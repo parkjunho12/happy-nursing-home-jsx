@@ -1,0 +1,313 @@
+// Prisma Schema for 행복한요양원 (Happy Nursing Home)
+// Database: PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===================================
+// 후기 관리 (Reviews)
+// ===================================
+model Review {
+  id        String   @id @default(cuid())
+  author    String   // 작성자 이름 (익명 처리: 김**, 박** 등)
+  date      String   // 작성 날짜 (표시용: "2024년 12월")
+  rating    Int      @default(5) // 1-5 별점
+  content   String   @db.Text // 후기 내용
+  verified  Boolean  @default(false) // 인증된 후기 여부
+  approved  Boolean  @default(false) // 관리자 승인 여부
+  featured  Boolean  @default(false) // 메인 페이지 노출 여부
+  
+  // 실제 작성자 정보 (관리용, 비공개)
+  email     String?
+  phone     String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([approved, featured])
+  @@index([createdAt])
+  @@map("reviews")
+}
+
+// ===================================
+// 상담 신청 관리 (Contacts)
+// ===================================
+model Contact {
+  id           String        @id @default(cuid())
+  
+  // 신청자 정보
+  name         String
+  phone        String
+  email        String?
+  inquiryType  String        // 입소상담, 비용문의, 시설견학, 프로그램문의, 기타
+  message      String        @db.Text
+  
+  // 처리 상태
+  status       ContactStatus @default(PENDING)
+  
+  // 관리자 답변
+  reply        String?       @db.Text
+  repliedBy    String?       // 답변자
+  repliedAt    DateTime?
+  
+  // 메타데이터
+  ipAddress    String?
+  userAgent    String?
+  referrer     String?
+  
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  
+  @@index([status])
+  @@index([createdAt])
+  @@map("contacts")
+}
+
+enum ContactStatus {
+  PENDING   // 대기 중
+  REPLIED   // 답변 완료
+  CLOSED    // 종료
+  SPAM      // 스팸
+}
+
+// ===================================
+// 서비스 관리 (Services)
+// ===================================
+model Service {
+  id          String   @id @default(cuid())
+  title       String   @unique
+  description String   @db.Text
+  icon        String   // 이모지 또는 아이콘 이름
+  imageUrl    String?  // 이미지 URL (선택)
+  order       Int      @default(0) // 정렬 순서
+  active      Boolean  @default(true) // 활성화 여부
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([order, active])
+  @@map("services")
+}
+
+// ===================================
+// 차별화 포인트 (Differentiators)
+// ===================================
+model Differentiator {
+  id          String   @id @default(cuid())
+  title       String   @unique
+  description String   @db.Text
+  icon        String   // 이모지 또는 아이콘
+  color       String?  // orange, green, brown
+  order       Int      @default(0) // 정렬 순서
+  active      Boolean  @default(true) // 활성화 여부
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([order, active])
+  @@map("differentiators")
+}
+
+// ===================================
+// FAQ (자주 묻는 질문)
+// ===================================
+model FAQ {
+  id        String   @id @default(cuid())
+  question  String
+  answer    String   @db.Text
+  category  String   // 입소, 비용, 시설, 프로그램, 기타
+  order     Int      @default(0) // 정렬 순서
+  active    Boolean  @default(true) // 활성화 여부
+  views     Int      @default(0) // 조회수
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([category, order, active])
+  @@map("faqs")
+}
+
+// ===================================
+// 갤러리 이미지 (Gallery)
+// ===================================
+model GalleryImage {
+  id          String          @id @default(cuid())
+  title       String
+  description String?
+  imageUrl    String          // Cloudinary URL
+  category    GalleryCategory
+  order       Int             @default(0)
+  active      Boolean         @default(true)
+  featured    Boolean         @default(false) // 메인 페이지 노출
+  
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  
+  @@index([category, order, active])
+  @@map("gallery_images")
+}
+
+enum GalleryCategory {
+  EXTERIOR  // 외관
+  ROOM      // 침실
+  DINING    // 식당
+  PROGRAM   // 프로그램실
+  GARDEN    // 정원
+  FACILITY  // 기타 시설
+}
+
+// ===================================
+// 예약 시스템 (Bookings)
+// ===================================
+model Booking {
+  id          String        @id @default(cuid())
+  
+  // 예약자 정보
+  name        String
+  phone       String
+  email       String?
+  
+  // 예약 정보
+  visitDate   DateTime      // 방문 날짜
+  visitTime   String        // 방문 시간 (예: "10:00", "14:00")
+  visitors    Int           @default(1) // 방문 인원
+  notes       String?       @db.Text
+  
+  // 상태
+  status      BookingStatus @default(PENDING)
+  
+  // 확인/취소
+  confirmedAt DateTime?
+  confirmedBy String?
+  cancelledAt DateTime?
+  cancelReason String?
+  
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  
+  @@index([visitDate, status])
+  @@index([status])
+  @@map("bookings")
+}
+
+enum BookingStatus {
+  PENDING   // 대기 중
+  CONFIRMED // 확인됨
+  CANCELLED // 취소됨
+  COMPLETED // 완료됨
+  NO_SHOW   // 노쇼
+}
+
+// ===================================
+// History Archive (히스토리 아카이브)
+// ===================================
+model HistoryPost {
+  id          String          @id @default(cuid())
+  
+  // 기본 정보
+  title       String
+  slug        String          @unique // SEO-friendly URL
+  category    HistoryCategory
+  
+  // 콘텐츠
+  content     String          @db.Text // HTML 또는 Markdown
+  excerpt     String?         @db.Text // 요약 (리스트용)
+  thumbnail   String?         // 썸네일 이미지 URL
+  
+  // 메타데이터
+  tags        String[]        // 태그 배열
+  author      String?         // 작성자
+  viewCount   Int             @default(0) // 조회수
+  
+  // 공개 설정
+  isPublished Boolean         @default(false)
+  publishedAt DateTime?       // 공개 날짜
+  
+  // 타임스탬프
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  
+  @@index([slug])
+  @@index([category, isPublished, publishedAt])
+  @@index([isPublished, publishedAt])
+  @@map("history_posts")
+}
+
+enum HistoryCategory {
+  NOTICE      // 공지사항
+  PROGRAM     // 프로그램/행사
+  MEAL        // 식단/영양
+  FACILITY    // 시설 소식
+  FAMILY      // 가족 이야기
+  ARCHIVE     // 기록/아카이브
+}
+
+// ===================================
+// 관리자 계정 (Admins)
+// ===================================
+model Admin {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  password  String    // bcrypt 해시
+  name      String
+  role      AdminRole @default(STAFF)
+  active    Boolean   @default(true)
+  
+  lastLogin DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  
+  @@map("admins")
+}
+
+enum AdminRole {
+  SUPER_ADMIN // 모든 권한
+  ADMIN       // 일반 관리자
+  STAFF       // 직원 (제한된 권한)
+}
+
+// ===================================
+// 사이트 설정 (Site Settings)
+// ===================================
+model SiteSetting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String @db.Text
+  
+  updatedAt DateTime @updatedAt
+  
+  @@map("site_settings")
+}
+
+// ===================================
+// 통계 추적 (Analytics)
+// ===================================
+model Analytics {
+  id        String   @id @default(cuid())
+  
+  // 이벤트 정보
+  event     String   // page_view, contact_submit, phone_click, etc.
+  page      String?
+  referrer  String?
+  
+  // 사용자 정보
+  ipAddress String?
+  userAgent String?
+  sessionId String?
+  
+  // 메타데이터
+  metadata  String?  @db.Text // JSON
+  
+  createdAt DateTime @default(now())
+  
+  @@index([event, createdAt])
+  @@index([sessionId])
+  @@map("analytics")
+}
+
