@@ -113,7 +113,7 @@ const ContactDetailPage = () => {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">상담 상세</h1>
-            <p className="text-gray-600">티켓 번호: {contact.ticketId}</p>
+            <p className="text-gray-600">티켓 번호: {contact.ticket_id}</p>
           </div>
           {getStatusBadge(contact.status)}
         </div>
@@ -163,7 +163,7 @@ const ContactDetailPage = () => {
               <div>
                 <p className="text-sm text-gray-600">접수일시</p>
                 <p className="font-bold text-gray-900">
-                  {new Date(contact.createdAt).toLocaleString('ko-KR')}
+                  {new Date(contact.created_at).toLocaleString('ko-KR')}
                 </p>
               </div>
             </div>
@@ -174,7 +174,7 @@ const ContactDetailPage = () => {
               <Tag className="w-5 h-5 text-gray-400" />
               <span className="text-sm font-semibold text-gray-600">문의 유형</span>
               <span className="px-3 py-1 bg-gray-100 text-gray-900 rounded-lg font-bold">
-                {contact.inquiryType}
+                {contact.inquiry_type}
               </span>
             </div>
           </div>
@@ -233,10 +233,10 @@ const ContactDetailPage = () => {
             </div>
             <div className="flex items-center justify-between px-2">
               <span className="text-sm font-bold text-blue-700">
-                답변자: {contact.repliedBy}
+                답변자: {contact.replied_by}
               </span>
               <span className="text-sm font-bold text-blue-700">
-                {contact.repliedAt && new Date(contact.repliedAt).toLocaleString('ko-KR')}
+                {contact.replied_at && new Date(contact.replied_at).toLocaleString('ko-KR')}
               </span>
             </div>
             

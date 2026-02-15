@@ -51,13 +51,13 @@ apiClient.interceptors.response.use(
   (res) => res,
   (error: AxiosError) => {
     if (error.response?.status === 401) {
-      // ✅ 토큰 제거 (무한 루프 방지)
-    //   tokenStorage.clear()
+    //   ✅ 토큰 제거 (무한 루프 방지)
+      tokenStorage.clear()
 
-    //   // ✅ 원하는 UX: 로그인 페이지로
-    //   if (window.location.pathname !== '/login') {
-    //     window.location.href = '/login'
-    //   }
+      // ✅ 원하는 UX: 로그인 페이지로
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login'
+      }
     }
     return Promise.reject(error)
   }

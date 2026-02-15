@@ -25,7 +25,7 @@ export default function AboutPage() {
     {
       icon: <Award className="w-8 h-8" />,
       title: 'A등급 인증 시설',
-      description: '서울시 노인요양시설 평가에서 최고 등급을 획득한 검증된 시설입니다',
+      description: '양주시 노인요양시설 평가에서 최고 등급을 획득한 검증된 시설입니다',
       color: 'bg-blue-100 text-blue-600',
     },
     {
@@ -50,7 +50,7 @@ export default function AboutPage() {
 
   const timeline = [
     { year: '2010', event: '행복한요양원 개원', icon: '🏥' },
-    { year: '2012', event: '서울시 우수 요양시설 선정', icon: '🏆' },
+    { year: '2012', event: '양주시 우수 요양시설 선정', icon: '🏆' },
     { year: '2015', event: 'A등급 인증 획득', icon: '⭐' },
     { year: '2018', event: '증축 및 리모델링', icon: '🏗️' },
     { year: '2020', event: '우수 프로그램 운영 시설 선정', icon: '🎯' },
@@ -113,7 +113,7 @@ export default function AboutPage() {
                   전문 간호사와 요양보호사가 24시간 상주하며, 개별 맞춤형 케어 플랜을 통해 어르신의 건강 상태와 생활 습관을 세심하게 관리합니다.
                 </p>
                 <p>
-                  서울시 노인요양시설 평가에서 <strong className="text-primary-orange">A등급</strong>을 획득한 검증된 시설로서, 안전하고 쾌적한 환경에서 질 높은 요양 서비스를 제공하고 있습니다.
+                  양주시 노인요양시설 평가에서 <strong className="text-primary-orange">A등급</strong>을 획득한 검증된 시설로서, 안전하고 쾌적한 환경에서 질 높은 요양 서비스를 제공하고 있습니다.
                 </p>
               </div>
               <div className="mt-8 flex flex-wrap gap-4">

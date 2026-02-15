@@ -51,17 +51,19 @@ export interface User {
   // Contact (상담)
   export interface Contact {
     id: string
-    ticketId: string
+    ticket_id: string
     name: string
     phone: string
     email?: string
-    inquiryType: string
+    inquiry_type: string
     message: string
+    privacy_agreed: boolean
     status: 'PENDING' | 'REPLIED' | 'CLOSED'
     reply?: string
-    repliedAt?: string
-    repliedBy?: string
-    createdAt: string
+    replied_at?: string
+    replied_by?: string
+    created_at: string
+    updated_at?: string
   }
   
   // History (히스토리)

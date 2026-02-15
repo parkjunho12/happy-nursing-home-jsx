@@ -42,7 +42,7 @@ const ContactsPage = () => {
     .filter(c => filter === 'ALL' || c.status === filter)
     .filter(c => 
       c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.ticketId.toLowerCase().includes(searchTerm.toLowerCase())
+      c.ticket_id.toLowerCase().includes(searchTerm.toLowerCase())
     )
 
   const getStatusBadge = (status: Contact['status']) => {
@@ -192,11 +192,11 @@ const ContactsPage = () => {
                 <div className="flex items-center gap-3 mb-2">
                   <h3 className="text-lg font-bold text-gray-900">{contact.name}</h3>
                   <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-lg text-xs font-semibold">
-                    {contact.inquiryType}
+                    {contact.inquiry_type}
                   </span>
                   {getStatusBadge(contact.status)}
                 </div>
-                <p className="text-sm text-gray-600 mb-1">티켓: {contact.ticketId}</p>
+                <p className="text-sm text-gray-600 mb-1">티켓: {contact.ticket_id}</p>
                 <p className="text-sm text-gray-600">
                   {contact.phone} {contact.email && `• ${contact.email}`}
                 </p>
@@ -215,14 +215,14 @@ const ContactsPage = () => {
                 <p className="text-sm font-semibold text-blue-900 mb-1">답변</p>
                 <p className="text-sm text-blue-800 line-clamp-2">{contact.reply}</p>
                 <div className="mt-2 flex items-center justify-between text-xs text-blue-600">
-                  <span>답변자: {contact.repliedBy}</span>
-                  <span>{contact.repliedAt && new Date(contact.repliedAt).toLocaleString('ko-KR')}</span>
+                  <span>답변자: {contact.replied_by}</span>
+                  <span>{contact.replied_at && new Date(contact.replied_at).toLocaleString('ko-KR')}</span>
                 </div>
               </div>
             )}
 
             <div className="mt-4 flex items-center justify-between text-sm text-gray-500">
-              <span>접수: {new Date(contact.createdAt).toLocaleString('ko-KR')}</span>
+              <span>접수: {new Date(contact.created_at).toLocaleString('ko-KR')}</span>
               <button className="text-primary-orange font-semibold hover:underline">
                 상세 보기 →
               </button>
