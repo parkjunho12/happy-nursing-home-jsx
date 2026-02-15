@@ -4,25 +4,46 @@ on:
   push:
     branches: [main]
     paths:
-      - 'backend/**'
-      - 'infra/**'
-      - '.github/workflows/deploy-backend.yml'
+      - "backend/**"
+      - "infra/**"
+      - ".github/workflows/deploy-backend.yml"
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
-      - name: Deploy to VPS
+      - name: Deploy to VPS (pull + compose up)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            cd ~/nursing-home
-            git pull origin main
-            cd infra
-            docker-compose build backend
-            docker-compose up -d --force-recreate backend
+            set -e
+
+            cd /opt/happy
+
+            # 최신 코드 가져오기
+            git fetch origin main
+            git reset --hard origin/main
+
+            # compose 실행 (v2)
+            cd /opt/happy/infra
+
+            # 이미지 빌드 + 배포
+            docker compose build backend
+            docker compose up -d --force-recreate backend
+
+            # (선택) 마이그레이션 자동 실행
+            docker compose exec -T backend alembic upgrade head || true
+
+            # 상태 확인
+            docker compose ps
+            docker compose logs --tail=50 backend
+
             echo "✅ Backend deployed successfully"

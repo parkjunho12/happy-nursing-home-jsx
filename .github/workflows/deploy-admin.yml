@@ -26,7 +26,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "pnpm"
+          # ⚠️ cache: "pnpm" 제거 (pnpm 없어서 실패 방지)
 
       - name: Enable pnpm (corepack)
         run: |
@@ -42,7 +42,6 @@ jobs:
           VITE_API_BASE_URL: https://api.xn--p80bu1t60gba47bg6abm347gsla.com
         run: pnpm --filter ./apps/admin... build
 
-      # ✅ rsync로 배포(삭제 동기화까지)
       - name: Deploy dist to VPS (rsync)
         uses: burnett01/rsync-deployments@7.0.2
         with:
