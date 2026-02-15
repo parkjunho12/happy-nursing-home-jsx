@@ -5,7 +5,7 @@
 
 export const API_BASE_URL =
   (process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, '') as string) ||
-  'http://localhost:8000'
+  'https://api.xn--p80bu1t60gba47bg6abm347gsla.com'
 
 /** ===== Types ===== */
 export interface ContactFormData {
