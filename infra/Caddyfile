@@ -1,92 +1,72 @@
-# API 도메인
-api.xn--2e0bw44a55au8bo9lbul5lh40a.com {
-    # 요청 로깅
-    log {
-        output file /data/logs/api-access.log
-        format json
-    }
+{
+  # 운영에서는 이메일 넣는 게 좋음(LE 갱신 알림)
+  email ghdlwnsgh25@gmail.com
 
-    # Health Check 엔드포인트
-    @health {
-        path /health
-    }
-    handle @health {
-        reverse_proxy backend:8000
-        header Cache-Control "public, max-age=30"
-    }
-
-    # API 요청
-    handle /api/* {
-        reverse_proxy backend:8000 {
-            # 헬스 체크
-            health_uri /health
-            health_interval 30s
-            health_timeout 10s
-
-            # 헤더 설정
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
-            header_up X-Forwarded-Proto {scheme}
-        }
-    }
-
-    # WebSocket 지원
-    @websockets {
-        header Connection *Upgrade*
-        header Upgrade websocket
-    }
-    handle @websockets {
-        reverse_proxy backend:8000
-    }
-
-    # 나머지는 404
-    handle {
-        respond "API endpoint not found" 404
-    }
-
-    # 보안 헤더
-    header {
-        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-        X-Content-Type-Options "nosniff"
-        X-Frame-Options "DENY"
-        X-XSS-Protection "1; mode=block"
-        Content-Security-Policy "default-src 'self'"
-        Referrer-Policy "strict-origin-when-cross-origin"
-    }
+  # 로그(전역)
+  log {
+    output file /data/logs/caddy-access.log
+    format json
+  }
 }
 
-# Admin 도메인 (React SPA 정적 호스팅)
-admin.xn--2e0bw44a55au8bo9lbul5lh40a.com {
-    log {
-        output file /data/logs/admin-access.log
-        format json
-    }
+# =========================
+# API: api.도메인
+# =========================
+api.행복한요양원녹양역.com {
+  encode gzip zstd
 
-    # 정적 파일 서빙
-    root * /srv/admin
-    
-    # SPA 라우팅 (모든 경로를 index.html로)
-    try_files {path} /index.html
-    file_server
+  # Health
+  handle /health {
+    reverse_proxy backend:8000
+    header Cache-Control "no-store"
+  }
 
-    # 보안 헤더
-    header {
-        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-        X-Content-Type-Options "nosniff"
-        X-Frame-Options "SAMEORIGIN"
-        X-XSS-Protection "1; mode=block"
-        Referrer-Policy "strict-origin-when-cross-origin"
+  # 나머지 전부 백엔드로
+  handle {
+    reverse_proxy backend:8000 {
+      header_up X-Real-IP {remote_host}
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Forwarded-Proto {scheme}
     }
+  }
 
-    # 캐싱 (정적 에셋)
-    @static {
-        path *.js *.css *.png *.jpg *.jpeg *.gif *.ico *.svg *.woff *.woff2
-    }
-    header @static Cache-Control "public, max-age=31536000, immutable"
+  # 보안 헤더(운영 API 기준)
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options "nosniff"
+    Referrer-Policy "strict-origin-when-cross-origin"
+  }
+}
 
-    # HTML은 캐싱 안함
-    @html {
-        path *.html /
-    }
-    header @html Cache-Control "no-cache, no-store, must-revalidate"
+# =========================
+# Admin: admin.도메인
+# =========================
+admin.행복한요양원녹양역.com {
+  encode gzip zstd
+
+  root * /srv/admin
+  file_server
+
+  # SPA 라우팅
+  try_files {path} /index.html
+
+  # 정적 에셋 장기 캐싱
+  @static {
+    path *.js *.css *.png *.jpg *.jpeg *.gif *.ico *.svg *.woff *.woff2
+  }
+  header @static Cache-Control "public, max-age=31536000, immutable"
+
+  # HTML은 캐시 금지
+  @html {
+    path *.html /
+  }
+  header @html Cache-Control "no-store"
+
+  # Admin 보안 헤더(조금 더 빡세게)
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "strict-origin-when-cross-origin"
+  }
 }

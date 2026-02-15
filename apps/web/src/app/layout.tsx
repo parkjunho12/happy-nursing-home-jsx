@@ -1,7 +1,6 @@
 // src/app/layout.tsx
 import type { Metadata } from 'next'
 import { Noto_Sans_KR, Nanum_Myeongjo } from 'next/font/google'
-import { GoogleAnalytics, GoogleTagManager } from '@next/third-parties/google'
 import './globals.css'
 import { DEFAULT_METADATA, SITE_INFO } from '@/lib/constants'
 import GTM from '@/components/analytics/GTM'
@@ -115,10 +114,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <GTM />
         {children}
 
-        {/* ✅ Google Analytics (GA4) */}
-        {process.env.NEXT_PUBLIC_GA_ID && (
-          <GoogleAnalytics gaId={process.env.NEXT_PUBLIC_GA_ID} />
-        )}
       </body>
     </html>
   )

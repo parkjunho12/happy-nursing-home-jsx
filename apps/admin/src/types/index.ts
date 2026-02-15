@@ -84,6 +84,7 @@ export interface User {
   export interface Review {
     id: string
     author: string
+    residentName?: string; 
     rating: number
     content: string
     isApproved: boolean

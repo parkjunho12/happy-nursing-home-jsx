@@ -47,7 +47,7 @@ export default function CategoryTabs({ selected, counts, onChange }: CategoryTab
               <>
                 <span className="mr-2">{config?.emoji}</span>
                 {config?.label}
-                {count !== undefined && count > 0 && (
+                {count !== undefined && count && count > 0 && (
                   <span className="ml-2 opacity-70">({count})</span>
                 )}
               </>

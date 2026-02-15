@@ -1,10 +1,15 @@
+import os
 import sys
 sys.path.append(".")
 
 from datetime import date, datetime, timedelta
 import time
+import subprocess
+from typing import Optional, Any
 
 from sqlalchemy import text
+from sqlalchemy.exc import ProgrammingError, OperationalError, SQLAlchemyError
+
 from app.core.database import SessionLocal, engine, Base
 
 # ✅ 모델 import (테이블 생성/매핑 등록용)
@@ -14,45 +19,110 @@ from app.models.contact import Contact, ContactStatus
 from app.models.history import History, HistoryCategory
 from app.models.review import Review
 
-# ✅ 비밀번호 해싱 (bcrypt 이슈가 있으면 fallback)
 from app.core.security import get_password_hash
 
 
-def ensure_tables():
-    print("📦 Ensuring tables exist...")
+# =============================================================================
+# Helpers: schema checks
+# =============================================================================
+
+def db_scalar(sql: str, params: Optional[dict] = None) -> Any:
+    with engine.connect() as conn:
+        res = conn.execute(text(sql), params or {}).scalar()
+        return res
+
+
+def table_exists(table_name: str, schema: str = "public") -> bool:
+    sql = """
+    SELECT 1
+    FROM information_schema.tables
+    WHERE table_schema=:s AND table_name=:t
+    LIMIT 1
+    """
+    return db_scalar(sql, {"s": schema, "t": table_name}) is not None
+
+
+def column_exists(table_name: str, column_name: str, schema: str = "public") -> bool:
+    sql = """
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema=:s AND table_name=:t AND column_name=:c
+    LIMIT 1
+    """
+    return db_scalar(sql, {"s": schema, "t": table_name, "c": column_name}) is not None
+
+
+def safe_count(db, model, label: str) -> Optional[int]:
+    try:
+        return db.query(model).count()
+    except ProgrammingError as e:
+        # schema mismatch (undefined column/table etc.)
+        msg = str(e.orig) if getattr(e, "orig", None) else str(e)
+        print(f"  {label:<10}: ❌ schema mismatch -> {msg.splitlines()[0]}")
+        db.rollback()
+        return None
+
+
+# =============================================================================
+# Migrations / Table creation strategy
+# =============================================================================
+
+def try_alembic_upgrade_head() -> bool:
+    """
+    Prefer migrations (correct way). If it fails, return False and fallback to create_all.
+    """
+    try:
+        subprocess.check_call(["alembic", "upgrade", "head"])
+        return True
+    except FileNotFoundError:
+        # alembic not installed in image or PATH
+        print("⚠️  alembic command not found. Fallback to create_all.")
+        return False
+    except subprocess.CalledProcessError as e:
+        print("⚠️  alembic upgrade head failed. Fallback to create_all.")
+        print("    reason:", repr(e))
+        return False
+
+
+def ensure_schema():
+    """
+    1) Try alembic upgrade head (best)
+    2) Fallback to Base.metadata.create_all (dev-only fallback)
+    """
+    print("📦 Ensuring DB schema...")
+
+    migrated = try_alembic_upgrade_head()
+    if migrated:
+        print("✅ Alembic migrations applied")
+        return
+
+    print("⚠️  Using create_all fallback (dev-only). This will NOT add missing columns.")
     Base.metadata.create_all(bind=engine)
-    print("✅ Tables ensured")
+    print("✅ Tables ensured (create_all fallback)")
 
 
-def quick_counts(db):
-    # 테이블 존재/카운트 확인
-    def count(table):
-        return db.query(table).count()
-
-    print("📊 Current counts:")
-    print(f"  users:     {count(User)}")
-    print(f"  residents: {count(Resident)}")
-    print(f"  contacts:  {count(Contact)}")
-    print(f"  history:   {count(History)}")
-    print(f"  reviews:   {count(Review)}")
-
+# =============================================================================
+# Password hashing
+# =============================================================================
 
 def safe_hash(password: str) -> str:
-    """
-    passlib/bcrypt 환경 꼬이면 여기서 터질 수 있음.
-    - 정상: get_password_hash 사용
-    - 실패: 임시로 평문 저장(개발용) -> 로그인 검증도 그에 맞춰야 함
-    """
     try:
         return get_password_hash(password)
     except Exception as e:
         print("⚠️  Password hash failed. Reason:", repr(e))
         print("⚠️  DEV ONLY: storing password as plain text. Fix bcrypt/passlib later.")
-        return password  # 개발용 임시
+        return password
 
+
+# =============================================================================
+# Seeds (idempotent)
+# =============================================================================
 
 def seed_admin(db):
-    email = "admin@nursing-home.com"
+    email = os.getenv("SEED_ADMIN_EMAIL", "admin@nursing-home.com")
+    password = os.getenv("SEED_ADMIN_PASSWORD", "admin123")
+    name = os.getenv("SEED_ADMIN_NAME", "관리자")
+
     admin = db.query(User).filter(User.email == email).first()
     if admin:
         print("ℹ️  Admin already exists:", email)
@@ -61,8 +131,8 @@ def seed_admin(db):
     print("👤 Creating admin user...")
     admin = User(
         email=email,
-        name="관리자",
-        hashed_password=safe_hash("admin123"),
+        name=name,
+        hashed_password=safe_hash(password),
         role=UserRole.ADMIN if hasattr(UserRole, "ADMIN") else "ADMIN",
     )
     db.add(admin)
@@ -73,7 +143,7 @@ def seed_admin(db):
 
 
 def seed_residents(db):
-    if db.query(Resident).count() > 0:
+    if safe_count(db, Resident, "residents") not in (None, 0):
         print("ℹ️  Residents already exist")
         return
 
@@ -134,7 +204,7 @@ def seed_residents(db):
 
 
 def seed_contacts(db):
-    if db.query(Contact).count() > 0:
+    if safe_count(db, Contact, "contacts") not in (None, 0):
         print("ℹ️  Contacts already exist")
         return
 
@@ -171,7 +241,7 @@ def seed_contacts(db):
 
 
 def seed_history(db):
-    if db.query(History).count() > 0:
+    if safe_count(db, History, "history") not in (None, 0):
         print("ℹ️  History already exist")
         return
 
@@ -208,7 +278,16 @@ def seed_history(db):
 
 
 def seed_reviews(db):
-    if db.query(Review).count() > 0:
+    # ✅ 스키마 체크: author_name 컬럼 없으면 아예 스킵
+    if not table_exists("reviews"):
+        print("⚠️  reviews table missing -> skip seed_reviews")
+        return
+    if not column_exists("reviews", "author_name"):
+        print("⚠️  reviews.author_name missing -> skip seed_reviews (run migrations / ALTER TABLE)")
+        return
+
+    existing = safe_count(db, Review, "reviews")
+    if existing not in (None, 0):
         print("ℹ️  Reviews already exist")
         return
 
@@ -238,12 +317,25 @@ def seed_reviews(db):
     print(f"✅ Reviews seeded: {len(items)}")
 
 
+# =============================================================================
+# Main
+# =============================================================================
+
+def quick_counts(db):
+    print("📊 Current counts:")
+    print(f"  users:     {safe_count(db, User, 'users')}")
+    print(f"  residents: {safe_count(db, Resident, 'residents')}")
+    print(f"  contacts:  {safe_count(db, Contact, 'contacts')}")
+    print(f"  history:   {safe_count(db, History, 'history')}")
+    print(f"  reviews:   {safe_count(db, Review, 'reviews')}")
+
+
 def main():
     print("=" * 60)
     print("🌱 Running seed.py")
     print("=" * 60)
 
-    ensure_tables()
+    ensure_schema()
 
     db = SessionLocal()
     try:
@@ -258,12 +350,16 @@ def main():
         print("-" * 60)
         quick_counts(db)
         print("-" * 60)
+
+        email = os.getenv("SEED_ADMIN_EMAIL", "admin@nursing-home.com")
+        password = os.getenv("SEED_ADMIN_PASSWORD", "admin123")
+
         print("🔐 Login")
-        print("  email:    admin@nursing-home.com")
-        print("  password: admin123")
+        print(f"  email:    {email}")
+        print(f"  password: {password}")
         print("=" * 60)
 
-    except Exception as e:
+    except (OperationalError, SQLAlchemyError) as e:
         db.rollback()
         print("❌ Seed failed:", repr(e))
         raise
@@ -272,4 +368,9 @@ def main():
 
 
 if __name__ == "__main__":
+    # RUN_SEED가 true일 때만 실행하고 싶으면 아래처럼 가드도 가능
+    if os.getenv("RUN_SEED") == "true":
+        main()
+    else:
+        print("seed.py skipped (RUN_SEED != true)")
     main()

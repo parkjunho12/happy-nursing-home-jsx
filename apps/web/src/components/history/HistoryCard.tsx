@@ -4,7 +4,6 @@ import React from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { HistoryListItem, CATEGORY_CONFIG } from '@/types/history'
-import { formatHistoryDate, getRelativeTime } from '@/lib/history'
 import { Eye } from 'lucide-react'
 
 interface HistoryCardProps {
@@ -44,7 +43,7 @@ export default function HistoryCard({ post }: HistoryCardProps) {
       <div className="p-6">
         {/* Date & Views */}
         <div className="flex items-center gap-4 text-sm text-text-gray mb-3">
-          <time>{getRelativeTime(post.publishedAt)}</time>
+          
           <span className="flex items-center gap-1">
             <Eye className="w-4 h-4" />
             {post.viewCount}

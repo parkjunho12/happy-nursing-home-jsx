@@ -97,7 +97,7 @@ export default function ContactForm() {
       name: '',
       phone: '',
       email: '',
-      inquiryType: '',
+      inquiryType: undefined,
       message: '',
       privacyAgreed: false,
     },

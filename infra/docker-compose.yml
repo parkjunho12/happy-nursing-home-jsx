@@ -1,7 +1,6 @@
-version: '3.8'
+version: "3.8"
 
 services:
-  # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
     container_name: happy_db
@@ -12,25 +11,26 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "127.0.0.1:5432:5432"
+    # ✅ 운영에서는 외부 포트 노출 불필요(보안/실수 방지)
+    # ports:
+    #   - "127.0.0.1:55432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
     networks:
       - nursing-home-net
 
-  # Redis
   redis:
     image: redis:7-alpine
-    container_name: nursing-home-redis
+    container_name: happy_redis
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
+    # ✅ 운영에서는 외부 포트 노출 불필요
+    # ports:
+    #   - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -39,54 +39,80 @@ services:
     networks:
       - nursing-home-net
 
-  # FastAPI Backend
   backend:
     build:
       context: ../backend
       dockerfile: Dockerfile
-    container_name: nursing-home-backend
+    container_name: happy_backend
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+
+      # ✅ Docker 네트워크 호스트명 postgres
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       REDIS_URL: redis://redis:6379/0
+
       SECRET_KEY: ${SECRET_KEY}
       ALGORITHM: ${ALGORITHM}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES}
+
+      # ✅ 예: https://www.행복한요양원녹양역.com,https://admin.행복한요양원녹양역.com
       CORS_ORIGINS: ${CORS_ORIGINS}
-      ENVIRONMENT: production
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+
+      # ✅ 운영에서는 자동 시드 비활성 권장 (초기 1회만 수동 실행)
+      RUN_SEED: ${RUN_SEED:-false}
+
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+
     volumes:
       - backend_uploads:/app/uploads
       - backend_logs:/app/logs
-    ports:
-      - "127.0.0.1:8000:8000"
+
+    # ✅ 운영에서는 외부로 8000 노출 불필요 (Caddy가 프록시)
+    expose:
+      - "8000"
+
+    # healthcheck: curl 없는 이미지면 실패 가능 → wget 방식 권장
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health >/dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+
     networks:
       - nursing-home-net
 
-  # Caddy Reverse Proxy
   caddy:
     image: caddy:2.7-alpine
-    container_name: nursing-home-caddy
+    container_name: happy_caddy
     restart: unless-stopped
     ports:
+      # ✅ 운영: 자동 HTTPS 필수
       - "80:80"
       - "443:443"
       - "443:443/udp"
+    environment:
+      # ✅ Caddy에서 ACME/TLS 쓸 때 이메일 추천(선택)
+      - ACME_AGREE=true
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
-      - ../../apps/admin/dist:/srv/admin
+
+      # ✅ 운영 안정성: admin dist는 고정 경로 권장
+      # VPS에서 /opt/happy/admin-dist 로 두고 여기 마운트
+      - ${ADMIN_DIST_PATH:-/opt/happy/admin-dist}:/srv/admin:ro
+
+      # ✅ 로그 디렉토리(선택): Caddyfile에서 /data/logs 쓰면 자동 생성되긴 함
+      # - ./logs:/data/logs
     depends_on:
       - backend
     networks:

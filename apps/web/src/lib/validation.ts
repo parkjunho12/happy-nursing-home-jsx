@@ -61,24 +61,24 @@ export function validateContactForm(data: ContactFormData): {
   }
 }
 
+type ContactSchemaShape = typeof contactFormSchema.shape
+type ContactSchemaKey = keyof ContactSchemaShape
 /**
  * 개별 필드 검증
  */
 export function validateField(
-  fieldName: keyof ContactFormData,
-  value: any
+  fieldName: ContactSchemaKey,
+  value: unknown
 ): string | null {
   try {
     const schema = contactFormSchema.shape[fieldName]
-    if (schema) {
-      schema.parse(value)
-    }
+    schema.parse(value)
     return null
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return error.errors[0]?.message || null
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return err.errors[0]?.message ?? 'Invalid value'
     }
-    return null
+    return 'Invalid value'
   }
 }
 
