@@ -57,11 +57,11 @@ app.add_middleware(
 app.add_middleware(
     TrustedHostMiddleware,
     allowed_hosts=[
-        "api.xn--2e0bw44a55au8bo9lbul5lh40a.com",
+        "api.xn--p80bu1t60gba47bg6abm347gsla.com",
         "localhost",
         "127.0.0.1",
-        "http://localhost:3001",  # admin
-  "http://localhost:3000",  # web(있으면)
+        "https://admin.xn--p80bu1t60gba47bg6abm347gsla.com",  # admin
+  "https://www.xn--p80bu1t60gba47bg6abm347gsla.com",  # web(있으면)
     ]
 )
 
