@@ -93,3 +93,4 @@ async def root():
         "docs": "/api/docs" if settings.ENVIRONMENT != "production" else "disabled",
         "version": "1.0.0"
     }
+    
