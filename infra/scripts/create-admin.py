@@ -6,21 +6,40 @@
 import sys
 sys.path.append('/app')
 
+from sqlalchemy.orm import Session
+from app.core.database import SessionLocal
+from app.models.user import User
 from app.core.security import get_password_hash
+import uuid
+
 
 def create_admin():
-    print("Creating admin account...")
-    
-    # TODO: DB 연결 후 Admin 생성
+    db: Session = SessionLocal()
+
     email = "admin@nursing-home.com"
     password = "admin123"
-    hashed_password = get_password_hash(password)
-    
-    print(f"✅ Admin created successfully")
+
+    existing = db.query(User).filter(User.email == email).first()
+    if existing:
+        print("⚠️ Admin already exists")
+        return
+
+    user = User(
+        id=str(uuid.uuid4()),
+        email=email,
+        name="Admin",
+        hashed_password=get_password_hash(password),
+        role="ADMIN",
+    )
+
+    db.add(user)
+    db.commit()
+    db.close()
+
+    print("✅ Admin created successfully")
     print(f"   Email: {email}")
     print(f"   Password: {password} (CHANGE THIS!)")
-    print(f"   Hashed: {hashed_password}")
+
 
 if __name__ == "__main__":
     create_admin()
-
