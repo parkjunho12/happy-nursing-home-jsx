@@ -2,6 +2,7 @@ import { Metadata } from 'next'
 import Link from 'next/link'
 import { Clock, Users, Award, Heart, Shield, Sparkles, MapPin, Phone, Mail, ChevronRight } from 'lucide-react'
 import { SITE_INFO, TRUST_INDICATORS } from '@/lib/constants'
+import KakaoMap from '@/components/map/KaKaoMap'
 
 export const metadata: Metadata = {
   title: '시설 소개 | 행복한요양원 녹양역점',
@@ -301,15 +302,15 @@ export default function AboutPage() {
             </div>
 
             {/* Map */}
-            <div className="h-96 lg:h-full bg-gray-200 rounded-2xl overflow-hidden shadow-lg">
-              <div className="w-full h-full flex items-center justify-center text-gray-500">
-                <div className="text-center">
-                  <MapPin className="w-12 h-12 mx-auto mb-4 text-primary-orange" />
-                  <p className="text-lg font-medium">지도가 표시됩니다</p>
-                  <p className="text-sm text-gray-400 mt-2">Google Maps API 연동</p>
-                </div>
+            <div className="h-96 bg-gray-200 rounded-2xl overflow-hidden shadow-lg">
+                <KakaoMap
+                  lat={37.76774123217728}
+                  lng={127.04359415733941}
+                  level={3}
+                  markerTitle="행복한요양원 (녹양역 근처)"
+                  height="100%"   // ✅ 부모 높이에 맞추기
+                />
               </div>
-            </div>
           </div>
         </div>
       </section>

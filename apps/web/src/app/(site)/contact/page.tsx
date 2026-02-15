@@ -2,6 +2,7 @@ import { Metadata } from 'next'
 import { Phone, Mail, MapPin, Clock, MessageCircle } from 'lucide-react'
 import ContactForm from '@/components/forms/ContactForm'
 import { SITE_INFO } from '@/lib/constants'
+import KakaoMap from '@/components/map/KaKaoMap'
 
 export const metadata: Metadata = {
   title: '상담 신청 | 행복한요양원 녹양역점',
@@ -186,13 +187,13 @@ export default function ContactPage() {
                 오시는 길
               </h2>
               <div className="h-96 bg-gray-200 rounded-2xl overflow-hidden shadow-lg">
-                <div className="w-full h-full flex items-center justify-center text-gray-500">
-                  <div className="text-center">
-                    <MapPin className="w-12 h-12 mx-auto mb-4 text-primary-orange" />
-                    <p className="text-lg font-medium">지도가 표시됩니다</p>
-                    <p className="text-sm text-gray-400 mt-2">Google Maps API 연동</p>
-                  </div>
-                </div>
+                <KakaoMap
+                  lat={37.76774123217728}
+                  lng={127.04359415733941}
+                  level={3}
+                  markerTitle="행복한요양원 (녹양역 근처)"
+                  height="100%"   // ✅ 부모 높이에 맞추기
+                />
               </div>
             </div>
           </div>
