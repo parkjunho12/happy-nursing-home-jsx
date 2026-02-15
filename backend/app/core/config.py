@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: str
     
+    OPENAI_API_KEY: str = ""
+    
     @property
     def CORS_ORIGINS_LIST(self) -> List[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]

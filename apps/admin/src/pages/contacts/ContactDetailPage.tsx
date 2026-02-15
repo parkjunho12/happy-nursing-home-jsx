@@ -10,7 +10,11 @@ import {
   MessageSquare,
   CheckCircle,
   XCircle,
-  Tag
+  Tag,
+  Sparkles,
+  AlertTriangle,
+  TrendingUp,
+  ListChecks
 } from 'lucide-react'
 import { contactsAPI } from '@/api/client'
 import type { Contact } from '@/types'
@@ -82,9 +86,47 @@ const ContactDetailPage = () => {
     const Icon = badge.icon
     
     return (
-      <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl font-bold ${badge.bg} ${badge.text}`}>
-        <Icon className="w-5 h-5" />
+      <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold ${badge.bg} ${badge.text}`}>
+        <Icon className="w-4 h-4" />
         {badge.label}
+      </span>
+    )
+  }
+
+  const getUrgencyBadge = (urgency: Contact['ai_urgency']) => {
+    if (!urgency) return null
+    
+    const badges = {
+      HIGH: { bg: 'bg-red-100', text: 'text-red-700', label: '높음', icon: AlertTriangle },
+      MEDIUM: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: '보통', icon: TrendingUp },
+      LOW: { bg: 'bg-green-100', text: 'text-green-700', label: '낮음', icon: CheckCircle },
+    }
+    const badge = badges[urgency]
+    const Icon = badge.icon
+    
+    return (
+      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold ${badge.bg} ${badge.text}`}>
+        <Icon className="w-3.5 h-3.5" />
+        {badge.label}
+      </span>
+    )
+  }
+
+  const getCategoryBadge = (category: Contact['ai_category']) => {
+    if (!category) return null
+    
+    const colors = {
+      '입소': 'bg-blue-100 text-blue-700',
+      '요금': 'bg-purple-100 text-purple-700',
+      '면회': 'bg-green-100 text-green-700',
+      '의료간호': 'bg-red-100 text-red-700',
+      '프로그램': 'bg-orange-100 text-orange-700',
+      '기타': 'bg-gray-100 text-gray-700',
+    }
+    
+    return (
+      <span className={`px-3 py-1 rounded-lg text-xs font-bold ${colors[category]}`}>
+        {category}
       </span>
     )
   }
@@ -92,7 +134,10 @@ const ContactDetailPage = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
-        <div className="w-12 h-12 border-4 border-primary-orange border-t-transparent rounded-full animate-spin" />
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-primary-orange border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">로딩 중...</p>
+        </div>
       </div>
     )
   }
@@ -120,6 +165,62 @@ const ContactDetailPage = () => {
       </div>
 
       <div className="space-y-6">
+        {/* AI Analysis Section */}
+        {contact.ai_summary && (
+          <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-2xl p-6 border-2 border-purple-200">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-purple-600" />
+              </div>
+              <h2 className="text-xl font-bold text-gray-900">AI 분석 결과</h2>
+              {contact.ai_model && (
+                <span className="ml-auto text-xs text-gray-500">
+                  {contact.ai_model} · {contact.ai_created_at && new Date(contact.ai_created_at).toLocaleString('ko-KR')}
+                </span>
+              )}
+            </div>
+
+            {/* Summary */}
+            <div className="mb-4">
+              <p className="text-gray-900 leading-relaxed text-lg">
+                {contact.ai_summary}
+              </p>
+            </div>
+
+            {/* Category & Urgency */}
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-gray-600">카테고리:</span>
+                {getCategoryBadge(contact.ai_category)}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-gray-600">긴급도:</span>
+                {getUrgencyBadge(contact.ai_urgency)}
+              </div>
+            </div>
+
+            {/* Next Actions */}
+            {contact.ai_next_actions && contact.ai_next_actions.length > 0 && (
+              <div className="mt-4 pt-4 border-t-2 border-purple-200">
+                <div className="flex items-center gap-2 mb-3">
+                  <ListChecks className="w-5 h-5 text-purple-600" />
+                  <span className="font-bold text-gray-900">권장 조치사항</span>
+                </div>
+                <ul className="space-y-2">
+                  {contact.ai_next_actions.map((action, index) => (
+                    <li key={index} className="flex items-start gap-2">
+                      <span className="w-6 h-6 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
+                        {index + 1}
+                      </span>
+                      <span className="text-gray-900">{action}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Contact Info */}
         <div className="bg-white rounded-2xl p-6 border-2 border-gray-100">
           <h2 className="text-xl font-bold text-gray-900 mb-4">상담자 정보</h2>
@@ -198,60 +299,61 @@ const ContactDetailPage = () => {
               value={reply}
               onChange={(e) => setReply(e.target.value)}
               placeholder="상담자에게 보낼 답변을 입력하세요..."
-              rows={10}
-              className="w-full px-4 py-4 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-orange focus:border-transparent resize-none text-lg mb-4"
+              className="w-full px-4 py-4 text-lg border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-orange focus:border-transparent resize-none"
+              rows={8}
             />
-            <div className="flex gap-3">
-              <button
-                onClick={handleClose}
-                className="px-6 py-3 bg-white border-2 border-gray-300 text-gray-700 rounded-xl font-bold hover:bg-gray-50"
-              >
-                답변 없이 종료
-              </button>
+            <div className="mt-4 flex gap-3">
               <button
                 onClick={handleSendReply}
-                disabled={sending || !reply.trim()}
-                className="flex-1 px-6 py-4 bg-primary-orange text-white rounded-xl font-bold hover:bg-primary-orange/90 disabled:opacity-50 flex items-center justify-center gap-2"
+                disabled={!reply.trim() || sending}
+                className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-primary-orange text-white rounded-xl font-bold hover:bg-primary-orange/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 <Send className="w-5 h-5" />
-                {sending ? '전송 중...' : '답변 보내기'}
+                {sending ? '전송 중...' : '답변 전송'}
               </button>
             </div>
           </div>
         ) : (
           <div className="bg-blue-50 rounded-2xl p-6 border-2 border-blue-200">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center">
-                <CheckCircle className="w-6 h-6 text-white" />
-              </div>
-              <h2 className="text-xl font-bold text-gray-900">답변 내역</h2>
-            </div>
-            <div className="p-6 bg-white rounded-xl border-2 border-blue-200 mb-4">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">답변 내용</h2>
+            <div className="p-6 bg-white rounded-xl border-2 border-blue-200">
               <p className="text-gray-900 leading-relaxed whitespace-pre-wrap text-lg">
                 {contact.reply}
               </p>
             </div>
-            <div className="flex items-center justify-between px-2">
-              <span className="text-sm font-bold text-blue-700">
-                답변자: {contact.replied_by}
-              </span>
-              <span className="text-sm font-bold text-blue-700">
-                {contact.replied_at && new Date(contact.replied_at).toLocaleString('ko-KR')}
-              </span>
-            </div>
-            
-            {contact.status !== 'CLOSED' && (
-              <button
-                onClick={handleClose}
-                className="mt-4 w-full px-6 py-3 bg-gray-600 text-white rounded-xl font-bold hover:bg-gray-700 flex items-center justify-center gap-2"
-              >
-                <XCircle className="w-5 h-5" />
-                종료하기
-              </button>
+            {contact.replied_at && contact.replied_by && (
+              <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
+                <span>답변자: {contact.replied_by}</span>
+                <span>{new Date(contact.replied_at).toLocaleString('ko-KR')}</span>
+              </div>
+            )}
+            {contact.status === 'REPLIED' && (
+              <div className="mt-4">
+                <button
+                  onClick={handleClose}
+                  className="px-6 py-3 bg-gray-600 text-white rounded-xl font-bold hover:bg-gray-700 transition-colors"
+                >
+                  상담 종료
+                </button>
+              </div>
             )}
           </div>
         )}
       </div>
+
+      {/* Sticky Action Bar (for mobile) */}
+      {contact.status === 'PENDING' && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t-2 border-gray-200 p-4 md:hidden z-10">
+          <button
+            onClick={handleSendReply}
+            disabled={!reply.trim() || sending}
+            className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-primary-orange text-white rounded-xl font-bold disabled:opacity-50"
+          >
+            <Send className="w-5 h-5" />
+            {sending ? '전송 중...' : '답변 전송'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

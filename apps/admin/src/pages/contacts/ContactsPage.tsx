@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MessageSquare, Clock, CheckCircle, X, Search, Eye } from 'lucide-react'
+import { MessageSquare, Clock, CheckCircle, X, Search, Eye, Sparkles, AlertTriangle, TrendingUp } from 'lucide-react' 
 import { contactsAPI } from '@/api/client'
 import type { Contact } from '@/types'
 
@@ -45,6 +45,25 @@ const ContactsPage = () => {
       c.ticket_id.toLowerCase().includes(searchTerm.toLowerCase())
     )
 
+    const getUrgencyBadge = (urgency: Contact['ai_urgency']) => {
+        if (!urgency) return null
+        
+        const badges = {
+          HIGH: { bg: 'bg-red-100', text: 'text-red-700', label: '긴급', icon: AlertTriangle },
+          MEDIUM: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: '보통', icon: TrendingUp },
+          LOW: { bg: 'bg-green-100', text: 'text-green-700', label: '낮음', icon: CheckCircle },
+        }
+        const badge = badges[urgency]
+        const Icon = badge.icon
+        
+        return (
+          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-bold ${badge.bg} ${badge.text}`}>
+            <Icon className="w-3 h-3" />
+            {badge.label}
+          </span>
+        )
+      }
+
   const getStatusBadge = (status: Contact['status']) => {
     const badges = {
       PENDING: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: '대기 중', icon: Clock },
@@ -58,6 +77,26 @@ const ContactsPage = () => {
       <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${badge.bg} ${badge.text}`}>
         <Icon className="w-3.5 h-3.5" />
         {badge.label}
+      </span>
+    )
+  }
+
+  const getCategoryBadge = (category: Contact['ai_category']) => {
+    if (!category) return null
+    
+    const colors = {
+      '입소': 'bg-blue-50 text-blue-700 border-blue-200',
+      '요금': 'bg-purple-50 text-purple-700 border-purple-200',
+      '면회': 'bg-green-50 text-green-700 border-green-200',
+      '의료간호': 'bg-red-50 text-red-700 border-red-200',
+      '프로그램': 'bg-orange-50 text-orange-700 border-orange-200',
+      '기타': 'bg-gray-50 text-gray-700 border-gray-200',
+    }
+    
+    return (
+      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded border text-xs font-bold ${colors[category]}`}>
+        <Sparkles className="w-3 h-3" />
+        {category}
       </span>
     )
   }
@@ -195,6 +234,9 @@ const ContactsPage = () => {
                     {contact.inquiry_type}
                   </span>
                   {getStatusBadge(contact.status)}
+                  {/* AI 분석 결과 */}
+                  {getCategoryBadge(contact.ai_category)}
+                  {getUrgencyBadge(contact.ai_urgency)}
                 </div>
                 <p className="text-sm text-gray-600 mb-1">티켓: {contact.ticket_id}</p>
                 <p className="text-sm text-gray-600">
@@ -205,6 +247,16 @@ const ContactsPage = () => {
                 <Eye className="w-5 h-5 text-gray-400" />
               </button>
             </div>
+
+             {/* AI Summary (if available) */}
+             {contact.ai_summary && (
+              <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <Sparkles className="w-4 h-4 text-purple-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-purple-900 line-clamp-2">{contact.ai_summary}</p>
+                </div>
+              </div>
+            )}
 
             <div className="p-4 bg-gray-50 rounded-lg mb-4">
               <p className="text-gray-900 line-clamp-2">{contact.message}</p>

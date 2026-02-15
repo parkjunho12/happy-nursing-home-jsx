@@ -64,6 +64,16 @@ export interface User {
     replied_by?: string
     created_at: string
     updated_at?: string
+
+    // AI 분석 결과 (관리자만 조회 가능)
+    ai_summary?: string
+    ai_category?: '입소' | '요금' | '면회' | '의료간호' | '프로그램' | '기타'
+    ai_urgency?: 'HIGH' | 'MEDIUM' | 'LOW'
+    ai_next_actions?: string[]
+    ai_model?: string
+    ai_created_at?: string
+
+    has_ai_analysis: boolean
   }
   
   // History (히스토리)

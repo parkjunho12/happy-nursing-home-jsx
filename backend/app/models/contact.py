@@ -1,4 +1,5 @@
 from sqlalchemy import Column, String, DateTime, Enum as SQLEnum, Text, Boolean
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 import enum
 import uuid
@@ -28,6 +29,14 @@ class Contact(Base):
     reply = Column(Text, nullable=True)
     replied_at = Column(DateTime(timezone=True), nullable=True)
     replied_by = Column(String, nullable=True)
+    
+     # AI Analysis Fields
+    ai_summary = Column(Text, nullable=True)
+    ai_category = Column(String(32), nullable=True, index=True)
+    ai_urgency = Column(String(16), nullable=True, index=True)
+    ai_next_actions = Column(JSONB, nullable=True)
+    ai_model = Column(String(32), nullable=True)
+    ai_created_at = Column(DateTime(timezone=True), nullable=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

@@ -27,7 +27,7 @@ def create_admin():
     user = User(
         id=str(uuid.uuid4()),
         email=email,
-        name="Admin",
+        name="관리자",
         hashed_password=get_password_hash(password),
         role="ADMIN",
     )

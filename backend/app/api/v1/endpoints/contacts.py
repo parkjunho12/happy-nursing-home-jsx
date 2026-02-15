@@ -40,6 +40,35 @@ def get_contact(
         raise HTTPException(status_code=404, detail="Contact not found")
     return ApiResponse(success=True, data=to_contact_dict(contact))
 
+@router.get("/{contact_id}/ai-analysis")
+async def get_contact_ai_analysis(contact_id: str, db: Session = Depends(get_db), _: str = Depends(get_current_user)):
+    """
+    상담 AI 분석 결과만 조회 (관리자)
+    
+    Returns:
+        - ai_summary
+        - ai_category
+        - ai_urgency
+        - ai_next_actions
+        - ai_model
+        - ai_created_at
+    """
+    contact = db.query(Contact).filter(Contact.id == contact_id).first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    
+    ai_data = {
+        "ai_summary": contact.ai_summary,
+        "ai_category": contact.ai_category,
+        "ai_urgency": contact.ai_urgency,
+        "ai_next_actions": contact.ai_next_actions,
+        "ai_model": contact.ai_model,
+        "ai_created_at": contact.ai_created_at,
+        "has_ai_analysis": contact.ai_summary is not None
+    }
+    
+    return ApiResponse(success=True, data=ai_data)
+
 
 @router.put("/{contact_id}/reply", response_model=ApiResponse)
 def reply_contact(
