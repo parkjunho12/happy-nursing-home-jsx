@@ -66,8 +66,10 @@ app.add_middleware(
         "api.xn--p80bu1t60gba47bg6abm347gsla.com",
         "localhost",
         "127.0.0.1",
-        "https://admin.xn--p80bu1t60gba47bg6abm347gsla.com",  # admin
-  "https://www.xn--p80bu1t60gba47bg6abm347gsla.com",  # web(있으면)
+        "admin.xn--p80bu1t60gba47bg6abm347gsla.com",  # admin
+        "www.xn--p80bu1t60gba47bg6abm347gsla.com",  # web(있으면)
+        "backend",          # ✅ 도커 내부에서 Host가 이렇게 잡히는 경우 대비
+        "happy_backend",    # ✅ 컨테이너 이름
     ]
 )
 
