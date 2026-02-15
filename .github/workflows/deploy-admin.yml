@@ -4,47 +4,55 @@ on:
   push:
     branches: [main]
     paths:
-      - 'apps/admin/**'
-      - '.github/workflows/deploy-admin.yml'
+      - "apps/admin/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "package.json"
+      - ".github/workflows/deploy-admin.yml"
+
+concurrency:
+  group: deploy-admin
+  cancel-in-progress: true
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-      
-      - name: Install pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 8
-      
-      - name: Install dependencies
-        working-directory: apps/admin
-        run: pnpm install
-      
-      - name: Build
-        working-directory: apps/admin
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Enable pnpm (corepack)
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.29.3 --activate
+          pnpm -v
+
+      - name: Install dependencies (workspace root)
+        run: pnpm install --frozen-lockfile
+
+      - name: Build admin
         env:
-          VITE_API_BASE_URL: https://api.xn--2e0bw44a55au8bo9lbul5lh40a.com
-        run: pnpm build
-      
-      - name: Deploy to VPS
-        uses: appleboy/scp-action@v0.1.7
+          VITE_API_BASE_URL: https://api.xn--p80bu1t60gba47bg6abm347gsla.com
+        run: pnpm --filter ./apps/admin... build
+
+      # ✅ rsync로 배포(삭제 동기화까지)
+      - name: Deploy dist to VPS (rsync)
+        uses: burnett01/rsync-deployments@7.0.2
         with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          source: "apps/admin/dist/*"
-          target: "~/nursing-home/"
-          strip_components: 2
-      
+          switches: -avz --delete
+          path: apps/admin/dist/
+          remote_path: /opt/happy/admin-dist/
+          remote_host: ${{ secrets.VPS_HOST }}
+          remote_user: ${{ secrets.VPS_USER }}
+          remote_key: ${{ secrets.VPS_SSH_KEY }}
+
       - name: Restart Caddy
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -52,6 +60,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            cd ~/nursing-home/infra
-            docker-compose restart caddy
+            cd /opt/happy/infra
+            docker compose restart caddy
+            docker compose ps
             echo "✅ Admin UI deployed successfully"

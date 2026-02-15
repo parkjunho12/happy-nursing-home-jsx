@@ -12,7 +12,7 @@
 # =========================
 # API: api.도메인
 # =========================
-api.행복한요양원녹양역.com {
+api.xn--p80bu1t60gba47bg6abm347gsla.com {
   encode gzip zstd
 
   # Health
@@ -41,7 +41,7 @@ api.행복한요양원녹양역.com {
 # =========================
 # Admin: admin.도메인
 # =========================
-admin.행복한요양원녹양역.com {
+admin.xn--p80bu1t60gba47bg6abm347gsla.com {
   encode gzip zstd
 
   root * /srv/admin
