@@ -51,7 +51,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
 
       # ✅ Docker 네트워크 호스트명 postgres
-      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: redis://redis:6379/0
 
       SECRET_KEY: ${SECRET_KEY}
