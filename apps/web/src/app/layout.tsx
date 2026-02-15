@@ -43,11 +43,7 @@ export const metadata: Metadata = {
       },
     ],
   },
-  icons: {
-    icon: "./logo.png",
-    shortcut: "./logo.png",
-    apple: "./logo.png",
-  },
+
   twitter: {
     card: 'summary_large_image',
     title: DEFAULT_METADATA.title,
@@ -78,7 +74,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     telephone: SITE_INFO.phone,
     email: SITE_INFO.email,
     image: '/og-image.jpg',
-    logo: '/logo.png',
     address: {
       '@type': 'PostalAddress',
       streetAddress: SITE_INFO.address.street,
@@ -101,11 +96,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     },
     slogan: SITE_INFO.slogan,
     sameAs: Object.values(SITE_INFO.social),
+    icons: {
+      icon: [
+        { url: '/favicon.ico' },
+      ],
+      apple: [
+        { url: '/apple-touch-icon.png' },
+      ],
+    },
+  
   }
 
   return (
     <html lang="ko" className="scroll-smooth">
       <head>
+        <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
 
