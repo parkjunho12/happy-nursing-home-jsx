@@ -12,5 +12,5 @@
       "vite.config.ts",
       "scripts/**/*.ts"
     ]
-  }
+}
   
