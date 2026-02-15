@@ -6,22 +6,28 @@ import logging
 import os
 from app.core.config import settings
 from app.api.v1.router import api_router
+import logging
+import sys
 
 if settings.ENVIRONMENT == "production":
-    log_path = "/app/logs/app.log"
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)],
+    )
+
 else:
     os.makedirs("logs", exist_ok=True)
     log_path = "logs/app.log"
-
-# 로깅 설정
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(log_path),
-        logging.StreamHandler()
-    ]
-)
+    # 로깅 설정
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_path),
+            logging.StreamHandler()
+        ]
+    )
 logger = logging.getLogger(__name__)
 
 @asynccontextmanager
