@@ -1,0 +1,57 @@
+name: Deploy Admin UI to VPS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/admin/**'
+      - '.github/workflows/deploy-admin.yml'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+      
+      - name: Install dependencies
+        working-directory: apps/admin
+        run: pnpm install
+      
+      - name: Build
+        working-directory: apps/admin
+        env:
+          VITE_API_BASE_URL: https://api.xn--2e0bw44a55au8bo9lbul5lh40a.com
+        run: pnpm build
+      
+      - name: Deploy to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "apps/admin/dist/*"
+          target: "~/nursing-home/"
+          strip_components: 2
+      
+      - name: Restart Caddy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd ~/nursing-home/infra
+            docker-compose restart caddy
+            echo "✅ Admin UI deployed successfully"

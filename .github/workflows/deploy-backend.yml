@@ -1,0 +1,28 @@
+name: Deploy Backend to VPS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'infra/**'
+      - '.github/workflows/deploy-backend.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd ~/nursing-home
+            git pull origin main
+            cd infra
+            docker-compose build backend
+            docker-compose up -d --force-recreate backend
+            echo "✅ Backend deployed successfully"

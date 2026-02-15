@@ -1,0 +1,92 @@
+# API 도메인
+api.xn--2e0bw44a55au8bo9lbul5lh40a.com {
+    # 요청 로깅
+    log {
+        output file /data/logs/api-access.log
+        format json
+    }
+
+    # Health Check 엔드포인트
+    @health {
+        path /health
+    }
+    handle @health {
+        reverse_proxy backend:8000
+        header Cache-Control "public, max-age=30"
+    }
+
+    # API 요청
+    handle /api/* {
+        reverse_proxy backend:8000 {
+            # 헬스 체크
+            health_uri /health
+            health_interval 30s
+            health_timeout 10s
+
+            # 헤더 설정
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # WebSocket 지원
+    @websockets {
+        header Connection *Upgrade*
+        header Upgrade websocket
+    }
+    handle @websockets {
+        reverse_proxy backend:8000
+    }
+
+    # 나머지는 404
+    handle {
+        respond "API endpoint not found" 404
+    }
+
+    # 보안 헤더
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        X-XSS-Protection "1; mode=block"
+        Content-Security-Policy "default-src 'self'"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+}
+
+# Admin 도메인 (React SPA 정적 호스팅)
+admin.xn--2e0bw44a55au8bo9lbul5lh40a.com {
+    log {
+        output file /data/logs/admin-access.log
+        format json
+    }
+
+    # 정적 파일 서빙
+    root * /srv/admin
+    
+    # SPA 라우팅 (모든 경로를 index.html로)
+    try_files {path} /index.html
+    file_server
+
+    # 보안 헤더
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # 캐싱 (정적 에셋)
+    @static {
+        path *.js *.css *.png *.jpg *.jpeg *.gif *.ico *.svg *.woff *.woff2
+    }
+    header @static Cache-Control "public, max-age=31536000, immutable"
+
+    # HTML은 캐싱 안함
+    @html {
+        path *.html /
+    }
+    header @html Cache-Control "no-cache, no-store, must-revalidate"
+}

@@ -1,0 +1,105 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: happy_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nursing-home-net
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: nursing-home-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - nursing-home-net
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: nursing-home-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY}
+      ALGORITHM: ${ALGORITHM}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      ENVIRONMENT: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - backend_uploads:/app/uploads
+      - backend_logs:/app/logs
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - nursing-home-net
+
+  # Caddy Reverse Proxy
+  caddy:
+    image: caddy:2.7-alpine
+    container_name: nursing-home-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+      - ../../apps/admin/dist:/srv/admin
+    depends_on:
+      - backend
+    networks:
+      - nursing-home-net
+
+volumes:
+  postgres_data:
+  redis_data:
+  backend_uploads:
+  backend_logs:
+  caddy_data:
+  caddy_config:
+
+networks:
+  nursing-home-net:
+    driver: bridge
