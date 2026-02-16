@@ -96,7 +96,7 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 
   const signal = signals.length === 1
     ? signals[0]
-    : AbortSignal.any(signals as any) // TS libdom 최신이면 가능. 아니면 아래 주석 버전 사용.
+    : controller.signal // TS libdom 최신이면 가능. 아니면 아래 주석 버전 사용.
   // ⚠️ AbortSignal.any 미지원 환경이면:
   // const signal = controller.signal
 

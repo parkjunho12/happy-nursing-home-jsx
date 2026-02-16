@@ -1,23 +1,26 @@
 {
-    "name": "nursing-home-monorepo",
-    "version": "1.0.0",
-    "private": true,
-    "workspaces": [
-      "apps/*"
-    ],
-    "scripts": {
-      "dev:web": "pnpm --filter web dev",
-      "dev:admin": "pnpm --filter admin dev",
-      "build:web": "pnpm --filter web build",
-      "build:admin": "pnpm --filter admin build",
-      "deploy:web": "pnpm build:web && vercel --prod",
-      "deploy:admin": "pnpm build:admin"
-    },
-    "devDependencies": {
-      "turbo": "^1.11.3"
-    },
-    "engines": {
-      "node": ">=18.0.0",
-      "pnpm": ">=8.0.0"
-    }
+  "name": "nursing-home-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:web": "pnpm --filter web dev",
+    "dev:admin": "pnpm --filter admin dev",
+    "build:web": "pnpm --filter web build",
+    "build:admin": "pnpm --filter admin build",
+    "deploy:web": "pnpm build:web && vercel --prod",
+    "deploy:admin": "pnpm build:admin"
+  },
+  "devDependencies": {
+    "turbo": "^1.11.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "dependencies": {
+    "openai": "^4.104.0"
   }
+}

@@ -348,7 +348,7 @@ export default function PricingPage() {
               맞춤 상담 신청
             </Link>
             <a
-              href="tel:02-1234-5678"
+              href="tel:031-856-809"
               className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white/10 backdrop-blur-sm border-2 border-white text-white rounded-lg font-semibold hover:bg-white/20 transition-colors"
             >
               전화 문의하기
