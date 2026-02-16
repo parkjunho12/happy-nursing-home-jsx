@@ -21,6 +21,8 @@
     "pnpm": ">=8.0.0"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.29",
+    "ai": "^3.4.33",
     "openai": "^4.104.0"
   }
 }
