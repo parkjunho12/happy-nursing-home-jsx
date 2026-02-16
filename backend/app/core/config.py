@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Literal
 
 class Settings(BaseSettings):
     # Database
@@ -17,6 +17,24 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str
     
     OPENAI_API_KEY: str = ""
+    
+    # =============================
+    # Email Provider
+    # =============================
+    EMAIL_PROVIDER: Literal["resend", "sendgrid"] = "resend"
+
+    RESEND_API_KEY: str = ""
+    SENDGRID_API_KEY: str = ""
+
+    MAIL_FROM: str = ""
+    MAIL_REPLY_TO: str = ""
+    MAIL_ADMIN_TO: str = ""  # comma separated
+
+    PUBLIC_SITE_URL: str = ""
+    ADMIN_URL: str = ""
+    
+    SUPPORT_EMAIL: str = ""
+    SUPPORT_PHONE: str = ""
     
     @property
     def CORS_ORIGINS_LIST(self) -> List[str]:

@@ -33,6 +33,7 @@ from app.schemas.public import (
 
 from app.schemas.ai import ContactAnalysisRequest
 from app.services.openai import analyze_contact_inquiry
+from app.services.email_service import notify_admins_new_contact, contact_to_dict
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -129,6 +130,8 @@ async def submit_contact_form(
 
     # ✅ AI 분석은 백그라운드로
     background_tasks.add_task(_run_ai_analysis_and_save, row.id)
+    # ✅ 관리자 알림 메일도 백그라운드로 (AI 분석과 동일한 방식)
+    background_tasks.add_task(notify_admins_new_contact, contact_to_dict(row))
 
     # ✅ response_model이 PublicApiResponse[dict] 이므로 dict로 감싸서 반환
     return PublicApiResponse(
