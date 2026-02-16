@@ -12,6 +12,8 @@ from app.schemas.contact import (
     ContactReplyRequest,
     ContactStatusUpdateRequest,
 )
+from fastapi import BackgroundTasks
+from app.services.email_service import send_customer_reply, contact_to_dict
 
 router = APIRouter()
 
@@ -74,6 +76,7 @@ async def get_contact_ai_analysis(contact_id: str, db: Session = Depends(get_db)
 def reply_contact(
     contact_id: str,
     payload: ContactReplyRequest,
+    background_tasks: BackgroundTasks,   # ✅ 추가
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -88,6 +91,9 @@ def reply_contact(
 
     db.commit()
     db.refresh(contact)
+    
+    background_tasks.add_task(send_customer_reply, contact_to_dict(contact), payload.reply)
+    
     return ApiResponse(success=True, data=to_contact_dict(contact))
 
 
