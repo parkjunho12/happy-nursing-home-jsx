@@ -4,6 +4,7 @@ import { Noto_Sans_KR, Nanum_Myeongjo } from 'next/font/google'
 import './globals.css'
 import { DEFAULT_METADATA, SITE_INFO } from '@/lib/constants'
 import GTM from '@/components/analytics/GTM'
+import dynamic from 'next/dynamic'
 
 const notoSansKr = Noto_Sans_KR({
   subsets: ['latin'],
@@ -63,6 +64,9 @@ export const metadata: Metadata = {
   },
   verification: { google: 'your-google-site-verification' },
 }
+const ChatButton = dynamic(() => import('@/components/chat/ChatButton'), {
+  ssr: false,
+})
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const structuredData = {
@@ -123,6 +127,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${notoSansKr.variable} ${nanumMyeongjo.variable} font-sans antialiased`}>
         <GTM />
         {children}
+        <ChatButton />
 
       </body>
     </html>

@@ -202,7 +202,7 @@ const SettingsPage = () => {
                     </label>
                     <input
                       type="tel"
-                      defaultValue="02-1234-5678"
+                      defaultValue="031-856-809"
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-orange focus:border-transparent"
                     />
                   </div>
@@ -224,7 +224,7 @@ const SettingsPage = () => {
                     </label>
                     <input
                       type="text"
-                      defaultValue="서울특별시 XX구 XX동 123-45"
+                      defaultValue="경기 양주시 외미로20번길 34 "
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-orange focus:border-transparent"
                     />
                   </div>
