@@ -76,32 +76,56 @@ export function GallerySection() {
   const galleryItems = [
     {
       id: 1,
-      src: '/assets/images/interior.png',
+      src: '/assets/images/interior.JPG',
       title: '요양원 내관',
       span: 'col-span-2 row-span-2',
     },
     {
       id: 2,
-      src: '/assets/images/room.png',
-      title: '침실',
+      src: '/assets/images/2room.JPG',
+      title: '2인실',
       span: '',
     },
     {
       id: 3,
-      src: '/assets/images/dining.png',
-      title: '식당',
+      src: '/assets/images/4room.JPG',
+      title: '4인실',
       span: '',
     },
     {
       id: 4,
+      src: '/assets/images/dining.JPG',
+      title: '식당',
+      span: '',
+    },
+    {
+      id: 5,
       src: '/assets/images/program.png',
       title: '프로그램실',
       span: '',
     },
     {
-      id: 5,
+      id: 6,
       src: '/assets/images/health.png',
       title: '물리치료실',
+      span: '',
+    },
+    {
+      id: 7,
+      src: '/assets/images/bathroom.JPG',
+      title: '화장실',
+      span: '',
+    },
+    {
+      id: 8,
+      src: '/assets/images/meeting.JPG',
+      title: '상담실',
+      span: '',
+    },
+    {
+      id: 9,
+      src: '/assets/images/meeting2.JPG',
+      title: '상담실2',
       span: '',
     },
   ]
