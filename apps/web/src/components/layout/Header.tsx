@@ -22,7 +22,6 @@ export default function Header() {
     { href: '/', label: '홈' },
     { href: '/about', label: '시설 소개' },
     { href: '/services', label: '서비스' },
-    { href: '/pricing', label: '요금 안내' },
     { href: '/reviews', label: '이용 후기' },
     { href: '/history', label: '히스토리' },
     { href: '/contact', label: '상담 신청' },

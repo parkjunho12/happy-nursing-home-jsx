@@ -17,7 +17,7 @@ export default function Footer() {
               {SITE_INFO.name}
             </h3>
             <p className="leading-relaxed mb-6">
-              15년 전통의 전문 노인요양시설
+              13년 전통의 전문 노인요양시설
               <br />
               {SITE_INFO.slogan}
               <br />
