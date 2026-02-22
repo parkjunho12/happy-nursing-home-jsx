@@ -231,7 +231,7 @@ export default function ServicesPage() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-4">
+          {/* <div className="grid md:grid-cols-2 gap-4">
             {dailySchedule.map((item, index) => (
               <div
                 key={index}
@@ -247,7 +247,7 @@ export default function ServicesPage() {
                 </div>
               </div>
             ))}
-          </div>
+          </div> */}
 
           <div className="mt-12 p-6 bg-blue-50 border-2 border-blue-200 rounded-xl">
             <p className="text-center text-gray-700">

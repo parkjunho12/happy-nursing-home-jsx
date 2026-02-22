@@ -6,7 +6,7 @@ import KakaoMap from '@/components/map/KaKaoMap'
 
 export const metadata: Metadata = {
   title: '시설 소개 | 행복한요양원 녹양역점',
-  description: '15년 전통의 행복한요양원 녹양역점을 소개합니다. 전문 간호사 24시간 상주, 쾌적한 환경, A등급 인증 시설.',
+  description: '13년 전통의 행복한요양원 녹양역점을 소개합니다. 전문 간호사 24시간 상주, 쾌적한 환경, A등급 인증 시설.',
 }
 
 export default function AboutPage() {
@@ -105,7 +105,7 @@ export default function AboutPage() {
               </h2>
               <div className="space-y-4 text-gray-700 text-lg leading-relaxed">
                 <p>
-                  행복한요양원 녹양역점은 2010년 개원 이래 <strong className="text-primary-orange">15년간</strong> 어르신들의 행복하고 건강한 노후를 위해 최선을 다해왔습니다.
+                  행복한요양원 녹양역점은 2010년 개원 이래 <strong className="text-primary-orange">13년간</strong> 어르신들의 행복하고 건강한 노후를 위해 최선을 다해왔습니다.
                 </p>
                 <p>
                   우리는 단순히 요양 서비스를 제공하는 것이 아니라, <strong className="text-primary-orange">어르신 한 분 한 분을 가족처럼 모시며</strong> 존엄과 행복을 지켜드리는 것을 최우선 가치로 삼고 있습니다.
@@ -181,7 +181,7 @@ export default function AboutPage() {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-3xl lg:text-4xl font-bold mb-4 text-gray-900">
-              15년의 역사
+              13년의 역사
             </h2>
             <p className="text-xl text-gray-600">
               함께 걸어온 감사한 시간들

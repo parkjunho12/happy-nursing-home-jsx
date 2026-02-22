@@ -13,7 +13,7 @@ import {
     name: '행복한요양원',
     slogan: '가족처럼 따뜻하게, 전문가처럼 안전하게',
     phone: '031-856-8090',
-    email: 'ghdlwnsgh25@gmail.com',
+    email: 'happy8568090@gmail.com',
     address: {
       full: '경기 양주시 외미로20번길 34 (남방동)',
       city: '경기 양주시',
@@ -252,7 +252,7 @@ import {
   // 메타데이터
   export const DEFAULT_METADATA = {
     title: '행복한요양원 | 경기 양주시 전문 요양 시설',
-    description: '15년 전통의 행복한요양원. 전문 간호사 24시간 상주, 개별 맞춤 케어, 지자체 A등급 인증. 가족처럼 따뜻하게, 전문가처럼 안전하게.',
+    description: '13년 전통의 행복한요양원. 전문 간호사 24시간 상주, 개별 맞춤 케어, 지자체 A등급 인증. 가족처럼 따뜻하게, 전문가처럼 안전하게.',
     keywords: '요양원, 경기도요양원, 양주시요양원, 노인요양시설, 전문요양원, 장기요양, 노인요양',
     ogImage: '/og-image.jpg',
   }
