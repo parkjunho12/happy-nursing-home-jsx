@@ -29,7 +29,7 @@ def _from_email() -> str:
     # 운영에서 필수. 개발에서만 fallback 허용
     if settings.MAIL_FROM:
         return settings.MAIL_FROM
-    return "Happy Nursing Home <no-reply@example.com>"
+    return "Happy Nursing Home <contact@example.com>"
 
 
 def _reply_to() -> Optional[str]:
