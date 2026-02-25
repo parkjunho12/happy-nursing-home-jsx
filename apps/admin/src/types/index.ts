@@ -90,6 +90,7 @@ export interface User {
     tags: string[]
     createdAt: string
     updatedAt: string
+    image_url: string
   }
   
   // Review (후기)

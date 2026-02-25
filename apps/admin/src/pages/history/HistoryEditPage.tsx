@@ -16,6 +16,7 @@ const HistoryEditPage = () => {
     excerpt: '',
     tags: [] as string[],
     isPublished: false,
+    imageUrl: '', 
   })
   const [tagInput, setTagInput] = useState('')
 
@@ -37,6 +38,7 @@ const HistoryEditPage = () => {
           excerpt: response.excerpt,
           tags: response.tags || [],
           isPublished: response.isPublished,
+          imageUrl: response.imageUrl ?? response.image_url ?? '',
         })
       }
     } catch (error) {
@@ -46,20 +48,33 @@ const HistoryEditPage = () => {
     }
   }
 
+  const toApiPayload = (v: typeof formData) => ({
+    title: v.title,
+    category: v.category,
+    content: v.content,
+    excerpt: v.excerpt,
+    tags: v.tags,
+    is_published: v.isPublished,
+    image_url: v.imageUrl?.trim() ? v.imageUrl.trim() : null,
+    // slug는 Optional이면 안 보내도 됨
+  })
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+  
     if (!formData.title || !formData.content || !formData.excerpt) {
       alert('필수 항목을 모두 입력해주세요')
       return
     }
-
+  
     try {
       setLoading(true)
+      const payload = toApiPayload(formData)
+  
       if (isEdit && id) {
-        await historyAPI.update(id, formData)
+        await historyAPI.update(id, payload)
       } else {
-        await historyAPI.create(formData)
+        await historyAPI.create(payload)
       }
       navigate('/history')
     } catch (error) {
@@ -233,6 +248,56 @@ const HistoryEditPage = () => {
               ))}
             </div>
           )}
+        </div>
+
+        {/* Image URL */}
+        <div className="bg-white rounded-2xl p-6 border-2 border-gray-100">
+        <label className="block text-sm font-bold text-gray-900 mb-3">
+            대표 이미지 URL
+        </label>
+
+        <input
+            type="url"
+            value={formData.imageUrl}
+            onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
+            placeholder="https://... (권장: 1200px 이상)"
+            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-orange focus:border-transparent"
+        />
+
+        <div className="mt-4 flex items-center gap-3">
+            <button
+            type="button"
+            onClick={() => setFormData({ ...formData, imageUrl: '' })}
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-bold hover:bg-gray-200"
+            >
+            이미지 제거
+            </button>
+            <p className="text-sm text-gray-500">
+            이미지를 넣으면 상세/목록에서 대표 이미지로 표시됩니다.
+            </p>
+        </div>
+
+        {/* Preview */}
+        {formData.imageUrl?.trim() && (
+            <div className="mt-6">
+            <p className="text-sm font-semibold text-gray-700 mb-2">미리보기</p>
+            <div className="rounded-2xl overflow-hidden border border-gray-200 bg-gray-50">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                src={formData.imageUrl}
+                alt="대표 이미지 미리보기"
+                className="w-full h-64 object-cover"
+                onError={(e) => {
+                    // 깨진 이미지 UX
+                    ;(e.currentTarget as HTMLImageElement).style.display = 'none'
+                }}
+                />
+                <div className="p-4 text-sm text-gray-500">
+                이미지가 안 보이면 URL이 유효한지 확인해주세요.
+                </div>
+            </div>
+            </div>
+        )}
         </div>
 
         {/* Publish */}

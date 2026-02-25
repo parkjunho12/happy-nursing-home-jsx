@@ -1,115 +1,107 @@
 import { Metadata } from 'next'
 import Link from 'next/link'
-import { Calendar, Tag, Eye, ChevronRight } from 'lucide-react'
+import { Calendar, Eye, ChevronRight } from 'lucide-react'
+
+import { getPublishedHistory } from '@/lib/api-client'
+import { CATEGORY_CONFIG, type HistoryCategory } from '@/types/history'
+import { toHistoryPost, toHistoryListItem, type HistoryResponseRaw } from '@/lib/history-mapper'
 
 export const metadata: Metadata = {
   title: '히스토리 | 행복한요양원 녹양역점',
   description: '행복한요양원의 다양한 활동과 소식을 확인하세요.',
 }
 
-export default function HistoryPage() {
-  // 임시 데이터 (실제로는 API에서 가져옴)
-  const posts = [
-    {
-      id: '1',
-      title: '2024년 설날 특별 행사',
-      slug: '2024-lunar-new-year',
-      category: 'PROGRAM',
-      categoryLabel: '프로그램',
-      excerpt: '온 가족이 함께한 즐거운 설날 행사. 떡국 나누기, 윷놀이, 복주머니 만들기 등 다양한 활동을 진행했습니다.',
-      publishedAt: '2024-02-10',
-      imageUrl: null,
-      viewCount: 145,
-    },
-    {
-      id: '2',
-      title: '크리스마스 특별 콘서트',
-      slug: '2023-christmas-concert',
-      category: 'EVENT',
-      categoryLabel: '행사',
-      excerpt: '지역 합창단을 초대하여 따뜻한 크리스마스 캐럴 콘서트를 진행했습니다. 어르신들께서 함께 노래 부르시며 즐거운 시간을 보내셨습니다.',
-      publishedAt: '2023-12-25',
-      imageUrl: null,
-      viewCount: 198,
-    },
-    {
-      id: '3',
-      title: '가을 단풍 나들이',
-      slug: '2023-autumn-outing',
-      category: 'PROGRAM',
-      categoryLabel: '프로그램',
-      excerpt: '아름다운 가을 단풍을 감상하며 인근 공원으로 나들이를 다녀왔습니다. 어르신들께서 신선한 공기를 마시며 행복한 시간을 보내셨습니다.',
-      publishedAt: '2023-10-15',
-      imageUrl: null,
-      viewCount: 176,
-    },
-    {
-      id: '4',
-      title: '건강 검진 실시',
-      slug: '2023-health-checkup',
-      category: 'NEWS',
-      categoryLabel: '소식',
-      excerpt: '전 입소자 대상 정기 건강 검진을 실시했습니다. 전문 의료진이 방문하여 종합 건강 상태를 점검했습니다.',
-      publishedAt: '2023-09-01',
-      imageUrl: null,
-      viewCount: 132,
-    },
-    {
-      id: '5',
-      title: '자원봉사자 방문',
-      slug: '2023-volunteer-visit',
-      category: 'VOLUNTEER',
-      categoryLabel: '봉사활동',
-      excerpt: '지역 대학교 봉사 동아리가 방문하여 어르신들과 함께 즐거운 시간을 보냈습니다. 함께 노래하고 이야기 나누며 따뜻한 시간이었습니다.',
-      publishedAt: '2023-08-20',
-      imageUrl: null,
-      viewCount: 89,
-    },
-    {
-      id: '6',
-      title: '여름 특별 프로그램',
-      slug: '2023-summer-program',
-      category: 'PROGRAM',
-      categoryLabel: '프로그램',
-      excerpt: '무더운 여름, 시원한 수박 파티와 부채 만들기, 물놀이 등 다양한 여름 특별 프로그램을 진행했습니다.',
-      publishedAt: '2023-07-15',
-      imageUrl: null,
-      viewCount: 203,
-    },
-  ]
+type SearchParams = {
+  page?: string
+  category?: string
+}
+
+const PAGE_SIZE = 12
+
+function isHistoryCategory(v?: string): v is HistoryCategory {
+  if (!v) return false
+  return Object.prototype.hasOwnProperty.call(CATEGORY_CONFIG, v)
+}
+
+function colorClass(category: HistoryCategory) {
+  switch (CATEGORY_CONFIG[category].color) {
+    case 'orange':
+      return 'bg-orange-100 text-orange-700'
+    case 'green':
+      return 'bg-green-100 text-green-700'
+    case 'brown':
+      return 'bg-amber-100 text-amber-800'
+    case 'blue':
+      return 'bg-blue-100 text-blue-700'
+    case 'pink':
+      return 'bg-pink-100 text-pink-700'
+    case 'gray':
+    default:
+      return 'bg-gray-100 text-gray-700'
+  }
+}
+
+export default async function HistoryPage({
+  searchParams,
+}: {
+  searchParams: SearchParams
+}) {
+  const currentPage = Math.max(1, Number(searchParams.page || '1') || 1)
+
+  const currentCategory: 'ALL' | HistoryCategory =
+    isHistoryCategory(searchParams.category) ? searchParams.category : 'ALL'
+
+  // ✅ API는 한 번만 호출
+  const res = await getPublishedHistory<HistoryResponseRaw[]>()
+  console.log('History API Response:', res)
+
+  const allPosts = (res.success && Array.isArray(res.data) ? res.data : [])
+    .map(toHistoryPost)
+    // public endpoint면 사실상 필요 없지만 안전장치
+    // .filter((x) => x.isPublished)
+    // 최신순
+    .sort((a, b) => {
+      const ta = (a.publishedAt ?? a.createdAt).getTime()
+      const tb = (b.publishedAt ?? b.createdAt).getTime()
+      return tb - ta
+    })
+
+  // ✅ 카테고리별 count는 “한 번 가져온 데이터”에서 계산
+  const categoryCounts = allPosts.reduce<Record<string, number>>((acc, p) => {
+    acc[p.category] = (acc[p.category] || 0) + 1
+    return acc
+  }, {})
+  const totalCount = allPosts.length
+
+  // ✅ 필터 적용
+  const filtered = currentCategory === 'ALL'
+    ? allPosts
+    : allPosts.filter((p) => p.category === currentCategory)
+
+  // ✅ pagination (프론트에서 슬라이스)
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const safePage = Math.min(currentPage, totalPages)
+
+  const pageItems = filtered
+    .slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
+    .map(toHistoryListItem)
 
   const categories = [
-    { value: 'ALL', label: '전체', count: posts.length },
-    { value: 'PROGRAM', label: '프로그램', count: 3 },
-    { value: 'EVENT', label: '행사', count: 1 },
-    { value: 'NEWS', label: '소식', count: 1 },
-    { value: 'VOLUNTEER', label: '봉사활동', count: 1 },
+    { value: 'ALL' as const, label: '전체', count: totalCount },
+    ...(Object.keys(CATEGORY_CONFIG) as HistoryCategory[]).map((k) => ({
+      value: k,
+      label: CATEGORY_CONFIG[k].label,
+      count: categoryCounts[k] || 0,
+    })),
   ]
-
-  const getCategoryColor = (category: string) => {
-    switch (category) {
-      case 'PROGRAM':
-        return 'bg-blue-100 text-blue-700'
-      case 'EVENT':
-        return 'bg-purple-100 text-purple-700'
-      case 'NEWS':
-        return 'bg-green-100 text-green-700'
-      case 'VOLUNTEER':
-        return 'bg-orange-100 text-orange-700'
-      default:
-        return 'bg-gray-100 text-gray-700'
-    }
-  }
 
   return (
     <div className="min-h-screen pt-20">
-      {/* Hero */}
+      {/* Hero Section */}
       <section className="relative bg-gradient-to-br from-primary-brown to-primary-orange text-white py-20">
         <div className="absolute inset-0 bg-black/10" />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6">
-            히스토리
-          </h1>
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6">히스토리</h1>
           <p className="text-xl md:text-2xl text-white/90 max-w-3xl mx-auto">
             행복한요양원의 다양한 활동과<br />
             따뜻한 이야기들을 확인하세요
@@ -117,18 +109,32 @@ export default function HistoryPage() {
         </div>
       </section>
 
-      {/* Categories */}
+      {/* Categories Filter */}
       <section className="py-8 bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-wrap gap-3">
-            {categories.map((category) => (
-              <button
-                key={category.value}
-                className="px-6 py-3 bg-white border-2 border-gray-300 rounded-full font-semibold text-gray-700 hover:border-primary-orange hover:text-primary-orange transition-colors"
-              >
-                {category.label} ({category.count})
-              </button>
-            ))}
+            {categories.map((cat) => {
+              const href =
+                cat.value === 'ALL'
+                  ? '/history'
+                  : `/history?category=${cat.value}`
+
+              const active = currentCategory === cat.value
+
+              return (
+                <Link
+                  key={cat.value}
+                  href={href}
+                  className={`px-6 py-3 rounded-full font-semibold transition-all ${
+                    active
+                      ? 'bg-primary-orange text-white shadow-md'
+                      : 'bg-white border-2 border-gray-300 text-gray-700 hover:border-primary-orange hover:text-primary-orange'
+                  }`}
+                >
+                  {cat.label} ({cat.count})
+                </Link>
+              )
+            })}
           </div>
         </div>
       </section>
@@ -136,63 +142,154 @@ export default function HistoryPage() {
       {/* Posts Grid */}
       <section className="py-16 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {posts.map((post) => (
-              <Link
-                key={post.id}
-                href={`/history/${post.slug}`}
-                className="group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
-              >
-                {/* Image */}
-                <div className="relative h-48 bg-gradient-to-br from-primary-orange/20 to-primary-green/20 overflow-hidden">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-6xl">📸</span>
-                  </div>
-                  <div className="absolute top-4 left-4">
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getCategoryColor(post.category)}`}>
-                      {post.categoryLabel}
-                    </span>
-                  </div>
+          {!res.success && (
+            <div className="bg-white rounded-2xl p-6 text-gray-700">
+              히스토리를 불러오지 못했습니다. {res.message || ''}
+            </div>
+          )}
+
+          {pageItems.length === 0 ? (
+            <div className="text-center py-20">
+              <div className="text-6xl mb-4">📭</div>
+              <p className="text-gray-500 text-lg">아직 게시글이 없습니다</p>
+              <p className="text-gray-400 text-sm mt-2">
+                곧 다양한 소식을 전해드리겠습니다
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {pageItems.map((post) => {
+                  const cfg = CATEGORY_CONFIG[post.category]
+                  return (
+                    <Link
+                      key={post.id}
+                      href={`/history/${post.slug}`}
+                      className="group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
+                    >
+                      {/* Image */}
+                      <div className="relative h-48 overflow-hidden">
+                        {post.thumbnail ? (
+                          // next/image로 바꾸면 더 좋음 (추후)
+                          <img
+                            src={post.thumbnail}
+                            alt={post.title}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-primary-orange/20 to-primary-green/20 flex items-center justify-center">
+                            <span className="text-6xl">{cfg.emoji}</span>
+                          </div>
+                        )}
+
+                        {/* Category Badge */}
+                        <div className="absolute top-4 left-4">
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${colorClass(post.category)}`}>
+                            {cfg.label}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Content */}
+                      <div className="p-6">
+                        <h3 className="text-xl font-bold mb-3 text-gray-900 group-hover:text-primary-orange transition-colors line-clamp-2">
+                          {post.title}
+                        </h3>
+
+                        {post.excerpt && (
+                          <p className="text-gray-600 mb-4 line-clamp-2 text-sm">
+                            {post.excerpt}
+                          </p>
+                        )}
+
+                        {/* Meta */}
+                        <div className="flex items-center justify-between text-sm text-gray-500">
+                          <div className="flex items-center gap-1">
+                            <Calendar className="w-4 h-4" />
+                            <span>{post.publishedAt.toLocaleDateString('ko-KR')}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Eye className="w-4 h-4" />
+                            <span>{post.viewCount}</span>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 pt-4 border-t border-gray-100">
+                          <div className="flex items-center gap-2 text-primary-orange font-semibold group-hover:gap-3 transition-all">
+                            자세히 보기
+                            <ChevronRight className="w-5 h-5" />
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+                  )
+                })}
+              </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="mt-12 flex justify-center items-center gap-2">
+                  {safePage > 1 && (
+                    <Link
+                      href={
+                        currentCategory === 'ALL'
+                          ? `/history?page=${safePage - 1}`
+                          : `/history?page=${safePage - 1}&category=${currentCategory}`
+                      }
+                      className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:border-primary-orange hover:text-primary-orange transition-colors"
+                    >
+                      이전
+                    </Link>
+                  )}
+
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
+                    if (
+                      pageNum === 1 ||
+                      pageNum === totalPages ||
+                      (pageNum >= safePage - 1 && pageNum <= safePage + 1)
+                    ) {
+                      const href =
+                        currentCategory === 'ALL'
+                          ? `/history?page=${pageNum}`
+                          : `/history?page=${pageNum}&category=${currentCategory}`
+
+                      return (
+                        <Link
+                          key={pageNum}
+                          href={href}
+                          className={`px-4 py-2 rounded-lg font-semibold transition-colors ${
+                            pageNum === safePage
+                              ? 'bg-primary-orange text-white'
+                              : 'bg-white text-gray-700 border border-gray-300 hover:border-primary-orange hover:text-primary-orange'
+                          }`}
+                        >
+                          {pageNum}
+                        </Link>
+                      )
+                    }
+                    if (pageNum === safePage - 2 || pageNum === safePage + 2) {
+                      return <span key={pageNum} className="px-2">...</span>
+                    }
+                    return null
+                  })}
+
+                  {safePage < totalPages && (
+                    <Link
+                      href={
+                        currentCategory === 'ALL'
+                          ? `/history?page=${safePage + 1}`
+                          : `/history?page=${safePage + 1}&category=${currentCategory}`
+                      }
+                      className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:border-primary-orange hover:text-primary-orange transition-colors"
+                    >
+                      다음
+                    </Link>
+                  )}
                 </div>
-
-                {/* Content */}
-                <div className="p-6">
-                  <h3 className="text-xl font-bold mb-3 text-gray-900 group-hover:text-primary-orange transition-colors line-clamp-2">
-                    {post.title}
-                  </h3>
-                  <p className="text-gray-600 mb-4 line-clamp-2">
-                    {post.excerpt}
-                  </p>
-
-                  <div className="flex items-center justify-between text-sm text-gray-500">
-                    <div className="flex items-center gap-1">
-                      <Calendar className="w-4 h-4" />
-                      <span>{new Date(post.publishedAt).toLocaleDateString('ko-KR')}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Eye className="w-4 h-4" />
-                      <span>{post.viewCount}</span>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 pt-4 border-t border-gray-100">
-                    <div className="flex items-center gap-2 text-primary-orange font-semibold group-hover:gap-3 transition-all">
-                      자세히 보기
-                      <ChevronRight className="w-5 h-5" />
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-
-          {/* Load More */}
-          <div className="mt-12 text-center">
-            <button className="inline-flex items-center gap-2 px-8 py-4 bg-white border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:border-primary-orange hover:text-primary-orange transition-colors">
-              더 보기
-              <ChevronRight className="w-5 h-5" />
-            </button>
-          </div>
+              )}
+            </>
+          )}
         </div>
       </section>
     </div>

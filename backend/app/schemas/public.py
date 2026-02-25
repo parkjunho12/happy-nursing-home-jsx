@@ -137,3 +137,61 @@ class PublicInfoOut(BaseModel):
     phone: str
     hours: Optional[str] = None
     email: Optional[str] = None
+
+# =========================================================
+# History (Extended + Pagination)
+# =========================================================
+
+class HistoryListItemV2(BaseModel):
+    """
+    프론트 HistoryListItem 요구사항에 맞춘 public 목록 아이템
+    - thumbnail/tags/viewCount 포함
+    """
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    title: str
+    slug: str
+    category: str
+    excerpt: Optional[str] = None
+
+    thumbnail: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+
+    publishedAt: Optional[datetime] = None
+    viewCount: int = 0
+
+
+class HistoryDetailV2(BaseModel):
+    """
+    프론트 HistoryPost(상세) 요구사항에 맞춘 public 상세
+    """
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    title: str
+    slug: str
+    category: str
+
+    content: str
+    excerpt: Optional[str] = None
+
+    thumbnail: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+
+    publishedAt: Optional[datetime] = None
+    viewCount: int = 0
+
+
+class PublicApiPageResponse(BaseModel, Generic[T]):
+    """
+    PublicApiListResponse는 그대로 두고, 페이징 필요할 때만 이걸 사용
+    """
+    success: bool = True
+    data: List[T] = Field(default_factory=list)
+    message: Optional[str] = None
+
+    total: int = 0
+    page: int = 1
+    limit: int = 12
+    total_pages: int = 1
