@@ -43,6 +43,7 @@ export interface HistoryListItem {
   viewCount: number
 }
 
+
 export const CATEGORY_CONFIG: Record<HistoryCategory, {
   label: string
   emoji: string

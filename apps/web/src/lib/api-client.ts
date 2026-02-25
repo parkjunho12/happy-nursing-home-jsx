@@ -83,6 +83,7 @@ async function safeJson(res: Response): Promise<any> {
 
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<ApiResponse<T>> {
   const url = normalizeUrl(endpoint)
+  console.log('[API]', options.method || 'GET', url)  // ✅ 추가
 
   // timeout 지원
   const controller = new AbortController()
@@ -219,14 +220,14 @@ export async function submitContactForm(
   })
 }
 
-/** 공개된 히스토리 게시물 목록 */
-export async function getPublishedHistory(): Promise<ApiResponse> {
-  return request('/api/v1/public/history', { timeoutMs: 15000 })
+export async function getPublishedHistory<T = any>(): Promise<ApiResponse<T>> {
+  console.log('[getPublishedHistory] calling', `${API_BASE_URL}/api/v1/public/history`)
+  return request<T>('/api/v1/public/history', { timeoutMs: 15000 })
 }
 
-/** 히스토리 게시물 상세 */
-export async function getHistoryPost(slug: string): Promise<ApiResponse> {
-  return request(`/api/v1/public/history/${encodeURIComponent(slug)}`, { timeoutMs: 15000 })
+// ✅ 히스토리 게시물 상세
+export async function getHistoryPost<T = any>(slug: string): Promise<ApiResponse<T>> {
+  return request<T>(`/api/v1/public/history/${encodeURIComponent(slug)}`, { timeoutMs: 15000 })
 }
 
 /** 승인된 후기 목록 */
@@ -290,3 +291,4 @@ export function trackPageView(path: string, title?: string): void {
     page_title: title,
   })
 }
+

@@ -3,9 +3,11 @@ import logging
 from datetime import datetime
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, asc
+from sqlalchemy import desc, asc, or_, extract
+from math import ceil
+from typing import Optional
 
 from app.core.database import get_db
 
@@ -23,12 +25,17 @@ from app.models.public import (
     PublicService, PublicDifferentiator, PublicInfo
 )
 
+from app.models.history import History, HistoryCategory
+
 from app.schemas.public import (
     ContactFormRequest,
     HistoryListItem, HistoryDetail,
     ReviewItem, ServiceItem, DifferentiatorItem,
     PublicInfoOut,
     PublicApiResponse, PublicApiListResponse,
+    HistoryListItemV2,
+    HistoryDetailV2,
+    PublicApiPageResponse,
 )
 
 from app.schemas.ai import ContactAnalysisRequest
@@ -149,58 +156,120 @@ async def submit_contact_form(
 # -------------------------
 @router.get(
     "/history",
-    response_model=PublicApiListResponse[HistoryListItem],
+    response_model=PublicApiPageResponse[HistoryListItemV2],
 )
-def get_published_history(db: Session = Depends(get_db)):
-    rows = (
-        db.query(PublicHistoryPost)
-        .filter(PublicHistoryPost.is_published.is_(True))
-        .order_by(desc(PublicHistoryPost.published_at), desc(PublicHistoryPost.id))
-        .all()
-    )
+def get_published_history(
+    db: Session = Depends(get_db),
+    page: int = Query(1, ge=1),
+    limit: int = Query(12, ge=1, le=48),
+    category: Optional[str] = Query(None),
+    year: Optional[int] = Query(None, ge=1900, le=2100),
+    month: Optional[int] = Query(None, ge=1, le=12),
+    search: Optional[str] = Query(None),
+    tag: Optional[str] = Query(None),
+):
+    q = db.query(History).filter(History.is_published.is_(True))
+
+    # ✅ category (Enum)
+    if category:
+        # 문자열이 들어와도 Enum 비교 되게 맞춤
+        try:
+            q = q.filter(History.category == HistoryCategory(category))
+        except Exception:
+            # 잘못된 카테고리면 빈 결과
+            return PublicApiPageResponse(success=True, data=[], total=0, page=page, limit=limit, total_pages=1)
+
+    # ✅ year/month (published_at 기준)
+    if year is not None:
+        q = q.filter(History.published_at.isnot(None))
+        q = q.filter(extract("year", History.published_at) == year)
+
+    if month is not None:
+        q = q.filter(History.published_at.isnot(None))
+        q = q.filter(extract("month", History.published_at) == month)
+
+    # ✅ search (title/excerpt/content)
+    if search:
+        like = f"%{search}%"
+        q = q.filter(
+            or_(
+                History.title.ilike(like),
+                History.excerpt.ilike(like),
+                History.content.ilike(like),
+            )
+        )
+
+    # ✅ tag (Postgres ARRAY(TEXT) → any())
+    if tag:
+        q = q.filter(History.tags.any(tag))
+
+    total = q.count()
+
+    q = q.order_by(desc(History.published_at), desc(History.created_at))
+    rows = q.offset((page - 1) * limit).limit(limit).all()
 
     items = [
-        HistoryListItem(
-            id=r.id,
+        HistoryListItemV2(
+            id=r.id,                      # string uuid OK (schema에서 str로 맞추면 더 정확)
             title=r.title,
             slug=r.slug,
-            category=r.category,
+            category=str(r.category.value) if hasattr(r.category, "value") else str(r.category),
             excerpt=r.excerpt,
+            thumbnail=r.image_url,        # ✅ image_url -> thumbnail
+            tags=r.tags or [],
             publishedAt=r.published_at,
+            viewCount=r.view_count or 0,
         )
         for r in rows
     ]
 
-    return PublicApiListResponse(success=True, data=items)
+    total_pages = max(1, ceil(total / limit))
+
+    return PublicApiPageResponse(
+        success=True,
+        data=items,
+        total=total,
+        page=page,
+        limit=limit,
+        total_pages=total_pages,
+    )
 
 
 @router.get(
     "/history/{slug}",
-    response_model=PublicApiResponse[HistoryDetail],
+    response_model=PublicApiResponse[HistoryDetailV2],
 )
 def get_history_post(slug: str, db: Session = Depends(get_db)):
     r = (
-        db.query(PublicHistoryPost)
+        db.query(History)
         .filter(
-            PublicHistoryPost.slug == slug,
-            PublicHistoryPost.is_published.is_(True),
+            History.slug == slug,
+            History.is_published.is_(True),
         )
         .first()
     )
     if not r:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+        raise HTTPException(status_code=404, detail="Post not found")
 
-    detail = HistoryDetail(
+    # ✅ 조회수 증가
+    r.view_count = (r.view_count or 0) + 1
+    db.commit()
+    db.refresh(r)
+
+    detail = HistoryDetailV2(
         id=r.id,
         title=r.title,
         slug=r.slug,
-        content=r.content_html,
+        category=str(r.category.value) if hasattr(r.category, "value") else str(r.category),
+        content=r.content,              # ✅ content_html 말고 History.content 사용
+        excerpt=r.excerpt,
+        thumbnail=r.image_url,
+        tags=r.tags or [],
         publishedAt=r.published_at,
+        viewCount=r.view_count or 0,
     )
 
     return PublicApiResponse(success=True, data=detail)
-
-
 # -------------------------
 # Reviews (approved only)
 # -------------------------
