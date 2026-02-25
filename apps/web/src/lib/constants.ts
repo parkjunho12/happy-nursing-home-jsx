@@ -39,7 +39,7 @@ import {
   export const TRUST_INDICATORS: TrustIndicator[] = [
     {
       id: 'experience',
-      value: '15',
+      value: '13',
       label: '운영 경력',
       unit: '년',
     },

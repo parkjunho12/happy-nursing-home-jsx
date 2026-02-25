@@ -6,7 +6,7 @@ import KakaoMap from '@/components/map/KaKaoMap'
 
 export const metadata: Metadata = {
   title: '시설 소개 | 행복한요양원 녹양역점',
-  description: '13년 전통의 행복한요양원 녹양역점을 소개합니다. 전문 간호사 24시간 상주, 쾌적한 환경, A등급 인증 시설.',
+  description: '13년 경력의 행복한요양원 녹양역점을 소개합니다. 전문 간호사 24시간 상주, 쾌적한 환경, A등급 인증 시설.',
 }
 
 export default function AboutPage() {
@@ -50,12 +50,11 @@ export default function AboutPage() {
   ]
 
   const timeline = [
-    { year: '2010', event: '행복한요양원 개원', icon: '🏥' },
-    { year: '2012', event: '양주시 우수 요양시설 선정', icon: '🏆' },
+    { year: '2014', event: '베스트요양원 개원', icon: '🏥' },
     { year: '2015', event: 'A등급 인증 획득', icon: '⭐' },
     { year: '2018', event: '증축 및 리모델링', icon: '🏗️' },
     { year: '2020', event: '우수 프로그램 운영 시설 선정', icon: '🎯' },
-    { year: '2024', event: '15주년 감사 이벤트', icon: '🎉' },
+    { year: '2026', event: '행복한요양원 개원', icon: '🎉' },
   ]
 
   const facilities = [
