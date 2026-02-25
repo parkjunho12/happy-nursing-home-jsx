@@ -39,7 +39,7 @@ import {
   export const TRUST_INDICATORS: TrustIndicator[] = [
     {
       id: 'experience',
-      value: '15',
+      value: '13',
       label: '운영 경력',
       unit: '년',
     },
@@ -108,7 +108,7 @@ import {
       title: '카카오톡 상담',
       description: '1:1 채팅 시작',
       action: 'kakao',
-      href: `http://pf.kakao.com/${SITE_INFO.kakaoChannelId}`,
+      href: `https://open.kakao.com/o/svXNViii`,
       type: 'kakao',
     },
     {
@@ -238,7 +238,7 @@ import {
     contact: [
       { label: SITE_INFO.phone, href: `tel:${SITE_INFO.phone}` },
       { label: '온라인 문의', href: '/contact' },
-      { label: '카카오톡 상담', href: `http://pf.kakao.com/${SITE_INFO.kakaoChannelId}` },
+      { label: '카카오톡 상담', href: `https://open.kakao.com/o/svXNViii` },
       { label: '오시는 길', href: '/location' },
     ],
     info: [

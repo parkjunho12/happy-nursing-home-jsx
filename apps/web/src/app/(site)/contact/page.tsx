@@ -26,7 +26,7 @@ export default function ContactPage() {
       description: '편한 시간에 1:1 채팅 상담',
       content: '카카오톡 채널',
       action: '채팅하기',
-      href: `http://pf.kakao.com/${SITE_INFO.kakaoChannelId}`,
+      href: `https://open.kakao.com/o/svXNViii`,
       color: 'bg-yellow-100 text-yellow-600',
     },
     {

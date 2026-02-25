@@ -188,10 +188,12 @@ async def send_email(
 # =========================
 def render_admin_new_contact(contact: Dict[str, Any]) -> Dict[str, str]:
     """
-    contact: ORM 객체 대신 dict로 받는 걸 권장 (BackgroundTasks 안전)
+    contact: dict 권장 (BackgroundTasks 안전)
     required keys: id, ticket_id, name, phone, email, inquiry_type, message
     """
-    detail_url = _build_admin_contact_url(contact.get("id"))
+    detail_url_raw = _build_admin_contact_url(contact.get("id")) or ""
+    detail_url = _escape(detail_url_raw)
+
     ticket = _escape(str(contact.get("ticket_id", "")))
     name = _escape(str(contact.get("name", "")))
     phone = _escape(str(contact.get("phone", "")))
@@ -199,38 +201,70 @@ def render_admin_new_contact(contact: Dict[str, Any]) -> Dict[str, str]:
     inquiry_type = _escape(str(contact.get("inquiry_type", "")))
     message = _escape(str(contact.get("message", "")))
 
+    # HTML: 단순하고 ‘업무 알림’ 톤으로
     html = f"""
-    <div style="font-family:Arial,sans-serif;line-height:1.55">
-      <h2 style="margin:0 0 8px">📩 상담 신청이 접수되었습니다</h2>
-      <div style="padding:12px;border:1px solid #e5e7eb;border-radius:10px;background:#fafafa">
-        <p style="margin:0"><b>티켓</b>: {ticket}</p>
-        <p style="margin:4px 0 0"><b>이름</b>: {name}</p>
-        <p style="margin:4px 0 0"><b>연락처</b>: {phone}</p>
-        <p style="margin:4px 0 0"><b>이메일</b>: {email}</p>
-        <p style="margin:4px 0 0"><b>문의유형</b>: {inquiry_type}</p>
-      </div>
+    <!doctype html>
+    <html>
+    <body style="margin:0;padding:0;font-family:Arial,sans-serif;line-height:1.55;color:#111827">
+        <div style="max-width:640px;margin:0 auto;padding:20px">
+        <h2 style="margin:0 0 12px;font-size:18px;font-weight:700">
+            상담 접수 알림
+        </h2>
+        <p style="margin:0 0 14px;color:#374151;font-size:13px">
+            홈페이지 상담폼을 통해 새 문의가 접수되어 안내드립니다.
+        </p>
 
-      <h3 style="margin:16px 0 8px">문의 내용</h3>
-      <div style="white-space:pre-wrap;padding:12px;border:1px solid #e5e7eb;border-radius:10px">
-        {message}
-      </div>
+        <div style="padding:12px;border:1px solid #e5e7eb;border-radius:10px;background:#fafafa">
+            <p style="margin:0"><b>티켓</b>: {ticket}</p>
+            <p style="margin:6px 0 0"><b>이름</b>: {name}</p>
+            <p style="margin:6px 0 0"><b>연락처</b>: {phone}</p>
+            <p style="margin:6px 0 0"><b>이메일</b>: {email}</p>
+            <p style="margin:6px 0 0"><b>문의유형</b>: {inquiry_type}</p>
+        </div>
 
-      {"<p style='margin:16px 0'><a href='%s' style='display:inline-block;padding:10px 14px;background:#f97316;color:#fff;border-radius:10px;text-decoration:none'>어드민에서 보기/답변하기</a></p>" % detail_url if detail_url else ""}
-    </div>
-    """.strip()
+        <h3 style="margin:16px 0 8px;font-size:15px">문의 내용</h3>
+        <div style="white-space:pre-wrap;padding:12px;border:1px solid #e5e7eb;border-radius:10px;background:#ffffff">
+    {message}
+        </div>
 
-    text = (
-        f"상담 신청 접수\n"
-        f"- 티켓: {contact.get('ticket_id','')}\n"
-        f"- 이름: {contact.get('name','')}\n"
-        f"- 연락처: {contact.get('phone','')}\n"
-        f"- 이메일: {contact.get('email','')}\n"
-        f"- 문의유형: {contact.get('inquiry_type','')}\n\n"
-        f"[문의 내용]\n{contact.get('message','')}\n\n"
-        + (f"어드민 링크: {detail_url}\n" if detail_url else "")
-    )
+        {"<p style='margin:14px 0 0;font-size:13px'>어드민에서 확인: <a href='%s'>%s</a></p>" % (detail_url, detail_url) if detail_url_raw else ""}
 
-    return {"html": html, "text": text}
+        <hr style="border:none;border-top:1px solid #e5e7eb;margin:18px 0">
+
+        <p style="margin:0;color:#6b7280;font-size:12px">
+            이 메일은 상담 접수 알림(업무용)입니다. 필요 시 이 메일에 회신하여 내부 메모를 남겨도 됩니다.<br>
+            행복한요양원 상담팀
+        </p>
+        </div>
+    </body>
+    </html>
+        """.strip()
+
+    # TEXT: 스팸 점수 낮추는 데 매우 중요
+    text_lines = [
+        "상담 접수 알림",
+        "홈페이지 상담폼을 통해 새 문의가 접수되어 안내드립니다.",
+        "",
+        f"- 티켓: {contact.get('ticket_id','')}",
+        f"- 이름: {contact.get('name','')}",
+        f"- 연락처: {contact.get('phone','')}",
+        f"- 이메일: {contact.get('email','')}",
+        f"- 문의유형: {contact.get('inquiry_type','')}",
+        "",
+        "[문의 내용]",
+        str(contact.get("message", "")),
+        "",
+    ]
+    if detail_url_raw:
+        text_lines.append(f"어드민 링크: {detail_url_raw}")
+        text_lines.append("")
+
+    text_lines += [
+        "이 메일은 상담 접수 알림(업무용)입니다.",
+        "행복한요양원 상담팀",
+    ]
+
+    return {"html": html, "text": "\n".join(text_lines)}
 
 
 # =========================
@@ -238,15 +272,20 @@ def render_admin_new_contact(contact: Dict[str, Any]) -> Dict[str, str]:
 # =========================
 
 def render_customer_reply(contact: Dict[str, Any], reply_text: str) -> Dict[str, str]:
-    site = _public_site_url()
+    site_raw = _public_site_url() or ""
+    site = _escape(site_raw)
+
     safe_reply = _escape(reply_text)
 
-    # 선택: 연락처/이메일(있으면 넣기)
-    phone = _escape(str(settings.SUPPORT_PHONE))  # 네 데이터 구조에 맞게 조정
-    support_email = _escape(str(settings.SUPPORT_EMAIL))  # 없으면 빈 문자열
+    # settings 값이 None이면 "None" 문자열이 들어가는 것 방지
+    phone_raw = getattr(settings, "SUPPORT_PHONE", "") or ""
+    support_email_raw = getattr(settings, "SUPPORT_EMAIL", "") or ""
+
+    phone = _escape(str(phone_raw))
+    support_email = _escape(str(support_email_raw))
+
     customer_name = _escape(str(contact.get("name") or ""))
 
-    # 선택: 티켓/문의유형이 있으면 표시
     ticket_id = _escape(str(contact.get("ticket_id") or ""))
     inquiry_type = _escape(str(contact.get("inquiry_type") or ""))
 
@@ -255,86 +294,88 @@ def render_customer_reply(contact: Dict[str, Any], reply_text: str) -> Dict[str,
     brand = "행복한요양원"
 
     html = f"""
-    <div style="margin:0;padding:0;background:#f6f7fb">
-      <div style="max-width:640px;margin:0 auto;padding:24px 12px">
-        
-        <!-- Header -->
-        <div style="padding:18px 18px 14px;border-radius:16px 16px 0 0;background:linear-gradient(135deg,#fb923c,#f97316);color:#fff">
-          <div style="font-family:Arial,sans-serif;font-size:18px;font-weight:700;letter-spacing:-0.2px">
-            {brand} · 문의 답변
-          </div>
-          <div style="font-family:Arial,sans-serif;font-size:12px;opacity:0.92;margin-top:6px">
+    <!doctype html>
+    <html>
+    <body style="margin:0;padding:0;background:#ffffff">
+        <div style="max-width:640px;margin:0 auto;padding:20px 14px;font-family:Arial,sans-serif;line-height:1.6;color:#111827">
+
+        <!-- Header (solid color, no gradient) -->
+        <div style="padding:14px 16px;border:1px solid #e5e7eb;border-radius:12px;background:#fff7ed">
+            <div style="font-size:16px;font-weight:700">
+            {brand} 문의 답변
+            </div>
+            <div style="font-size:12px;color:#6b7280;margin-top:4px">
             {meta_line if meta_line else "상담 문의에 대한 답변을 안내드립니다."}
-          </div>
+            </div>
         </div>
 
-        <!-- Card -->
-        <div style="background:#ffffff;border:1px solid #e5e7eb;border-top:0;border-radius:0 0 16px 16px;box-shadow:0 8px 18px rgba(15,23,42,0.06)">
-          <div style="padding:20px 18px 8px;font-family:Arial,sans-serif;color:#111827;line-height:1.65">
+        <!-- Why you got this email -->
+        <p style="margin:14px 2px 10px;font-size:12px;color:#6b7280">
+            본 메일은 {brand} 홈페이지 상담폼 문의에 대한 답변 안내입니다.
+        </p>
+
+        <!-- Body -->
+        <div style="border:1px solid #e5e7eb;border-radius:12px;padding:16px;background:#ffffff">
             <p style="margin:0 0 10px;font-size:14px">
-              안녕하세요{f", {customer_name}님" if customer_name else ""}. {brand}입니다.
+            안녕하세요{f", {customer_name}님" if customer_name else ""}. {brand}입니다.
             </p>
-            <p style="margin:0 0 14px;font-size:14px;color:#374151">
-              문의 주셔서 감사합니다. 아래 내용으로 답변드립니다.
+
+            <p style="margin:0 0 12px;font-size:14px;color:#374151">
+            문의 주셔서 감사합니다. 아래 내용으로 답변드립니다.
             </p>
 
             <!-- Reply Box -->
-            <div style="white-space:pre-wrap;padding:14px 14px;border:1px solid #e5e7eb;border-radius:12px;background:#f9fafb;color:#111827;font-size:14px">
-              {safe_reply}
+            <div style="white-space:pre-wrap;padding:12px 12px;border:1px solid #e5e7eb;border-radius:10px;background:#f9fafb;color:#111827;font-size:14px">
+    {safe_reply}
             </div>
 
-            <div style="height:14px"></div>
-
-            <p style="margin:0 0 10px;font-size:13px;color:#374151">
-              추가 문의가 있으시면 <b>이 메일로 회신</b>하시거나{(" 전화로 연락" if phone else "")} 부탁드립니다.
+            <p style="margin:12px 0 0;font-size:13px;color:#374151">
+            추가 문의가 있으시면 <b>이 메일로 회신</b>하시거나{(" 전화로 연락" if phone_raw else "")} 부탁드립니다.
             </p>
 
-            <!-- Contact row -->
-            <div style="padding:12px 14px;border-radius:12px;background:#fff7ed;border:1px solid #fed7aa;color:#7c2d12;font-size:12px;line-height:1.5">
-              <div style="margin:0 0 6px"><b>연락 안내</b></div>
-              {"<div style='margin:0 0 4px'>📞 전화: " + phone + "</div>" if phone else ""}
-              {"<div style='margin:0 0 4px'>✉️ 이메일: " + support_email + "</div>" if support_email else ""}
-              {("<div style='margin:0'>🌐 웹사이트: " + _escape(site) + "</div>") if site else ""}
+            <!-- Contact -->
+            <div style="margin-top:12px;padding:12px 12px;border-radius:10px;background:#fafafa;border:1px solid #e5e7eb;font-size:12px;color:#374151">
+            <div style="margin:0 0 6px;font-weight:700;color:#111827">연락 안내</div>
+            {"<div style='margin:0 0 4px'>전화: " + phone + "</div>" if phone_raw else ""}
+            {"<div style='margin:0 0 4px'>이메일: " + support_email + "</div>" if support_email_raw else ""}
+            {("<div style='margin:0'>홈페이지: <a href='" + site + "'>" + site + "</a></div>") if site_raw else ""}
             </div>
-
-            <div style="height:18px"></div>
 
             <!-- Footer note -->
-            <div style="border-top:1px solid #f1f5f9;padding:12px 0 4px;color:#6b7280;font-size:11px">
-              <div style="margin:0 0 4px">본 메일은 상담 답변 안내 목적으로 발송되었습니다.</div>
-              <div style="margin:0">민감한 개인정보(주민번호/계좌번호 등)는 메일로 보내지 마시고, 전화 또는 상담 폼을 이용해 주세요.</div>
+            <div style="margin-top:14px;padding-top:10px;border-top:1px solid #f1f5f9;color:#6b7280;font-size:11px">
+            <div style="margin:0 0 4px">본 메일은 상담 답변 안내 목적으로 발송되었습니다.</div>
+            <div style="margin:0">민감한 개인정보(주민번호/계좌번호 등)는 메일로 보내지 마시고, 전화 또는 상담 폼을 이용해 주세요.</div>
             </div>
-          </div>
         </div>
-
-        <!-- Bottom spacing -->
-        <div style="height:10px"></div>
-      </div>
-    </div>
-    """.strip()
+        </div>
+    </body>
+    </html>
+        """.strip()
 
     text_lines = []
     text_lines.append(f"{brand} 문의 답변")
     if meta_line:
         text_lines.append(meta_line)
+
     text_lines.append("")
-    text_lines.append(f"안녕하세요{(', ' + (contact.get('name') or '')) if contact.get('name') else ''}. {brand}입니다.")
+    # 이름은 escape하지 않은 원문을 그대로 쓰는 게 더 자연스러워서 기존 방식 유지(원하면 escape 적용 가능)
+    raw_name = (contact.get("name") or "").strip()
+    text_lines.append(f"안녕하세요{(', ' + raw_name) if raw_name else ''}. {brand}입니다.")
     text_lines.append("문의 주셔서 감사합니다. 아래 내용으로 답변드립니다.")
     text_lines.append("")
     text_lines.append(reply_text)
     text_lines.append("")
-    text_lines.append("추가 문의는 이 메일로 회신하시거나" + (" 전화로 연락 부탁드립니다." if phone else " 부탁드립니다."))
-    if phone:
-        text_lines.append(f"전화: {phone}")
-    if support_email:
-        text_lines.append(f"이메일: {support_email}")
-    if site:
-        text_lines.append(f"웹사이트: {site}")
+    text_lines.append("추가 문의는 이 메일로 회신하시거나" + (" 전화로 연락 부탁드립니다." if phone_raw else " 부탁드립니다."))
+    if phone_raw:
+        text_lines.append(f"전화: {phone_raw}")
+    if support_email_raw:
+        text_lines.append(f"이메일: {support_email_raw}")
+    if site_raw:
+        text_lines.append(f"홈페이지: {site_raw}")
     text_lines.append("")
     text_lines.append("※ 민감한 개인정보(주민번호/계좌번호 등)는 메일로 보내지 마시고, 전화 또는 상담 폼을 이용해 주세요.")
 
     text = "\n".join(text_lines)
-
     return {"html": html, "text": text}
 
 
