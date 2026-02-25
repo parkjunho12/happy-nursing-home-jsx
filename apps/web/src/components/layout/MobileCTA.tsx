@@ -22,7 +22,7 @@ export default function MobileCTA() {
 
         {/* KakaoTalk Button */}
         <a
-          href={`http://pf.kakao.com/${SITE_INFO.kakaoChannelId}`}
+          href={`https://open.kakao.com/o/svXNViii`}
           target="_blank"
           rel="noopener noreferrer"
           onClick={() => trackSocialClick('KakaoTalk', 'Mobile CTA')}
