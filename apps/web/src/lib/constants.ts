@@ -70,11 +70,6 @@ import {
       href: '/services',
     },
     {
-      id: 'pricing',
-      label: '요금안내',
-      href: '/pricing',
-    },
-    {
       id: 'reviews',
       label: '후기',
       href: '/reviews',
@@ -232,7 +227,6 @@ import {
     quickLinks: [
       { label: '소개', href: '/about' },
       { label: '서비스', href: '/services' },
-      { label: '요금안내', href: '/pricing' },
       { label: '후기', href: '/reviews' },
     ],
     contact: [
