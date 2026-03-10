@@ -1,0 +1,25 @@
+# 행복한요양원 녹양역점 robots.txt
+
+# 모든 크롤러 허용
+User-agent: *
+Allow: /
+
+# 네이버 크롤러 (Yeti) 명시적 허용
+User-agent: Yeti
+Allow: /
+
+# 구글 크롤러
+User-agent: Googlebot
+Allow: /
+
+# 제외할 경로
+Disallow: /api/
+Disallow: /_next/
+Disallow: /admin/
+
+# Sitemap 위치
+Sitemap: https://www.행복한요양원녹양역.com/sitemap.xml
+Sitemap: https://www.행복한요양원녹양역.com/sitemap-history.xml
+
+# 크롤 속도 (선택)
+Crawl-delay: 1

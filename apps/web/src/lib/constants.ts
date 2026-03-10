@@ -23,14 +23,14 @@ import {
     },
     businessInfo: {
       owner: '박준호',
-      registrationNumber: '123-45-67890',
+      registrationNumber: '342-45-67890',
       established: '2010-01-15',
     },
     social: {
-      facebook: 'https://facebook.com/happynursinghome',
+      facebook: 'https://www.facebook.com/profile.php?id=61580800010457',
       instagram: 'https://instagram.com/happynursinghome',
-      blog: 'https://blog.naver.com/happynursinghome',
-      youtube: 'https://youtube.com/@happynursinghome',
+      blog: 'https://blog.naver.com/happy-n-y',
+      youtube: 'https://www.youtube.com/channel/UCr5NVnuu8ROSXjAuY1uVM-Q',
     },
     kakaoChannelId: '_xaXXXX',
   } as const
@@ -247,6 +247,8 @@ import {
   export const DEFAULT_METADATA = {
     title: '행복한요양원 | 경기 양주시 전문 요양 시설',
     description: '13년 전통의 행복한요양원. 전문 간호사 24시간 상주, 개별 맞춤 케어, 지자체 A등급 인증. 가족처럼 따뜻하게, 전문가처럼 안전하게.',
-    keywords: '요양원, 경기도요양원, 양주시요양원, 노인요양시설, 전문요양원, 장기요양, 노인요양',
+    keywords: '요양원, 경기도요양원, 양주시요양원, 노인요양시설, 전문요양원, 장기요양, 노인요양, 의정부요양원, 양주요양원, 행복한요양원, 녹양역요양원',
     ogImage: '/og-image.jpg',
+    naverSiteVerification: '0681d688b8f58007d39fc3e823d6ea4eaf6a947a',
+    googleSiteVerification: 'VInI3tQKpj10YeNKWxqsV61dh89JmJtrdbYh9KrLr2U'
   }
