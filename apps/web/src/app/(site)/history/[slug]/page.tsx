@@ -22,7 +22,7 @@ export async function generateMetadata(
   { params }: { params: PageParams }
 ): Promise<Metadata> {
   return {
-    title: `히스토리 상세 | 행복한요양원 녹양역점`,
+    title: `블로그 상세 | 행복한요양원 녹양역점`,
   }
 }
 

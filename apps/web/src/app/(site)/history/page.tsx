@@ -7,7 +7,7 @@ import { CATEGORY_CONFIG, type HistoryCategory } from '@/types/history'
 import { toHistoryPost, toHistoryListItem, type HistoryResponseRaw } from '@/lib/history-mapper'
 
 export const metadata: Metadata = {
-  title: '히스토리 | 행복한요양원 녹양역점',
+  title: '블로그 | 행복한요양원 녹양역점',
   description: '행복한요양원의 다양한 활동과 소식을 확인하세요.',
 }
 
@@ -101,7 +101,7 @@ export default async function HistoryPage({
       <section className="relative bg-gradient-to-br from-primary-brown to-primary-orange text-white py-20">
         <div className="absolute inset-0 bg-black/10" />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6">히스토리</h1>
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6">블로그</h1>
           <p className="text-xl md:text-2xl text-white/90 max-w-3xl mx-auto">
             행복한요양원의 다양한 활동과<br />
             따뜻한 이야기들을 확인하세요
@@ -144,7 +144,7 @@ export default async function HistoryPage({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {!res.success && (
             <div className="bg-white rounded-2xl p-6 text-gray-700">
-              히스토리를 불러오지 못했습니다. {res.message || ''}
+              블로그를 불러오지 못했습니다. {res.message || ''}
             </div>
           )}
 

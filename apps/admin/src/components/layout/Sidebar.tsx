@@ -19,7 +19,7 @@ const Sidebar = () => {
     { to: '/residents', icon: Users, label: '입소자 관리' },
     { to: '/staff', icon: UserCog, label: '직원 관리' },
     { to: '/contacts', icon: MessageSquare, label: '상담 관리' },
-    { to: '/history', icon: FileText, label: '히스토리' },
+    { to: '/history', icon: FileText, label: '블로그' },
     { to: '/reviews', icon: Star, label: '후기 관리' },
     { to: '/settings', icon: Settings, label: '설정' },
   ]

@@ -1,6 +1,7 @@
 // src/app/layout.tsx
 import type { Metadata } from 'next'
 import { Noto_Sans_KR, Nanum_Myeongjo } from 'next/font/google'
+import { OrganizationSchema } from '../components/seo/StructuredData'
 import './globals.css'
 import { DEFAULT_METADATA, SITE_INFO } from '@/lib/constants'
 import GTM from '@/components/analytics/GTM'
@@ -31,7 +32,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     locale: 'ko_KR',
-    url: 'https://happynursinghome.com',
+    url: 'https://www.행복한요양원녹양역.com',
     title: DEFAULT_METADATA.title,
     description: DEFAULT_METADATA.description,
     siteName: SITE_INFO.name,
@@ -62,7 +63,19 @@ export const metadata: Metadata = {
       'max-snippet': -1,
     },
   },
-  verification: { google: 'your-google-site-verification' },
+  verification: {
+  
+    google: DEFAULT_METADATA.googleSiteVerification,
+    other: {
+      'naver-site-verification': DEFAULT_METADATA.naverSiteVerification,
+    },
+  },
+  alternates: {
+    canonical: 'https://www.행복한요양원녹양역.com',
+    types: {
+      'application/rss+xml': 'https://www.행복한요양원녹양역.com/rss.xml',
+    },
+  },
 }
 const ChatButton = dynamic(() => import('@/components/chat/ChatButton'), {
   ssr: false,
@@ -74,7 +87,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     '@type': ['NursingHome', 'MedicalBusiness', 'LocalBusiness'],
     name: SITE_INFO.name,
     description: DEFAULT_METADATA.description,
-    url: 'https://happynursinghome.com',
+    url: 'https://www.행복한요양원녹양역.com',
     telephone: SITE_INFO.phone,
     email: SITE_INFO.email,
     image: '/og-image.jpg',
@@ -117,11 +130,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-
+        <meta name="naver-site-verification" content={DEFAULT_METADATA.naverSiteVerification} />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
         />
+        <OrganizationSchema />
       </head>
 
       <body className={`${notoSansKr.variable} ${nanumMyeongjo.variable} font-sans antialiased`}>

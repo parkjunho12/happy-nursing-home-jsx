@@ -75,7 +75,7 @@ export default function HistoryPage() {
       setHistory(list)
     } catch (e: any) {
       console.error('Failed to load history:', e)
-      setError(e?.response?.data?.message || '히스토리 목록을 불러올 수 없습니다')
+      setError(e?.response?.data?.message || '블로그 목록을 불러올 수 없습니다')
       setHistory([])
     } finally {
       setLoading(false)
@@ -172,7 +172,7 @@ export default function HistoryPage() {
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-primary-orange border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">히스토리 로딩 중...</p>
+          <p className="text-gray-600">블로그 로딩 중...</p>
         </div>
       </div>
     )
@@ -205,7 +205,7 @@ export default function HistoryPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">히스토리 관리</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">블로그 관리</h1>
           <p className="text-gray-600">총 {history.length}건</p>
         </div>
         <button

@@ -236,7 +236,7 @@ export default function HistoryEditPage() {
           목록으로
         </button>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          {isEdit ? '히스토리 수정' : '새 히스토리 작성'}
+          {isEdit ? '블로그 수정' : '새 블로그 작성'}
         </h1>
         <p className="text-gray-600">{isEdit ? '기존 게시물을 수정합니다' : '새로운 게시물을 작성합니다'}</p>
       </div>
