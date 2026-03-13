@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { Clock, Users, Award, Heart, Shield, Sparkles, MapPin, Phone, Mail, ChevronRight } from 'lucide-react'
 import { SITE_INFO, TRUST_INDICATORS } from '@/lib/constants'
 import KakaoMap from '@/components/map/KaKaoMap'
-import { trackPhoneClick } from '@/lib/analytics/naver'
+
 
 export const metadata: Metadata = {
   title: '시설 소개 | 행복한요양원 녹양역점',
@@ -11,10 +11,7 @@ export const metadata: Metadata = {
 }
 
 export default function AboutPage() {
-  const handleClick = () => {
-    // 네이버 전환 추적
-    trackPhoneClick()
-  }
+
   const features = [
     {
       icon: <Clock className="w-8 h-8" />,
@@ -273,7 +270,6 @@ export default function AboutPage() {
                     <div className="font-semibold text-gray-900 mb-1">전화번호</div>
                     <a 
                       href={`tel:${SITE_INFO.phone}`} 
-                      onClick={handleClick}
                       className="text-gray-700 hover:text-primary-orange transition-colors"
                     >
                       {SITE_INFO.phone}
@@ -332,7 +328,6 @@ export default function AboutPage() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <a
               href={`tel:${SITE_INFO.phone}`}
-              onClick={handleClick}
               className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white text-primary-orange rounded-lg font-semibold hover:bg-gray-100 transition-colors"
             >
               <Phone className="w-5 h-5" />
