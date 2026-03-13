@@ -4,6 +4,7 @@ import Image from 'next/image'
 import { SITE_INFO, TRUST_INDICATORS } from '@/lib/constants'
 import { Button } from '@/components/ui/Button'
 import { Phone, CalendarCheck } from 'lucide-react'
+import YouTubeButton from '@/components/video/modal/YouTubeButton'
 
 export default function HeroSection() {
   const telHref = `tel:${SITE_INFO.phone}`
@@ -98,6 +99,15 @@ export default function HeroSection() {
                 className="object-cover group-hover:scale-105 transition-transform duration-500"
                 sizes="(max-width: 768px) 100vw, 50vw"
               />
+              {/* <YouTubeButton 
+                videoId="XgiIcdZFswY" 
+                title="시설 소개 영상"
+                buttonText="영상 보기"
+                thumbnail="/assets/images/exterior.png"
+                variant="thumbnail"
+                className="w-full"
+              /> */}
+              
 
               {/* Overlay Gradient (가독성 + 고급감) */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
