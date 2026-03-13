@@ -1,18 +1,20 @@
 import { NextResponse } from 'next/server'
 
+export const revalidate = 3600
+
 const BASE_URL = 'https://www.행복한요양원녹양역.com'
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 async function getHistoryPosts() {
   try {
     const res = await fetch(`${API_URL}/api/v1/public/history?limit=50`, {
-      cache: 'no-store',
+      next: { revalidate: 3600 },
     })
-    
+
     if (!res.ok) {
       return []
     }
-    
+
     const data = await res.json()
     return data.items || []
   } catch (error) {
@@ -62,7 +64,7 @@ export async function GET() {
   return new NextResponse(rss, {
     headers: {
       'Content-Type': 'application/xml; charset=utf-8',
-      'Cache-Control': 'public, max-age=3600, s-maxage=3600',
+      'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
     },
   })
 }
