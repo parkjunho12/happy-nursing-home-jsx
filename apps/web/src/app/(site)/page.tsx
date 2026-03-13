@@ -5,9 +5,9 @@ import {
   DifferentiatorsSection 
 } from '@/components/home/Sections'
 import { 
-  ReviewsSection, 
-  GallerySection 
+  ReviewsSection
 } from '@/components/home/ReviewsAndGallery'
+import {GallerySection} from '@/components/home/GallerySection'
 import ContactFormSection from '@/components/home/ContactFormSection'
 
 export default function HomePage() {
@@ -19,6 +19,9 @@ export default function HomePage() {
       {/* Quick Contact Bar */}
       <QuickContact />
 
+      {/* Gallery Section */}
+      <GallerySection />
+      
       {/* Services Section */}
       <ServicesSection />
 
@@ -27,9 +30,6 @@ export default function HomePage() {
 
       {/* Reviews Section */}
       <ReviewsSection />
-
-      {/* Gallery Section */}
-      <GallerySection />
 
       {/* Contact Form Section */}
       <ContactFormSection />
