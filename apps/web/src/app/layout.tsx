@@ -1,6 +1,7 @@
 // src/app/layout.tsx
 import type { Metadata } from 'next'
 import { Noto_Sans_KR, Nanum_Myeongjo } from 'next/font/google'
+import Script from 'next/script'
 import { OrganizationSchema } from '../components/seo/StructuredData'
 import './globals.css'
 import { DEFAULT_METADATA, SITE_INFO } from '@/lib/constants'
@@ -142,6 +143,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <GTM />
         {children}
         <ChatButton />
+
+        {/* 네이버 애널리틱스 */}
+        <Script
+          src="//wcs.naver.net/wcslog.js"
+          strategy="afterInteractive"
+        />
+        <Script id="naver-analytics" strategy="afterInteractive">
+          {`
+            if (!wcs_add) var wcs_add = {};
+            wcs_add["wa"] = "s_53d5b4f75c34";
+            if (!_nasa) var _nasa = {};
+            if (window.wcs) {
+              wcs.inflow();
+              wcs_do();
+            }
+          `}
+        </Script>
 
       </body>
     </html>
