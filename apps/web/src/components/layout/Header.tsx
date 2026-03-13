@@ -5,8 +5,13 @@ import Link from 'next/link'
 import { Menu, X, Phone } from 'lucide-react'
 import { SITE_INFO } from '@/lib/constants'
 import Image from 'next/image'
+import { trackPhoneClick } from '@/lib/analytics/naver'
 
 export default function Header() {
+  const handleClick = () => {
+    // 네이버 전환 추적
+    trackPhoneClick()
+  }
   const [isScrolled, setIsScrolled] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
@@ -72,6 +77,7 @@ export default function Header() {
           {/* Phone Button */}
           <a
             href={`tel:${SITE_INFO.phone}`}
+            onClick={handleClick}
             className="hidden lg:flex items-center gap-2 px-6 py-3 bg-primary-orange text-white rounded-full font-semibold hover:bg-primary-orange/90 transition-all hover:scale-105"
           >
             <Phone className="w-4 h-4" />
@@ -108,6 +114,7 @@ export default function Header() {
             ))}
             <a
               href={`tel:${SITE_INFO.phone}`}
+              onClick={handleClick}
               className="flex items-center justify-center gap-2 px-4 py-3 bg-primary-orange text-white rounded-lg font-semibold mt-4"
             >
               <Phone className="w-4 h-4" />
