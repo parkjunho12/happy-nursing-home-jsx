@@ -146,10 +146,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
         {/* 네이버 애널리틱스 */}
         <Script
-          src="//wcs.naver.net/wcslog.js"
+          src="https://wcs.naver.net/wcslog.js"
           strategy="afterInteractive"
         />
-        <Script id="naver-analytics" strategy="afterInteractive">
+        <Script id="naver-log" strategy="afterInteractive">
           {`
             if (!wcs_add) var wcs_add = {};
             wcs_add["wa"] = "s_53d5b4f75c34";
