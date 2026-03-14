@@ -7,6 +7,7 @@ import './globals.css'
 import { DEFAULT_METADATA, SITE_INFO } from '@/lib/constants'
 import GTM from '@/components/analytics/GTM'
 import dynamic from 'next/dynamic'
+import NaverWcs from '@/components/analytics/NaverWcs'
 
 const notoSansKr = Noto_Sans_KR({
   subsets: ['latin'],
@@ -145,21 +146,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ChatButton />
 
         {/* 네이버 애널리틱스 */}
-        <Script
-          src="https://wcs.naver.net/wcslog.js"
-          strategy="afterInteractive"
-        />
-        <Script id="naver-log" strategy="afterInteractive">
-          {`
-            if (!wcs_add) var wcs_add = {};
-            wcs_add["wa"] = "s_53d5b4f75c34";
-            if (!_nasa) var _nasa = {};
-            if (window.wcs) {
-              wcs.inflow();
-              wcs_do();
-            }
-          `}
-        </Script>
+        <NaverWcs/>
 
       </body>
     </html>
