@@ -8,6 +8,7 @@ import { DEFAULT_METADATA, SITE_INFO } from '@/lib/constants'
 import GTM from '@/components/analytics/GTM'
 import dynamic from 'next/dynamic'
 import NaverWcs from '@/components/analytics/NaverWcs'
+import PageTracker from '@/components/analytics/PageViewTracker'
 
 const notoSansKr = Noto_Sans_KR({
   subsets: ['latin'],
@@ -142,6 +143,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
       <body className={`${notoSansKr.variable} ${nanumMyeongjo.variable} font-sans antialiased`}>
         <GTM />
+        <PageTracker />
         {children}
         <ChatButton />
 

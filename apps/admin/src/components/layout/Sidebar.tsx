@@ -21,6 +21,8 @@ const Sidebar = () => {
     { to: '/contacts', icon: MessageSquare, label: '상담 관리' },
     { to: '/history', icon: FileText, label: '블로그' },
     { to: '/reviews', icon: Star, label: '후기 관리' },
+    { to: '/analytics/page-views', icon: LayoutDashboard, label: '페이지뷰 통계' },
+    { to: '/analytics/suspicious-ips', icon: LayoutDashboard, label: '의심 IP 통계' },
     { to: '/settings', icon: Settings, label: '설정' },
   ]
 

@@ -22,6 +22,8 @@ from app.models.public import (
     PublicInfo,
 )
 
+from app.models.click_event import ClickEvent
+
 __all__ = [
     # Internal
     "User",
@@ -36,6 +38,7 @@ __all__ = [
     "History",
     "HistoryCategory",
     "Review",
+    "ClickEvent",
 
     # Public
     "ContactTicket",
