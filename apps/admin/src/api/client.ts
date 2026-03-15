@@ -252,3 +252,60 @@ export const dashboardAPI = {
     return unwrap(res.data)
   },
 }
+
+// --------------------
+// Track API
+// --------------------
+export interface TrackStatsResponse {
+    total_clicks: number
+    suspicious_clicks: number
+    unique_ips: number
+    suspicious_rate: number
+  }
+  
+  export interface TrackEvent {
+    id: string
+    ip_hash: string
+    event_type: string
+    is_suspicious: boolean
+    created_at: string
+  }
+
+  export interface SuspiciousIP {
+    ip_hash: string
+    click_count: number
+    last_click: string
+  }
+  
+  export const trackAPI = {
+    // 공개 엔드포인트: 페이지뷰/클릭 기록
+    click: async (eventType: string) => {
+      const res = await apiClient.post(`${API_PREFIX}/track/click`, null, {
+        params: { event_type: eventType },
+      })
+      return res.data
+    },
+  
+    // 관리자 통계
+    stats: async (days = 7): Promise<TrackStatsResponse> => {
+      const res = await apiClient.get<TrackStatsResponse>(`${API_PREFIX}/track/stats`, {
+        params: { days },
+      })
+      return res.data
+    },
+  
+    // 전체 이벤트 목록
+    all: async (days = 7): Promise<TrackEvent[]> => {
+      const res = await apiClient.get<TrackEvent[]>(`${API_PREFIX}/track/all`, {
+        params: { days },
+      })
+      return res.data
+    },
+    
+    suspicious: async (days = 7): Promise<SuspiciousIP[]> => {
+        const res = await apiClient.get<SuspiciousIP[]>(`${API_PREFIX}/track/suspicious`, {
+          params: { days },
+        })
+        return res.data
+      },
+  }

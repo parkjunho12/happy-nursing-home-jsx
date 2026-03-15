@@ -258,6 +258,19 @@ declare global {
   }
 }
 
+export async function trackClickWithIP(eventType: string): Promise<void> {
+  if (typeof window === 'undefined') return
+  
+  try {
+    await fetch(`${API_BASE_URL}/api/v1/track/click?event_type=${encodeURIComponent(eventType)}`, {
+      method: 'POST',
+    })
+  } catch (error) {
+    console.error('[Tracking]', eventType, 'failed:', error)
+  }
+}
+
+
 export function trackEvent(eventName: string, params?: Record<string, any>): void {
   if (typeof window === 'undefined') return
   if (Array.isArray(window.dataLayer)) {
@@ -271,14 +284,17 @@ export function trackEvent(eventName: string, params?: Record<string, any>): voi
 
 export function trackPhoneClick(source: string): void {
   trackEvent('phone_click', { source })
+  trackClickWithIP('phone_click')
 }
 
 export function trackFormSubmit(formName: string, success: boolean): void {
   trackEvent('form_submit', { formName, success })
+  trackClickWithIP('form_submit')
 }
 
 export function trackSocialClick(platform: string, action: string): void {
   trackEvent('social_click', { platform, action })
+  trackClickWithIP('social_click')
 }
 
 export function trackPageView(path: string, title?: string): void {
@@ -290,5 +306,7 @@ export function trackPageView(path: string, title?: string): void {
     page_path: path,
     page_title: title,
   })
+  const pageName = path === '/' ? 'home' : path.replace(/^\//, '').replace(/\//g, '_')
+  trackClickWithIP(`page_view_${pageName}`)
 }
 

@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, public, residents, staff, contacts, reviews, history, dashboard
+from app.api.v1.endpoints import auth, public, residents, staff, contacts, reviews, history, dashboard, tracking
 
 api_router = APIRouter()
 
@@ -52,4 +52,10 @@ api_router.include_router(
     dashboard.router,
     prefix="/dashboard",
     tags=["dashboard"]
+)
+
+api_router.include_router(
+    tracking.router,
+    prefix="/track",
+    tags=["tracking"]
 )

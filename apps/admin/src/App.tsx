@@ -16,6 +16,8 @@ import HistoryPage from './pages/history/HistoryPage'
 import HistoryEditPage from './pages/history/HistoryEditPage'
 import ReviewsPage from './pages/reviews/ReviewsPage'
 import SettingsPage from './pages/settings/SettingsPage'
+import PageViewStats from './pages/analytics/PageViewStats'
+import SuspiciousIPPage from './pages/analytics/SuspiciousIPPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -63,6 +65,8 @@ function App() {
             <Route path="history/new" element={<HistoryEditPage />} />
             <Route path="history/edit/:id" element={<HistoryEditPage />} />
             <Route path="reviews" element={<ReviewsPage />} />
+            <Route path="analytics/page-views" element={<PageViewStats />} />
+            <Route path="analytics/suspicious-ips" element={<SuspiciousIPPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
 
