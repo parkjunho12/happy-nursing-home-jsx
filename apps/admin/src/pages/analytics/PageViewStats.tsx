@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react'
 import { trackAPI } from '@/api/client'
 import { Eye, Users, TrendingUp, Clock } from 'lucide-react'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-
 interface PageViewStat {
   page: string
   views: number
