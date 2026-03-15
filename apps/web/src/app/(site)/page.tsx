@@ -10,14 +10,21 @@ import {
 import {GallerySection} from '@/components/home/GallerySection'
 import ContactFormSection from '@/components/home/ContactFormSection'
 import YouTubeButton from '@/components/video/modal/YouTubeButton'
-
+import HeroSlider from '@/components/home/HeroSlider'
+import HeroSliderMobile from '@/components/home/HeroSliderMobile'
 
 export default function HomePage() {
   
   return (
     <>
       {/* Hero Section */}
-      <HeroSection />
+      <div className="hidden md:block">
+        <HeroSlider />
+      </div>
+      {/* 모바일 */}
+      <div className="md:hidden">
+        <HeroSliderMobile />
+      </div>
 
       
       {/* Quick Contact Bar */}

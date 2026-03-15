@@ -140,3 +140,385 @@
 .animate-scaleIn {
   animation: scaleIn 0.3s ease-out;
 }
+
+@keyframes float-slow {
+  0%,100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes float-delay {
+  0%,100% { transform: translateY(0); }
+  50% { transform: translateY(-14px); }
+}
+
+@keyframes float-slower {
+  0%,100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes soft-pulse {
+  0%,100% {
+    transform: scale(1);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.16);
+  }
+  50% {
+    transform: scale(1.02);
+    box-shadow: 0 18px 38px rgba(0,0,0,0.22);
+  }
+}
+
+@keyframes bounce-slow {
+  0%,100% { transform: translateY(0); opacity:0.7; }
+  50% { transform: translateY(6px); opacity:1; }
+}
+
+/* animation classes */
+
+.animate-float-slow {
+  animation: float-slow 4.8s ease-in-out infinite;
+}
+
+.animate-float-delay {
+  animation: float-delay 5.6s ease-in-out infinite;
+}
+
+.animate-float-slower {
+  animation: float-slower 6.2s ease-in-out infinite;
+}
+
+.animate-soft-pulse {
+  animation: soft-pulse 3.8s ease-in-out infinite;
+}
+
+.animate-bounce-slow {
+  animation: bounce-slow 2.2s ease-in-out infinite;
+}
+
+/* ===== Additional Premium Effects ===== */
+
+/* Gradient Border Effect */
+.gradient-border {
+  position: relative;
+  background: linear-gradient(white, white) padding-box,
+              linear-gradient(135deg, #f97316, #fb923c) border-box;
+  border: 2px solid transparent;
+}
+
+/* Shimmer Effect (optional) */
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.3) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 1000px 100%;
+  animation: shimmer 3s infinite;
+}
+
+/* ========================================
+   HERO SLIDER ANIMATIONS
+   ======================================== */
+
+/* Fade In Up - 페이지 로드 시 부드럽게 등장 */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.8s ease-out forwards;
+}
+
+/* Animation Delays */
+.animation-delay-200 {
+  animation-delay: 0.2s;
+  opacity: 0;
+}
+
+.animation-delay-400 {
+  animation-delay: 0.4s;
+  opacity: 0;
+}
+
+.animation-delay-600 {
+  animation-delay: 0.6s;
+  opacity: 0;
+}
+
+
+/* Pulse Glow - CTA 버튼 강조 효과 */
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+
+/* Bounce Slow - 스크롤 인디케이터 */
+@keyframes bounce-slow {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-bounce-slow {
+  animation: bounce-slow 2s ease-in-out infinite;
+}
+
+
+/* Slide Transition - 이미지 전환 효과 */
+.slide-enter {
+  opacity: 0;
+  transform: scale(1.1);
+}
+
+.slide-enter-active {
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 1s, transform 1s;
+}
+
+.slide-exit {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.slide-exit-active {
+  opacity: 0;
+  transform: scale(0.95);
+  transition: opacity 1s, transform 1s;
+}
+
+
+/* ========================================
+   CTA BUTTON STYLES
+   ======================================== */
+
+/* Gradient Glow Effect */
+.glow-effect {
+  position: relative;
+}
+
+.glow-effect::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  background: linear-gradient(45deg, #f97316, #fb923c, #fdba74);
+  border-radius: inherit;
+  filter: blur(10px);
+  opacity: 0;
+  transition: opacity 0.3s;
+  z-index: -1;
+}
+
+.glow-effect:hover::before {
+  opacity: 1;
+}
+
+
+/* ========================================
+   RESPONSIVE ADJUSTMENTS
+   ======================================== */
+
+/* Mobile: Smaller buttons, adjust spacing */
+@media (max-width: 640px) {
+  .animate-fade-in-up {
+    animation-duration: 0.6s;
+  }
+}
+
+
+/* ========================================
+   ACCESSIBILITY
+   ======================================== */
+
+/* Reduced Motion - 애니메이션 비활성화 */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in-up,
+  .animate-pulse-glow,
+  .animate-bounce-slow {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  
+  .slide-enter-active,
+  .slide-exit-active {
+    transition: none;
+  }
+}
+
+/* Focus States for Accessibility */
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid rgba(249, 115, 22, 0.5);
+  outline-offset: 3px;
+}
+
+
+/* ========================================
+   SLIDER CONTROLS
+   ======================================== */
+
+/* Dot Indicators - Active State */
+.slider-dot {
+  @apply w-3 h-3 rounded-full transition-all duration-300;
+  background-color: rgba(255, 255, 255, 0.5);
+}
+
+.slider-dot-active {
+  @apply w-12 h-3;
+  background-color: rgba(255, 255, 255, 1);
+}
+
+.slider-dot:hover {
+  background-color: rgba(255, 255, 255, 0.7);
+}
+
+
+/* Arrow Buttons */
+.slider-arrow {
+  @apply p-3 bg-white/20 backdrop-blur-sm text-white rounded-full 
+         hover:bg-white/30 transition-all duration-300
+         active:scale-95;
+}
+
+
+/* ========================================
+   TRUST BADGE ANIMATION
+   ======================================== */
+
+/* Subtle Float for Trust Indicators */
+@keyframes float-subtle {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+.animate-float-subtle {
+  animation: float-subtle 3s ease-in-out infinite;
+}
+
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-pretendard), sans-serif;
+  color: #1f2937;
+  background: #ffffff;
+}
+
+.font-body {
+  font-family: var(--font-pretendard), sans-serif;
+}
+
+.font-hero {
+  font-family: var(--font-maruburi), serif;
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+.hero-soft-shadow {
+  text-shadow: 0 2px 12px rgba(255, 255, 255, 0.18);
+}
+
+.hero-card-shadow {
+  box-shadow:
+    0 10px 30px rgba(15, 23, 42, 0.08),
+    0 4px 12px rgba(15, 23, 42, 0.05);
+}
+
+.hero-button-shadow {
+  box-shadow:
+    0 10px 24px rgba(249, 115, 22, 0.22),
+    0 4px 10px rgba(249, 115, 22, 0.12);
+}
+
+@keyframes heroFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes heroFadeSoft {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hero-animate {
+  opacity: 0;
+  animation: heroFadeUp 2.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.hero-animate-soft {
+  opacity: 0;
+  animation: heroFadeSoft 2.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.hero-delay-1 {
+  animation-delay: 0.12s;
+}
+
+.hero-delay-2 {
+  animation-delay: 0.28s;
+}
+
+.hero-delay-3 {
+  animation-delay: 0.46s;
+}
+
+.hero-delay-4 {
+  animation-delay: 0.64s;
+}
+
+.hero-delay-5 {
+  animation-delay: 0.82s;
+}
