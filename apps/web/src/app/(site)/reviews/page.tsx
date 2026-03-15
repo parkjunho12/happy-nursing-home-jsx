@@ -10,7 +10,7 @@ import {
   ShieldCheck,
   HeartHandshake,
 } from 'lucide-react'
-
+import Image from 'next/image'
 export const metadata: Metadata = {
   title: '보호자 상담 후기 | 행복한요양원 녹양역점',
   description:
@@ -36,7 +36,7 @@ export default function ReviewsPage() {
       author: '김**님',
       relation: '딸',
       rating: 5,
-      date: '2026년 2월',
+      date: '2026년 3월',
       title: '설명을 차분하게 잘 해주셔서 마음이 놓였습니다',
       content:
         '처음 요양원을 알아보는 입장이라 모르는 것이 많았는데, 장기요양등급부터 비용까지 하나씩 차분하게 설명해주셔서 부담이 덜했습니다. 급하게 결정하라고 하지 않고 보호자 입장에서 안내해주시는 점이 좋았습니다.',
@@ -48,7 +48,7 @@ export default function ReviewsPage() {
       author: '박**님',
       relation: '아들',
       rating: 5,
-      date: '2026년 2월',
+      date: '2026년 3월',
       title: '비용 부분을 솔직하게 알려주셔서 좋았습니다',
       content:
         '요양원 비용이 가장 걱정이었는데 본인부담금과 비급여 항목을 구분해서 쉽게 설명해주셔서 이해가 잘 됐습니다. 과장 없이 현실적으로 안내해주셔서 신뢰가 갔습니다.',
@@ -60,7 +60,7 @@ export default function ReviewsPage() {
       author: '이**님',
       relation: '며느리',
       rating: 5,
-      date: '2026년 1월',
+      date: '2026년 3월',
       title: '입소 절차가 정리되는 상담이었습니다',
       content:
         '무엇을 준비해야 하는지 막막했는데 상담을 받고 나니 입소 절차와 준비서류가 머릿속에 정리됐습니다. 보호자가 어떤 부분을 먼저 확인해야 하는지도 알려주셔서 도움이 많이 됐습니다.',
@@ -72,7 +72,7 @@ export default function ReviewsPage() {
       author: '최**님',
       relation: '딸',
       rating: 5,
-      date: '2026년 1월',
+      date: '2026년 3월',
       title: '부모님 모시는 마음을 이해해주는 상담이었습니다',
       content:
         '시설 설명만 하는 상담이 아니라 보호자의 걱정과 상황을 먼저 들어주셔서 좋았습니다. 바로 결정하라고 하지 않고 충분히 생각해보시라고 해주셔서 오히려 더 믿음이 갔습니다.',
@@ -84,7 +84,7 @@ export default function ReviewsPage() {
       author: '정**님',
       relation: '아들',
       rating: 4,
-      date: '2026년 2월',
+      date: '2026년 3월',
       title: '처음 문의하는 분들에게 도움이 될 것 같습니다',
       content:
         '요양원 상담이 처음이라 긴장했는데 어렵지 않게 설명해주셔서 편하게 상담받을 수 있었습니다. 장기요양보험, 등급, 비용 같은 내용도 쉽게 말씀해주셔서 처음 알아보는 분들에게 도움이 될 것 같습니다.',
@@ -96,7 +96,7 @@ export default function ReviewsPage() {
       author: '강**님',
       relation: '손녀',
       rating: 5,
-      date: '2026년 2월',
+      date: '2026년 3월',
       title: '편하게 질문할 수 있는 상담이었습니다',
       content:
         '질문이 많았는데도 하나하나 친절하게 답해주셔서 감사했습니다. 보호자 입장에서 궁금한 부분을 편하게 물어볼 수 있었고, 전체적으로 상담 분위기가 편안해서 좋았습니다.',
@@ -114,23 +114,42 @@ export default function ReviewsPage() {
   return (
     <div className="min-h-screen pt-20">
       {/* Hero */}
-      <section className="relative bg-gradient-to-br from-primary-brown to-primary-orange text-white py-20 lg:py-28">
-        <div className="absolute inset-0 bg-black/10" />
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/15 backdrop-blur-sm border border-white/20 text-sm font-medium mb-6">
+
+      <section className="relative overflow-hidden">
+        <div className="relative h-[120px] sm:h-[180px] lg:h-[320px]">
+          <Image
+            src="/assets/images/introduce-4.png"
+            alt="행복한요양원 녹양역점 시설 소개 배경 이미지"
+            fill
+            priority
+            quality={92}
+            className="object-cover object-center"
+          />
+
+          {/* Overlay */}
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(18,28,38,0.30)_0%,rgba(18,28,38,0.18)_34%,rgba(18,28,38,0.08)_62%,rgba(18,28,38,0.03)_100%)]" />
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.03)_0%,rgba(0,0,0,0.06)_100%)]" />
+        </div>
+
+        <div className="absolute inset-0 z-10 flex items-center">
+          <div className="mx-auto w-full max-w-7xl px-6 sm:px-8 lg:px-10">
+            <div className="max-w-3xl">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/15 backdrop-blur-sm border border-white/20 text-white font-medium mb-6">
             <Clock3 className="w-4 h-4" />
             현재 개원 준비 중 · 보호자 상담 가능
           </div>
+              <h1 className="text-balance text-4xl font-bold leading-[1.08] tracking-[-0.04em] text-white sm:text-5xl lg:text-7xl">
+              보호자 상담 후기
+              </h1>
 
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 leading-tight">
-            보호자 상담 후기
-          </h1>
+              <p className="mt-5 max-w-2xl text-base leading-7 text-white/85 sm:text-lg sm:leading-8 lg:text-xl">
+              행복한요양원 녹양역점 상담 후
+                <br className="hidden sm:block" />
+                보호자분들이 남겨주신 반응을 소개합니다
+              </p>
 
-          <p className="text-xl md:text-2xl text-white/90 max-w-3xl mx-auto leading-relaxed">
-            행복한요양원 녹양역점 상담 후
-            <br />
-            보호자분들이 남겨주신 반응을 소개합니다
-          </p>
+            </div>
+          </div>
         </div>
       </section>
 

@@ -1,175 +1,304 @@
 import { Metadata } from 'next'
 import Link from 'next/link'
-import { Clock, Users, Award, Heart, Shield, Sparkles, MapPin, Phone, Mail, ChevronRight } from 'lucide-react'
-import { SITE_INFO, TRUST_INDICATORS } from '@/lib/constants'
+import Image from 'next/image'
+import {
+  Heart,
+  ShieldCheck,
+  Sparkles,
+  Users,
+  Stethoscope,
+  MapPin,
+  Phone,
+  Mail,
+  ChevronRight,
+  CheckCircle2,
+  Clock3,
+  Home,
+} from 'lucide-react'
+import { SITE_INFO } from '@/lib/constants'
 import KakaoMap from '@/components/map/KaKaoMap'
-
+import HeroSlider from '@/components/home/HeroSlider'
 
 export const metadata: Metadata = {
   title: '시설 소개 | 행복한요양원 녹양역점',
-  description: '13년 경력의 행복한요양원 녹양역점을 소개합니다. 전문 간호사 24시간 상주, 쾌적한 환경, A등급 인증 시설.',
+  description:
+    '행복한요양원 녹양역점의 시설 소개, 케어 철학, 주요 공간, 오시는 길을 안내합니다.',
 }
 
+const coreValues = [
+  {
+    icon: <Heart className="w-7 h-7" />,
+    title: '가족 같은 돌봄',
+    description:
+      '어르신 한 분 한 분의 생활 리듬과 성향을 존중하며 편안한 생활을 돕습니다.',
+    color: 'bg-rose-50 text-rose-600',
+  },
+  {
+    icon: <ShieldCheck className="w-7 h-7" />,
+    title: '안전 중심 운영',
+    description:
+      '생활 동선, 낙상 예방, 응급 대응 체계를 중심으로 안전한 환경을 준비합니다.',
+    color: 'bg-blue-50 text-blue-600',
+  },
+  {
+    icon: <Stethoscope className="w-7 h-7" />,
+    title: '건강 관리 체계',
+    description:
+      '간호 및 건강관리 체계를 바탕으로 어르신 상태를 세심하게 살핍니다.',
+    color: 'bg-emerald-50 text-emerald-600',
+  },
+  {
+    icon: <Users className="w-7 h-7" />,
+    title: '보호자 소통',
+    description:
+      '보호자분들이 궁금해하시는 비용, 절차, 생활 안내를 쉽게 설명해드립니다.',
+    color: 'bg-amber-50 text-amber-600',
+  },
+]
+
+const highlights = [
+  '녹양역 인근으로 접근이 편리한 위치',
+  '편안한 생활 중심의 요양 환경',
+  '밝고 정돈된 공용 공간과 생활 공간',
+  '입소 전 상담부터 차분하게 안내',
+]
+
+const facilityPhotos = [
+  {
+    src: '/assets/images/introduce-1.png',
+    alt: '어르신들이 함께 식사하고 대화하는 공간 이미지',
+    title: '밝고 편안한 생활 분위기',
+    description: '어르신들이 일상 속에서 편안하게 지내실 수 있는 분위기를 중요하게 생각합니다.',
+  },
+  {
+    src: '/assets/images/introduce-2.png',
+    alt: '어르신들이 함께 운동 프로그램에 참여하는 모습',
+    title: '활동과 재활을 고려한 프로그램',
+    description: '무리하지 않으면서도 꾸준히 참여할 수 있는 생활 프로그램을 준비합니다.',
+  },
+  {
+    src: '/assets/images/introduce-3.png',
+    alt: '케어 선생님과 어르신이 함께 웃는 모습',
+    title: '따뜻한 케어 관계',
+    description: '시설의 분위기는 결국 사람에게서 만들어진다고 생각합니다.',
+  },
+  {
+    src: '/assets/images/introduce-4.png',
+    alt: '어르신들이 원예 활동을 즐기는 모습',
+    title: '정서적 안정과 여가 시간',
+    description: '생활의 안정감과 소소한 즐거움을 함께 드릴 수 있도록 준비합니다.',
+  },
+]
+
+const facilitySpaces = [
+  {
+    title: '생활실',
+    description: '어르신께서 편안하게 쉬실 수 있도록 정돈된 생활 공간을 제공합니다.',
+  },
+  {
+    title: '공용 생활 공간',
+    description: '식사, 대화, 휴식이 자연스럽게 이어질 수 있는 공용 공간을 운영합니다.',
+  },
+  {
+    title: '프로그램 공간',
+    description: '인지 활동, 여가 활동, 생활 프로그램이 가능한 공간을 준비합니다.',
+  },
+  {
+    title: '간호·건강 관리 공간',
+    description: '기본 건강 상태 확인과 일상적인 건강 관리를 위한 체계를 갖춥니다.',
+  },
+  {
+    title: '위생 관리 공간',
+    description: '청결과 위생 관리가 유지될 수 있도록 일상 운영 기준을 적용합니다.',
+  },
+  {
+    title: '보호자 상담 공간',
+    description: '입소 상담과 안내를 차분히 받으실 수 있도록 상담 환경을 준비합니다.',
+  },
+]
+
 export default function AboutPage() {
-
-  const features = [
-    {
-      icon: <Clock className="w-8 h-8" />,
-      title: '24시간 전문 케어',
-      description: '간호사와 요양보호사가 24시간 상주하여 안전하고 전문적인 케어를 제공합니다',
-      color: 'bg-orange-100 text-orange-600',
-    },
-    {
-      icon: <Users className="w-8 h-8" />,
-      title: '1:5 직원 비율',
-      description: '일반 요양원보다 2배 많은 인력으로 더욱 세심한 케어를 제공합니다',
-      color: 'bg-green-100 text-green-600',
-    },
-    {
-      icon: <Award className="w-8 h-8" />,
-      title: 'A등급 인증 시설',
-      description: '양주시 노인요양시설 평가에서 최고 등급을 획득한 검증된 시설입니다',
-      color: 'bg-blue-100 text-blue-600',
-    },
-    {
-      icon: <Heart className="w-8 h-8" />,
-      title: '개별 맞춤 케어',
-      description: '입소자 개개인의 건강 상태와 생활 습관을 고려한 맞춤형 케어 계획',
-      color: 'bg-pink-100 text-pink-600',
-    },
-    {
-      icon: <Shield className="w-8 h-8" />,
-      title: '안전한 환경',
-      description: '낙상 방지, CCTV 모니터링, 응급 콜 시스템 등 안전 시스템 완비',
-      color: 'bg-purple-100 text-purple-600',
-    },
-    {
-      icon: <Sparkles className="w-8 h-8" />,
-      title: '쾌적한 시설',
-      description: '깨끗하고 밝은 환경, 개인 및 공용 공간의 쾌적한 유지 관리',
-      color: 'bg-yellow-100 text-yellow-600',
-    },
-  ]
-
-  const timeline = [
-    { year: '2014', event: '베스트요양원 개원', icon: '🏥' },
-    { year: '2015', event: 'A등급 인증 획득', icon: '⭐' },
-    { year: '2018', event: '증축 및 리모델링', icon: '🏗️' },
-    { year: '2020', event: '우수 프로그램 운영 시설 선정', icon: '🎯' },
-    { year: '2026', event: '행복한요양원 개원', icon: '🎉' },
-  ]
-
-  const facilities = [
-    { name: '침실', description: '1인실, 2인실, 4인실 선택 가능' },
-    { name: '식당', description: '밝고 쾌적한 공용 식당' },
-    { name: '물리치료실', description: '전문 재활 치료 시설' },
-    { name: '프로그램실', description: '다양한 활동 공간' },
-    { name: '정원', description: '산책과 휴식을 위한 정원' },
-    { name: '의무실', description: '간호사 상주 의무실' },
-  ]
-
   return (
-    <div className="min-h-screen pt-20">
-      {/* Hero Section */}
-      <section className="relative bg-gradient-to-br from-primary-brown to-primary-orange text-white py-20 lg:py-32">
-        <div className="absolute inset-0 bg-black/10" />
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6">
-              행복한요양원 녹양역점
-            </h1>
-            <p className="text-xl md:text-2xl mb-8 text-white/90 max-w-3xl mx-auto">
-              {SITE_INFO.slogan}
-            </p>
-            <div className="flex flex-wrap justify-center gap-8 lg:gap-16 mt-12">
-              {TRUST_INDICATORS.map((indicator) => (
-                <div key={indicator.id} className="text-center">
-                  <div className="text-4xl lg:text-5xl font-bold mb-2">
-                    {indicator.value}
-                    <span className="text-2xl lg:text-3xl ml-1">{indicator.unit}</span>
-                  </div>
-                  <div className="text-white/80 text-sm lg:text-base">{indicator.label}</div>
-                </div>
-              ))}
+    <div className="min-h-screen bg-white pt-20">
+      {/* Hero */}
+      {/* Hero */}
+      <section className="relative overflow-hidden">
+      <div className="relative h-[120px] sm:h-[180px] lg:h-[320px]">
+          <Image
+            src="/assets/images/hero-8-image.png"
+            alt="행복한요양원 녹양역점 시설 소개 배경 이미지"
+            fill
+            priority
+            quality={92}
+            className="object-cover object-center"
+          />
+
+          {/* Overlay */}
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(18,28,38,0.30)_0%,rgba(18,28,38,0.18)_34%,rgba(18,28,38,0.08)_62%,rgba(18,28,38,0.03)_100%)]" />
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.03)_0%,rgba(0,0,0,0.06)_100%)]" />
+        </div>
+
+        <div className="absolute inset-0 z-10 flex items-center">
+          <div className="mx-auto w-full max-w-7xl px-6 sm:px-8 lg:px-10">
+            <div className="max-w-3xl">
+              <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 backdrop-blur-sm">
+                <Heart className="h-4 w-4 text-orange-300" />
+                <span className="text-sm font-semibold text-white/90">
+                  편안한 생활과 따뜻한 돌봄
+                </span>
+              </div>
+
+              <h1 className="text-balance text-4xl font-bold leading-[1.08] tracking-[-0.04em] text-white sm:text-5xl lg:text-7xl">
+                시설 소개
+              </h1>
+
+              <p className="mt-5 max-w-2xl text-base leading-7 text-white/85 sm:text-lg sm:leading-8 lg:text-xl">
+                어르신께서 편안하게 지내실 수 있도록
+                <br className="hidden sm:block" />
+                생활 환경, 건강 관리, 보호자 상담 체계를 세심하게 준비하고 있습니다.
+              </p>
+
+              <div className="mt-7 flex flex-wrap items-center gap-3">
+                <span className="inline-flex items-center gap-2 rounded-full bg-white/12 px-4 py-2 text-sm font-medium text-white/90 backdrop-blur-sm">
+                  <MapPin className="h-4 w-4 text-orange-300" />
+                  녹양역 인근
+                </span>
+
+                <span className="inline-flex items-center gap-2 rounded-full bg-white/12 px-4 py-2 text-sm font-medium text-white/90 backdrop-blur-sm">
+                  <ShieldCheck className="h-4 w-4 text-orange-300" />
+                  안전 중심 환경
+                </span>
+
+                <span className="inline-flex items-center gap-2 rounded-full bg-white/12 px-4 py-2 text-sm font-medium text-white/90 backdrop-blur-sm">
+                  <Sparkles className="h-4 w-4 text-orange-300" />
+                  쾌적한 생활 공간
+                </span>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Introduction */}
+      {/* Intro */}
       <section className="py-16 lg:py-24 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-            <div className="order-2 lg:order-1">
-              <h2 className="text-3xl lg:text-4xl font-bold mb-6 text-gray-900">
-                어르신을 가족처럼<br />모십니다
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-700 mb-6">
+                <Clock3 className="w-4 h-4" />
+                보호자 중심으로 차분하게 안내드립니다
+              </div>
+
+              <h2 className="text-3xl lg:text-5xl font-bold leading-tight text-gray-900 mb-6">
+                어르신께는 편안한 생활을,
+                <br />
+                보호자분께는 안심할 수 있는 안내를
               </h2>
+
               <div className="space-y-4 text-gray-700 text-lg leading-relaxed">
                 <p>
-                  행복한요양원 녹양역점은 2010년 개원 이래 <strong className="text-primary-orange">13년간</strong> 어르신들의 행복하고 건강한 노후를 위해 최선을 다해왔습니다.
+                  행복한요양원 녹양역점은 어르신께서 하루하루를 보다 안정되고
+                  편안하게 보내실 수 있도록 생활 중심의 요양 환경을 준비하고 있습니다.
                 </p>
                 <p>
-                  우리는 단순히 요양 서비스를 제공하는 것이 아니라, <strong className="text-primary-orange">어르신 한 분 한 분을 가족처럼 모시며</strong> 존엄과 행복을 지켜드리는 것을 최우선 가치로 삼고 있습니다.
+                  단순히 머무는 공간이 아니라,
+                  <strong className="text-primary-orange"> 안전, 청결, 건강관리, 정서적 안정</strong>이
+                  함께 유지되는 생활 공간이 되도록 세심하게 운영하고자 합니다.
                 </p>
                 <p>
-                  전문 간호사와 요양보호사가 24시간 상주하며, 개별 맞춤형 케어 플랜을 통해 어르신의 건강 상태와 생활 습관을 세심하게 관리합니다.
-                </p>
-                <p>
-                  양주시 노인요양시설 평가에서 <strong className="text-primary-orange">A등급</strong>을 획득한 검증된 시설로서, 안전하고 쾌적한 환경에서 질 높은 요양 서비스를 제공하고 있습니다.
+                  또한 보호자분들이 가장 궁금해하시는
+                  <strong className="text-primary-orange"> 비용, 입소 절차, 준비사항</strong>을
+                  어렵지 않게 안내드리는 것을 중요하게 생각합니다.
                 </p>
               </div>
-              <div className="mt-8 flex flex-wrap gap-4">
+
+              <div className="mt-8 grid sm:grid-cols-2 gap-3">
+                {highlights.map((item) => (
+                  <div
+                    key={item}
+                    className="flex items-start gap-3 rounded-2xl bg-gray-50 px-4 py-4"
+                  >
+                    <CheckCircle2 className="w-5 h-5 text-primary-orange mt-0.5 shrink-0" />
+                    <span className="text-gray-700 leading-relaxed">{item}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-8 flex flex-col sm:flex-row gap-4">
                 <Link
                   href="/contact"
-                  className="inline-flex items-center gap-2 px-8 py-4 bg-primary-orange text-white rounded-lg font-semibold hover:bg-primary-orange/90 transition-colors"
+                  className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-primary-orange text-white rounded-xl font-semibold hover:bg-primary-orange/90 transition-colors"
                 >
                   상담 신청하기
                   <ChevronRight className="w-5 h-5" />
                 </Link>
-                <Link
-                  href="/services"
-                  className="inline-flex items-center gap-2 px-8 py-4 bg-white border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:border-primary-orange hover:text-primary-orange transition-colors"
+
+                <a
+                  href={`tel:${SITE_INFO.phone}`}
+                  className="inline-flex items-center justify-center gap-2 px-8 py-4 border-2 border-gray-300 text-gray-800 rounded-xl font-semibold hover:border-primary-orange hover:text-primary-orange transition-colors"
                 >
-                  서비스 보기
-                </Link>
+                  <Phone className="w-5 h-5" />
+                  전화 상담
+                </a>
               </div>
             </div>
-            <div className="order-1 lg:order-2 relative h-96 lg:h-[500px] rounded-2xl overflow-hidden shadow-2xl">
-              <div className="absolute inset-0 bg-gradient-to-br from-primary-orange/20 to-primary-green/20" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-8xl lg:text-9xl">🏥</span>
+
+            <div className="relative">
+              <div className="relative h-[420px] lg:h-[540px] rounded-[32px] overflow-hidden shadow-[0_20px_50px_rgba(15,23,42,0.12)]">
+                <Image
+                  src="/assets/images/exterior.png"
+                  alt="행복한요양원의 따뜻한 돌봄 분위기를 보여주는 이미지"
+                  fill
+                  className="object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent" />
+              </div>
+
+              <div className="absolute -bottom-6 left-6 right-6 rounded-3xl border border-white/80 bg-white/90 backdrop-blur-md p-5 shadow-xl">
+                <div className="flex items-start gap-3">
+                  <Home className="w-6 h-6 text-primary-orange mt-0.5 shrink-0" />
+                  <div>
+                    <p className="font-bold text-gray-900 mb-1">
+                      편안한 생활 환경을 준비하고 있습니다
+                    </p>
+                    <p className="text-sm text-gray-600 leading-relaxed">
+                      생활 공간, 프로그램 운영, 보호자 상담 체계를 포함해
+                      어르신과 가족 모두 안심할 수 있는 환경을 만들어가고 있습니다.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Features */}
-      <section className="py-16 lg:py-24 bg-gray-50">
+      {/* Core values */}
+      <section className="py-16 lg:py-24 bg-[#faf7f3]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
+          <div className="text-center mb-14">
             <h2 className="text-3xl lg:text-4xl font-bold mb-4 text-gray-900">
-              행복한요양원의 특별함
+              행복한요양원이 중요하게 생각하는 것
             </h2>
-            <p className="text-xl text-gray-600">
-              어르신의 행복한 노후를 위한 6가지 핵심 가치
+            <p className="text-lg lg:text-xl text-gray-600">
+              요양원 선택에서 가장 중요한 기준을 중심으로 준비하고 있습니다
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
-            {features.map((feature, index) => (
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {coreValues.map((item) => (
               <div
-                key={index}
-                className="bg-white rounded-2xl p-8 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
+                key={item.title}
+                className="rounded-3xl bg-white p-7 shadow-sm border border-gray-100 hover:shadow-lg transition-all duration-300"
               >
-                <div className={`w-16 h-16 rounded-xl ${feature.color} flex items-center justify-center mb-6`}>
-                  {feature.icon}
+                <div className={`w-14 h-14 rounded-2xl ${item.color} flex items-center justify-center mb-5`}>
+                  {item.icon}
                 </div>
-                <h3 className="text-xl font-bold mb-3 text-gray-900">
-                  {feature.title}
+                <h3 className="text-xl font-bold text-gray-900 mb-3">
+                  {item.title}
                 </h3>
                 <p className="text-gray-600 leading-relaxed">
-                  {feature.description}
+                  {item.description}
                 </p>
               </div>
             ))}
@@ -177,39 +306,50 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Timeline */}
+      {/* Photo gallery */}
       <section className="py-16 lg:py-24 bg-white">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl lg:text-4xl font-bold mb-4 text-gray-900">
-              13년의 역사
-            </h2>
-            <p className="text-xl text-gray-600">
-              함께 걸어온 감사한 시간들
-            </p>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6 mb-12">
+            <div>
+              <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
+                이런 분위기의 생활을 준비합니다
+              </h2>
+              <p className="text-lg text-gray-600 max-w-3xl leading-relaxed">
+                어르신의 일상은 단순히 시설이 아니라 분위기와 사람, 생활 리듬에서
+                결정됩니다. 따뜻하고 안정된 환경을 가장 중요하게 생각합니다.
+              </p>
+            </div>
+
+            <Link
+              href="/contact"
+              className="inline-flex items-center gap-2 text-primary-orange font-semibold hover:text-primary-orange/80 transition-colors"
+            >
+              상담 예약하기
+              <ChevronRight className="w-5 h-5" />
+            </Link>
           </div>
 
-          <div className="space-y-8">
-            {timeline.map((item, index) => (
+          <div className="grid md:grid-cols-2 gap-6">
+            {facilityPhotos.map((photo) => (
               <div
-                key={index}
-                className="relative flex items-center gap-6 group"
+                key={photo.title}
+                className="group overflow-hidden rounded-[28px] bg-white border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-300"
               >
-                {/* Icon */}
-                <div className="flex-shrink-0 w-16 h-16 bg-gradient-to-br from-primary-orange to-primary-brown rounded-xl flex items-center justify-center text-3xl shadow-lg group-hover:scale-110 transition-transform">
-                  {item.icon}
+                <div className="relative h-72 lg:h-80 overflow-hidden">
+                  <Image
+                    src={photo.src}
+                    alt={photo.alt}
+                    fill
+                    className="object-cover transition-transform duration-700 group-hover:scale-105"
+                  />
                 </div>
-                
-                {/* Content */}
-                <div className="flex-1 bg-gray-50 rounded-xl p-6 group-hover:bg-white group-hover:shadow-md transition-all">
-                  <div className="flex items-center gap-4 mb-2">
-                    <span className="text-2xl font-bold text-primary-orange">
-                      {item.year}
-                    </span>
-                    <div className="h-px flex-1 bg-gray-200" />
-                  </div>
-                  <p className="text-lg text-gray-700 font-medium">
-                    {item.event}
+
+                <div className="p-6">
+                  <h3 className="text-2xl font-bold text-gray-900 mb-3">
+                    {photo.title}
+                  </h3>
+                  <p className="text-gray-600 leading-relaxed">
+                    {photo.description}
                   </p>
                 </div>
               </div>
@@ -218,28 +358,30 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Facilities */}
+      {/* Spaces */}
       <section className="py-16 lg:py-24 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl lg:text-4xl font-bold mb-4 text-gray-900">
-              주요 시설
+          <div className="text-center mb-14">
+            <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
+              주요 공간 안내
             </h2>
-            <p className="text-xl text-gray-600">
-              어르신의 편안한 생활을 위한 다양한 시설
+            <p className="text-lg lg:text-xl text-gray-600">
+              생활과 케어에 필요한 공간을 균형 있게 준비합니다
             </p>
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {facilities.map((facility, index) => (
+            {facilitySpaces.map((space) => (
               <div
-                key={index}
-                className="bg-white rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow"
+                key={space.title}
+                className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow"
               >
-                <h3 className="text-xl font-bold mb-2 text-gray-900">
-                  {facility.name}
+                <h3 className="text-xl font-bold text-gray-900 mb-3">
+                  {space.title}
                 </h3>
-                <p className="text-gray-600">{facility.description}</p>
+                <p className="text-gray-600 leading-relaxed">
+                  {space.description}
+                </p>
               </div>
             ))}
           </div>
@@ -249,27 +391,29 @@ export default function AboutPage() {
       {/* Location & Contact */}
       <section className="py-16 lg:py-24 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid lg:grid-cols-2 gap-12">
-            {/* Contact Info */}
+          <div className="grid lg:grid-cols-[1fr_1.2fr] gap-10 lg:gap-14 items-start">
             <div>
               <h2 className="text-3xl lg:text-4xl font-bold mb-8 text-gray-900">
                 오시는 길
               </h2>
-              <div className="space-y-6">
-                <div className="flex items-start gap-4 p-4 bg-gray-50 rounded-xl">
-                  <MapPin className="w-6 h-6 text-primary-orange flex-shrink-0 mt-1" />
+
+              <div className="space-y-4">
+                <div className="flex items-start gap-4 rounded-2xl bg-gray-50 p-5">
+                  <MapPin className="w-6 h-6 text-primary-orange mt-1 shrink-0" />
                   <div>
                     <div className="font-semibold text-gray-900 mb-1">주소</div>
-                    <div className="text-gray-700">{SITE_INFO.address.full}</div>
+                    <div className="text-gray-700 leading-relaxed">
+                      {SITE_INFO.address.full}
+                    </div>
                   </div>
                 </div>
-                
-                <div className="flex items-start gap-4 p-4 bg-gray-50 rounded-xl">
-                  <Phone className="w-6 h-6 text-primary-orange flex-shrink-0 mt-1" />
+
+                <div className="flex items-start gap-4 rounded-2xl bg-gray-50 p-5">
+                  <Phone className="w-6 h-6 text-primary-orange mt-1 shrink-0" />
                   <div>
                     <div className="font-semibold text-gray-900 mb-1">전화번호</div>
-                    <a 
-                      href={`tel:${SITE_INFO.phone}`} 
+                    <a
+                      href={`tel:${SITE_INFO.phone}`}
                       className="text-gray-700 hover:text-primary-orange transition-colors"
                     >
                       {SITE_INFO.phone}
@@ -277,11 +421,11 @@ export default function AboutPage() {
                   </div>
                 </div>
 
-                <div className="flex items-start gap-4 p-4 bg-gray-50 rounded-xl">
-                  <Mail className="w-6 h-6 text-primary-orange flex-shrink-0 mt-1" />
+                <div className="flex items-start gap-4 rounded-2xl bg-gray-50 p-5">
+                  <Mail className="w-6 h-6 text-primary-orange mt-1 shrink-0" />
                   <div>
                     <div className="font-semibold text-gray-900 mb-1">이메일</div>
-                    <a 
+                    <a
                       href={`mailto:${SITE_INFO.email}`}
                       className="text-gray-700 hover:text-primary-orange transition-colors"
                     >
@@ -291,51 +435,72 @@ export default function AboutPage() {
                 </div>
               </div>
 
-              <div className="mt-8">
-                <Link
-                  href="/contact"
-                  className="inline-flex items-center gap-2 px-8 py-4 bg-primary-orange text-white rounded-lg font-semibold hover:bg-primary-orange/90 transition-colors w-full md:w-auto justify-center"
-                >
-                  상담 신청하기
-                  <ChevronRight className="w-5 h-5" />
-                </Link>
+              <div className="mt-8 rounded-3xl border border-orange-100 bg-orange-50 p-6">
+                <h3 className="text-xl font-bold text-gray-900 mb-3">
+                  방문 전 상담 예약을 추천드립니다
+                </h3>
+                <p className="text-gray-700 leading-relaxed mb-5">
+                  어르신 상태와 상담 목적에 맞춰 보다 차분하게 안내드릴 수 있도록
+                  방문 전 연락을 주시면 더욱 원활하게 상담받으실 수 있습니다.
+                </p>
+
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Link
+                    href="/contact"
+                    className="inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-primary-orange text-white rounded-xl font-semibold hover:bg-primary-orange/90 transition-colors"
+                  >
+                    상담 신청하기
+                    <ChevronRight className="w-5 h-5" />
+                  </Link>
+
+                  <a
+                    href={`tel:${SITE_INFO.phone}`}
+                    className="inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-white border border-orange-200 text-gray-800 rounded-xl font-semibold hover:border-primary-orange hover:text-primary-orange transition-colors"
+                  >
+                    <Phone className="w-5 h-5" />
+                    전화 상담
+                  </a>
+                </div>
               </div>
             </div>
 
-            {/* Map */}
-            <div className="h-96 bg-gray-200 rounded-2xl overflow-hidden shadow-lg">
-                <KakaoMap
-                  lat={37.76774123217728}
-                  lng={127.04359415733941}
-                  level={3}
-                  markerTitle="행복한요양원 (녹양역 근처)"
-                  height="100%"   // ✅ 부모 높이에 맞추기
-                />
-              </div>
+            <div className="h-[420px] lg:h-[560px] rounded-[28px] overflow-hidden shadow-[0_20px_50px_rgba(15,23,42,0.12)] bg-gray-100">
+              <KakaoMap
+                lat={37.76774123217728}
+                lng={127.04359415733941}
+                level={3}
+                markerTitle="행복한요양원 녹양역점"
+                height="100%"
+              />
+            </div>
           </div>
         </div>
       </section>
 
-      {/* CTA Section */}
+      {/* CTA */}
       <section className="py-16 bg-gradient-to-br from-primary-orange to-primary-brown text-white">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl lg:text-4xl font-bold mb-4">
-            지금 바로 상담 받아보세요
+            직접 상담받아 보세요
           </h2>
-          <p className="text-xl mb-8 text-white/90">
-            전문 상담원이 친절하게 안내해 드립니다
+          <p className="text-xl mb-8 text-white/90 leading-relaxed">
+            입소 절차, 비용, 생활 환경까지
+            <br className="hidden sm:block" />
+            궁금하신 내용을 차분하게 안내해드립니다.
           </p>
+
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <a
               href={`tel:${SITE_INFO.phone}`}
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white text-primary-orange rounded-lg font-semibold hover:bg-gray-100 transition-colors"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white text-primary-orange rounded-xl font-semibold hover:bg-gray-100 transition-colors"
             >
               <Phone className="w-5 h-5" />
               전화 상담
             </a>
+
             <Link
               href="/contact"
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white/10 backdrop-blur-sm border-2 border-white text-white rounded-lg font-semibold hover:bg-white/20 transition-colors"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white/10 backdrop-blur-sm border-2 border-white text-white rounded-xl font-semibold hover:bg-white/20 transition-colors"
             >
               온라인 상담
               <ChevronRight className="w-5 h-5" />

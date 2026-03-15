@@ -3,6 +3,7 @@ import { Phone, Mail, MapPin, Clock, MessageCircle } from 'lucide-react'
 import ContactForm from '@/components/forms/ContactForm'
 import { SITE_INFO } from '@/lib/constants'
 import KakaoMap from '@/components/map/KaKaoMap'
+import Image from 'next/image'
 
 export const metadata: Metadata = {
   title: '상담 신청 | 행복한요양원 녹양역점',
@@ -64,18 +65,41 @@ export default function ContactPage() {
   return (
     <div className="min-h-screen pt-20">
       {/* Hero */}
-      <section className="relative bg-gradient-to-br from-primary-brown to-primary-orange text-white py-20">
-        <div className="absolute inset-0 bg-black/10" />
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6">
-            상담 신청
-          </h1>
-          <p className="text-xl md:text-2xl text-white/90 max-w-3xl mx-auto">
-            전문 상담원이 친절하게 안내해 드립니다<br />
-            편한 방법으로 문의해 주세요
-          </p>
+      <section className="relative overflow-hidden">
+        <div className="relative h-[120px] sm:h-[180px] lg:h-[320px]">
+          <Image
+            src="/assets/images/introduce-1.png"
+            alt="행복한요양원 녹양역점 시설 소개 배경 이미지"
+            fill
+            priority
+            quality={92}
+            className="object-cover object-center"
+          />
+
+          {/* Overlay */}
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(18,28,38,0.30)_0%,rgba(18,28,38,0.18)_34%,rgba(18,28,38,0.08)_62%,rgba(18,28,38,0.03)_100%)]" />
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.03)_0%,rgba(0,0,0,0.06)_100%)]" />
+        </div>
+
+        <div className="absolute inset-0 z-10 flex items-center">
+          <div className="mx-auto w-full max-w-7xl px-6 sm:px-8 lg:px-10">
+            <div className="max-w-3xl">
+
+              <h1 className="text-balance text-4xl font-bold leading-[1.08] tracking-[-0.04em] text-white sm:text-5xl lg:text-7xl">
+              상담 신청
+              </h1>
+
+              <p className="mt-5 max-w-2xl text-base leading-7 text-white/85 sm:text-lg sm:leading-8 lg:text-xl">
+              전문 상담원이 친절하게 안내해 드립니다
+                <br className="hidden sm:block" />
+                편한 방법으로 문의해 주세요
+              </p>
+
+            </div>
+          </div>
         </div>
       </section>
+
 
       {/* Contact Methods */}
       <section className="py-16 bg-white">

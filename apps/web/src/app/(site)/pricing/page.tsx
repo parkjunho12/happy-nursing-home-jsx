@@ -10,6 +10,7 @@ import {
   Phone,
   ShieldCheck,
 } from 'lucide-react'
+import Image from 'next/image'
 
 export const metadata: Metadata = {
   title: '입소 비용 | 행복한요양원 녹양역점',
@@ -138,17 +139,39 @@ export default function PricingPage() {
   return (
     <div className="min-h-screen pt-20">
       {/* Hero */}
-      <section className="relative bg-gradient-to-br from-primary-brown to-primary-orange text-white py-20 lg:py-28">
-        <div className="absolute inset-0 bg-black/10" />
-        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6">
-          입소비용 안내
-          </h1>
-          <p className="text-xl md:text-2xl text-white/90 max-w-3xl mx-auto leading-relaxed">
-            요양원 비용은 대부분 국가에서 지원됩니다.
-            <br />
-            보호자분께서는 본인부담금과 일부 비급여만 부담하시면 됩니다.
-          </p>
+
+      <section className="relative overflow-hidden">
+        <div className="relative h-[120px] sm:h-[180px] lg:h-[320px]">
+          <Image
+            src="/assets/images/introduce-3.png"
+            alt="행복한요양원 녹양역점 시설 소개 배경 이미지"
+            fill
+            priority
+            quality={92}
+            className="object-cover object-center"
+          />
+
+          {/* Overlay */}
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(18,28,38,0.30)_0%,rgba(18,28,38,0.18)_34%,rgba(18,28,38,0.08)_62%,rgba(18,28,38,0.03)_100%)]" />
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.03)_0%,rgba(0,0,0,0.06)_100%)]" />
+        </div>
+
+        <div className="absolute inset-0 z-10 flex items-center">
+          <div className="mx-auto w-full max-w-7xl px-6 sm:px-8 lg:px-10">
+            <div className="max-w-3xl">
+
+              <h1 className="text-balance text-4xl font-bold leading-[1.08] tracking-[-0.04em] text-white sm:text-5xl lg:text-7xl">
+              입소비용 안내
+              </h1>
+
+              <p className="mt-5 max-w-2xl text-base leading-7 text-white/85 sm:text-lg sm:leading-8 lg:text-xl">
+              요양원 비용은 대부분 국가에서 지원됩니다.
+                <br className="hidden sm:block" />
+                보호자분께서는 본인부담금과 일부 비급여만 부담하시면 됩니다.
+              </p>
+
+            </div>
+          </div>
         </div>
       </section>
 
