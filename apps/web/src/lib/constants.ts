@@ -39,7 +39,7 @@ import {
   export const TRUST_INDICATORS: TrustIndicator[] = [
     {
       id: 'experience',
-      value: '13',
+      value: '11',
       label: '운영 경력',
       unit: '년',
     },
@@ -51,7 +51,7 @@ import {
     },
     {
       id: 'satisfaction',
-      value: '98',
+      value: '99',
       label: '만족도',
       unit: '%',
     },
@@ -68,6 +68,11 @@ import {
       id: 'services',
       label: '서비스',
       href: '/services',
+    },
+    {
+      id: 'pricing',
+      label: '입소비용',
+      href: '/pricing',
     },
     {
       id: 'reviews',
@@ -150,15 +155,15 @@ import {
     {
       id: 'ratio',
       icon: '👥',
-      title: '1:5 낮은 입소자 대비 직원 비율',
+      title: '2:1 낮은 입소자 대비 직원 비율',
       description: '일반 요양원보다 2배 많은 인력으로 더욱 세심하고 개인화된 케어를 제공합니다',
       color: 'green',
     },
     {
       id: 'certification',
       icon: '⭐',
-      title: '지자체 A등급 인증 시설',
-      description: '양주시 노인요양시설 평가에서 최고 등급을 획득한 검증된 시설입니다',
+      title: '최우수 A등급 인증 시설',
+      description: '국민건강보험 노인요양시설 평가에서 최고 등급을 획득한 검증된 시설입니다',
       color: 'orange',
     },
     {
@@ -179,30 +184,31 @@ import {
   
   // 후기 목록
   export const REVIEWS: Review[] = [
+    
     {
       id: 'review-1',
       author: '김**님',
-      date: '2024년 12월',
+      date: '2026년 3월',
       rating: 5,
-      content: '어머니를 모시기 위해 여러 요양원을 둘러봤는데, 행복한요양원의 시설과 직원분들의 태도가 가장 인상적이었습니다. 입소 후 3개월이 지났는데 어머니도 많이 편안해하시고, 정기적으로 보내주시는 사진과 건강 상태 리포트 덕분에 저희도 안심하고 있습니다.',
+      content: '처음 요양원을 알아보는 입장이라 모르는 것이 많았는데, 장기요양등급부터 비용까지 하나씩 차분하게 설명해주셔서 부담이 덜했습니다. 급하게 결정하라고 하지 않고 보호자 입장에서 안내해주시는 점이 좋았습니다.',
       verified: true,
     },
     {
       id: 'review-2',
       author: '박**님',
-      date: '2024년 10월',
+      date: '2026년 3월',
       rating: 5,
-      content: '아버지께서 치매가 있으셔서 많이 걱정했는데, 전문적인 인지 프로그램과 세심한 케어 덕분에 증상이 많이 안정되었습니다. 요양보호사님들이 진심으로 대해주시는 것이 느껴져서 가족으로서 너무 감사합니다.',
+      content: '요양원 비용이 가장 걱정이었는데 본인부담금과 비급여 항목을 구분해서 쉽게 설명해주셔서 이해가 잘 됐습니다. 과장 없이 현실적으로 안내해주셔서 신뢰가 갔습니다.',
       verified: true,
     },
     {
       id: 'review-3',
       author: '이**님',
-      date: '2024년 9월',
+      date: '2026년 3월',
       rating: 5,
-      content: '시설이 너무 깨끗하고 직원분들도 친절하세요. 특히 식사가 정말 맛있다고 어머니께서 매번 칭찬하십니다. 다양한 프로그램 덕분에 요양원에서도 즐겁게 지내시는 것 같아 마음이 놓입니다.',
+      content: '무엇을 준비해야 하는지 막막했는데 상담을 받고 나니 입소 절차와 준비서류가 머릿속에 정리됐습니다. 보호자가 어떤 부분을 먼저 확인해야 하는지도 알려주셔서 도움이 많이 됐습니다.',
       verified: true,
-    },
+    }
   ]
   
   // 문의 유형
@@ -227,6 +233,7 @@ import {
     quickLinks: [
       { label: '소개', href: '/about' },
       { label: '서비스', href: '/services' },
+      { label: '입소비용', href: '/pricing' },
       { label: '후기', href: '/reviews' },
     ],
     contact: [
@@ -238,6 +245,7 @@ import {
     info: [
       { label: '입소 절차', href: '/admission' },
       { label: '개인정보처리방침', href: '/privacy' },
+      { label: '입소비용', href: '/pricing' },
       { label: '이용약관', href: '/terms' },
       { label: '시설 안내', href: '/about#facility' },
     ],

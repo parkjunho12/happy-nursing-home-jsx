@@ -1,219 +1,398 @@
 import { Metadata } from 'next'
 import Link from 'next/link'
-import { Check, ChevronRight, AlertCircle, Calculator, FileText, CreditCard } from 'lucide-react'
+import {
+  AlertCircle,
+  Calculator,
+  CheckCircle,
+  ChevronRight,
+  CreditCard,
+  FileText,
+  Phone,
+  ShieldCheck,
+} from 'lucide-react'
+import Image from 'next/image'
 
 export const metadata: Metadata = {
-  title: '요금 안내 | 행복한요양원 녹양역점',
-  description: '투명하고 합리적인 요금 체계. 장기요양보험 적용, 다양한 객실 옵션을 안내합니다.',
+  title: '입소 비용 | 행복한요양원 녹양역점',
+  description:
+    '행복한요양원 녹양역점의 2026년 입소비용 안내입니다. 장기요양등급별 본인부담금, 감경 대상자 기준, 비급여 항목을 확인하세요.',
+}
+
+const paymentTypes = [
+  {
+    title: '일반 어르신',
+    highlight: '본인부담금 20%',
+    description:
+      '장기요양보험 적용 후 본인부담금 20%와 비급여 비용을 부담합니다.',
+    notes: ['비급여 별도', '식비, 간식비 등 추가'],
+    icon: CreditCard,
+    tone: 'orange',
+  },
+  {
+    title: '의료급여 수급권 어르신',
+    highlight: '본인부담금 8% 또는 12%',
+    description:
+      '의료급여 수급권자는 감경 대상에 따라 본인부담금이 8% 또는 12%로 줄어듭니다.',
+    notes: ['비급여 별도', '식비, 간식비 등 추가'],
+    icon: ShieldCheck,
+    tone: 'blue',
+  },
+  {
+    title: '기초생활수급자',
+    highlight: '본인부담금 없음',
+    description:
+      '시설급여는 전액 지원되며, 본인부담금과 식재료비도 국가 및 지자체에서 지원됩니다.',
+    notes: ['상급 침실료 등 일부 비급여 가능'],
+    icon: CheckCircle,
+    tone: 'green',
+  },
+]
+
+const pricingTable = [
+  {
+    type: '일반 (20%)',
+    note: '기초수급자 외',
+    values: ['₩558,420', '₩518,040', '₩489,240', '₩489,240', '₩489,240'],
+  },
+  {
+    type: '감경 I (12%)',
+    note: '차상위계층 등',
+    values: ['₩335,052', '₩310,824', '₩293,544', '₩293,544', '₩293,544'],
+  },
+  {
+    type: '감경 II (8%)',
+    note: '감경 대상자',
+    values: ['₩223,368', '₩207,216', '₩195,696', '₩195,696', '₩195,696'],
+  },
+]
+
+const includedItems = [
+  '24시간 요양보호 서비스',
+  '간호 인력 건강 관리',
+  '투약 관리',
+  '기본 생활 케어',
+  '목욕 서비스',
+  '세탁 서비스',
+  '인지 활동 프로그램',
+  '여가 프로그램',
+  '물리치료 및 재활 프로그램',
+  '응급 대응 체계',
+]
+
+const excludedItems = [
+  '식비',
+  '간식비',
+  '기저귀',
+  '개인 위생용품',
+  '개인 의류',
+  '상급 침실료(해당 시)',
+]
+
+const faqItems = [
+  {
+    question: '요양원 비용은 누가 얼마나 부담하나요?',
+    answer:
+      '장기요양보험이 적용되면 대부분의 비용은 건강보험공단이 부담하고, 보호자께서는 본인부담금과 일부 비급여 항목만 부담하시면 됩니다.',
+  },
+  {
+    question: '기초생활수급자는 정말 무료인가요?',
+    answer:
+      '시설급여에 대해서는 본인부담금이 없으며, 식재료비도 국가 및 지자체에서 지원됩니다. 다만 상급 침실료 등 일부 비급여 항목은 별도로 발생할 수 있습니다.',
+  },
+  {
+    question: '비급여 항목은 어떤 것이 있나요?',
+    answer:
+      '대표적으로 식비, 간식비, 기저귀, 개인 위생용품, 개인 의류 등이 있으며, 사용량이나 상황에 따라 달라질 수 있습니다.',
+  },
+  {
+    question: '정확한 월 비용은 어떻게 알 수 있나요?',
+    answer:
+      '어르신의 장기요양등급, 감경 여부, 개인 상태, 필요한 물품에 따라 실제 부담액이 달라질 수 있으므로 상담을 통해 정확하게 안내해드립니다.',
+  },
+]
+
+function toneClasses(tone: 'orange' | 'blue' | 'green') {
+  if (tone === 'orange') {
+    return {
+      icon: 'bg-orange-50 text-primary-orange',
+      border: 'border-orange-200',
+      badge: 'bg-orange-100 text-orange-700',
+    }
+  }
+
+  if (tone === 'blue') {
+    return {
+      icon: 'bg-blue-50 text-blue-600',
+      border: 'border-blue-200',
+      badge: 'bg-blue-100 text-blue-700',
+    }
+  }
+
+  return {
+    icon: 'bg-green-50 text-green-600',
+    border: 'border-green-200',
+    badge: 'bg-green-100 text-green-700',
+  }
 }
 
 export default function PricingPage() {
-  const pricingPlans = [
-    {
-      name: '4인실',
-      grade: '1~5등급',
-      price: '월 120만원',
-      priceNote: '(장기요양보험 적용 후)',
-      features: [
-        '쾌적한 4인 공용 침실',
-        '개인 침대 및 수납장',
-        '냉난방 완비',
-        '24시간 간호',
-        '3식 제공',
-        '프로그램 참여',
-      ],
-      popular: false,
-      color: 'border-gray-300',
-    },
-    {
-      name: '2인실',
-      grade: '1~5등급',
-      price: '월 150만원',
-      priceNote: '(장기요양보험 적용 후)',
-      features: [
-        '프라이빗한 2인 침실',
-        '개인 침대 및 수납장',
-        '개인 화장실',
-        '냉난방 완비',
-        '24시간 간호',
-        '3식 제공',
-        '프로그램 참여',
-        '넓은 공간',
-      ],
-      popular: true,
-      color: 'border-primary-orange',
-    },
-    {
-      name: '1인실',
-      grade: '1~5등급',
-      price: '월 200만원',
-      priceNote: '(장기요양보험 적용 후)',
-      features: [
-        '프라이빗 1인 침실',
-        '개인 침대 및 가구',
-        '개인 화장실',
-        '냉난방 완비',
-        '24시간 간호',
-        '3식 제공',
-        '프로그램 참여',
-        '넓은 공간',
-        '개인 TV',
-      ],
-      popular: false,
-      color: 'border-gray-300',
-    },
-  ]
-
-  const includedServices = [
-    '24시간 전문 간호',
-    '영양사 식단 관리',
-    '물리 치료',
-    '인지 프로그램',
-    '여가 활동',
-    '세탁 서비스',
-    '목욕 서비스',
-    '정기 건강 체크',
-    '응급 대응 시스템',
-    '가족 상담',
-  ]
-
-  const insuranceGrades = [
-    {
-      grade: '1등급',
-      condition: '완전 와상 상태',
-      benefit: '월 최대 1,538,200원',
-      selfPay: '약 20% 본인부담',
-    },
-    {
-      grade: '2등급',
-      condition: '중증 상태',
-      benefit: '월 최대 1,356,000원',
-      selfPay: '약 20% 본인부담',
-    },
-    {
-      grade: '3등급',
-      condition: '중등도 장애',
-      benefit: '월 최대 1,260,900원',
-      selfPay: '약 20% 본인부담',
-    },
-    {
-      grade: '4등급',
-      condition: '경증 장애',
-      benefit: '월 최대 1,161,200원',
-      selfPay: '약 20% 본인부담',
-    },
-    {
-      grade: '5등급',
-      condition: '치매 전담',
-      benefit: '월 최대 1,068,800원',
-      selfPay: '약 20% 본인부담',
-    },
-  ]
-
-  const faqItems = [
-    {
-      question: '장기요양보험이 무엇인가요?',
-      answer: '고령이나 노인성 질병 등으로 일상생활이 어려운 어르신에게 신체 활동 및 가사 지원 등의 서비스를 제공하여 노후 생활의 안정과 가족의 부담을 덜어드리기 위한 사회보험 제도입니다.',
-    },
-    {
-      question: '등급 판정은 어떻게 받나요?',
-      answer: '국민건강보험공단에 신청하시면 방문 조사를 통해 등급을 판정받으실 수 있습니다. 저희 요양원에서 신청 절차를 도와드립니다.',
-    },
-    {
-      question: '본인부담금은 어떻게 되나요?',
-      answer: '장기요양보험 급여 비용의 약 20%가 본인부담금입니다. 나머지 80%는 장기요양보험에서 지원됩니다. (기초생활수급자는 무료)',
-    },
-    {
-      question: '추가 비용이 있나요?',
-      answer: '기본 서비스 외 개인 용품(기저귀, 물티슈 등), 병원 진료비, 이미용 등은 별도 비용이 발생할 수 있습니다.',
-    },
-  ]
-
   return (
     <div className="min-h-screen pt-20">
       {/* Hero */}
-      <section className="relative bg-gradient-to-br from-primary-brown to-primary-orange text-white py-20 lg:py-32">
-        <div className="absolute inset-0 bg-black/10" />
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6">
-            요금 안내
-          </h1>
-          <p className="text-xl md:text-2xl text-white/90 max-w-3xl mx-auto">
-            투명하고 합리적인 요금 체계<br />
-            장기요양보험 적용으로 부담을 덜어드립니다
-          </p>
+
+      <section className="relative overflow-hidden">
+        <div className="relative h-[120px] sm:h-[180px] lg:h-[320px]">
+          <Image
+            src="/assets/images/introduce-3.png"
+            alt="행복한요양원 녹양역점 시설 소개 배경 이미지"
+            fill
+            priority
+            quality={92}
+            className="object-cover object-center"
+          />
+
+          {/* Overlay */}
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(18,28,38,0.30)_0%,rgba(18,28,38,0.18)_34%,rgba(18,28,38,0.08)_62%,rgba(18,28,38,0.03)_100%)]" />
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.03)_0%,rgba(0,0,0,0.06)_100%)]" />
+        </div>
+
+        <div className="absolute inset-0 z-10 flex items-center">
+          <div className="mx-auto w-full max-w-7xl px-6 sm:px-8 lg:px-10">
+            <div className="max-w-3xl">
+
+              <h1 className="text-balance text-4xl font-bold leading-[1.08] tracking-[-0.04em] text-white sm:text-5xl lg:text-7xl">
+              입소비용 안내
+              </h1>
+
+              <p className="mt-5 max-w-2xl text-base leading-7 text-white/85 sm:text-lg sm:leading-8 lg:text-xl">
+              요양원 비용은 대부분 국가에서 지원됩니다.
+                <br className="hidden sm:block" />
+                보호자분께서는 본인부담금과 일부 비급여만 부담하시면 됩니다.
+              </p>
+
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* Pricing Cards */}
-      <section className="py-16 lg:py-24 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl lg:text-4xl font-bold mb-4 text-gray-900">
-              객실별 요금
+      {/* Quick summary */}
+      <section className="py-10 bg-amber-50 border-b border-amber-100">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="rounded-2xl bg-white border border-amber-200 p-6 lg:p-8 shadow-sm">
+            <h2 className="text-2xl font-bold text-gray-900 mb-3">
+              먼저 이렇게 보시면 쉽습니다
             </h2>
-            <p className="text-xl text-gray-600">
-              어르신의 상태와 선호에 맞는 객실을 선택하세요
+            <p className="text-gray-700 leading-relaxed text-base md:text-lg">
+              일반 어르신은 보통 <strong className="text-gray-900">본인부담금 20%</strong>,
+              의료급여 수급권 어르신은 <strong className="text-gray-900">8% 또는 12%</strong>,
+              기초생활수급자는 <strong className="text-gray-900">본인부담금이 없습니다.</strong>
+              <br className="hidden sm:block" />
+              실제 비용은 등급과 감경 대상 여부에 따라 달라지며, 아래 표에서 바로 확인하실 수 있습니다.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Payment types */}
+      <section className="py-16 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
+              본인부담 기준
+            </h2>
+            <p className="text-lg text-gray-600">
+              보호자분이 실제로 부담하시는 기준입니다
             </p>
           </div>
 
-          <div className="grid lg:grid-cols-3 gap-8">
-            {pricingPlans.map((plan, index) => (
-              <div
-                key={index}
-                className={`relative bg-white border-2 ${plan.color} rounded-2xl p-8 ${
-                  plan.popular ? 'shadow-2xl scale-105' : 'shadow-sm'
-                } transition-all duration-300 hover:shadow-xl`}
-              >
-                {plan.popular && (
-                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                    <span className="px-6 py-2 bg-gradient-to-r from-primary-orange to-primary-brown text-white text-sm font-bold rounded-full shadow-lg">
-                      인기
-                    </span>
-                  </div>
-                )}
+          <div className="grid lg:grid-cols-3 gap-6">
+            {paymentTypes.map((item) => {
+              const Icon = item.icon
+              const tone = toneClasses(item.tone as 'orange' | 'blue' | 'green')
 
-                <div className="text-center mb-8">
-                  <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                    {plan.name}
-                  </h3>
-                  <div className="text-sm text-gray-500 mb-4">{plan.grade}</div>
-                  <div className="text-4xl font-bold text-primary-orange mb-2">
-                    {plan.price}
-                  </div>
-                  <div className="text-sm text-gray-600">{plan.priceNote}</div>
-                </div>
-
-                <ul className="space-y-3 mb-8">
-                  {plan.features.map((feature, idx) => (
-                    <li key={idx} className="flex items-center gap-3">
-                      <Check className="w-5 h-5 text-primary-green flex-shrink-0" />
-                      <span className="text-gray-700">{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                <Link
-                  href="/contact"
-                  className={`block w-full text-center py-4 rounded-lg font-semibold transition-colors ${
-                    plan.popular
-                      ? 'bg-primary-orange text-white hover:bg-primary-orange/90'
-                      : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
-                  }`}
+              return (
+                <div
+                  key={item.title}
+                  className={`rounded-2xl border-2 ${tone.border} bg-white p-8 shadow-sm hover:shadow-md transition-shadow`}
                 >
-                  상담 신청하기
-                </Link>
-              </div>
-            ))}
+                  <div className={`inline-flex items-center justify-center w-14 h-14 rounded-2xl ${tone.icon} mb-5`}>
+                    <Icon className="w-7 h-7" />
+                  </div>
+
+                  <h3 className="text-2xl font-bold text-gray-900 mb-3">
+                    {item.title}
+                  </h3>
+
+                  <div className={`inline-flex px-3 py-1 rounded-full text-sm font-semibold ${tone.badge} mb-4`}>
+                    {item.highlight}
+                  </div>
+
+                  <p className="text-gray-700 leading-relaxed mb-5">
+                    {item.description}
+                  </p>
+
+                  <ul className="space-y-2">
+                    {item.notes.map((note) => (
+                      <li key={note} className="flex items-start gap-2 text-gray-600">
+                        <CheckCircle className="w-4 h-4 mt-0.5 text-primary-orange shrink-0" />
+                        <span>{note}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing table */}
+      <section className="py-16 lg:py-20 bg-gray-50">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-10">
+            <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
+              등급별 본인부담금
+            </h2>
+            <p className="text-lg text-gray-600">
+              인력배치 기준 2.1 대 1 · 30일 기준
+            </p>
           </div>
 
-          <div className="mt-12 p-6 bg-blue-50 border-2 border-blue-200 rounded-xl">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-6 h-6 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-gray-700 leading-relaxed">
-                  <strong className="text-blue-900">안내:</strong> 위 요금은 장기요양보험 적용 후 본인부담금 기준이며, 
-                  등급과 소득 수준에 따라 달라질 수 있습니다. 정확한 요금은 상담을 통해 안내해 드립니다.
+          <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
+            <table className="min-w-[980px] w-full">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th
+                    rowSpan={2}
+                    className="px-6 py-5 text-center text-base font-bold text-gray-900 border-b border-r border-gray-200"
+                  >
+                    구분
+                  </th>
+                  <th
+                    colSpan={5}
+                    className="px-6 py-5 text-center text-base font-bold text-gray-900 border-b border-r border-gray-200"
+                  >
+                    등급
+                  </th>
+                  <th
+                    rowSpan={2}
+                    className="px-6 py-5 text-center text-base font-bold text-gray-900 border-b border-gray-200"
+                  >
+                    비고
+                  </th>
+                </tr>
+                <tr className="bg-gray-50">
+                  <th className="px-6 py-4 text-center font-semibold text-gray-900 border-b border-r border-gray-200">
+                    1등급
+                  </th>
+                  <th className="px-6 py-4 text-center font-semibold text-gray-900 border-b border-r border-gray-200">
+                    2등급
+                  </th>
+                  <th className="px-6 py-4 text-center font-semibold text-gray-900 border-b border-r border-gray-200">
+                    3등급
+                  </th>
+                  <th className="px-6 py-4 text-center font-semibold text-gray-900 border-b border-r border-gray-200">
+                    4등급
+                  </th>
+                  <th className="px-6 py-4 text-center font-semibold text-gray-900 border-b border-r border-gray-200">
+                    5등급
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {pricingTable.map((row, index) => (
+                  <tr key={row.type} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                    <td className="px-6 py-5 text-center border-r border-b border-gray-200">
+                      <div className="font-semibold text-gray-900">{row.type}</div>
+                      <div className="text-sm text-gray-500 mt-1">(30일 기준)</div>
+                    </td>
+
+                    {row.values.map((value, idx) => (
+                      <td
+                        key={`${row.type}-${idx}`}
+                        className="px-6 py-5 text-center text-xl font-bold text-gray-900 border-r border-b border-gray-200"
+                      >
+                        {value}
+                      </td>
+                    ))}
+
+                    <td className="px-6 py-5 text-center text-gray-700 border-b border-gray-200">
+                      {row.note}
+                    </td>
+                  </tr>
+                ))}
+
+                <tr className="bg-white">
+                  <td className="px-6 py-6 text-center border-r border-gray-200">
+                    <div className="font-semibold text-gray-900">기초생활수급자</div>
+                    <div className="text-sm text-gray-500 mt-1">(시설급여 전액급여)</div>
+                  </td>
+                  <td
+                    colSpan={5}
+                    className="px-6 py-6 text-center text-xl font-bold text-gray-900 border-r border-gray-200"
+                  >
+                    본인부담금 없음
+                  </td>
+                  <td className="px-6 py-6 text-center text-gray-700">
+                    건강보험공단 전액 지원
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-8 rounded-2xl bg-white border border-gray-200 p-6 shadow-sm">
+            <ul className="space-y-2 text-gray-700 leading-relaxed">
+              <li>※ 위 금액은 <strong>30일 기준</strong>이며, 공휴일 수에 따라 월별 총액이 변동될 수 있습니다.</li>
+              <li>※ 31일 기준 금액은 월별로 일부 변동됩니다.</li>
+              <li>※ <strong>비급여 항목</strong>(기저귀, 간식, 개인용품 등)은 별도입니다.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      {/* Included / excluded */}
+      <section className="py-16 lg:py-20 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid lg:grid-cols-2 gap-8">
+            <div className="rounded-3xl border border-green-200 bg-green-50/50 p-8">
+              <h2 className="text-2xl font-bold text-gray-900 mb-5">
+                기본 제공 서비스
+              </h2>
+              <div className="grid sm:grid-cols-2 gap-3">
+                {includedItems.map((item) => (
+                  <div
+                    key={item}
+                    className="flex items-start gap-3 rounded-2xl bg-white p-4 border border-green-100"
+                  >
+                    <CheckCircle className="w-5 h-5 text-green-600 mt-0.5 shrink-0" />
+                    <span className="text-gray-700 leading-relaxed">{item}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-orange-200 bg-orange-50/50 p-8">
+              <h2 className="text-2xl font-bold text-gray-900 mb-5">
+                별도 비용이 발생할 수 있는 항목
+              </h2>
+              <div className="grid sm:grid-cols-2 gap-3">
+                {excludedItems.map((item) => (
+                  <div
+                    key={item}
+                    className="flex items-start gap-3 rounded-2xl bg-white p-4 border border-orange-100"
+                  >
+                    <AlertCircle className="w-5 h-5 text-primary-orange mt-0.5 shrink-0" />
+                    <span className="text-gray-700 leading-relaxed">{item}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-5 rounded-2xl bg-white border border-orange-100 p-4">
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  비급여 항목은 어르신 개인 상태, 사용량, 선택 사항에 따라 달라질 수 있으므로
+                  상담 시 자세히 안내드립니다.
                 </p>
               </div>
             </div>
@@ -221,104 +400,29 @@ export default function PricingPage() {
         </div>
       </section>
 
-      {/* Included Services */}
-      <section className="py-16 lg:py-24 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl lg:text-4xl font-bold mb-4 text-gray-900">
-              포함 서비스
-            </h2>
-            <p className="text-xl text-gray-600">
-              추가 비용 없이 제공되는 기본 서비스
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-4">
-            {includedServices.map((service, index) => (
-              <div
-                key={index}
-                className="bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-center gap-3">
-                  <Check className="w-5 h-5 text-primary-green flex-shrink-0" />
-                  <span className="text-gray-700 font-medium">{service}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Insurance Grades */}
-      <section className="py-16 lg:py-24 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl lg:text-4xl font-bold mb-4 text-gray-900">
-              장기요양보험 등급별 혜택
-            </h2>
-            <p className="text-xl text-gray-600">
-              등급에 따른 급여 한도액 안내
-            </p>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full bg-white border-2 border-gray-200 rounded-xl overflow-hidden">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">등급</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">상태</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">월 급여 한도</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">본인부담</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {insuranceGrades.map((grade, index) => (
-                  <tr key={index} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4">
-                      <span className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-primary-orange to-primary-brown text-white font-bold text-lg rounded-xl">
-                        {grade.grade}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-gray-700">{grade.condition}</td>
-                    <td className="px-6 py-4 text-gray-900 font-semibold">{grade.benefit}</td>
-                    <td className="px-6 py-4 text-gray-700">{grade.selfPay}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="mt-8 p-6 bg-yellow-50 border-2 border-yellow-200 rounded-xl">
-            <p className="text-center text-gray-700">
-              ※ 2024년 기준이며, 매년 변동될 수 있습니다. 기초생활수급자는 본인부담금이 면제됩니다.
-            </p>
-          </div>
-        </div>
-      </section>
-
       {/* FAQ */}
-      <section className="py-16 lg:py-24 bg-gray-50">
+      <section className="py-16 lg:py-20 bg-gray-50">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
+          <div className="text-center mb-12">
             <h2 className="text-3xl lg:text-4xl font-bold mb-4 text-gray-900">
               자주 묻는 질문
             </h2>
-            <p className="text-xl text-gray-600">
-              요금 관련 궁금하신 점을 확인하세요
+            <p className="text-lg text-gray-600">
+              비용 관련하여 많이 물어보시는 내용을 정리했습니다
             </p>
           </div>
 
           <div className="space-y-4">
-            {faqItems.map((item, index) => (
+            {faqItems.map((item) => (
               <details
-                key={index}
-                className="bg-white rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow group"
+                key={item.question}
+                className="group rounded-2xl bg-white p-6 shadow-sm border border-gray-100"
               >
-                <summary className="flex items-center justify-between cursor-pointer list-none">
-                  <span className="text-lg font-semibold text-gray-900 pr-4">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
+                  <span className="text-lg font-semibold text-gray-900">
                     {item.question}
                   </span>
-                  <ChevronRight className="w-5 h-5 text-gray-400 group-open:rotate-90 transition-transform flex-shrink-0" />
+                  <ChevronRight className="w-5 h-5 text-gray-400 transition-transform group-open:rotate-90 shrink-0" />
                 </summary>
                 <div className="mt-4 pt-4 border-t border-gray-100">
                   <p className="text-gray-700 leading-relaxed">{item.answer}</p>
@@ -336,23 +440,27 @@ export default function PricingPage() {
           <h2 className="text-3xl lg:text-4xl font-bold mb-4">
             정확한 비용이 궁금하신가요?
           </h2>
-          <p className="text-xl mb-8 text-white/90">
-            개인별 상황에 맞는 정확한 요금을 안내해 드립니다
+          <p className="text-xl mb-8 text-white/90 leading-relaxed">
+            어르신의 등급과 상황에 맞는 실제 부담 비용을
+            <br className="hidden sm:block" />
+            상담을 통해 자세히 안내해드립니다.
           </p>
+
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
               href="/contact"
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white text-primary-orange rounded-lg font-semibold hover:bg-gray-100 transition-colors"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white text-primary-orange rounded-xl font-semibold hover:bg-gray-100 transition-colors"
             >
               <FileText className="w-5 h-5" />
               맞춤 상담 신청
             </Link>
+
             <a
-              href="tel:031-856-809"
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white/10 backdrop-blur-sm border-2 border-white text-white rounded-lg font-semibold hover:bg-white/20 transition-colors"
+              href="tel:031-856-8090"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white/10 backdrop-blur-sm border-2 border-white text-white rounded-xl font-semibold hover:bg-white/20 transition-colors"
             >
-              전화 문의하기
-              <ChevronRight className="w-5 h-5" />
+              <Phone className="w-5 h-5" />
+              031-856-8090
             </a>
           </div>
         </div>

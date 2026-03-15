@@ -5,7 +5,7 @@ import { Calendar, Eye, ChevronRight } from 'lucide-react'
 import { getPublishedHistory } from '@/lib/api-client'
 import { CATEGORY_CONFIG, type HistoryCategory } from '@/types/history'
 import { toHistoryPost, toHistoryListItem, type HistoryResponseRaw } from '@/lib/history-mapper'
-
+import Image from 'next/image'
 export const metadata: Metadata = {
   title: '블로그 | 행복한요양원 녹양역점',
   description: '행복한요양원의 다양한 활동과 소식을 확인하세요.',
@@ -98,14 +98,39 @@ export default async function HistoryPage({
   return (
     <div className="min-h-screen pt-20">
       {/* Hero Section */}
-      <section className="relative bg-gradient-to-br from-primary-brown to-primary-orange text-white py-20">
-        <div className="absolute inset-0 bg-black/10" />
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6">블로그</h1>
-          <p className="text-xl md:text-2xl text-white/90 max-w-3xl mx-auto">
-            행복한요양원의 다양한 활동과<br />
-            따뜻한 이야기들을 확인하세요
-          </p>
+
+      <section className="relative overflow-hidden">
+        <div className="relative h-[120px] sm:h-[180px] lg:h-[320px]">
+          <Image
+            src="/assets/images/introduce-2.png"
+            alt="행복한요양원 녹양역점 시설 소개 배경 이미지"
+            fill
+            priority
+            quality={92}
+            className="object-cover object-center"
+          />
+
+          {/* Overlay */}
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(18,28,38,0.30)_0%,rgba(18,28,38,0.18)_34%,rgba(18,28,38,0.08)_62%,rgba(18,28,38,0.03)_100%)]" />
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.03)_0%,rgba(0,0,0,0.06)_100%)]" />
+        </div>
+
+        <div className="absolute inset-0 z-10 flex items-center">
+          <div className="mx-auto w-full max-w-7xl px-6 sm:px-8 lg:px-10">
+            <div className="max-w-3xl">
+
+              <h1 className="text-balance text-4xl font-bold leading-[1.08] tracking-[-0.04em] text-white sm:text-5xl lg:text-7xl">
+              따뜻한 소식들
+              </h1>
+
+              <p className="mt-5 max-w-2xl text-base leading-7 text-white/85 sm:text-lg sm:leading-8 lg:text-xl">
+              행복한요양원의 다양한 활동과
+                <br className="hidden sm:block" />
+                따뜻한 이야기들을 확인하세요
+              </p>
+
+            </div>
+          </div>
         </div>
       </section>
 

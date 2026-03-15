@@ -86,7 +86,7 @@ const ContactsPage = () => {
     
     const colors = {
       '입소': 'bg-blue-50 text-blue-700 border-blue-200',
-      '요금': 'bg-purple-50 text-purple-700 border-purple-200',
+      '입소비용': 'bg-purple-50 text-purple-700 border-purple-200',
       '면회': 'bg-green-50 text-green-700 border-green-200',
       '의료간호': 'bg-red-50 text-red-700 border-red-200',
       '프로그램': 'bg-orange-50 text-orange-700 border-orange-200',

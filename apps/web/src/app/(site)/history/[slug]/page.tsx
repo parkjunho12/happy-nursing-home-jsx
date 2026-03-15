@@ -8,7 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react'
-
+import Image from 'next/image'
 import { getHistoryPost, getPublishedHistory } from '@/lib/api-client'
 import { CATEGORY_CONFIG, type HistoryCategory } from '@/types/history'
 import ShareButton from './_components/ShareButton'
@@ -155,6 +155,7 @@ export default async function HistoryDetailPage({ params }: { params: PageParams
           </div>
         </div>
       </section>
+
 
       {/* Content */}
       <article className="py-16 bg-white">
