@@ -9,6 +9,62 @@ import GTM from '@/components/analytics/GTM'
 import dynamic from 'next/dynamic'
 import NaverWcs from '@/components/analytics/NaverWcs'
 import PageTracker from '@/components/analytics/PageViewTracker'
+import localFont from 'next/font/local'
+
+
+const pretendard = localFont({
+  src: [
+    {
+      path: '../../public/fonts/Pretendard-Regular.otf',
+      weight: '400',
+      style: 'normal',
+    },
+    {
+      path: '../../public/fonts/Pretendard-Medium.otf',
+      weight: '500',
+      style: 'normal',
+    },
+    {
+      path: '../../public/fonts/Pretendard-SemiBold.otf',
+      weight: '600',
+      style: 'normal',
+    },
+    {
+      path: '../../public/fonts/Pretendard-Bold.otf',
+      weight: '700',
+      style: 'normal',
+    },
+    {
+      path: '../../public/fonts/Pretendard-ExtraBold.otf',
+      weight: '800',
+      style: 'normal',
+    },
+  ],
+  variable: '--font-pretendard',
+  display: 'swap',
+})
+
+const maruburi = localFont({
+  src: [
+    {
+      path: '../../public/fonts/MaruBuri-Regular.otf',
+      weight: '400',
+      style: 'normal',
+    },
+    {
+      path: '../../public/fonts/MaruBuri-SemiBold.otf',
+      weight: '600',
+      style: 'normal',
+    },
+    {
+      path: '../../public/fonts/MaruBuri-Bold.otf',
+      weight: '700',
+      style: 'normal',
+    },
+  ],
+  variable: '--font-maruburi',
+  display: 'swap',
+})
 
 const notoSansKr = Noto_Sans_KR({
   subsets: ['latin'],
@@ -141,7 +197,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <OrganizationSchema />
       </head>
 
-      <body className={`${notoSansKr.variable} ${nanumMyeongjo.variable} font-sans antialiased`}>
+      <body className={`${notoSansKr.variable} ${nanumMyeongjo.variable} ${pretendard.variable} ${maruburi.variable} font-sans antialiased`}>
         <GTM />
         <PageTracker />
         {children}
