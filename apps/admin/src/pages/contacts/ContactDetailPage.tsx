@@ -117,7 +117,7 @@ const ContactDetailPage = () => {
     
     const colors = {
       '입소': 'bg-blue-100 text-blue-700',
-      '요금': 'bg-purple-100 text-purple-700',
+      '입소비용': 'bg-purple-100 text-purple-700',
       '면회': 'bg-green-100 text-green-700',
       '의료간호': 'bg-red-100 text-red-700',
       '프로그램': 'bg-orange-100 text-orange-700',

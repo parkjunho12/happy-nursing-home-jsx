@@ -2,7 +2,7 @@
 title: "입소비용"
 route: "/pricing"
 updated: "2026-02-15"
-category: "요금"
+category: "입소비용"
 ---
 
 # 입소비용

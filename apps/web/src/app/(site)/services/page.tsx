@@ -278,7 +278,7 @@ export default function ServicesPage() {
               href="/pricing"
               className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white/10 backdrop-blur-sm border-2 border-white text-white rounded-lg font-semibold hover:bg-white/20 transition-colors"
             >
-              요금 안내 보기
+              입소비용 안내 보기
             </Link>
           </div>
         </div>

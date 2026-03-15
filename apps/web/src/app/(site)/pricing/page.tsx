@@ -12,9 +12,9 @@ import {
 } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: '요금 안내 | 행복한요양원 녹양역점',
+  title: '입소 비용 | 행복한요양원 녹양역점',
   description:
-    '행복한요양원 녹양역점의 2026년 요금 안내입니다. 장기요양등급별 본인부담금, 감경 대상자 기준, 비급여 항목을 확인하세요.',
+    '행복한요양원 녹양역점의 2026년 입소비용 안내입니다. 장기요양등급별 본인부담금, 감경 대상자 기준, 비급여 항목을 확인하세요.',
 }
 
 const paymentTypes = [
@@ -142,7 +142,7 @@ export default function PricingPage() {
         <div className="absolute inset-0 bg-black/10" />
         <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6">
-            요금 안내
+          입소비용 안내
           </h1>
           <p className="text-xl md:text-2xl text-white/90 max-w-3xl mx-auto leading-relaxed">
             요양원 비용은 대부분 국가에서 지원됩니다.
