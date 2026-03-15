@@ -126,13 +126,13 @@ export default function HeroSliderMobile() {
               </a>
 
               <a
-                href="https://open.kakao.com/o/svXNViii"
-                target="_blank"
+                href="#contact"
+                target="_self"
                 rel="noopener noreferrer"
                 className="flex items-center justify-center gap-1.5 rounded-2xl border border-white/85 bg-white/94 px-4 py-3.5 text-sm font-bold text-[#1f2937] shadow-[0_6px_18px_rgba(15,23,42,0.05)] transition active:scale-[0.98]"
               >
                 <MessageCircle className="h-4 w-4" />
-                카카오톡
+                온라인 상담
               </a>
             </div>
           </div>

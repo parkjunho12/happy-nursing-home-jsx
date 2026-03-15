@@ -274,12 +274,12 @@ export default function ServicesPage() {
               상담 신청하기
               <ChevronRight className="w-5 h-5" />
             </Link>
-            {/* <Link
+            <Link
               href="/pricing"
               className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white/10 backdrop-blur-sm border-2 border-white text-white rounded-lg font-semibold hover:bg-white/20 transition-colors"
             >
               요금 안내 보기
-            </Link> */}
+            </Link>
           </div>
         </div>
       </section>

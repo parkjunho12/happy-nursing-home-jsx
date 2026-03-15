@@ -39,7 +39,7 @@ import {
   export const TRUST_INDICATORS: TrustIndicator[] = [
     {
       id: 'experience',
-      value: '13',
+      value: '11',
       label: '운영 경력',
       unit: '년',
     },
@@ -51,7 +51,7 @@ import {
     },
     {
       id: 'satisfaction',
-      value: '98',
+      value: '99',
       label: '만족도',
       unit: '%',
     },
@@ -68,6 +68,11 @@ import {
       id: 'services',
       label: '서비스',
       href: '/services',
+    },
+    {
+      id: 'pricing',
+      label: '입소비용',
+      href: '/pricing',
     },
     {
       id: 'reviews',
@@ -150,15 +155,15 @@ import {
     {
       id: 'ratio',
       icon: '👥',
-      title: '1:5 낮은 입소자 대비 직원 비율',
+      title: '2:1 낮은 입소자 대비 직원 비율',
       description: '일반 요양원보다 2배 많은 인력으로 더욱 세심하고 개인화된 케어를 제공합니다',
       color: 'green',
     },
     {
       id: 'certification',
       icon: '⭐',
-      title: '지자체 A등급 인증 시설',
-      description: '양주시 노인요양시설 평가에서 최고 등급을 획득한 검증된 시설입니다',
+      title: '최우수 A등급 인증 시설',
+      description: '국민건강보험 노인요양시설 평가에서 최고 등급을 획득한 검증된 시설입니다',
       color: 'orange',
     },
     {
@@ -227,6 +232,7 @@ import {
     quickLinks: [
       { label: '소개', href: '/about' },
       { label: '서비스', href: '/services' },
+      { label: '입소비용', href: '/pricing' },
       { label: '후기', href: '/reviews' },
     ],
     contact: [
@@ -238,6 +244,7 @@ import {
     info: [
       { label: '입소 절차', href: '/admission' },
       { label: '개인정보처리방침', href: '/privacy' },
+      { label: '입소비용', href: '/pricing' },
       { label: '이용약관', href: '/terms' },
       { label: '시설 안내', href: '/about#facility' },
     ],

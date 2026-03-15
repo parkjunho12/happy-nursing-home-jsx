@@ -109,7 +109,7 @@ export default function HeroSlider() {
 
               <p className="hero-animate hero-delay-3 font-body mt-4 inline-flex items-center gap-2 rounded-full bg-white/72 px-3.5 py-2 text-[13px] font-semibold text-[#334155] shadow-[0_4px_12px_rgba(15,23,42,0.04)] backdrop-blur-sm sm:text-[14px]">
                 <MapPin className="h-4 w-4 text-orange-500" />
-                녹양역 도보 5분 · 생활 중심 케어
+                녹양역 도보 8분 · 생활 중심 케어
               </p>
             </div>
 
@@ -147,7 +147,7 @@ export default function HeroSlider() {
                 </a>
 
                 <p className="font-body mt-2 text-[13px] text-[#64748b]">
-                  평일 9시~6시 상담 가능
+                  24시간 상담가능
                 </p>
 
                 <div className="mt-4 flex flex-col gap-2.5 sm:flex-row sm:items-center">
@@ -160,13 +160,13 @@ export default function HeroSlider() {
                   </a>
 
                   <a
-                    href="http://pf.kakao.com/_xoVxexj/chat"
-                    target="_blank"
+                    href="#contact"
+                    target="_self"
                     rel="noopener noreferrer"
                     className="font-body inline-flex items-center gap-2 text-[14px] font-medium text-[#475569] transition hover:text-[#1f2937]"
                   >
                     <MessageCircle className="h-4 w-4" />
-                    카카오톡 문의
+                    온라인 상담 문의
                   </a>
                 </div>
               </div>
@@ -176,10 +176,6 @@ export default function HeroSlider() {
             <div className="hero-animate-soft hero-delay-5 mt-5 flex flex-wrap items-center gap-x-5 gap-y-2">
               <span className="font-body text-[12px] font-medium text-[#64748b]">
                 2025년 4월 오픈
-              </span>
-              <span className="hidden h-3.5 w-px bg-[#cbd5e1] sm:block" />
-              <span className="font-body text-[12px] font-medium text-[#64748b]">
-                최신 시설
               </span>
               <span className="hidden h-3.5 w-px bg-[#cbd5e1] sm:block" />
               <span className="font-body text-[12px] font-medium text-[#64748b]">
