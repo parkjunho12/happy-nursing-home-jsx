@@ -81,11 +81,7 @@ const includedItems = [
 
 const excludedItems = [
   '식비',
-  '간식비',
-  '기저귀',
-  '개인 위생용품',
-  '개인 의류',
-  '상급 침실료(해당 시)',
+  '간식비'
 ]
 
 const faqItems = [
@@ -102,7 +98,7 @@ const faqItems = [
   {
     question: '비급여 항목은 어떤 것이 있나요?',
     answer:
-      '대표적으로 식비, 간식비, 기저귀, 개인 위생용품, 개인 의류 등이 있으며, 사용량이나 상황에 따라 달라질 수 있습니다.',
+      '대표적으로 식비, 간식비가 있으며, 사용량이나 상황에 따라 달라질 수 있습니다.',
   },
   {
     question: '정확한 월 비용은 어떻게 알 수 있나요?',
@@ -375,7 +371,7 @@ export default function PricingPage() {
 
             <div className="rounded-3xl border border-orange-200 bg-orange-50/50 p-8">
               <h2 className="text-2xl font-bold text-gray-900 mb-5">
-                별도 비용이 발생할 수 있는 항목
+                비급여
               </h2>
               <div className="grid sm:grid-cols-2 gap-3">
                 {excludedItems.map((item) => (
@@ -389,12 +385,7 @@ export default function PricingPage() {
                 ))}
               </div>
 
-              <div className="mt-5 rounded-2xl bg-white border border-orange-100 p-4">
-                <p className="text-sm text-gray-600 leading-relaxed">
-                  비급여 항목은 어르신 개인 상태, 사용량, 선택 사항에 따라 달라질 수 있으므로
-                  상담 시 자세히 안내드립니다.
-                </p>
-              </div>
+              
             </div>
           </div>
         </div>
