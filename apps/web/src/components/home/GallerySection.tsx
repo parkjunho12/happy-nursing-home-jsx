@@ -92,7 +92,7 @@ export function GallerySection() {
       },
       {
         id: 15,
-        src: '/assets/images/4room.JPG',
+        src: '/assets/images/4rooms.png',
         title: '4인실',
         span: '',
       },

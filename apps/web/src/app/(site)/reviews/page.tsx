@@ -136,7 +136,7 @@ export default function ReviewsPage() {
             <div className="max-w-3xl">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/15 backdrop-blur-sm border border-white/20 text-white font-medium mb-6">
             <Clock3 className="w-4 h-4" />
-            현재 개원 준비 중 · 보호자 상담 가능
+            현재 보호자 상담 가능
           </div>
               <h1 className="text-balance text-4xl font-bold leading-[1.08] tracking-[-0.04em] text-white sm:text-5xl lg:text-7xl">
               보호자 상담 후기
@@ -161,7 +161,7 @@ export default function ReviewsPage() {
               안내드립니다
             </h2>
             <p className="text-gray-700 leading-relaxed">
-              행복한요양원 녹양역점은 현재 개원 준비 중입니다. 아래 내용은
+              행복한요양원 녹양역 아래 내용은
               <strong className="text-gray-900"> 실제 이용후기</strong>가 아니라,
               <strong className="text-gray-900"> 입소 상담 및 문의 과정에서 보호자분들이 남겨주신 반응</strong>
               을 바탕으로 정리한 상담 후기입니다.

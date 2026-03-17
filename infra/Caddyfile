@@ -15,6 +15,11 @@
 api.xn--p80bu1t60gba47bg6abm347gsla.com {
   encode gzip zstd
 
+  log {
+    output file /data/logs/api-access.log
+    format json
+  }
+
   # Health
   handle /health {
     reverse_proxy backend:8000
