@@ -65,9 +65,9 @@ export default function HeroSliderMobile() {
 
       <div className="relative z-20 flex min-h-[680px] items-end px-4 pb-28 pt-24">
         <div className="w-full max-w-[320px]">
-          <div className="rounded-[24px] border border-white/70 bg-white/74 p-5 shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur-[6px]">
+          <div className="rounded-[24px] border border-white/70 bg-white/74 p-5 shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur-[3px]">
             {/* Badge */}
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#fed7aa] bg-[#fff7ed]/95 px-3 py-1.5">
+            <div className="hero-animate hero-delay-1 mb-4 inline-flex items-center gap-2 rounded-full border border-[#fed7aa] bg-[#fff7ed]/95 px-3 py-1.5">
               <Award className="h-3.5 w-3.5 text-orange-500" />
               <span className="font-body text-[11px] font-semibold text-[#9a5a18]">
                 자매시설 A등급 운영 노하우
@@ -76,21 +76,21 @@ export default function HeroSliderMobile() {
 
             {/* Headline */}
             <div>
-              <h1 className="font-hero text-[1.9rem] font-bold leading-[1.18] tracking-[-0.03em] text-[#18212b]">
+              <h1 className="hero-animate hero-delay-2 font-hero text-[1.9rem] font-bold leading-[1.18] tracking-[-0.03em] text-[#18212b]">
                 가족처럼 모시는
                 <br />
-                <span className="text-orange-500">행복한요양원 녹양역점</span>
+                <span className="hero-animate hero-delay-3 text-orange-500">행복한요양원 녹양역점</span>
               </h1>
 
-              <p className="mt-3 font-body text-[14px] leading-relaxed text-[#4b5563]">
-                따뜻한 돌봄과 편안한 생활 환경을 제공합니다.
+              <p className="hero-animate hero-delay-4 mt-3 font-body text-[14px] leading-relaxed text-[#4b5563]">
+                규정이 아닌 어르신의 삶을 기준으로 운영합니다.
               </p>
             </div>
 
             {/* Quick facts */}
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="hero-animate hero-delay-5 mt-4 flex flex-wrap gap-2">
               <span className="rounded-full bg-[#fff7ed]/95 px-3 py-1.5 text-[11px] font-semibold text-[#9a5a18]">
-                전문 요양보호사
+                삶을 돌보는 요양원
               </span>
               <span className="rounded-full bg-white/92 px-3 py-1.5 text-[11px] font-medium text-[#4b5563]">
                 최신 시설
@@ -102,7 +102,7 @@ export default function HeroSliderMobile() {
             </div>
 
             {/* Phone */}
-            <div className="mt-4 rounded-2xl bg-[#fffaf5]/95 px-4 py-3">
+            <div className="hero-animate hero-delay-6 mt-4 rounded-2xl bg-[#fffaf5]/95 px-4 py-3">
               <div className="font-body text-[11px] font-medium text-[#8b95a1]">
                 입소 상담 문의
               </div>
@@ -116,25 +116,7 @@ export default function HeroSliderMobile() {
             </div>
 
             {/* CTA */}
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <a
-                href="tel:0318568090"
-                className="flex items-center justify-center gap-1.5 rounded-2xl bg-orange-500 px-4 py-3.5 text-sm font-bold text-white shadow-[0_8px_20px_rgba(249,115,22,0.20)] transition active:scale-[0.98]"
-              >
-                <Phone className="h-4 w-4" />
-                전화상담
-              </a>
-
-              <a
-                href="#contact"
-                target="_self"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-1.5 rounded-2xl border border-white/85 bg-white/94 px-4 py-3.5 text-sm font-bold text-[#1f2937] shadow-[0_6px_18px_rgba(15,23,42,0.05)] transition active:scale-[0.98]"
-              >
-                <MessageCircle className="h-4 w-4" />
-                온라인 상담
-              </a>
-            </div>
+            
           </div>
         </div>
       </div>

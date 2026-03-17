@@ -119,6 +119,9 @@ export default function HeroSlider() {
                 전문 요양보호사가 함께하는
                 편안한 생활 중심 케어를 제공합니다.
               </p>
+              <p className="font-body text-[15px] leading-[1.8] text-[#334155] sm:text-[16px]">
+                규정이 아닌 어르신의 삶을 기준으로 운영합니다.
+              </p>
 
               <div className="mt-4 flex flex-wrap items-center gap-2.5">
                 <span className="font-body inline-flex items-center gap-2 rounded-full bg-white/88 px-3.5 py-2 text-[13px] font-medium text-[#475569] shadow-[0_4px_10px_rgba(15,23,42,0.03)]">
@@ -127,7 +130,8 @@ export default function HeroSlider() {
                 </span>
 
                 <span className="font-body inline-flex items-center gap-2 rounded-full bg-white/88 px-3.5 py-2 text-[13px] font-medium text-[#475569] shadow-[0_4px_10px_rgba(15,23,42,0.03)]">
-                  최신 시설
+                <ShieldCheck className="h-4 w-4 text-orange-500" />
+                  삶을 돌보는 요양원
                 </span>
               </div>
 
@@ -175,7 +179,7 @@ export default function HeroSlider() {
             {/* Bottom note */}
             <div className="hero-animate-soft hero-delay-5 mt-5 flex flex-wrap items-center gap-x-5 gap-y-2">
               <span className="font-body text-[12px] font-medium text-[#64748b]">
-                2025년 4월 오픈
+                최신식 시설과 쾌적한 환경
               </span>
               <span className="hidden h-3.5 w-px bg-[#cbd5e1] sm:block" />
               <span className="font-body text-[12px] font-medium text-[#64748b]">

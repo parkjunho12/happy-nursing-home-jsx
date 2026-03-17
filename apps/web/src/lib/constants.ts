@@ -11,7 +11,7 @@ import {
   // 사이트 정보
   export const SITE_INFO = {
     name: '행복한요양원',
-    slogan: '가족처럼 따뜻하게, 전문가처럼 안전하게',
+    slogan: '가족의 마음으로 따뜻하게, 전문가와 안전하게',
     phone: '031-856-8090',
     email: 'happy8568090@gmail.com',
     address: {

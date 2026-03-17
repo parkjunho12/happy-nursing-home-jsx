@@ -155,7 +155,7 @@ export default function AboutPage() {
               <p className="mt-5 max-w-2xl text-base leading-7 text-white/85 sm:text-lg sm:leading-8 lg:text-xl">
                 어르신께서 편안하게 지내실 수 있도록
                 <br className="hidden sm:block" />
-                생활 환경, 건강 관리, 보호자 상담 체계를 세심하게 준비하고 있습니다.
+                생활 환경, 건강 관리, 보호자 상담 체계를 갖추고 있습니다.
               </p>
 
               <div className="mt-7 flex flex-wrap items-center gap-3">
@@ -198,12 +198,12 @@ export default function AboutPage() {
               <div className="space-y-4 text-gray-700 text-lg leading-relaxed">
                 <p>
                   행복한요양원 녹양역점은 어르신께서 하루하루를 보다 안정되고
-                  편안하게 보내실 수 있도록 생활 중심의 요양 환경을 준비하고 있습니다.
+                  편안하게 보내실 수 있도록 생활 중심의 요양 환경을 갖추고 있습니다.
                 </p>
                 <p>
                   단순히 머무는 공간이 아니라,
                   <strong className="text-primary-orange"> 안전, 청결, 건강관리, 정서적 안정</strong>이
-                  함께 유지되는 생활 공간이 되도록 세심하게 운영하고자 합니다.
+                  함께 유지되는 생활 공간이 되도록 세심하게 운영합니다.
                 </p>
                 <p>
                   또한 보호자분들이 가장 궁금해하시는
@@ -259,7 +259,7 @@ export default function AboutPage() {
                   <Home className="w-6 h-6 text-primary-orange mt-0.5 shrink-0" />
                   <div>
                     <p className="font-bold text-gray-900 mb-1">
-                      편안한 생활 환경을 준비하고 있습니다
+                      편안한 생활 환경을 갖추고 있습니다
                     </p>
                     <p className="text-sm text-gray-600 leading-relaxed">
                       생활 공간, 프로그램 운영, 보호자 상담 체계를 포함해
@@ -281,7 +281,7 @@ export default function AboutPage() {
               행복한요양원이 중요하게 생각하는 것
             </h2>
             <p className="text-lg lg:text-xl text-gray-600">
-              요양원 선택에서 가장 중요한 기준을 중심으로 준비하고 있습니다
+              요양원 선택에서 가장 중요한 기준을 중심으로 운영합니다.
             </p>
           </div>
 

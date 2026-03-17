@@ -24,7 +24,7 @@ const paymentTypes = [
     highlight: '본인부담금 20%',
     description:
       '장기요양보험 적용 후 본인부담금 20%와 비급여 비용을 부담합니다.',
-    notes: ['비급여 별도', '식비, 간식비 등 추가'],
+    notes: ['비급여 별도'],
     icon: CreditCard,
     tone: 'orange',
   },
@@ -33,7 +33,7 @@ const paymentTypes = [
     highlight: '본인부담금 8% 또는 12%',
     description:
       '의료급여 수급권자는 감경 대상에 따라 본인부담금이 8% 또는 12%로 줄어듭니다.',
-    notes: ['비급여 별도', '식비, 간식비 등 추가'],
+    notes: ['비급여 별도'],
     icon: ShieldCheck,
     tone: 'blue',
   },
@@ -42,7 +42,7 @@ const paymentTypes = [
     highlight: '본인부담금 없음',
     description:
       '시설급여는 전액 지원되며, 본인부담금과 식재료비도 국가 및 지자체에서 지원됩니다.',
-    notes: ['상급 침실료 등 일부 비급여 가능'],
+    notes: [],
     icon: CheckCircle,
     tone: 'green',
   },
@@ -342,7 +342,7 @@ export default function PricingPage() {
             <ul className="space-y-2 text-gray-700 leading-relaxed">
               <li>※ 위 금액은 <strong>30일 기준</strong>이며, 공휴일 수에 따라 월별 총액이 변동될 수 있습니다.</li>
               <li>※ 31일 기준 금액은 월별로 일부 변동됩니다.</li>
-              <li>※ <strong>비급여 항목</strong>(기저귀, 간식, 개인용품 등)은 별도입니다.</li>
+              <li>※ <strong>비급여 항목</strong>(식비, 간식비)은 별도입니다.</li>
             </ul>
           </div>
         </div>
