@@ -22,10 +22,6 @@ export default function HomePage() {
         <HeroSlider />
       </div>
       {/* 모바일 */}
-      <div className="md:hidden">
-        <HeroSliderMobile />
-      </div>
-
       
       {/* Quick Contact Bar */}
       <QuickContact />
