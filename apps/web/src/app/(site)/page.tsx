@@ -18,9 +18,9 @@ export default function HomePage() {
   return (
     <>
       {/* Hero Section */}
-      <div className="hidden md:block">
-        <HeroSlider />
-      </div>
+      
+      <HeroSlider />
+      
       {/* 모바일 */}
       
       {/* Quick Contact Bar */}
