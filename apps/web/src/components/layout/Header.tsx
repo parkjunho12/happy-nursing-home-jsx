@@ -25,7 +25,8 @@ export default function Header() {
     { href: '/services', label: '서비스' },
     { href: '/pricing', label: '입소비용' },
     { href: '/reviews', label: '이용 후기' },
-    { href: '/history', label: '블로그' },
+    { href: '/blog', label: '블로그' },
+    { href: '/history', label: '히스토리' },
     { href: '/contact', label: '상담 신청' },
   ]
 
