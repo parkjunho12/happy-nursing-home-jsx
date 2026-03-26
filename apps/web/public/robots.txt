@@ -8,6 +8,9 @@ Allow: /
 User-agent: Yeti
 Allow: /
 
+User-agent: Ads-Naver
+Allow: /
+
 # 구글 크롤러
 User-agent: Googlebot
 Allow: /
