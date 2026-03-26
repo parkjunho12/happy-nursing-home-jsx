@@ -9,6 +9,22 @@ const nextConfig = {
           protocol: 'https',
           hostname: 'api.xn--2e0bw44a55au8bo9lbul5lh40a.com',
         },
+        {
+            protocol: "https",
+            hostname: "blogfiles.pstatic.net",
+          },
+          {
+            protocol: "https",
+            hostname: "postfiles.pstatic.net",
+          },
+          {
+            protocol: "https",
+            hostname: "**.pstatic.net",
+          },
+          {
+            protocol: "https",
+            hostname: "**.naver.com",
+          },
       ],
     },
   
