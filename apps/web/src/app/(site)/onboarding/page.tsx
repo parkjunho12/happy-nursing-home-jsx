@@ -1,15 +1,7 @@
 'use client';
 
-/**
- * 행복한요양원 녹양역점 – 신규 직원 온보딩
- * Next.js App Router 단일 파일 버전
- *
- * 사용법: app/onboarding/page.tsx 에 이 파일을 그대로 넣으세요.
- */
+import { useState, useEffect, useCallback, type ReactNode } from 'react';
 
-import { useState, useEffect, useCallback, type ReactNode, type KeyboardEvent } from 'react';
-
-/* ===== CSS (전역 스타일 인라인 주입) ===== */
 const GLOBAL_CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&family=Noto+Sans+KR:wght@400;500;700;900&display=swap');
   :root {
@@ -28,35 +20,16 @@ const GLOBAL_CSS = `
   :focus-visible{outline:3px solid var(--primary);outline-offset:3px}
   button{cursor:pointer} input,button{font-family:inherit}
 
-  .login-wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 16px;background:linear-gradient(160deg,#fff8f0 0%,#fdf3e7 50%,#f5ede0 100%)}
-  .login-card{background:var(--paper);border-radius:var(--r);box-shadow:var(--shadow);border:1.5px solid var(--border);padding:44px 36px 40px;width:100%;max-width:460px}
-  .login-logo{text-align:center;margin-bottom:32px}
-  .login-logo .emoji{font-size:52px;display:block;margin-bottom:8px}
-  .login-logo .facility{font-size:1.15rem;color:var(--text-soft);font-weight:500;letter-spacing:-0.02em}
-  .login-logo .title{font-family:'Nanum Myeongjo',serif;font-size:1.7rem;font-weight:800;color:var(--primary);letter-spacing:-0.03em;margin-top:4px}
-  .login-form{display:flex;flex-direction:column;gap:20px}
-  .form-group{display:flex;flex-direction:column;gap:8px}
-  .form-group label{font-size:1.05rem;font-weight:700;color:var(--text-mid)}
-  .form-group input{border:2px solid var(--border);border-radius:var(--r-sm);padding:16px 18px;font-size:1.15rem;color:var(--text);background:var(--bg);transition:border-color 0.2s;width:100%;outline:none}
-  .form-group input:focus{border-color:var(--primary);background:#fff}
-  .form-group input::placeholder{color:var(--text-soft);font-size:1rem}
-  .login-btn{background:var(--primary);color:#fff;border:none;border-radius:var(--r-sm);padding:18px;font-size:1.2rem;font-weight:700;letter-spacing:-0.02em;transition:background 0.2s,transform 0.1s;margin-top:8px;width:100%}
-  .login-btn:hover{background:var(--primary-d)}
-  .login-btn:active{transform:scale(0.98)}
-  .login-error{background:#fde8e8;border:1.5px solid #f0b4b4;border-radius:var(--r-sm);padding:14px 18px;color:var(--danger);font-size:1rem;font-weight:600;text-align:center}
-  .login-hint{margin-top:28px;background:var(--sage-l);border-radius:var(--r-sm);padding:16px 18px;font-size:0.88rem;color:var(--text-mid);line-height:1.7}
-  .login-hint strong{color:var(--sage);font-weight:700;display:block;margin-bottom:4px}
-
   .app-wrap{max-width:800px;margin:0 auto;padding:0 0 80px}
   .header{background:var(--paper);border-bottom:2px solid var(--border);padding:16px 20px;position:sticky;top:0;z-index:100;display:flex;align-items:center;justify-content:space-between;gap:12px;box-shadow:0 2px 10px rgba(100,70,30,0.08)}
   .header-left{display:flex;flex-direction:column}
   .header-facility{font-size:0.78rem;color:var(--text-soft);font-weight:500;letter-spacing:-0.01em}
   .header-title{font-size:1.1rem;font-weight:700;color:var(--primary);letter-spacing:-0.03em}
-  .header-right{display:flex;gap:8px;align-items:center;flex-shrink:0}
-  .btn-outline{border:2px solid var(--border);background:var(--paper);border-radius:var(--r-sm);padding:9px 16px;font-size:0.92rem;font-weight:600;color:var(--text-mid);transition:all 0.18s;white-space:nowrap}
-  .btn-outline:hover{border-color:var(--primary);color:var(--primary)}
+  .header-right{display:flex;gap:8px;align-items:center;flex-shrink:0;flex-wrap:wrap}
   .btn-sage{border:2px solid var(--sage);background:var(--sage);border-radius:var(--r-sm);padding:9px 16px;font-size:0.92rem;font-weight:700;color:#fff;transition:all 0.18s;white-space:nowrap}
   .btn-sage:hover{background:#6a8e6e;border-color:#6a8e6e}
+  .btn-warm{border:2px solid var(--primary);background:var(--primary-l);border-radius:var(--r-sm);padding:9px 16px;font-size:0.92rem;font-weight:700;color:var(--primary-d);transition:all 0.18s;white-space:nowrap}
+  .btn-warm:hover{background:var(--primary);color:#fff}
 
   .welcome-banner{background:linear-gradient(135deg,var(--primary) 0%,#e8954a 100%);color:#fff;padding:28px 24px 32px;position:relative;overflow:hidden}
   .welcome-banner::after{content:'🌸';position:absolute;right:20px;top:16px;font-size:64px;opacity:0.22}
@@ -143,16 +116,11 @@ const GLOBAL_CSS = `
   .btn-print{background:var(--text);color:#fff;border:none;border-radius:var(--r-sm);padding:14px 22px;font-size:1rem;font-weight:700;transition:background 0.18s;display:flex;align-items:center;gap:8px}
   .btn-print:hover{background:#111}
   .print-note{font-size:0.88rem;color:var(--text-soft);line-height:1.5}
-
-  .btn-toggle{border:2px solid var(--border);background:var(--paper);border-radius:var(--r-sm);padding:9px 16px;font-size:0.92rem;font-weight:600;color:var(--text-mid);transition:all 0.18s;white-space:nowrap}
-  .btn-toggle:hover{border-color:var(--primary);color:var(--primary)}
-  .btn-toggle.active{border-color:var(--primary);background:var(--primary-l);color:var(--primary-d)}
-
   .print-sign{display:none}
 
   @media print {
     .header,.progress-section .progress-bar-wrap,.print-section,
-    .accordion-head .accordion-arrow,.done-btn,.btn-outline,.btn-sage,.btn-print{display:none !important}
+    .accordion-head .accordion-arrow,.done-btn,.btn-sage,.btn-print,.btn-warm{display:none !important}
     body{background:#fff;font-size:13pt}
     html{font-size:14px}
     .app-wrap{max-width:100%;padding:0}
@@ -176,112 +144,94 @@ const GLOBAL_CSS = `
   }
 
   @media(max-width:480px){
-    html{font-size:17px}
-    .login-card{padding:32px 20px}
-    .accordion-head{padding:16px;gap:10px}
-    .accordion-body{padding:18px 16px 16px}
-    .welcome-banner{padding:24px 18px 28px}
-    .summary-section,.sections-wrap{padding-left:14px;padding-right:14px}
+    html{font-size:16px}
+    .header{flex-wrap:wrap;padding:12px 16px;gap:8px}
+    .header-left{flex:1;min-width:0}
+    .header-right{width:100%;justify-content:flex-end;gap:6px}
+    .btn-sage,.btn-warm{padding:8px 12px;font-size:0.84rem}
+    .welcome-banner{padding:20px 16px 24px}
+    .welcome-name{font-size:1.3rem}
+    .welcome-sub{font-size:0.9rem}
+    .progress-section{padding:16px}
+    .progress-pct{font-size:1.2rem}
+    .badge-complete{font-size:0.92rem;padding:12px 14px}
+    .summary-section{padding:16px 14px 8px}
+    .summary-grid{grid-template-columns:1fr}
+    .summary-card{padding:14px;display:flex;align-items:center;gap:12px}
+    .summary-card .icon{font-size:1.8rem;margin-bottom:0;flex-shrink:0}
+    .summary-card .card-title{font-size:0.96rem;margin-bottom:2px}
+    .summary-card .card-body{font-size:0.84rem}
+    .print-section{padding:12px 14px}
+    .btn-print{padding:12px 16px;font-size:0.92rem}
+    .sections-wrap{padding:6px 12px 20px;gap:10px}
+    .accordion-head{padding:14px;gap:10px}
+    .accordion-icon{font-size:1.5rem}
+    .accordion-name{font-size:1rem}
+    .accordion-num{font-size:0.72rem}
+    .accordion-badge{padding:3px 10px;font-size:0.72rem}
+    .accordion-body{padding:16px 14px 14px}
+    .content-text{font-size:0.95rem}
+    .content-h3{font-size:1rem}
+    .check-item label{font-size:0.93rem}
+    .highlight-box,.warn-box,.sage-box{padding:14px;font-size:0.93rem}
+    .done-btn{padding:16px;font-size:1rem}
     .contact-grid{grid-template-columns:1fr}
+  }
+  @media(max-width:360px){
+    html{font-size:15px}
+    .accordion-badge{display:none}
+    .btn-sage,.btn-warm{padding:7px 10px;font-size:0.8rem}
   }
 `;
 
-/* ===== 목 직원 데이터 ===== */
-const MOCK_USERS = [
-  { id: 'u1', name: '김미순', password: '1234', role: '요양보호사' },
-  { id: 'u2', name: '김원녀', password: '1234', role: '요양보호사' },
-  { id: 'u3', name: '김진숙', password: '1234', role: '요양보호사' },
-  { id: 'u4', name: '이오목', password: '1234', role: '요양보호사' },
-  { id: 'u5', name: '최숙진', password: '1234', role: '요양보호사' },
-];
+/* ===== localStorage 유틸 (고정 키 사용) ===== */
+const LS_SECTIONS = 'hwr_sections';
+const LS_CHECKLIST = 'hwr_checklist';
 
+function loadDone(): DoneMap {
+  try { return JSON.parse(localStorage.getItem(LS_SECTIONS) ?? '{}'); } catch { return {}; }
+}
+function saveDone(state: DoneMap) {
+  localStorage.setItem(LS_SECTIONS, JSON.stringify(state));
+}
+function loadChecks(): Record<string, boolean> {
+  try { return JSON.parse(localStorage.getItem(LS_CHECKLIST) ?? '{}'); } catch { return {}; }
+}
+function saveChecks(state: Record<string, boolean>) {
+  localStorage.setItem(LS_CHECKLIST, JSON.stringify(state));
+}
+
+/* ===== 타입 ===== */
 const SECTION_IDS = ['welcome','checklist','firstday','attitude','hygiene','emergency','faq','confirm'] as const;
 type SectionId = typeof SECTION_IDS[number];
 type DoneMap = Partial<Record<SectionId, boolean>>;
-interface User { id: string; name: string; password: string; role: string; }
+type OpenMap = Partial<Record<SectionId, boolean>>;
 
-const lsKey = (uid: string, k: string) => `hwr_${uid}_${k}`;
-function loadUserState(uid: string): DoneMap {
-  try { return JSON.parse(localStorage.getItem(lsKey(uid,'sections')) ?? '{}'); } catch { return {}; }
-}
-function saveUserState(uid: string, state: DoneMap) {
-  localStorage.setItem(lsKey(uid,'sections'), JSON.stringify(state));
-}
 function calcProgress(done: DoneMap) {
   return Math.round(SECTION_IDS.filter(s => done[s]).length / SECTION_IDS.length * 100);
 }
 
-/* ===== 로그인 화면 ===== */
-function LoginScreen({ onLogin }: { onLogin: (u: User) => void }) {
-  const [name, setName] = useState('');
-  const [pw, setPw] = useState('');
-  const [err, setErr] = useState('');
-  const handleLogin = () => {
-    const u = MOCK_USERS.find(u => u.name === name.trim() && u.password === pw.trim());
-    if (u) { setErr(''); onLogin(u); }
-    else setErr('이름 또는 비밀번호가 맞지 않습니다. 다시 확인해 주세요.');
-  };
-  const handleKey = (e: KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') handleLogin(); };
-  return (
-    <div className="login-wrap">
-      <div className="login-card">
-        <div className="login-logo">
-          <span className="emoji">🌸</span>
-          <div className="facility">행복한요양원 녹양역점</div>
-          <div className="title">신규 직원 온보딩</div>
-        </div>
-        <div className="login-form">
-          {err && <div className="login-error" role="alert">⚠️ {err}</div>}
-          <div className="form-group">
-            <label htmlFor="inp-name">이름</label>
-            <input id="inp-name" type="text" placeholder="이름을 입력하세요 (예: 김미순)"
-              value={name} onChange={e => setName(e.target.value)} onKeyDown={handleKey}
-              aria-label="이름 입력" autoComplete="name" />
-          </div>
-          <div className="form-group">
-            <label htmlFor="inp-pw">비밀번호</label>
-            <input id="inp-pw" type="password" placeholder="비밀번호 4자리를 입력하세요"
-              value={pw} onChange={e => setPw(e.target.value)} onKeyDown={handleKey}
-              aria-label="비밀번호 입력" autoComplete="current-password" />
-          </div>
-          <button className="login-btn" onClick={handleLogin} aria-label="로그인">로그인 →</button>
-        </div>
-        <div className="login-hint">
-          <strong>💡 테스트 계정 안내</strong>
-          이름: <b>김미순</b> / 비밀번호: <b>1234</b><br />
-          이름: <b>김원녀</b> / 비밀번호: <b>1234</b>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ===== 아코디언 ===== */
-function Accordion({ sectionId, num, icon, title, done, onDone, children, forceOpen }:
-  { sectionId: SectionId; num: number; icon: string; title: string; done: boolean; onDone: (id: SectionId) => void; children: ReactNode; forceOpen?: boolean }) {
-  const [open, setOpen] = useState(false);
-
-  // 모두 열기/닫기 버튼에 반응
-  useEffect(() => {
-    if (forceOpen !== undefined) setOpen(forceOpen);
-  }, [forceOpen]);
+function Accordion({ sectionId, num, icon, title, done, onDone, children, isOpen, onToggle }:
+  { sectionId: SectionId; num: number; icon: string; title: string; done: boolean;
+    onDone: (id: SectionId) => void; children: ReactNode; isOpen: boolean; onToggle: (id: SectionId) => void }) {
   return (
     <div className={`accordion${done ? ' done' : ''}`}>
-      <div className="accordion-head" onClick={() => setOpen(o => !o)} role="button" aria-expanded={open} tabIndex={0}
-        onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => { if (e.key === 'Enter' || e.key === ' ') setOpen(o => !o); }}>
+      <div className="accordion-head" onClick={() => onToggle(sectionId)} role="button" aria-expanded={isOpen} tabIndex={0}
+        onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(sectionId); } }}>
         <span className="accordion-icon" aria-hidden="true">{icon}</span>
         <div className="accordion-texts">
           <div className="accordion-num">STEP {num}</div>
           <div className="accordion-name">{title}</div>
         </div>
         <span className={`accordion-badge${done ? '' : ' pending'}`}>{done ? '✅ 완료' : '확인 필요'}</span>
-        <span className={`accordion-arrow${open ? ' open' : ''}`} aria-hidden="true">▼</span>
+        <span className={`accordion-arrow${isOpen ? ' open' : ''}`} aria-hidden="true">▼</span>
       </div>
-      {open && (
+      {isOpen && (
         <div className="accordion-body">
           {children}
           <button className={`done-btn${done ? ' active' : ''}`}
-            onClick={() => { if (!done) onDone(sectionId); }} disabled={done}
+            onClick={e => { e.stopPropagation(); if (!done) onDone(sectionId); }} disabled={done}
             aria-label={done ? '이미 완료된 항목입니다' : '이 항목 읽음 확인'}>
             {done ? '✅ 확인 완료' : '👍 이 내용을 읽었습니다'}
           </button>
@@ -291,7 +241,7 @@ function Accordion({ sectionId, num, icon, title, done, onDone, children, forceO
   );
 }
 
-/* ===== 섹션 콘텐츠들 ===== */
+/* ===== 섹션 콘텐츠 ===== */
 function WelcomeContent() {
   return (
     <>
@@ -308,24 +258,31 @@ function WelcomeContent() {
   );
 }
 
-function ChecklistContent({ uid }: { uid: string }) {
-  const KEY = lsKey(uid, 'checklist');
-  const [checks, setChecks] = useState<Record<string,boolean>>(() => {
-    try { return JSON.parse(localStorage.getItem(KEY) ?? '{}'); } catch { return {}; }
-  });
+function ChecklistContent() {
+  const [checks, setChecks] = useState<Record<string,boolean>>(() => loadChecks());
   const items = [
-    { id:'c1', text:'신분증 제출 완료' }, { id:'c2', text:'통장 사본 제출 완료' },
-    { id:'c3', text:'편한 실내화 준비' }, { id:'c4', text:'근무복 확인' },
-    { id:'c5', text:'필기구 챙기기 (볼펜, 노트)' }, { id:'c6', text:'개인 텀블러 준비 (생수병 가능)' },
-    { id:'c7', text:'비상연락망 확인' }, { id:'c8', text:'기본 인수인계 내용 숙지' },
+    { id:'c1', text:'통장사본 준비' },
+    { id:'c2', text:'신분증 사본 준비' },
+    { id:'c3', text:'건강검진 결과서 준비 (검진일/판정일/발행일 모두 1년 이내)' },
+    { id:'c4', text:'등본 준비' },
+    { id:'c5', text:'가족관계증명서 준비' },
+    { id:'c6', text:'요양보호사 자격증 사본 준비' },
+    { id:'c7', text:'자격득실확인서 준비 (건강보험공단)' },
+    { id:'c8', text:'실내화 준비' },
   ];
   const toggle = (id: string) => {
     const n = { ...checks, [id]: !checks[id] };
-    setChecks(n); localStorage.setItem(KEY, JSON.stringify(n));
+    setChecks(n); saveChecks(n);
   };
   return (
     <>
-      <p className="content-text">첫 출근 전에 아래 항목을 하나씩 확인해 주세요. 체크하면 저장됩니다.</p>
+      <div className="highlight-box">
+        <b>📢 입사 안내</b><br />
+        행복한요양원 녹양역점입니다.<br />
+        <b>입사일: 2026년 4월 1일</b><br />
+        함께 어르신을 섬기게 되어 진심으로 반갑습니다 😊
+      </div>
+      <h3 className="content-h3">📄 제출 서류 안내</h3>
       <ul className="check-list">
         {items.map(it => (
           <li key={it.id} className={`check-item${checks[it.id] ? ' checked' : ''}`}>
@@ -334,7 +291,42 @@ function ChecklistContent({ uid }: { uid: string }) {
           </li>
         ))}
       </ul>
-      <div className="highlight-box"><b>📌 복장 안내</b><br />편하고 단정한 복장으로 오시면 됩니다.<br />슬리퍼·샌들·하이힐은 안전상 금지입니다. 운동화 또는 크록스 계열을 권장합니다.</div>
+      <div className="sage-box">
+        📌 <b>서류 복사는 요양원에서 가능</b><br />
+        원본만 가져오시면 사무실에서 복사 도와드립니다.
+      </div>
+      <div className="highlight-box">
+        <b>🩺 건강검진 서류 안내 (중요)</b><br />
+        건강검진 서류는 <b>국민건강보험공단 일반건강검진 수준 이상</b>이면 됩니다.<br /><br />
+        📌 <b>아래 날짜 모두 1년 이내여야 인정됩니다.</b><br />
+        - 검진일<br />
+        - 판정일<br />
+        - 발행일
+      </div>
+      <div className="sage-box">
+        <b>✅ 건강검진 결과서 확인 항목</b><br />
+        아래 5개 영역이 확인되면 됩니다.<br /><br />
+        1. 계측검사<br />
+        2. 요검사<br />
+        3. 혈액검사<br />
+        4. 영상검사 (흉부 X-ray)<br />
+        5. 판정 확인
+      </div>
+      <div className="warn-box">
+        <b>⚠️ 가장 중요한 확인 사항</b><br />
+        건강검진 결과서의 <b>검진일 / 판정일 / 발행일</b> 중<br />
+        하나라도 <b>1년 초과 시 인정되지 않을 수 있습니다.</b><br /><br />
+        👉 반드시 날짜를 확인 후 가져오세요.<br />
+        👉 헷갈리면 <b>국가건강검진 결과서</b>를 가져오시면 가장 확실합니다.
+      </div>
+      <div className="highlight-box">
+        👟 <b>실내화 꼭 준비해주세요</b><br />
+        편한 신발, 미끄럼 방지 기능이 있는 실내화를 권장합니다.
+      </div>
+      <div className="sage-box">
+        📞 궁금한 사항은 언제든지 전화 주세요.<br />
+        처음이라 어려운 것은 당연합니다. 편하게 문의하세요 😊
+      </div>
     </>
   );
 }
@@ -361,7 +353,7 @@ function FirstDayContent() {
           </div>
         ))}
       </div>
-      <div className="sage-box"><b>💡 당일 꼭 기억하세요</b><br />• 모르면 반드시 여쭤보세요. 혼자 판단하지 마세요.<br />• 첫날은 보조 역할입니다. 관찰하고 배우는 것이 우선입니다.<br />• 어르신 이름은 천천히 외워도 됩니다. 급하게 하지 않아도 돼요.</div>
+      <div className="sage-box"><b>💡 당일 꼭 기억하세요</b><br />• 모르면 반드시 여쭤보세요. 혼자 판단하지 마세요.<br />• 첫날은 보조 역할입니다. 관찰하고 배우는 것이 우선입니다.<br />• 어르신 이름은 천천히 외워도 됩니다. 급하게 하지 않아도 됩니다.</div>
     </>
   );
 }
@@ -409,7 +401,7 @@ function HygieneContent() {
       <h3 className="content-h3">🛡️ 낙상 예방 수칙</h3>
       <ul className="check-list">
         {['낙상 고위험 어르신 명단 사전 파악','이동 보조 시 항상 곁에서 지지',
-          '침상 사이드레일 올리기 (취침·낮잠 시)','휠체어 이동 전 잠금 해제 여부 확인',
+          '침상 사이드레일 올리기 (취침·낮잠 시)','휠체어 이동 전 잠금 확인',
           '복도·화장실 바닥 물기 발견 즉시 닦기','야간 화장실 이동 시 반드시 동행',
           '어르신이 혼자 일어서려 하면 즉시 도움',
         ].map((t, i) => <li key={i} className="check-item"><label>{t}</label></li>)}
@@ -451,7 +443,7 @@ function EmergencyContent() {
         <div className="contact-card"><div className="contact-role">시설장</div><div className="contact-name">김제현 시설장</div><div className="contact-phone">010-8882-5474</div></div>
         <div className="contact-card"><div className="contact-role">응급 (119)</div><div className="contact-name">소방서</div><div className="contact-phone" style={{ fontSize:'1.4rem' }}>119</div></div>
       </div>
-      <div className="sage-box" style={{ marginTop:'12px', fontSize:'0.88rem' }}>※ 위 연락처는 예시입니다. 실제 연락처는 첫날 팀장에게 확인하세요.</div>
+      <div className="sage-box" style={{ marginTop:'12px', fontSize:'0.88rem' }}>※ 실제 연락처는 첫날 팀장에게 다시 확인하세요.</div>
     </>
   );
 }
@@ -463,9 +455,9 @@ function FAQContent() {
     { q:'식사 시간은 어떻게 되나요?', a:'직원 식사는 어르신 식사 보조 후 교대로 합니다. 보통 오전 12시~오후 1시 사이입니다.' },
     { q:'휴게 시간은 언제인가요?', a:'8시간 근무 기준 1시간 휴게가 있습니다. 팀장과 협의하여 교대로 쉬게 됩니다.' },
     { q:'이상 상황은 누구에게 보고하나요?', a:'먼저 팀장(선임 요양보호사)에게 알리고, 의료적 판단이 필요하면 간호사에게 연결합니다.' },
-    { q:'보호자가 민원을 제기하면 어떻게 하나요?', a:'본인이 직접 대응하지 말고, "담당자에게 연결해 드리겠다"고 안내 후 팀장·사회복지사에게 알립니다.' },
+    { q:'보호자가 민원을 제기하면 어떻게 하나요?', a:'본인이 직접 대응하지 말고, "담당자에게 연결해 드리겠다"고 안내 후 팀장이나 담당자에게 알립니다.' },
     { q:'야간 근무도 있나요?', a:'교대제로 운영되며, 야간 근무 일정은 입사 후 팀장과 조율합니다.' },
-    { q:'실수를 했을 때는 어떻게 하나요?', a:'숨기지 말고 즉시 팀장에게 알리세요. 빨리 알릴수록 대처가 쉽습니다. 혼나는 것보다 어르신 안전이 우선입니다.' },
+    { q:'실수를 했을 때는 어떻게 하나요?', a:'숨기지 말고 즉시 팀장에게 알리세요. 빨리 알릴수록 대처가 쉽습니다. 어르신 안전이 우선입니다.' },
   ];
   return (
     <>
@@ -487,9 +479,13 @@ function ConfirmContent({ done }: { done: boolean }) {
     <>
       <p className="content-text">위의 모든 내용을 읽고 이해하셨다면 아래 버튼을 눌러 주세요.</p>
       <div className="highlight-box">
-        ✅ 환영 인사 및 온보딩 안내 확인<br />✅ 첫 출근 준비물 체크<br />✅ 첫날 일정 숙지<br />
-        ✅ 어르신 응대 태도 및 금지사항 확인<br />✅ 감염예방 및 낙상예방 수칙 확인<br />
-        ✅ 응급상황 보고 절차 숙지<br />✅ 자주 묻는 질문 확인
+        ✅ 환영 인사 및 온보딩 안내 확인<br />
+        ✅ 입사 서류 및 준비물 확인<br />
+        ✅ 첫날 일정 숙지<br />
+        ✅ 어르신 응대 태도 및 금지사항 확인<br />
+        ✅ 감염예방 및 낙상예방 수칙 확인<br />
+        ✅ 응급상황 보고 절차 숙지<br />
+        ✅ 자주 묻는 질문 확인
       </div>
       {done && <div className="badge-complete">🎉 온보딩을 모두 완료하셨습니다! 첫 출근을 응원합니다.</div>}
       <div className="print-sign">
@@ -500,109 +496,119 @@ function ConfirmContent({ done }: { done: boolean }) {
   );
 }
 
-/* ===== 메인 Page 컴포넌트 ===== */
+/* ===== 메인 Page ===== */
 export default function OnboardingPage() {
-  const [user, setUser] = useState<User | null>(null);
   const [done, setDone] = useState<DoneMap>({});
-  const [allOpen, setAllOpen] = useState(false); // 모두 열기/닫기 상태
+  const [openSections, setOpenSections] = useState<OpenMap>({});
 
+  // 클라이언트에서만 localStorage 접근
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('hwr_session');
-      if (saved) { const u: User = JSON.parse(saved); setUser(u); setDone(loadUserState(u.id)); }
-    } catch { /* 무시 */ }
+    setDone(loadDone());
   }, []);
 
-  const handleLogin = (u: User) => {
-    localStorage.setItem('hwr_session', JSON.stringify(u));
-    setUser(u); setDone(loadUserState(u.id));
-  };
-  const handleLogout = () => {
-    localStorage.removeItem('hwr_session'); setUser(null); setDone({});
-  };
   const markDone = useCallback((sectionId: SectionId) => {
-    if (!user) return;
-    setDone(prev => { const next = { ...prev, [sectionId]: true }; saveUserState(user.id, next); return next; });
-  }, [user]);
+    setDone(prev => {
+      const next = { ...prev, [sectionId]: true };
+      saveDone(next);
+      return next;
+    });
+  }, []);
+
+  const toggleSection = useCallback((sectionId: SectionId) => {
+    setOpenSections(prev => ({ ...prev, [sectionId]: !prev[sectionId] }));
+  }, []);
+
+  const toggleAllSections = useCallback(() => {
+    const allOpen = SECTION_IDS.every(id => openSections[id]);
+    if (allOpen) {
+      setOpenSections({});
+    } else {
+      const next: OpenMap = {};
+      SECTION_IDS.forEach(id => { next[id] = true; });
+      setOpenSections(next);
+    }
+  }, [openSections]);
 
   const pct = calcProgress(done);
   const allDone = pct === 100;
+  const allSectionsOpen = SECTION_IDS.every(id => openSections[id]);
 
   const sectionProps: { sectionId: SectionId; num: number; icon: string; title: string; content: ReactNode }[] = [
-    { sectionId:'welcome',   num:1, icon:'🌸', title:'환영합니다',                  content:<WelcomeContent /> },
-    { sectionId:'checklist', num:2, icon:'📋', title:'출근 전 준비물 체크리스트',    content:<ChecklistContent uid={user?.id ?? ''} /> },
-    { sectionId:'firstday',  num:3, icon:'🗓️', title:'첫날 오면 바로 하는 일',       content:<FirstDayContent /> },
+    { sectionId:'welcome',   num:1, icon:'🌸', title:'환영합니다',               content:<WelcomeContent /> },
+    { sectionId:'checklist', num:2, icon:'📋', title:'입사 서류 및 준비물 안내', content:<ChecklistContent /> },
+    { sectionId:'firstday',  num:3, icon:'🗓️', title:'첫날 오면 바로 하는 일',   content:<FirstDayContent /> },
     { sectionId:'attitude',  num:4, icon:'💛', title:'어르신 응대 태도 & 근무 수칙', content:<AttitudeContent /> },
-    { sectionId:'hygiene',   num:5, icon:'🛡️', title:'감염예방 & 낙상예방 수칙',     content:<HygieneContent /> },
-    { sectionId:'emergency', num:6, icon:'🚨', title:'응급상황 보고 절차',           content:<EmergencyContent /> },
-    { sectionId:'faq',       num:7, icon:'💬', title:'자주 묻는 질문',              content:<FAQContent /> },
-    { sectionId:'confirm',   num:8, icon:'✅', title:'모든 내용을 확인했습니다',     content:<ConfirmContent done={allDone} /> },
+    { sectionId:'hygiene',   num:5, icon:'🛡️', title:'감염예방 & 낙상예방 수칙', content:<HygieneContent /> },
+    { sectionId:'emergency', num:6, icon:'🚨', title:'응급상황 보고 절차',        content:<EmergencyContent /> },
+    { sectionId:'faq',       num:7, icon:'💬', title:'자주 묻는 질문',           content:<FAQContent /> },
+    { sectionId:'confirm',   num:8, icon:'✅', title:'모든 내용을 확인했습니다',  content:<ConfirmContent done={allDone} /> },
   ];
 
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: GLOBAL_CSS }} />
-      {!user ? (
-        <LoginScreen onLogin={handleLogin} />
-      ) : (
-        <div className="app-wrap">
-          <header className="header" role="banner">
-            <div className="header-left">
-              <span className="header-facility">행복한요양원 녹양역점</span>
-              <span className="header-title">신규 직원 온보딩</span>
-            </div>
-            <div className="header-right">
-              <button
-                className={`btn-toggle${allOpen ? ' active' : ''}`}
-                onClick={() => setAllOpen(o => !o)}
-                aria-label={allOpen ? '모두 닫기' : '모두 열기'}
-              >
-                {allOpen ? '🔼 모두 닫기' : '🔽 모두 열기'}
-              </button>
-              <button className="btn-sage" onClick={() => window.print()} aria-label="인쇄하기">🖨️ 인쇄</button>
-              <button className="btn-outline" onClick={handleLogout} aria-label="로그아웃">로그아웃</button>
-            </div>
-          </header>
+      <div className="app-wrap">
 
-          <section className="welcome-banner" aria-label="환영 메시지">
-            <div className="welcome-name">{user.name} {user.role}님, 환영합니다! 🎉</div>
-            <div className="welcome-sub">2026년 4월 1일 첫 출근을 진심으로 응원합니다.<br />아래 내용을 차례로 읽고 체크해 주세요.</div>
-          </section>
-
-          <section className="progress-section" aria-label="온보딩 진행률">
-            <div className="progress-row">
-              <span className="progress-label">📊 온보딩 진행률</span>
-              <span className="progress-pct">{pct}%</span>
-            </div>
-            <div className="progress-bar-wrap" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
-              <div className="progress-bar-fill" style={{ width:`${pct}%` }} />
-            </div>
-            {allDone && <div className="badge-complete" role="status">🏅 온보딩 완료! 첫 출근을 응원합니다, {user.name}님!</div>}
-          </section>
-
-          <section className="summary-section" aria-label="오늘 꼭 확인할 것">
-            <div className="section-heading">📌 오늘 꼭 확인할 것</div>
-            <div className="summary-grid">
-              <div className="summary-card"><span className="icon">📦</span><div className="card-title">준비물 챙기기</div><div className="card-body">신분증, 통장 사본, 실내화, 필기구를 꼭 가져오세요.</div></div>
-              <div className="summary-card"><span className="icon">🕘</span><div className="card-title">08:50까지 입실</div><div className="card-body">정문 체온 체크 후 출근부에 서명해 주세요.</div></div>
-              <div className="summary-card"><span className="icon">🙋</span><div className="card-title">팀장에게 인사</div><div className="card-body">도착 즉시 팀장(선임)에게 인사하고 안내를 받으세요.</div></div>
-            </div>
-          </section>
-
-          <div className="print-section">
-            <button className="btn-print" onClick={() => window.print()} aria-label="온보딩 내용 인쇄">🖨️ 인쇄하기</button>
-            <span className="print-note">버튼을 누르면 A4 용지에 맞게 출력됩니다.<br />종이 안내문으로도 활용하실 수 있습니다.</span>
+        {/* 헤더 */}
+        <header className="header" role="banner">
+          <div className="header-left">
+            <span className="header-facility">행복한요양원 녹양역점</span>
+            <span className="header-title">신규 직원 온보딩</span>
           </div>
+          <div className="header-right">
+            <button className="btn-warm" onClick={toggleAllSections}
+              aria-label={allSectionsOpen ? '전체 닫기' : '모두 열기'}>
+              {allSectionsOpen ? '📂 전체 닫기' : '📖 모두 열기'}
+            </button>
+            <button className="btn-sage" onClick={() => window.print()} aria-label="인쇄하기">🖨️ 인쇄</button>
+          </div>
+        </header>
 
-          <main className="sections-wrap" aria-label="온보딩 내용">
-            {sectionProps.map(s => (
-              <Accordion key={s.sectionId} sectionId={s.sectionId} num={s.num} icon={s.icon} title={s.title} done={!!done[s.sectionId]} onDone={markDone} forceOpen={allOpen}>
-                {s.content}
-              </Accordion>
-            ))}
-          </main>
+        {/* 환영 배너 */}
+        <section className="welcome-banner" aria-label="환영 메시지">
+          <div className="welcome-name">신규 직원분, 환영합니다! 🎉</div>
+          <div className="welcome-sub">2026년 4월 1일 첫 출근을 진심으로 응원합니다.<br />아래 내용을 차례로 읽고 체크해 주세요.</div>
+        </section>
+
+        {/* 진행률 */}
+        <section className="progress-section" aria-label="온보딩 진행률">
+          <div className="progress-row">
+            <span className="progress-label">📊 온보딩 진행률</span>
+            <span className="progress-pct">{pct}%</span>
+          </div>
+          <div className="progress-bar-wrap" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+            <div className="progress-bar-fill" style={{ width:`${pct}%` }} />
+          </div>
+          {allDone && <div className="badge-complete" role="status">🏅 온보딩 완료! 첫 출근을 응원합니다!</div>}
+        </section>
+
+        {/* 요약 카드 */}
+        <section className="summary-section" aria-label="오늘 꼭 확인할 것">
+          <div className="section-heading">📌 오늘 꼭 확인할 것</div>
+          <div className="summary-grid">
+            <div className="summary-card"><span className="icon">📦</span><div className="card-title">입사 서류 준비</div><div className="card-body">신분증, 통장사본, 건강검진 결과서, 자격증 사본, 실내화를 꼭 준비해 주세요.</div></div>
+            <div className="summary-card"><span className="icon">🕘</span><div className="card-title">08:50까지 입실</div><div className="card-body">정문 체온 체크 후 출근부에 서명해 주세요.</div></div>
+          </div>
+        </section>
+
+        {/* 인쇄 버튼 */}
+        <div className="print-section">
+          <button className="btn-print" onClick={() => window.print()} aria-label="온보딩 내용 인쇄">🖨️ 인쇄하기</button>
+          <span className="print-note">버튼을 누르면 A4 용지에 맞게 출력됩니다.<br />종이 안내문으로도 활용하실 수 있습니다.</span>
         </div>
-      )}
+
+        {/* 온보딩 섹션 */}
+        <main className="sections-wrap" aria-label="온보딩 내용">
+          {sectionProps.map(s => (
+            <Accordion key={s.sectionId} sectionId={s.sectionId} num={s.num} icon={s.icon} title={s.title}
+              done={!!done[s.sectionId]} onDone={markDone}
+              isOpen={!!openSections[s.sectionId]} onToggle={toggleSection}>
+              {s.content}
+            </Accordion>
+          ))}
+        </main>
+
+      </div>
     </>
   );
 }
