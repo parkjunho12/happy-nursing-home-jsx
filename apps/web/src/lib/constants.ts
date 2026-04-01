@@ -23,8 +23,8 @@ import {
     },
     businessInfo: {
       owner: '박준호',
-      registrationNumber: '342-45-67890',
-      established: '2010-01-15',
+      registrationNumber: '292-80-03705',
+      established: '2026-04-01',
     },
     social: {
       facebook: 'https://www.facebook.com/profile.php?id=61580800010457',
