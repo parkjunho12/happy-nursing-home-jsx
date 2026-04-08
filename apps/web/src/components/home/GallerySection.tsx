@@ -14,20 +14,20 @@ export function GallerySection() {
     },
     {
         id: 2,
-        src: '/assets/images/haircut.jpeg',
-        title: '미용실',
+        src: '/assets/images/room.png',
+        title: '1인실',
         span: '',
       },
     {
       id: 3,
-      src: '/assets/images/healing.jpeg',
-      title: '힐링룸/발마사지실',
+      src: '/assets/images/2rooms.jpg',
+      title: '2인실',
       span: '',
     },
     {
       id: 4,
-      src: '/assets/images/2room.JPG',
-      title: '2인실',
+      src: '/assets/images/4rooms.png',
+      title: '4인실',
       span: '',
     },
     {
@@ -38,14 +38,14 @@ export function GallerySection() {
     },
     {
       id: 6,
-      src: '/assets/images/dining.JPG',
-      title: '식당',
+      src: '/assets/images/cafe.png',
+      title: '카페/프로그램실',
       span: '',
     },
-    {
+      {
         id: 7,
-        src: '/assets/images/program.jpeg',
-        title: '프로그램실1',
+        src: '/assets/images/healing.jpeg',
+        title: '힐링룸/발마사지실',
         span: '',
       },
     {
@@ -62,7 +62,7 @@ export function GallerySection() {
     },
     {
       id: 10,
-      src: '/assets/images/bathroom.JPG',
+      src: '/assets/images/bathroom.png',
       title: '화장실',
       span: '',
     },
@@ -92,8 +92,14 @@ export function GallerySection() {
       },
       {
         id: 15,
-        src: '/assets/images/4rooms.png',
-        title: '4인실',
+        src: '/assets/images/haircut.jpeg',
+        title: '미용실',
+        span: '',
+      },
+      {
+        id: 16,
+        src: '/assets/images/program.jpeg',
+        title: '프로그램실1',
         span: '',
       },
   ]
