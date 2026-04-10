@@ -18,6 +18,8 @@ export const metadata: Metadata = {
     '행복한요양원 녹양역점의 2026년 입소비용 안내입니다. 장기요양등급별 본인부담금, 감경 대상자 기준, 비급여 항목을 확인하세요.',
 }
 
+const CALCULATOR_PAGE_URL = '/calculator'
+
 const paymentTypes = [
   {
     title: '일반 어르신',
@@ -79,10 +81,7 @@ const includedItems = [
   '응급 대응 체계',
 ]
 
-const excludedItems = [
-  '식비',
-  '간식비'
-]
+const excludedItems = ['식비', '간식비']
 
 const faqItems = [
   {
@@ -131,11 +130,51 @@ function toneClasses(tone: 'orange' | 'blue' | 'green') {
   }
 }
 
+function CalculatorPromoCard() {
+  return (
+    <div className="rounded-3xl border border-amber-200 bg-gradient-to-br from-amber-50 via-white to-orange-50 p-6 lg:p-8 shadow-sm">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="max-w-2xl">
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-amber-700 shadow-sm">
+            <Calculator className="h-4 w-4" />
+            본인부담금 예상 계산기
+          </div>
+
+          <h3 className="text-2xl font-bold text-gray-900 mb-3">
+            우리 어르신은 실제로 얼마 정도 부담할까요?
+          </h3>
+
+          <p className="text-gray-700 leading-relaxed">
+            장기요양등급, 감경 대상 여부, 방 선택 등에 따라 실제 부담액은 달라질 수 있습니다.
+            계산기에서 조건을 선택해 예상 비용을 바로 확인해보세요.
+          </p>
+        </div>
+
+        <div className="flex shrink-0 flex-col gap-3 sm:flex-row lg:flex-col">
+          <Link
+            href={CALCULATOR_PAGE_URL}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary-orange px-6 py-4 font-semibold text-white transition-colors hover:bg-primary-brown"
+          >
+            <Calculator className="h-5 w-5" />
+            계산기 바로가기
+          </Link>
+
+          <a
+            href="tel:031-856-8090"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-amber-300 bg-white px-6 py-4 font-semibold text-gray-900 transition-colors hover:bg-amber-50"
+          >
+            <Phone className="h-5 w-5" />
+            전화 상담
+          </a>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function PricingPage() {
   return (
     <div className="min-h-screen pt-20">
-      {/* Hero */}
-
       <section className="relative overflow-hidden">
         <div className="relative h-[120px] sm:h-[180px] lg:h-[320px]">
           <Image
@@ -147,7 +186,6 @@ export default function PricingPage() {
             className="object-cover object-center"
           />
 
-          {/* Overlay */}
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(18,28,38,0.30)_0%,rgba(18,28,38,0.18)_34%,rgba(18,28,38,0.08)_62%,rgba(18,28,38,0.03)_100%)]" />
           <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.03)_0%,rgba(0,0,0,0.06)_100%)]" />
         </div>
@@ -155,23 +193,20 @@ export default function PricingPage() {
         <div className="absolute inset-0 z-10 flex items-center">
           <div className="mx-auto w-full max-w-7xl px-6 sm:px-8 lg:px-10">
             <div className="max-w-3xl">
-
               <h1 className="text-balance text-4xl font-bold leading-[1.08] tracking-[-0.04em] text-white sm:text-5xl lg:text-7xl">
-              입소비용 안내
+                입소비용 안내
               </h1>
 
               <p className="mt-5 max-w-2xl text-base leading-7 text-white/85 sm:text-lg sm:leading-8 lg:text-xl">
-              요양원 비용은 대부분 국가에서 지원됩니다.
+                요양원 비용은 대부분 국가에서 지원됩니다.
                 <br className="hidden sm:block" />
                 보호자분께서는 본인부담금과 일부 비급여만 부담하시면 됩니다.
               </p>
-
             </div>
           </div>
         </div>
       </section>
 
-      {/* Quick summary */}
       <section className="py-10 bg-amber-50 border-b border-amber-100">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="rounded-2xl bg-white border border-amber-200 p-6 lg:p-8 shadow-sm">
@@ -186,10 +221,14 @@ export default function PricingPage() {
               실제 비용은 등급과 감경 대상 여부에 따라 달라지며, 아래 표에서 바로 확인하실 수 있습니다.
             </p>
           </div>
+
+          {/* 계산기 링크 1차 배치: 요약 바로 아래 */}
+          <div className="mt-6">
+            <CalculatorPromoCard />
+          </div>
         </div>
       </section>
 
-      {/* Payment types */}
       <section className="py-16 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
@@ -242,7 +281,6 @@ export default function PricingPage() {
         </div>
       </section>
 
-      {/* Pricing table */}
       <section className="py-16 lg:py-20 bg-gray-50">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-10">
@@ -345,10 +383,14 @@ export default function PricingPage() {
               <li>※ <strong>비급여 항목</strong>(식비, 간식비)은 별도입니다.</li>
             </ul>
           </div>
+
+          {/* 계산기 링크 2차 배치: 표 확인 후 바로 계산 유도 */}
+          <div className="mt-8">
+            <CalculatorPromoCard />
+          </div>
         </div>
       </section>
 
-      {/* Included / excluded */}
       <section className="py-16 lg:py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid lg:grid-cols-2 gap-8">
@@ -384,14 +426,11 @@ export default function PricingPage() {
                   </div>
                 ))}
               </div>
-
-              
             </div>
           </div>
         </div>
       </section>
 
-      {/* FAQ */}
       <section className="py-16 lg:py-20 bg-gray-50">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
@@ -424,7 +463,6 @@ export default function PricingPage() {
         </div>
       </section>
 
-      {/* CTA */}
       <section className="py-16 bg-gradient-to-br from-primary-orange to-primary-brown text-white">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <Calculator className="w-16 h-16 mx-auto mb-6 text-white/90" />
@@ -444,6 +482,14 @@ export default function PricingPage() {
             >
               <FileText className="w-5 h-5" />
               맞춤 상담 신청
+            </Link>
+
+            <Link
+              href={CALCULATOR_PAGE_URL}
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white/10 backdrop-blur-sm border-2 border-white text-white rounded-xl font-semibold hover:bg-white/20 transition-colors"
+            >
+              <Calculator className="w-5 h-5" />
+              비용 계산기 보기
             </Link>
 
             <a
