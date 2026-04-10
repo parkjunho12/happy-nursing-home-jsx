@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import Image from "next/image";
+import { useEffect, useMemo, useState } from "react";
 import type { BlogPost } from "@/lib/blog/naverBlog";
 
 const PLACEHOLDER_IMG = "/assets/images/dining.JPG";
@@ -10,13 +9,36 @@ interface NaverBlogCardProps {
   post: BlogPost;
 }
 
+function normalizeImageSrc(src?: string | null): string {
+  if (!src) return PLACEHOLDER_IMG;
+
+  const trimmed = src.trim();
+  if (!trimmed) return PLACEHOLDER_IMG;
+
+  // protocol-relative URL 대응: //image.url -> https://image.url
+  if (trimmed.startsWith("//")) {
+    return `https:${trimmed}`;
+  }
+
+  // http/https만 허용
+  if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith("/")) {
+    return trimmed;
+  }
+
+  return PLACEHOLDER_IMG;
+}
+
 export default function NaverBlogCard({ post }: NaverBlogCardProps) {
-  const initialSrc =
-    post.thumbnail && post.thumbnail.trim() !== ""
-      ? post.thumbnail
-      : PLACEHOLDER_IMG;
+  const initialSrc = useMemo(
+    () => normalizeImageSrc(post.thumbnail),
+    [post.thumbnail]
+  );
 
   const [imgSrc, setImgSrc] = useState(initialSrc);
+
+  useEffect(() => {
+    setImgSrc(initialSrc);
+  }, [initialSrc]);
 
   return (
     <a
@@ -34,14 +56,17 @@ export default function NaverBlogCard({ post }: NaverBlogCardProps) {
       "
     >
       <div className="relative w-full aspect-[16/9] overflow-hidden bg-stone-100">
-        <Image
+        <img
           src={imgSrc}
           alt={post.title}
-          fill
-          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-          className="object-cover transition-transform duration-500 group-hover:scale-105"
-          unoptimized
-          onError={() => setImgSrc(PLACEHOLDER_IMG)}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+          onError={() => {
+            if (imgSrc !== PLACEHOLDER_IMG) {
+              setImgSrc(PLACEHOLDER_IMG);
+            }
+          }}
         />
       </div>
 

@@ -88,7 +88,7 @@ export default async function NaverBlogSection() {
             <div className="mt-12 text-center">
               <a
                 href={`https://blog.naver.com/${
-                  process.env.NAVER_BLOG_ID ?? "your_blog_id"
+                  process.env.NAVER_BLOG_ID_1 ?? "your_blog_id"
                 }`}
                 target="_blank"
                 rel="noreferrer noopener"
