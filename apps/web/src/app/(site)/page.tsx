@@ -39,7 +39,7 @@ export default function HomePage() {
           </div>
           
           <YouTubeButton
-              videoId="XgiIcdZFswY"
+              videoId="x_ltZwPZgsk"
               title="행복한요양원 시설 소개 영상"
               thumbnail="/assets/images/gate.jpeg"
               variant="thumbnail"
