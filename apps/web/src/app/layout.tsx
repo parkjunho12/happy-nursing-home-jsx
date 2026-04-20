@@ -206,6 +206,26 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* 네이버 애널리틱스 */}
         <NaverWcs/>
 
+        {/* Smartlog 메인 스크립트 */}
+        <Script id="smartlog-init" strategy="afterInteractive">
+          {`
+            var hpt_info = {'_account':'UHPT-38356', '_server':'a31'};
+          `}
+        </Script>
+        <Script
+          id="smartlog-loader"
+          src="//cdn.smlog.co.kr/core/smart.js"
+          strategy="afterInteractive"
+          charSet="utf-8"
+        />
+        <noscript>
+          <img
+            src="//a31.smlog.co.kr/smart_bda.php?_account=38356"
+            style={{ display: 'none', width: 0, height: 0 }}
+            alt=""
+          />
+        </noscript>
+
       </body>
     </html>
   )
