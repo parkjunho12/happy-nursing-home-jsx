@@ -11,6 +11,7 @@ import {
   HeartHandshake,
 } from 'lucide-react'
 import Image from 'next/image'
+import PhoneConsultButton from '@/components/common/PhoneConsultButton'
 export const metadata: Metadata = {
   title: '보호자 상담 후기 | 행복한요양원 녹양역점',
   description:
@@ -400,13 +401,12 @@ export default function ReviewsPage() {
               <ChevronRight className="w-5 h-5" />
             </Link>
 
-            <a
-              href="tel:031-856-8090"
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white/10 backdrop-blur-sm border-2 border-white text-white rounded-lg font-semibold hover:bg-white/20 transition-colors"
-            >
-              <Phone className="w-5 h-5" />
+            <PhoneConsultButton
+              phoneNumber="031-856-8090"
+              className="call-btn inline-flex items-center justify-center gap-2 px-8 py-4 bg-white/10 backdrop-blur-sm border-2 border-white text-white rounded-lg font-semibold hover:bg-white/20 transition-colors"
+              >
               031-856-8090
-            </a>
+            </PhoneConsultButton>
           </div>
         </div>
       </section>

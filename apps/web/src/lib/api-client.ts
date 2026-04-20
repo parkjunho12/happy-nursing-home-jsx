@@ -255,6 +255,11 @@ declare global {
   interface Window {
     gtag?: (...args: any[]) => void
     dataLayer?: any[]
+    hpt_trace_info?: {
+      _mode: string
+      _memid: string
+      _total_price?: string
+    }
   }
 }
 

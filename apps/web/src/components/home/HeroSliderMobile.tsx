@@ -108,7 +108,23 @@ export default function HeroSliderMobile() {
               </div>
               <a
                 href="tel:0318568090"
-                className="mt-1 inline-flex items-center gap-2 font-body text-[1.5rem] font-extrabold tracking-[-0.03em] text-orange-600"
+                onClick={(e) => {
+                  e.preventDefault()
+    
+                  try {
+                    window.hpt_trace_info = {
+                      _mode: 'q',
+                      _memid: '',
+                    }
+                  } catch (err) {
+                    console.error(err)
+                  }
+    
+                  setTimeout(() => {
+                    window.location.href = 'tel:031-856-8090'
+                  }, 150)
+                }}
+                className="call-btn mt-1 inline-flex items-center gap-2 font-body text-[1.5rem] font-extrabold tracking-[-0.03em] text-orange-600"
               >
                 <Phone className="h-5 w-5" />
                 031-856-8090
