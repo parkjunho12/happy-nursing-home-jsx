@@ -202,7 +202,7 @@ const SettingsPage = () => {
                     </label>
                     <input
                       type="tel"
-                      defaultValue="031-856-809"
+                      defaultValue="031-856-8090"
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-orange focus:border-transparent"
                     />
                   </div>

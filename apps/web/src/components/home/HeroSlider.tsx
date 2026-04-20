@@ -142,7 +142,23 @@ export default function HeroSlider() {
 
                 <a
                   href="tel:0318568090"
-                  className="group mt-2 inline-flex items-end gap-2.5 transition"
+                  onClick={(e) => {
+                    e.preventDefault()
+      
+                    try {
+                      window.hpt_trace_info = {
+                        _mode: 'q',
+                        _memid: '',
+                      }
+                    } catch (err) {
+                      console.error(err)
+                    }
+      
+                    setTimeout(() => {
+                      window.location.href = 'tel:031-856-8090'
+                    }, 150)
+                  }}
+                  className="call-btn group mt-2 inline-flex items-end gap-2.5 transition"
                 >
                   <Phone className="mb-1 h-7 w-7 text-orange-500 transition group-hover:scale-105" />
                   <span className="font-body text-[2rem] font-extrabold leading-none tracking-[-0.05em] text-orange-600 transition group-hover:text-orange-700 sm:text-[2.35rem] lg:text-[2.7rem]">
@@ -157,7 +173,23 @@ export default function HeroSlider() {
                 <div className="mt-4 flex flex-col gap-2.5 sm:flex-row sm:items-center">
                   <a
                     href="tel:0318568090"
-                    className="font-body inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3.5 text-[15px] font-bold text-white shadow-[0_10px_22px_rgba(249,115,22,0.20)] transition hover:bg-orange-600"
+                    onClick={(e) => {
+                      e.preventDefault()
+        
+                      try {
+                        window.hpt_trace_info = {
+                          _mode: 'q',
+                          _memid: '',
+                        }
+                      } catch (err) {
+                        console.error(err)
+                      }
+        
+                      setTimeout(() => {
+                        window.location.href = 'tel:031-856-8090'
+                      }, 150)
+                    }}
+                    className="call-btn font-body inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3.5 text-[15px] font-bold text-white shadow-[0_10px_22px_rgba(249,115,22,0.20)] transition hover:bg-orange-600"
                   >
                     <Phone className="h-4.5 w-4.5" />
                     전화 상담

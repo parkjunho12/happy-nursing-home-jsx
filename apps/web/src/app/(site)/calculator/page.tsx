@@ -11,6 +11,7 @@ import {
   Shield,
   Users,
 } from 'lucide-react'
+import PhoneConsultButton from '@/components/common/PhoneConsultButton'
 
 type Grade = 1 | 2 | 3 | 4 | 5
 type PaymentType = '일반' | '감경I' | '감경II' | '기초생활수급자'
@@ -445,13 +446,13 @@ export default function CostCalculatorPage() {
           </p>
 
           <div className="flex flex-col gap-4 sm:flex-row sm:justify-center">
-            <a
-              href="tel:0318568090"
-              className="inline-flex items-center justify-center gap-3 rounded-xl bg-orange-600 px-10 py-5 text-lg font-bold text-white shadow-xl transition-all hover:bg-orange-700 hover:shadow-2xl"
+
+            <PhoneConsultButton
+            phoneNumber="031-856-8090"
+            className="call-btn inline-flex items-center justify-center gap-3 rounded-xl bg-orange-600 px-10 py-5 text-lg font-bold text-white shadow-xl transition-all hover:bg-orange-700 hover:shadow-2xl"
             >
-              <Phone className="h-6 w-6" />
-              전화로 바로 문의하기
-            </a>
+            전화로 바로 문의하기
+            </PhoneConsultButton>
 
             <a
               href="#contact"
@@ -599,13 +600,12 @@ export default function CostCalculatorPage() {
             <p className="mb-6 text-lg font-medium text-gray-700">
               상담을 통해 보다 정확한 안내가 가능합니다
             </p>
-            <a
-              href="tel:0318568090"
-              className="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-8 py-4 text-lg font-bold text-white shadow-lg transition-all hover:bg-orange-700"
+            <PhoneConsultButton
+            phoneNumber="031-856-8090"
+            className="call-btn inline-flex items-center gap-2 rounded-xl bg-orange-600 px-8 py-4 text-lg font-bold text-white shadow-lg transition-all hover:bg-orange-700"
             >
-              <Phone className="h-5 w-5" />
-              지금 바로 상담받기
-            </a>
+            지금 바로 상담받기
+            </PhoneConsultButton>
           </div>
         </div>
       </section>
@@ -714,13 +714,12 @@ export default function CostCalculatorPage() {
             만들어드립니다
           </p>
 
-          <a
-            href="tel:0318568090"
-            className="inline-flex items-center gap-3 rounded-xl bg-white px-10 py-5 text-xl font-bold text-orange-600 shadow-2xl transition-all hover:bg-orange-50"
-          >
-            <Phone className="h-6 w-6" />
-            031-856-8090
-          </a>
+          <PhoneConsultButton
+        phoneNumber="031-856-8090"
+        className="call-btn inline-flex items-center gap-3 rounded-xl bg-white px-10 py-5 text-xl font-bold text-orange-600 shadow-2xl transition-all hover:bg-orange-50"
+        >
+        031-856-8090
+        </PhoneConsultButton>
         </div>
       </section>
     </div>

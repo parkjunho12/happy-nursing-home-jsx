@@ -103,7 +103,23 @@ export default function HeroSection() {
               {/* Primary CTA */}
               <a
                 href="tel:0318568090"
-                className="cta-primary group"
+                onClick={(e) => {
+                  e.preventDefault()
+    
+                  try {
+                    window.hpt_trace_info = {
+                      _mode: 'q',
+                      _memid: '',
+                    }
+                  } catch (err) {
+                    console.error(err)
+                  }
+    
+                  setTimeout(() => {
+                    window.location.href = 'tel:031-856-8090'
+                  }, 150)
+                }}
+                className="call-btn cta-primary group"
               >
                 <Phone className="w-5 h-5 group-hover:animate-pulse" />
                 <div className="text-left">

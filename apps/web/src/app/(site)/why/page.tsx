@@ -20,6 +20,7 @@ import {
   Camera,
   Waves,
 } from 'lucide-react'
+import PhoneConsultButton from '@/components/common/PhoneConsultButton'
 
 type FeatureCard = {
   icon: React.ComponentType<{ className?: string }>
@@ -250,13 +251,12 @@ export default function WhyChooseUsPage() {
             </p>
 
             <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-              <a
-                href="tel:0318568090"
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-8 py-4 text-base font-semibold text-white shadow-lg shadow-slate-300 transition hover:-translate-y-0.5 hover:bg-slate-800 sm:w-auto"
-              >
-                <Phone className="h-5 w-5" />
+              <PhoneConsultButton
+                phoneNumber="031-856-8090"
+                className="call-btn inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-8 py-4 text-base font-semibold text-white shadow-lg shadow-slate-300 transition hover:-translate-y-0.5 hover:bg-slate-800 sm:w-auto"
+                >
                 입소 상담 문의
-              </a>
+            </PhoneConsultButton>
 
               <a
                 href="#features"
@@ -622,13 +622,12 @@ export default function WhyChooseUsPage() {
           </p>
 
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <a
-              href="tel:0318568090"
-              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-8 py-4 text-base font-semibold text-slate-950 shadow-xl shadow-slate-900/20 transition hover:-translate-y-0.5 hover:bg-slate-100 sm:w-auto"
-            >
-              <Phone className="h-5 w-5" />
-              상담 문의하기
-            </a>
+            <PhoneConsultButton
+                phoneNumber="031-856-8090"
+                className="call-btn inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-8 py-4 text-base font-semibold text-slate-950 shadow-xl shadow-slate-900/20 transition hover:-translate-y-0.5 hover:bg-slate-100 sm:w-auto"
+                >
+                상담 문의하기
+            </PhoneConsultButton>
 
             <a
               href="/contact"

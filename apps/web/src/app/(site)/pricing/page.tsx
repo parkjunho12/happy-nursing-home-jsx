@@ -11,6 +11,7 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 import Image from 'next/image'
+import PhoneConsultButton from '@/components/common/PhoneConsultButton'
 
 export const metadata: Metadata = {
   title: '입소 비용 | 행복한요양원 녹양역점',
@@ -159,13 +160,12 @@ function CalculatorPromoCard() {
             계산기 바로가기
           </Link>
 
-          <a
-            href="tel:031-856-8090"
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-amber-300 bg-white px-6 py-4 font-semibold text-gray-900 transition-colors hover:bg-amber-50"
+          <PhoneConsultButton
+            phoneNumber="031-856-8090"
+            className="call-btn inline-flex items-center justify-center gap-2 rounded-xl border border-amber-300 bg-white px-6 py-4 font-semibold text-gray-900 transition-colors hover:bg-amber-50"
           >
-            <Phone className="h-5 w-5" />
             전화 상담
-          </a>
+          </PhoneConsultButton>
         </div>
       </div>
     </div>
@@ -492,13 +492,13 @@ export default function PricingPage() {
               비용 계산기 보기
             </Link>
 
-            <a
-              href="tel:031-856-8090"
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-white/10 backdrop-blur-sm border-2 border-white text-white rounded-xl font-semibold hover:bg-white/20 transition-colors"
-            >
-              <Phone className="w-5 h-5" />
-              031-856-8090
-            </a>
+            
+            <PhoneConsultButton
+            phoneNumber="031-856-8090"
+            className="call-btn inline-flex items-center justify-center gap-2 px-8 py-4 bg-white/10 backdrop-blur-sm border-2 border-white text-white rounded-xl font-semibold hover:bg-white/20 transition-colors"
+          >
+            031-856-8090
+          </PhoneConsultButton>
           </div>
         </div>
       </section>
