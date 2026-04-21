@@ -218,13 +218,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           strategy="afterInteractive"
           charSet="utf-8"
         />
-        <noscript>
-          <img
-            src="//a31.smlog.co.kr/smart_bda.php?_account=38356"
-            style={{ display: 'none', width: 0, height: 0 }}
-            alt=""
-          />
-        </noscript>
 
       </body>
     </html>
