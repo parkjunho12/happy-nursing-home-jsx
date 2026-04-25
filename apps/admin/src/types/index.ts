@@ -18,22 +18,30 @@ export interface User {
     user: User
   }
   
-  // Resident (입소자)
-  export interface Resident {
-    id: string
-    name: string
-    birthDate: string
-    gender: 'MALE' | 'FEMALE'
-    admissionDate: string
-    roomNumber: string
-    grade: '1' | '2' | '3' | '4' | '5'
-    emergencyContact: string
-    emergencyPhone: string
-    status: 'ACTIVE' | 'DISCHARGED' | 'HOSPITALIZED'
-    notes?: string
-    createdAt: string
-    updatedAt: string
+ // Resident 타입 추가/수정
+export interface Resident {
+  id: string
+  name: string
+  birth_date: string  // ISO date string
+  gender: 'MALE' | 'FEMALE'
+  admission_date: string  // ISO date string
+  room_number: string
+  grade: string  // "1", "2", "3", "4", "5"
+  emergency_contact: string
+  emergency_phone: string
+  status: 'ACTIVE' | 'DISCHARGED' | 'HOSPITALIZED'
+  notes?: string
+  created_at: string
+  updated_at?: string
+  
+  // 관계 데이터 (백엔드에서 추가)
+  guardians?: Guardian[]
+  photos?: Photo[]
+  _count?: {
+    guardians: number
+    photos: number
   }
+}
   
   // Staff (직원)
   export interface Staff {
@@ -139,3 +147,39 @@ export interface User {
     limit: number
     totalPages: number
   }
+
+  export interface Guardian {
+    id: string
+    resident_id: string
+    name: string
+    relationship: string
+    phone: string
+    receive_kakao: boolean
+    is_primary: boolean
+    created_at: string
+    updated_at?: string
+  }
+  
+  export interface Photo {
+    id: string
+    resident_id: string
+    file_name: string
+    file_url: string
+    uploaded_at: string
+  }
+
+// Message 관련
+export interface MessageLog {
+  id: string
+  resident_id: string
+  guardian_id: string
+  message_content: string
+  photo_urls: string[]
+  status: 'SUCCESS' | 'PENDING' | 'FAILED'
+  error_message?: string
+  sent_at: string
+  resident_name?: string
+  guardian_name?: string
+  guardian_phone?: string
+}
+

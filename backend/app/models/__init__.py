@@ -9,6 +9,9 @@ from app.models.staff import Staff, StaffStatus
 from app.models.contact import Contact, ContactStatus
 from app.models.history import History, HistoryCategory
 from app.models.review import Review
+from app.models.guardian import Guardian
+from app.models.message_log import MessageLog, MessageStatus
+from app.models.photo import Photo
 
 # -------------------------
 # Public Website Models
@@ -39,6 +42,10 @@ __all__ = [
     "HistoryCategory",
     "Review",
     "ClickEvent",
+    "Guardian",
+    "MessageLog",
+    "MessageStatus",
+    "Photo",
 
     # Public
     "ContactTicket",

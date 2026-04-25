@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.api.v1.router import api_router
 import logging
 import sys
+from fastapi.staticfiles import StaticFiles
 
 if settings.ENVIRONMENT == "production":
     logging.basicConfig(
@@ -74,6 +75,7 @@ app.add_middleware(
 )
 
 # API 라우터 등록
+app.mount("/uploads", StaticFiles(directory="app/uploads"), name="uploads")
 app.include_router(api_router, prefix="/api/v1")
 
 # Health Check

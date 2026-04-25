@@ -18,6 +18,7 @@ import ReviewsPage from './pages/reviews/ReviewsPage'
 import SettingsPage from './pages/settings/SettingsPage'
 import PageViewStats from './pages/analytics/PageViewStats'
 import SuspiciousIPPage from './pages/analytics/SuspiciousIPPage'
+import PhotosPage from './pages/photo/PhotoPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -68,6 +69,7 @@ function App() {
             <Route path="analytics/page-views" element={<PageViewStats />} />
             <Route path="analytics/suspicious-ips" element={<SuspiciousIPPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="photos" element={<PhotosPage />} />
           </Route>
 
           {/* Fallback */}

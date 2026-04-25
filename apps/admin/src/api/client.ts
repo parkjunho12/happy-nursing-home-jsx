@@ -31,7 +31,6 @@ export const tokenStorage = {
 // --------------------
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  // ✅ 쿠키 인증이 "진짜"일 때만 true (현재 백엔드는 JWT 반환이라 불필요)
   withCredentials: false,
   headers: { 'Content-Type': 'application/json' },
 })
@@ -51,10 +50,7 @@ apiClient.interceptors.response.use(
   (res) => res,
   (error: AxiosError) => {
     if (error.response?.status === 401) {
-    //   ✅ 토큰 제거 (무한 루프 방지)
       tokenStorage.clear()
-
-      // ✅ 원하는 UX: 로그인 페이지로
       if (window.location.pathname !== '/login') {
         window.location.href = '/login'
       }
@@ -67,18 +63,13 @@ apiClient.interceptors.response.use(
 // Auth API
 // --------------------
 export const authAPI = {
-  // ✅ FastAPI LoginRequest(email/password)와 계약 맞춤: JSON
   login: async (data: LoginRequest): Promise<AuthResponse> => {
     const res = await apiClient.post<AuthResponse>(`${API_PREFIX}/auth/login`, data)
-
-    // ✅ access_token 저장
     if (res.data?.access_token) tokenStorage.set(res.data.access_token)
-
     return res.data
   },
 
   logout: async (): Promise<void> => {
-    // 서버는 stateless라 의미가 약하지만 호출은 유지
     try {
       await apiClient.post(`${API_PREFIX}/auth/logout`)
     } finally {
@@ -86,23 +77,17 @@ export const authAPI = {
     }
   },
 
-  // ⚠️ 백엔드 /me가 {success:true, data:{...}}면 아래처럼 파싱
   me: async (): Promise<User> => {
     const res = await apiClient.get<ApiResponse<User>>(`${API_PREFIX}/auth/me`)
-
-    // 케이스1) ApiResponse<User> = { success, data }
     if ((res.data as any)?.data) return (res.data as any).data as User
-
-    // 케이스2) 그냥 User를 바로 주는 경우
     return res.data as unknown as User
   },
 }
 
 // --------------------
-// Generic helpers (선택)
+// Generic helpers
 // --------------------
 const unwrap = <T>(payload: ApiResponse<T> | T): T => {
-  // ApiResponse<T> 형태면 data를 꺼냄
   if (payload && typeof payload === 'object' && 'data' in (payload as any)) {
     return (payload as any).data as T
   }
@@ -119,7 +104,16 @@ export const residentsAPI = {
   },
   get: async (id: string) => {
     const res = await apiClient.get<ApiResponse<Resident>>(`${API_PREFIX}/residents/${id}`)
-    return unwrap(res.data)
+    const data = unwrap(res.data)
+
+    if (data.photos) {
+      data.photos = data.photos.map((photo: any) => ({
+        ...photo,
+        image_url: getImageUrl(photo.file_url)
+      }))
+    }
+    
+    return data
   },
   create: async (data: Partial<Resident>) => {
     const res = await apiClient.post<ApiResponse<Resident>>(`${API_PREFIX}/residents`, data)
@@ -131,6 +125,199 @@ export const residentsAPI = {
   },
   delete: async (id: string) => {
     const res = await apiClient.delete<ApiResponse<null>>(`${API_PREFIX}/residents/${id}`)
+    return unwrap(res.data)
+  },
+}
+
+// --------------------
+// Guardians API
+// --------------------
+export interface Guardian {
+  id: string
+  resident_id: string
+  name: string
+  relationship: string
+  phone: string
+  receive_kakao: boolean
+  is_primary: boolean
+  created_at: string
+  updated_at?: string
+}
+
+export interface GuardianCreate {
+  name: string
+  relationship: string
+  phone: string
+  receive_kakao?: boolean
+  is_primary?: boolean
+}
+
+export interface GuardianUpdate {
+  name?: string
+  relationship?: string
+  phone?: string
+  receive_kakao?: boolean
+  is_primary?: boolean
+}
+
+export const guardiansAPI = {
+  // 입소자별 보호자 목록
+  list: async (residentId: string) => {
+    const res = await apiClient.get<ApiResponse<Guardian[]>>(
+      `${API_PREFIX}/residents/${residentId}/guardians`
+    )
+    return unwrap(res.data)
+  },
+
+  // 보호자 상세 조회
+  get: async (guardianId: string) => {
+    const res = await apiClient.get<ApiResponse<Guardian>>(
+      `${API_PREFIX}/guardians/${guardianId}`
+    )
+    return unwrap(res.data)
+  },
+
+  // 보호자 생성
+  create: async (residentId: string, data: GuardianCreate) => {
+    const res = await apiClient.post<ApiResponse<Guardian>>(
+      `${API_PREFIX}/residents/${residentId}/guardians`,
+      data
+    )
+    return unwrap(res.data)
+  },
+
+  // 보호자 수정
+  update: async (guardianId: string, data: GuardianUpdate) => {
+    const res = await apiClient.put<ApiResponse<Guardian>>(
+      `${API_PREFIX}/guardians/${guardianId}`,
+      data
+    )
+    return unwrap(res.data)
+  },
+
+  // 보호자 삭제
+  delete: async (guardianId: string) => {
+    const res = await apiClient.delete<ApiResponse<null>>(
+      `${API_PREFIX}/guardians/${guardianId}`
+    )
+    return unwrap(res.data)
+  },
+
+  // 카카오톡 수신 토글
+  toggleKakao: async (guardianId: string) => {
+    const res = await apiClient.post<ApiResponse<Guardian>>(
+      `${API_PREFIX}/guardians/${guardianId}/toggle-kakao`
+    )
+    return unwrap(res.data)
+  },
+
+  // 주 보호자 설정
+  setPrimary: async (guardianId: string) => {
+    const res = await apiClient.post<ApiResponse<Guardian>>(
+      `${API_PREFIX}/guardians/${guardianId}/set-primary`
+    )
+    return unwrap(res.data)
+  },
+}
+
+// --------------------
+// Photos API
+// --------------------
+export interface Photo {
+  id: string
+  resident_id: string
+  file_name: string
+  file_url: string
+  image_url: string
+  uploaded_at: string
+}
+
+export const photosAPI = {
+  // 사진 업로드 (multipart/form-data)
+  upload: async (residentId: string, files: File[]) => {
+    const formData = new FormData()
+    formData.append('resident_id', residentId)
+    
+    files.forEach(file => {
+      formData.append('files', file)
+    })
+
+    const res = await apiClient.post<ApiResponse<Photo[]>>(
+      `${API_PREFIX}/photos/upload`,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
+    )
+    const data = unwrap(res.data)
+
+    return data.map(photo => ({
+      ...photo,
+      image_url: getImageUrl(photo.file_url)
+    }))
+  },
+
+  // 사진 삭제
+  delete: async (photoId: string) => {
+    const res = await apiClient.delete<ApiResponse<null>>(
+      `${API_PREFIX}/photos/${photoId}`
+    )
+    return unwrap(res.data)
+  },
+}
+
+// --------------------
+// Messages API
+// --------------------
+export interface MessageSendRequest {
+  resident_id: string
+  guardian_ids: string[]
+  message_content: string
+  photo_urls?: string[]
+}
+
+export interface MessageLog {
+  id: string
+  resident_id: string
+  guardian_id: string
+  message_content: string
+  photo_urls: string[]
+  status: 'SUCCESS' | 'PENDING' | 'FAILED'
+  error_message?: string
+  sent_at: string
+  resident_name?: string
+  guardian_name?: string
+  guardian_phone?: string
+}
+
+export interface MessageSendResult {
+  guardian_id: string
+  success: boolean
+  log_id?: string
+  error?: string
+}
+
+export const messagesAPI = {
+  // 메시지 발송
+  send: async (data: MessageSendRequest) => {
+    const res = await apiClient.post<ApiResponse<{ results: MessageSendResult[] }>>(
+      `${API_PREFIX}/messages/send`,
+      data
+    )
+    return unwrap(res.data)
+  },
+
+  // 발송 로그 조회
+  logs: async (residentId?: string, limit = 50) => {
+    const params: any = { limit }
+    if (residentId) params.resident_id = residentId
+
+    const res = await apiClient.get<ApiResponse<MessageLog[]>>(
+      `${API_PREFIX}/messages/logs`,
+      { params }
+    )
     return unwrap(res.data)
   },
 }
@@ -257,55 +444,66 @@ export const dashboardAPI = {
 // Track API
 // --------------------
 export interface TrackStatsResponse {
-    total_clicks: number
-    suspicious_clicks: number
-    unique_ips: number
-    suspicious_rate: number
-  }
-  
-  export interface TrackEvent {
-    id: string
-    ip_hash: string
-    event_type: string
-    is_suspicious: boolean
-    created_at: string
+  total_clicks: number
+  suspicious_clicks: number
+  unique_ips: number
+  suspicious_rate: number
+}
+
+export interface TrackEvent {
+  id: string
+  ip_hash: string
+  event_type: string
+  is_suspicious: boolean
+  created_at: string
+}
+
+export interface SuspiciousIP {
+  ip_hash: string
+  click_count: number
+  last_click: string
+}
+
+export const trackAPI = {
+  click: async (eventType: string) => {
+    const res = await apiClient.post(`${API_PREFIX}/track/click`, null, {
+      params: { event_type: eventType },
+    })
+    return res.data
+  },
+
+  stats: async (days = 7): Promise<TrackStatsResponse> => {
+    const res = await apiClient.get<TrackStatsResponse>(`${API_PREFIX}/track/stats`, {
+      params: { days },
+    })
+    return res.data
+  },
+
+  all: async (days = 7): Promise<TrackEvent[]> => {
+    const res = await apiClient.get<TrackEvent[]>(`${API_PREFIX}/track/all`, {
+      params: { days },
+    })
+    return res.data
+  },
+
+  suspicious: async (days = 7): Promise<SuspiciousIP[]> => {
+    const res = await apiClient.get<SuspiciousIP[]>(`${API_PREFIX}/track/suspicious`, {
+      params: { days },
+    })
+    return res.data
+  },
+}
+
+const getImageUrl = (url?: string) => {
+  if (!url) return ''
+
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url
   }
 
-  export interface SuspiciousIP {
-    ip_hash: string
-    click_count: number
-    last_click: string
+  if (url.startsWith('/')) {
+    return `${API_BASE_URL}${url}`
   }
-  
-  export const trackAPI = {
-    // 공개 엔드포인트: 페이지뷰/클릭 기록
-    click: async (eventType: string) => {
-      const res = await apiClient.post(`${API_PREFIX}/track/click`, null, {
-        params: { event_type: eventType },
-      })
-      return res.data
-    },
-  
-    // 관리자 통계
-    stats: async (days = 7): Promise<TrackStatsResponse> => {
-      const res = await apiClient.get<TrackStatsResponse>(`${API_PREFIX}/track/stats`, {
-        params: { days },
-      })
-      return res.data
-    },
-  
-    // 전체 이벤트 목록
-    all: async (days = 7): Promise<TrackEvent[]> => {
-      const res = await apiClient.get<TrackEvent[]>(`${API_PREFIX}/track/all`, {
-        params: { days },
-      })
-      return res.data
-    },
-    
-    suspicious: async (days = 7): Promise<SuspiciousIP[]> => {
-        const res = await apiClient.get<SuspiciousIP[]>(`${API_PREFIX}/track/suspicious`, {
-          params: { days },
-        })
-        return res.data
-      },
-  }
+
+  return `${API_BASE_URL}/${url}`
+}

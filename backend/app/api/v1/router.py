@@ -1,5 +1,6 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, public, residents, staff, contacts, reviews, history, dashboard, tracking
+from app.api.v1.endpoints import auth, public, residents, staff, contacts, reviews, history, dashboard, tracking, guardians, photos, messages
+
 
 api_router = APIRouter()
 
@@ -59,3 +60,7 @@ api_router.include_router(
     prefix="/track",
     tags=["tracking"]
 )
+
+api_router.include_router(guardians.router, tags=["guardians"])
+api_router.include_router(photos.router, prefix="/photos", tags=["photos"])
+api_router.include_router(messages.router, prefix="/messages", tags=["messages"])
