@@ -64,7 +64,7 @@ export function ServicesSection() {
     {
       id: 2,
       title: '재활 감성 돌봄',
-      description: '워크메이트와 물리치료 공간을 기반으로 신체 기능 유지를 돕습니다',
+      description: '이지스텝와 물리치료 공간을 기반으로 신체 기능 유지를 돕습니다',
       image: '/assets/images/37_care_physics.jpg',
       alt: '행복한요양원 재활 케어 모습',
       icon: '♿',
@@ -170,8 +170,8 @@ export function DifferentiatorsSection() {
     {
       id: 1,
       icon: '🚶‍♂️',
-      title: '워크메이트 하네스 레일 보행 재활',
-      description: '국내 요양원 중 드물게 갖춘 워크메이트 보행 재활 시스템으로 안전한 보행 훈련과 하지 근력 강화를 돕습니다. 어르신의 신체 기능 유지에 실질적인 도움을 드립니다.',
+      title: '이지스텝 하네스 레일 보행 재활',
+      description: '국내 요양원 중 드물게 갖춘 이지스텝 보행 재활 시스템으로 안전한 보행 훈련과 하지 근력 강화를 돕습니다. 어르신의 신체 기능 유지에 실질적인 도움을 드립니다.',
       color: 'orange',
     },
     {
