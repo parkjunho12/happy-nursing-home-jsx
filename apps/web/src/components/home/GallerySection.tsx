@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import GalleryLightbox from '@/components/home/GalleryLightbox'
 
@@ -20,6 +21,7 @@ interface Category {
   name: string
   description: string
   tagline?: string
+  anchor: string 
 }
 
 const categories: Category[] = [
@@ -28,45 +30,51 @@ const categories: Category[] = [
     name: '전체',
     description: '행복한요양원의 모든 공간',
     tagline: '어르신의 행복한 일상이 있는 곳',
+    anchor: 'gallery', // ← 추가
   },
   {
     id: '시설 전경',
     name: '시설 전경',
     description: '쾌적한 단독 건물과 편안한 분위기',
     tagline: '녹양역 가까운 단독 건물',
+    anchor: 'gallery-facility', // ← 추가
   },
   {
     id: '생활 공간',
     name: '생활 공간',
     description: '어르신이 실제로 머무시는 편안한 공간',
     tagline: '집처럼 편안한 우리 집',
+    anchor: 'gallery-living', // ← 추가
   },
   {
     id: '재활 공간',
     name: '재활 공간',
     description: '이지스텝 보행 재활과 전문 물리치료',
     tagline: '우리의 핵심 경쟁력',
+    anchor: 'gallery-rehab', // ← 추가
   },
   {
     id: '프로그램',
     name: '프로그램',
     description: '웃음과 활력이 있는 일상 활동',
     tagline: '매일매일 활기찬 하루',
+    anchor: 'gallery-program', // ← 추가
   },
   {
     id: '식사/위생',
     name: '식사/위생',
     description: '청결하고 안전한 생활 환경',
     tagline: '위생과 안전을 최우선으로',
+    anchor: 'gallery-dining', // ← 추가
   },
   {
     id: '상담/입소',
     name: '상담/입소',
     description: '보호자님과의 따뜻한 소통 공간',
     tagline: '가족의 마음으로 상담합니다',
+    anchor: 'gallery-consultation', // ← 추가
   },
 ]
-
 const galleryImages: GalleryImage[] = [
   // ===== 전체 (대표/브랜드 이미지) =====
   {
@@ -361,6 +369,34 @@ const galleryImages: GalleryImage[] = [
 export function GallerySection() {
   const [selectedCategory, setSelectedCategory] = useState('전체')
   const [openIndex, setOpenIndex] = useState<number | null>(null)
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace('#', '')
+      const matchedCategory = categories.find((cat) => cat.anchor === hash)
+      
+      if (matchedCategory) {
+        setSelectedCategory(matchedCategory.id)
+        setTimeout(() => {
+          const element = document.getElementById('gallery')
+          if (element) {
+            const yOffset = -100
+            const y = element.getBoundingClientRect().top + window.pageYOffset + yOffset
+            window.scrollTo({ top: y, behavior: 'smooth' })
+          }
+        }, 100)
+      }
+    }
+
+    handleHashChange()
+    window.addEventListener('hashchange', handleHashChange)
+    
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange)
+    }
+  }, [])
 
   const currentCategory = categories.find((cat) => cat.id === selectedCategory)
 
@@ -368,6 +404,14 @@ export function GallerySection() {
     selectedCategory === '전체'
       ? galleryImages.filter((img) => img.featured) // 전체는 대표 이미지만
       : galleryImages.filter((img) => img.category === selectedCategory)
+
+  const handleCategoryChange = (categoryId: string) => {
+  setSelectedCategory(categoryId)
+  const category = categories.find((cat) => cat.id === categoryId)
+  if (category) {
+    window.history.replaceState(null, '', `#${category.anchor}`)
+  }
+}
 
   const handleClose = () => setOpenIndex(null)
 
@@ -403,7 +447,7 @@ export function GallerySection() {
             {categories.map((category) => (
               <button
                 key={category.id}
-                onClick={() => setSelectedCategory(category.id)}
+                onClick={() => handleCategoryChange(category.id)}
                 className={`px-5 py-2.5 rounded-full text-sm font-semibold transition-all ${
                   selectedCategory === category.id
                     ? 'bg-primary-orange text-white shadow-md scale-105'
