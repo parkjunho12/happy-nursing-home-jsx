@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import GalleryLightbox from '@/components/home/GalleryLightbox'
 
@@ -369,8 +368,6 @@ const galleryImages: GalleryImage[] = [
 export function GallerySection() {
   const [selectedCategory, setSelectedCategory] = useState('전체')
   const [openIndex, setOpenIndex] = useState<number | null>(null)
-  const router = useRouter()
-  const searchParams = useSearchParams()
 
   useEffect(() => {
     const handleHashChange = () => {
