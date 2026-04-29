@@ -314,7 +314,7 @@ const galleryImages: GalleryImage[] = [
   },
   {
     id: 602,
-    src: '/assets/images/diet.png',
+    src: '/assets/images/foods.png',
     category: '식사/위생',
     title: '영양잡힌 식단',
     description: '어르신의 건강과 기호를 고려한 균형 잡힌 식사',
