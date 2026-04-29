@@ -89,7 +89,7 @@ export function ServicesSection() {
       id: 5,
       title: '균형 잡힌 식사',
       description: '어르신의 건강 상태와 식사 습관을 고려한 따뜻한 식사를 제공합니다',
-      image: '/assets/images/diet2.png',
+      image: '/assets/images/foods.png',
       alt: '요양원 식사와 식단',
       icon: '🍚',
     },
