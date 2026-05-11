@@ -12,6 +12,7 @@ from app.models.review import Review
 from app.models.guardian import Guardian
 from app.models.message_log import MessageLog, MessageStatus
 from app.models.photo import Photo
+from app.models.family_story import FamilyStory, FamilyStoryPhoto
 
 # -------------------------
 # Public Website Models
@@ -46,6 +47,8 @@ __all__ = [
     "MessageLog",
     "MessageStatus",
     "Photo",
+    "FamilyStory",
+    "FamilyStoryPhoto",
 
     # Public
     "ContactTicket",
@@ -54,4 +57,5 @@ __all__ = [
     "PublicService",
     "PublicDifferentiator",
     "PublicInfo",
+    
 ]

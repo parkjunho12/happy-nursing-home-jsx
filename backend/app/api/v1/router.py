@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, public, residents, staff, contacts, reviews, history, dashboard, tracking, guardians, photos, messages
+from app.api.v1.endpoints import auth, public, residents, staff, contacts, reviews, history, dashboard, tracking, guardians, photos, messages, family_stories, family_auth
 
 
 api_router = APIRouter()
@@ -64,3 +64,16 @@ api_router.include_router(
 api_router.include_router(guardians.router, tags=["guardians"])
 api_router.include_router(photos.router, prefix="/photos", tags=["photos"])
 api_router.include_router(messages.router, prefix="/messages", tags=["messages"])
+
+api_router.include_router(
+    family_stories.router,
+    prefix="/admin/family-stories",
+    tags=["admin-family-stories"]
+)
+
+# 보호자용 API
+api_router.include_router(
+    family_auth.router,
+    prefix="/family",
+    tags=["family"]
+)
