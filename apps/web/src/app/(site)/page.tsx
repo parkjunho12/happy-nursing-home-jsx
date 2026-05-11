@@ -29,7 +29,7 @@ export default function HomePage() {
               VIDEO TOUR
             </div>
             <h2 className="font-serif text-3xl md:text-4xl lg:text-5xl font-bold text-primary-brown mb-4">
-              영상으로 만나는 행복한요양원
+              영상으로 만나는 행복한요양원 녹양역점
             </h2>
             <p className="text-lg text-text-gray max-w-2xl mx-auto">
               쾌적한 시설과 따뜻한 분위기를 직접 확인해보세요
@@ -39,7 +39,7 @@ export default function HomePage() {
           <div className="max-w-4xl mx-auto">
             <YouTubeButton
               videoId="x_ltZwPZgsk"
-              title="행복한요양원 시설 소개 영상"
+              title="행복한요양원 녹양역점 시설 소개 영상"
               thumbnail="/assets/images/gate.jpeg"
               variant="thumbnail"
               className="w-full rounded-2xl overflow-hidden shadow-large hover:shadow-xl transition-shadow duration-300"

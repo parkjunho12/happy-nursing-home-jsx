@@ -219,7 +219,7 @@ export function DifferentiatorsSection() {
             WHY US
           </div>
           <h2 className="font-serif text-3xl md:text-4xl lg:text-5xl font-bold text-primary-brown mb-4">
-            왜 행복한요양원을 선택해야 할까요?
+            왜 행복한요양원 녹양역점을 선택해야 할까요?
           </h2>
           <p className="text-lg text-text-gray max-w-2xl mx-auto leading-relaxed">
             단순히 규정을 따르는 것이 아닌,
