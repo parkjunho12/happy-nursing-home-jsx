@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>행복한요양원 녹양역점 · 전화상담 시스템</title>
+<style>
+/* ================================================================
+   ① SCREEN LAYER — 상담 입력 UI
+   ================================================================ */
+:root{
+  --navy:#1a3a5c;--navy2:#1e4a70;--navy3:#2a5f8f;
+  --navy-pale:#eaf1f8;--navy-ghost:#f4f8fc;
+  --green:#2d7a54;--green2:#3a9465;
+  --green-pale:#e6f5ec;--green-ghost:#f3faf6;
+  --warm:#b87c2a;--warm-pale:#fdf3e3;
+  --amber:#b45309;--amber-pale:#fef3c7;
+  --red:#c0392b;--red-pale:#fdecea;
+  --purple:#5b3fa0;--purple-pale:#f0ebfb;
+  --teal:#0e7a8a;--teal-pale:#e0f5f8;
+  --bg:#f2f5f9;--surface:#fff;--surf2:#f8fafb;
+  --border:#d8e2ec;--border2:#e5edf5;
+  --txt:#1a2b3c;--txt2:#3a5068;--txt3:#6a7d92;--txt4:#9fb0c0;--txt5:#c8d5e0;
+  --sh1:0 1px 3px rgba(20,45,80,.07);
+  --sh2:0 3px 12px rgba(20,45,80,.09),0 1px 3px rgba(20,45,80,.05);
+  --sh3:0 8px 28px rgba(20,45,80,.11),0 2px 8px rgba(20,45,80,.05);
+  --r-xl:18px;--r-lg:14px;--r-md:11px;--r-sm:8px;
+  --font:'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+  --ease:.17s cubic-bezier(.4,0,.2,1);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:var(--font);background:var(--bg);color:var(--txt);line-height:1.65;min-height:100vh;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font-family:inherit}
+
+/* HEADER */
+.hdr{position:sticky;top:0;z-index:400;background:var(--navy);box-shadow:0 2px 14px rgba(10,25,50,.42)}
+.hdr-in{max-width:960px;margin:0 auto;padding:0 16px;height:54px;display:flex;align-items:center;gap:10px}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none;flex-shrink:0}
+.brand-mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#4daa78,#2d7a54);display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 8px rgba(45,122,84,.4);flex-shrink:0}
+.brand-txt strong{display:block;color:#fff;font-size:13px;font-weight:700;letter-spacing:-.2px}
+.brand-txt span{display:block;color:rgba(255,255,255,.45);font-size:9.5px}
+.hdr-mid{flex:1;display:flex;align-items:center;gap:6px;overflow:hidden}
+.hdr-chip{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);border-radius:99px;padding:3px 10px;font-size:10px;color:rgba(255,255,255,.7);white-space:nowrap}
+.hdr-chip strong{color:#fff;font-weight:700}
+.tw{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.15);border-radius:99px;padding:4px 10px;flex-shrink:0}
+.tw-ico{font-size:10px;opacity:.5}
+.tw-val{font-size:13px;font-weight:700;color:#fff;min-width:44px;letter-spacing:.06em}
+.tw-val.run{color:#6ee7b7}
+.tbtn{background:rgba(255,255,255,.14);border:none;color:#fff;border-radius:50%;width:21px;height:21px;font-size:9px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background var(--ease)}
+.tbtn:hover{background:rgba(255,255,255,.28)}
+.hdr-btns{display:flex;gap:5px;flex-shrink:0}
+.btn{display:inline-flex;align-items:center;gap:4px;padding:6px 12px;border-radius:var(--r-sm);font-size:11px;font-weight:600;cursor:pointer;border:none;transition:var(--ease);white-space:nowrap;line-height:1}
+.btn-ghost{background:rgba(255,255,255,.11);color:#fff;border:1px solid rgba(255,255,255,.2)}
+.btn-ghost:hover{background:rgba(255,255,255,.22)}
+.btn-red{background:rgba(192,57,43,.15);color:#fca5a5;border:1px solid rgba(192,57,43,.28)}
+.btn-red:hover{background:rgba(192,57,43,.28)}
+.btn-gold{background:rgba(184,124,42,.2);color:#fde8b2;border:1px solid rgba(184,124,42,.35)}
+.btn-gold:hover{background:rgba(184,124,42,.35)}
+@media(max-width:600px){.hdr-mid,.brand-txt span,.tw{display:none}.btn{padding:5px 9px;font-size:10.5px}}
+
+/* PROGRESS STRIP */
+.pstrip{position:sticky;top:54px;z-index:390;background:var(--surface);border-bottom:1px solid var(--border2);box-shadow:var(--sh1)}
+.pstrip-in{max-width:960px;margin:0 auto;padding:8px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pstages{display:flex;align-items:center;flex-shrink:0}
+.pstage{display:flex;align-items:center}
+.pdot{width:26px;height:26px;border-radius:50%;background:var(--border2);color:var(--txt4);font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;transition:all .3s;flex-shrink:0;border:2px solid transparent}
+.pdot.active{background:var(--navy);color:#fff;border-color:var(--navy);box-shadow:0 2px 8px rgba(26,58,92,.3)}
+.pdot.done{background:var(--green);color:#fff;border-color:var(--green)}
+.pline{width:16px;height:2px;background:var(--border2);transition:background .3s}
+.pline.done{background:var(--green)}
+.pbar-wrap{flex:1;display:flex;align-items:center;gap:8px;min-width:60px}
+.pbar{flex:1;height:5px;background:var(--border2);border-radius:99px;overflow:hidden}
+.pbar-fill{height:100%;background:linear-gradient(90deg,var(--navy3),var(--green2));border-radius:99px;width:0%;transition:width .5s cubic-bezier(.4,0,.2,1)}
+.ppct{font-size:11px;font-weight:800;color:var(--navy);min-width:30px;text-align:right}
+.jbs{display:flex;gap:5px;flex-wrap:wrap}
+.jb{font-size:10px;font-weight:700;padding:3px 9px;border-radius:99px;border:1.5px solid transparent;white-space:nowrap;opacity:.2;transition:opacity .3s}
+.jb.on{opacity:1}
+.jb-red{background:var(--red-pale);color:var(--red);border-color:#f5aea8}
+.jb-green{background:var(--green-pale);color:var(--green);border-color:#80c9a1}
+.jb-navy{background:var(--navy-pale);color:var(--navy);border-color:#8db5d7}
+.jb-amber{background:var(--amber-pale);color:var(--amber);border-color:#f6c87a}
+.jb-purple{background:var(--purple-pale);color:var(--purple);border-color:#b89ee0}
+
+/* LAYOUT */
+.wrap{max-width:960px;margin:0 auto;padding:20px 14px 100px;display:flex;flex-direction:column;gap:13px}
+
+/* OPENING BOX */
+.opening{background:linear-gradient(135deg,#162d47,#1e4a70);border-radius:var(--r-xl);padding:18px 20px;display:flex;gap:14px;align-items:flex-start;box-shadow:0 6px 24px rgba(15,30,60,.3)}
+.opening-ico{font-size:26px;flex-shrink:0;margin-top:2px}
+.opening-txt h2{color:#fff;font-size:15px;font-weight:800;letter-spacing:-.3px;margin-bottom:8px}
+.opening-lines{display:flex;flex-direction:column;gap:6px}
+.oline{display:flex;align-items:flex-start;gap:9px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);border-radius:var(--r-md);padding:10px 13px}
+.oline-ico{font-size:12px;flex-shrink:0;margin-top:2px;opacity:.7}
+.oline p{color:rgba(255,255,255,.9);font-size:14px;font-weight:500;line-height:1.5}
+.opening-tip{margin-top:8px;font-size:11px;color:rgba(255,255,255,.45);font-style:italic}
+@media(max-width:480px){.opening{padding:14px 15px;gap:11px}.oline p{font-size:13px}}
+
+/* STAGE CARDS */
+.card{background:var(--surface);border-radius:var(--r-xl);border:1px solid var(--border2);box-shadow:var(--sh2);overflow:hidden;transition:box-shadow var(--ease)}
+.card:hover{box-shadow:var(--sh3)}
+.card-hd{display:flex;align-items:center;gap:10px;padding:13px 18px;cursor:pointer;user-select:none;border-bottom:1px solid transparent;transition:background var(--ease),border-color var(--ease)}
+.card-hd:hover{background:var(--surf2)}
+.card.open .card-hd{border-bottom-color:var(--border2)}
+.sdot{width:28px;height:28px;border-radius:50%;background:var(--navy-pale);color:var(--navy);font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all var(--ease)}
+.card.open .sdot{background:var(--navy);color:#fff}
+.card-ico{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.ico-navy{background:var(--navy-pale)}.ico-green{background:var(--green-pale)}.ico-amber{background:var(--amber-pale)}.ico-red{background:var(--red-pale)}.ico-purple{background:var(--purple-pale)}.ico-warm{background:var(--warm-pale)}.ico-teal{background:var(--teal-pale)}
+.card-ttl-wrap{flex:1;min-width:0}
+.card-ttl{font-size:13.5px;font-weight:700;letter-spacing:-.2px}
+.card-sub{font-size:11px;color:var(--txt3);margin-top:1px}
+.card-arr{color:var(--txt5);font-size:10px;flex-shrink:0;transition:transform .2s}
+.card.open .card-arr{transform:rotate(180deg)}
+.card-bd{display:none;padding:20px 18px 24px}
+.card.open .card-bd{display:block}
+.card.dark .card-hd{background:linear-gradient(135deg,#162d47,#1e4a70)}
+.card.dark .card-ttl,.card.dark .card-sub{color:#fff}
+.card.dark .card-arr{color:rgba(255,255,255,.4)}
+.card.dark .sdot{background:rgba(255,255,255,.18);color:#fff}
+.card.dark.open .card-hd{border-bottom-color:rgba(255,255,255,.14)}
+.card.dark .card-bd{background:linear-gradient(180deg,#172f4b,#1a3c5d)}
+.card.gold .card-hd{background:linear-gradient(135deg,#fdf3e3,#fef9f2)}
+
+/* SCRIPT BOX */
+.q-block{margin-bottom:20px}
+.q-block:last-child{margin-bottom:0}
+.sbox{background:linear-gradient(135deg,#152b45,#1d4870);border-radius:var(--r-lg);padding:13px 17px 13px 18px;margin-bottom:11px;position:relative;overflow:hidden}
+.sbox::before{content:'"';position:absolute;top:-10px;left:11px;font-size:58px;color:rgba(255,255,255,.07);font-family:Georgia,serif;line-height:1;pointer-events:none}
+.sbox-tag{display:flex;align-items:center;gap:5px;font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:6px}
+.sbox-main{font-size:15.5px;font-weight:600;color:#fff;line-height:1.55;letter-spacing:-.15px;padding-left:3px}
+.sbox-hint{font-size:10.5px;color:rgba(255,255,255,.42);margin-top:5px;padding-left:3px;font-style:italic;line-height:1.45}
+.sbox.green{background:linear-gradient(135deg,#1a3a5c,#2d7a54)}
+.sbox.target{background:linear-gradient(135deg,#1a3a5c,#2d6a9e)}
+
+/* TRANSITION BOX */
+.trans{background:var(--green-ghost);border:1.5px solid #9dcdb3;border-left:4px solid var(--green);border-radius:var(--r-md);padding:12px 15px;margin-bottom:16px}
+.trans-tag{font-size:9.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--green);display:flex;align-items:center;gap:4px;margin-bottom:5px}
+.trans p{font-size:13.5px;font-weight:600;color:var(--green);line-height:1.5}
+
+/* OPTION CARDS */
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.opts.c3{grid-template-columns:1fr 1fr 1fr}
+.opts.c1{grid-template-columns:1fr}
+@media(max-width:500px){.opts,.opts.c3{grid-template-columns:1fr 1fr}}
+@media(max-width:340px){.opts,.opts.c3{grid-template-columns:1fr}}
+.opts label{cursor:pointer;display:block}
+.opts input{display:none}
+.ocard{display:flex;align-items:center;gap:9px;padding:13px 14px;min-height:54px;background:var(--surf2);border:2px solid var(--border);border-radius:var(--r-md);font-size:13.5px;font-weight:500;color:var(--txt2);transition:all var(--ease);user-select:none;line-height:1.3}
+.ocard-ico{font-size:18px;flex-shrink:0;line-height:1}
+.ocard-sub{display:block;font-size:10px;color:var(--txt4);margin-top:2px;font-weight:400}
+.opts label:hover .ocard{border-color:var(--navy3);background:var(--navy-ghost)}
+.opts input:checked~.ocard{background:var(--navy);border-color:var(--navy);color:#fff;box-shadow:0 4px 14px rgba(26,58,92,.26);font-weight:600}
+.opts input:checked~.ocard .ocard-sub{color:rgba(255,255,255,.58)}
+.opts.concern input:checked~.ocard{background:var(--green);border-color:var(--green);box-shadow:0 4px 14px rgba(45,122,84,.22)}
+
+/* YN TOGGLES */
+.yn-row{display:flex;gap:7px;flex-wrap:wrap}
+.yn label{cursor:pointer}
+.yn input{display:none}
+.yn-btn{display:flex;align-items:center;gap:5px;padding:9px 16px;min-height:42px;background:var(--surf2);border:2px solid var(--border);border-radius:99px;font-size:13px;font-weight:500;color:var(--txt2);transition:all var(--ease);user-select:none;white-space:nowrap}
+.yn label:hover .yn-btn{border-color:var(--navy3);background:var(--navy-pale);color:var(--navy)}
+.yn input:checked~.yn-btn{background:var(--navy);border-color:var(--navy);color:#fff;font-weight:600}
+.yn.green input:checked~.yn-btn{background:var(--green);border-color:var(--green)}
+
+/* PILLS */
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pills label{cursor:pointer}
+.pills input{display:none}
+.pill{display:inline-flex;align-items:center;padding:7px 13px;min-height:36px;background:var(--surf2);border:1.5px solid var(--border);border-radius:99px;font-size:12px;font-weight:500;color:var(--txt2);transition:all var(--ease);user-select:none}
+.pills label:hover .pill{border-color:var(--navy3);background:var(--navy-pale);color:var(--navy)}
+.pills input:checked~.pill{background:var(--navy);border-color:var(--navy);color:#fff;font-weight:600}
+.pills.green input:checked~.pill{background:var(--green);border-color:var(--green)}
+
+/* FORM */
+.grid{display:grid;gap:13px}
+.g2{grid-template-columns:1fr 1fr}
+@media(max-width:560px){.g2{grid-template-columns:1fr}}
+.field{display:flex;flex-direction:column;gap:5px}
+.flabel{font-size:11px;font-weight:700;color:var(--txt3);display:flex;align-items:center;gap:4px}
+.freq{color:var(--red);font-size:12px;line-height:1}
+.field input[type="text"],.field input[type="date"],.field input[type="datetime-local"],.field input[type="tel"],.field textarea{width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--r-sm);font-size:13px;color:var(--txt);background:#fafcff;transition:border-color var(--ease),box-shadow var(--ease);appearance:none;line-height:1.5}
+.field input:focus,.field textarea:focus{outline:none;border-color:var(--navy3);box-shadow:0 0 0 3px rgba(42,95,143,.11);background:#fff}
+.field textarea{resize:vertical;min-height:76px}
+.div{height:1px;background:var(--border2);margin:18px 0}
+.sec{font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--txt5);display:flex;align-items:center;gap:6px;margin-bottom:11px}
+.sec::after{content:'';flex:1;height:1px;background:var(--border2)}
+
+/* CHECKLIST */
+.ck-list{display:flex;flex-direction:column;gap:6px;margin-bottom:18px}
+.ck-item{display:flex;align-items:flex-start;gap:10px;padding:11px 14px;border-radius:var(--r-sm);background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.11);cursor:pointer;user-select:none;transition:all var(--ease);min-height:46px}
+.ck-item:hover{background:rgba(255,255,255,.13);border-color:rgba(255,255,255,.22)}
+.ck-item.done{background:rgba(45,122,84,.18);border-color:rgba(78,205,139,.3)}
+.ck-item input{display:none}
+.ck-n{font-size:9.5px;font-weight:800;color:rgba(255,255,255,.28);min-width:16px;margin-top:3px}
+.ck-item.done .ck-n{color:#6ee7b7}
+.ck-box{width:20px;height:20px;border-radius:6px;flex-shrink:0;margin-top:1px;border:2px solid rgba(255,255,255,.26);background:rgba(255,255,255,.09);display:flex;align-items:center;justify-content:center;transition:all var(--ease)}
+.ck-item.done .ck-box{background:#059669;border-color:#059669}
+.ck-tick{width:10px;height:7px;border-left:2.5px solid #fff;border-bottom:2.5px solid #fff;transform:rotate(-45deg) translateY(-1px);display:none}
+.ck-item.done .ck-tick{display:block}
+.ck-txt{font-size:12.5px;font-weight:500;color:rgba(255,255,255,.82);flex:1;line-height:1.4}
+.ck-item.done .ck-txt{color:#a7f3d0;font-weight:600}
+
+/* ACTIONS */
+.ac-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+@media(max-width:480px){.ac-grid{grid-template-columns:1fr}}
+.ac-item{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:var(--r-sm);min-height:44px;background:var(--surf2);border:1.5px solid var(--border2);cursor:pointer;user-select:none;transition:all var(--ease)}
+.ac-item:hover{border-color:var(--navy3);background:var(--navy-pale)}
+.ac-item.done{background:var(--green-pale);border-color:#8ecfac}
+.ac-item input{display:none}
+.ac-box{width:18px;height:18px;border-radius:5px;flex-shrink:0;border:2px solid var(--border);background:#fff;display:flex;align-items:center;justify-content:center;transition:all var(--ease)}
+.ac-item.done .ac-box{background:var(--green);border-color:var(--green)}
+.ac-tick{width:8px;height:6px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(-45deg) translateY(-1px);display:none}
+.ac-item.done .ac-tick{display:block}
+.ac-txt{font-size:12px;font-weight:500;color:var(--txt2)}
+.ac-item.done .ac-txt{color:var(--green);font-weight:700}
+
+/* MEMO */
+.memo-nav{display:flex;border-bottom:2px solid var(--border2);margin-bottom:14px;overflow-x:auto}
+.mtab{padding:7px 14px;font-size:11.5px;font-weight:600;color:var(--txt4);cursor:pointer;border-bottom:2.5px solid transparent;margin-bottom:-2px;transition:all var(--ease);white-space:nowrap;user-select:none}
+.mtab:hover{color:var(--navy)}.mtab.on{color:var(--navy);border-bottom-color:var(--navy)}
+.mpanel{display:none;flex-direction:column;gap:9px}.mpanel.on{display:flex}
+.mc{border-radius:var(--r-md);padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.mc-w{background:var(--red-pale);border:1.5px solid #f0ada8}
+.mc-s{background:var(--green-pale);border:1.5px solid #7ecba1}
+.mc-v{background:var(--navy-pale);border:1.5px solid #91b4d4}
+.mc-i{background:var(--purple-pale);border:1.5px solid #b39dd8}
+.mc-lbl{font-size:10px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;display:flex;align-items:center;gap:4px}
+.mc-w .mc-lbl{color:var(--red)}.mc-s .mc-lbl{color:var(--green)}.mc-v .mc-lbl{color:var(--navy)}.mc-i .mc-lbl{color:var(--purple)}
+.mc-tags{display:flex;flex-wrap:wrap;gap:5px}
+.mc-tag{font-size:11px;font-weight:600;padding:3px 9px;border-radius:99px;cursor:pointer;user-select:none;transition:all var(--ease);border:1.5px solid transparent}
+.mc-w .mc-tag{background:rgba(192,57,43,.09);color:var(--red);border-color:rgba(192,57,43,.18)}.mc-w .mc-tag.sel{background:var(--red);color:#fff}
+.mc-s .mc-tag{background:rgba(45,122,84,.09);color:var(--green);border-color:rgba(45,122,84,.18)}.mc-s .mc-tag.sel{background:var(--green);color:#fff}
+.mc-v .mc-tag{background:rgba(26,58,92,.09);color:var(--navy);border-color:rgba(26,58,92,.18)}.mc-v .mc-tag.sel{background:var(--navy);color:#fff}
+.mc-i .mc-tag{background:rgba(91,63,160,.09);color:var(--purple);border-color:rgba(91,63,160,.18)}.mc-i .mc-tag.sel{background:var(--purple);color:#fff}
+.mc-ta{width:100%;padding:9px 11px;border-radius:var(--r-sm);resize:vertical;min-height:68px;font-size:12.5px;font-family:var(--font);line-height:1.55;border:1.5px solid rgba(0,0,0,.09);background:rgba(255,255,255,.6);transition:border-color var(--ease),box-shadow var(--ease)}
+.mc-ta:focus{outline:none;border-color:rgba(0,0,0,.24);box-shadow:0 0 0 3px rgba(0,0,0,.06);background:rgba(255,255,255,.9)}
+
+/* STATUS */
+.st-row{display:flex;gap:6px;flex-wrap:wrap}
+.sopt{display:flex;align-items:center;gap:5px;padding:8px 14px;border-radius:var(--r-sm);min-height:40px;border:1.5px solid var(--border);background:var(--surf2);cursor:pointer;font-size:12px;font-weight:600;color:var(--txt3);user-select:none;transition:all var(--ease)}
+.sopt:hover{border-color:var(--navy3);color:var(--navy)}
+.sopt input{display:none}
+.sopt.s-new:has(input:checked){background:var(--navy-pale);border-color:var(--navy);color:var(--navy)}
+.sopt.s-prog:has(input:checked){background:var(--teal-pale);border-color:var(--teal);color:var(--teal)}
+.sopt.s-book:has(input:checked){background:var(--green-pale);border-color:var(--green);color:var(--green)}
+.sopt.s-hold:has(input:checked){background:var(--amber-pale);border-color:var(--amber);color:var(--amber)}
+.sopt.s-end:has(input:checked){background:var(--red-pale);border-color:var(--red);color:var(--red)}
+
+/* PREVIEW MODAL */
+.modal-bg{position:fixed;inset:0;background:rgba(15,30,55,.6);z-index:999;display:none;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)}
+.modal-bg.show{display:flex}
+.modal{background:#fff;border-radius:16px;width:100%;max-width:760px;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(10,25,60,.4)}
+.modal-hd{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #e8edf4;background:#f4f8fc}
+.modal-hd h3{font-size:15px;font-weight:700;color:var(--navy)}
+.modal-hd-btns{display:flex;gap:8px}
+.modal-close{background:none;border:1px solid #d0d8e4;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;color:var(--txt3);cursor:pointer;transition:all var(--ease)}
+.modal-close:hover{background:#f1f5f9}
+.btn-print-now{background:var(--navy);color:#fff;border:none;border-radius:8px;padding:7px 16px;font-size:12px;font-weight:600;cursor:pointer;transition:background var(--ease)}
+.btn-print-now:hover{background:var(--navy2)}
+.modal-body{overflow-y:auto;padding:24px 28px;flex:1}
+
+/* ================================================================
+   ② PRINT REPORT LAYER — A4 보고서
+   ================================================================ */
+
+/* 화면에서는 숨김 */
+#report{display:none}
+
+/* 미리보기 전용 */
+.preview-mode #report{display:block}
+
+/* 보고서 내부 스타일 (화면 미리보기용) */
+.rpt{font-family:'Noto Sans KR','Malgun Gothic',sans-serif;color:#111;font-size:11.5px;line-height:1.65}
+.rpt-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;border-bottom:2.5px solid #1a3a5c;margin-bottom:14px}
+.rpt-brand{display:flex;align-items:center;gap:10px}
+.rpt-brand-mark{width:32px;height:32px;border-radius:8px;background:#1a3a5c;display:flex;align-items:center;justify-content:center;font-size:15px;color:#fff}
+.rpt-brand-txt strong{font-size:14px;font-weight:800;color:#1a3a5c;display:block;letter-spacing:-.2px}
+.rpt-brand-txt span{font-size:10.5px;color:#6a7d92}
+.rpt-doc-info{text-align:right;font-size:10px;color:#888}
+.rpt-doc-info strong{display:block;font-size:11px;color:#333;font-weight:700}
+.rpt-title{text-align:center;margin-bottom:14px}
+.rpt-title h1{font-size:17px;font-weight:900;color:#1a3a5c;letter-spacing:-.4px}
+.rpt-title p{font-size:10.5px;color:#888;margin-top:3px}
+
+/* Report body grid */
+.rpt-body{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.rpt-col-full{grid-column:1/-1}
+.rpt-sect{background:#f9fafb;border:1px solid #e2e8f0;border-left:3.5px solid #1a3a5c;border-radius:6px;padding:9px 11px}
+.rpt-sect.green{border-left-color:#2d7a54}
+.rpt-sect.amber{border-left-color:#b87c2a}
+.rpt-sect.red{border-left-color:#c0392b}
+.rpt-sect.purple{border-left-color:#5b3fa0}
+.rpt-sect-ttl{font-size:9.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#6a7d92;margin-bottom:7px;display:flex;align-items:center;gap:5px}
+.rpt-row{display:flex;align-items:flex-start;gap:6px;margin-bottom:4px;font-size:11px;line-height:1.55}
+.rpt-row:last-child{margin-bottom:0}
+.rpt-k{font-weight:700;color:#3a5068;min-width:68px;flex-shrink:0}
+.rpt-v{color:#1a2b3c;flex:1}
+.rpt-v.empty{color:#bbb;font-style:italic}
+.rpt-auto{font-size:11px;color:#2d4a65;line-height:1.7;background:#eef4fa;border-radius:4px;padding:7px 9px;border-left:3px solid #2a5f8f}
+.rpt-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.rpt-tag{font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;background:#1a3a5c;color:#fff}
+.rpt-tag.green{background:#2d7a54}.rpt-tag.red{background:#c0392b}.rpt-tag.amber{background:#b87c2a}.rpt-tag.purple{background:#5b3fa0}
+.rpt-judgment{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.rpt-jitem{font-size:10.5px;font-weight:700;padding:3px 10px;border-radius:99px;border:1.5px solid}
+.rpt-jitem.r{background:#fdecea;color:#c0392b;border-color:#f5aea8}
+.rpt-jitem.g{background:#e6f5ec;color:#2d7a54;border-color:#80c9a1}
+.rpt-jitem.n{background:#eaf1f8;color:#1a3a5c;border-color:#8db5d7}
+.rpt-jitem.a{background:#fef3c7;color:#b45309;border-color:#f6c87a}
+.rpt-footer{margin-top:10px;padding-top:8px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;font-size:9.5px;color:#aaa}
+.rpt-sig{display:flex;align-items:center;gap:20px}
+.rpt-sig-item{text-align:center;border-top:1px solid #ccc;padding-top:5px;min-width:70px}
+.rpt-sig-item span{display:block;font-size:9px;color:#aaa;margin-bottom:16px}
+
+/* ================================================================
+   PRINT MEDIA — A4 출력 전용
+   ================================================================ */
+@media print{
+  @page{size:A4;margin:12mm 14mm}
+
+  /* 화면 UI 전부 숨김 */
+  .hdr,.pstrip,.wrap,.modal-bg{display:none!important}
+
+  /* 보고서만 표시 */
+  #report{display:block!important}
+
+  body{background:#fff;margin:0;padding:0;font-size:11px;color:#000;
+       -webkit-print-color-adjust:exact;print-color-adjust:exact}
+
+  .rpt{width:100%;font-size:10.5px;line-height:1.6}
+  .rpt-header{padding-bottom:8px;margin-bottom:12px}
+  .rpt-brand-mark{background:#1a3a5c;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .rpt-brand-txt strong{font-size:13px}
+  .rpt-title h1{font-size:16px}
+  .rpt-body{gap:8px}
+  .rpt-sect{background:#f9fafb;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .rpt-auto{background:#eef4fa;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .rpt-tag{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .rpt-jitem{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+}
+
+/* ================================================================
+   MOBILE
+   ================================================================ */
+@media(max-width:480px){
+  .hdr-in{height:50px;padding:0 12px}
+  .card-hd{padding:11px 14px}.card-bd{padding:16px 14px 18px}
+  .ocard{padding:11px 12px;min-height:50px;font-size:13px}
+  .ocard-ico{font-size:16px}
+  .ck-item{min-height:48px;padding:10px 12px}
+  .ac-item{min-height:42px}
+  .mtab{padding:6px 11px;font-size:11px}
+  .modal-body{padding:16px 18px}
+}
+</style>
+</head>
+<body>
+
+<!-- ================================================================
+     HEADER
+     ================================================================ -->
+<header class="hdr" role="banner">
+  <div class="hdr-in">
+    <a class="brand" href="#">
+      <div class="brand-mark">🌿</div>
+      <div class="brand-txt">
+        <strong>행복한요양원 녹양역점</strong>
+        <span>전화상담 시스템 · v6.0</span>
+      </div>
+    </a>
+    <div class="hdr-mid no-print">
+      <span class="hdr-chip" id="chipCaller">문의자: <strong>—</strong></span>
+      <span class="hdr-chip" id="chipConsultant">상담자: <strong>—</strong></span>
+    </div>
+    <div class="tw no-print">
+      <span class="tw-ico">📞</span>
+      <span class="tw-val" id="twVal">00:00</span>
+      <button class="tbtn" id="twBtn" onclick="toggleTimer()">▶</button>
+      <button class="tbtn" onclick="resetTimer()">↺</button>
+    </div>
+    <div class="hdr-btns no-print">
+      <button class="btn btn-gold" onclick="showPreview()">👁 미리보기</button>
+      <button class="btn btn-ghost" onclick="window.print()">🖨 인쇄</button>
+      <button class="btn btn-red" onclick="resetAll()">↺ 초기화</button>
+    </div>
+  </div>
+</header>
+
+<!-- ================================================================
+     PROGRESS STRIP
+     ================================================================ -->
+<div class="pstrip no-print">
+  <div class="pstrip-in">
+    <div class="pstages">
+      <div class="pstage"><div class="pdot active" id="pd1">1</div></div>
+      <div class="pstage"><div class="pline" id="pl1"></div><div class="pdot" id="pd2">2</div></div>
+      <div class="pstage"><div class="pline" id="pl2"></div><div class="pdot" id="pd3">3</div></div>
+      <div class="pstage"><div class="pline" id="pl3"></div><div class="pdot" id="pd4">4</div></div>
+      <div class="pstage"><div class="pline" id="pl4"></div><div class="pdot" id="pd5">5</div></div>
+      <div class="pstage"><div class="pline" id="pl5"></div><div class="pdot" id="pd6">6</div></div>
+    </div>
+    <div class="pbar-wrap">
+      <div class="pbar"><div class="pbar-fill" id="pbarFill"></div></div>
+      <span class="ppct" id="pbarPct">0%</span>
+    </div>
+    <div class="jbs" id="jbWrap">
+      <span class="jb jb-navy">분석 중…</span>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     ① SCREEN LAYER — 상담 입력 UI
+     ================================================================ -->
+<main class="wrap">
+
+  <!-- 오프닝 -->
+  <div class="opening">
+    <div class="opening-ico">🌿</div>
+    <div class="opening-txt">
+      <h2>📞 전화 수신 — 오프닝 멘트</h2>
+      <div class="opening-lines">
+        <div class="oline"><span class="oline-ico">💬</span><p>"네, 행복한요양원 녹양역점입니다. 문의주셔서 감사합니다. 어떤 상황이신지 편하게 말씀해 주세요."</p></div>
+        <div class="oline"><span class="oline-ico">💬</span><p>"어르신 현재 상황을 조금만 여쭤봐도 괜찮으실까요? 딱 맞는 케어를 안내드릴 수 있도록요."</p></div>
+      </div>
+      <p class="opening-tip">💡 타이머 ▶ 클릭 → 통화 시작 / 상단 미리보기·인쇄로 보고서 출력</p>
+    </div>
+  </div>
+
+  <!-- ── STAGE 1: 상황 파악 ── -->
+  <div class="card open" id="s1">
+    <div class="card-hd" onclick="toggle('s1')">
+      <span class="sdot">1</span>
+      <div class="card-ico ico-navy">🔍</div>
+      <div class="card-ttl-wrap"><div class="card-ttl">상황 파악</div><div class="card-sub">핵심 6가지 — 빠르게 체크</div></div>
+      <span class="card-arr">▾</span>
+    </div>
+    <div class="card-bd">
+      <div class="q-block">
+        <div class="sbox"><div class="sbox-tag">🗣 읽어보세요</div><div class="sbox-main">"어르신 지금 어디에 계신 상태이세요?"</div><div class="sbox-hint">→ 병원·요양병원이면 퇴원 일정 추가 확인</div></div>
+        <div class="opts c3">
+          <label><input type="radio" name="residence" value="집"><div class="ocard"><span class="ocard-ico">🏠</span><div>집<span class="ocard-sub">자택 거주 중</span></div></div></label>
+          <label><input type="radio" name="residence" value="병원"><div class="ocard"><span class="ocard-ico">🏥</span><div>병원<span class="ocard-sub">입원 치료 중</span></div></div></label>
+          <label><input type="radio" name="residence" value="요양병원"><div class="ocard"><span class="ocard-ico">🩺</span><div>요양병원<span class="ocard-sub">장기 입원</span></div></div></label>
+          <label><input type="radio" name="residence" value="재활병원"><div class="ocard"><span class="ocard-ico">🏋️</span><div>재활병원<span class="ocard-sub">재활 치료 중</span></div></div></label>
+          <label><input type="radio" name="residence" value="다른시설"><div class="ocard"><span class="ocard-ico">🏨</span><div>다른 요양원<span class="ocard-sub">이전 검토 중</span></div></div></label>
+          <label><input type="radio" name="residence" value="기타"><div class="ocard"><span class="ocard-ico">📍</span><div>기타</div></div></label>
+        </div>
+      </div>
+      <div class="q-block">
+        <div class="sbox"><div class="sbox-tag">🗣 읽어보세요</div><div class="sbox-main">"장기요양등급은 이미 받으신 상태세요?"</div><div class="sbox-hint">→ 없거나 모르시면 신청 절차 간단히 안내</div></div>
+        <div class="opts">
+          <label><input type="radio" name="ltcGrade" value="1~2등급"><div class="ocard"><span class="ocard-ico">🏅</span><div>있음 (1~2등급)<span class="ocard-sub">중증</span></div></div></label>
+          <label><input type="radio" name="ltcGrade" value="3~5등급"><div class="ocard"><span class="ocard-ico">🏷</span><div>있음 (3~5등급)<span class="ocard-sub">경·중증</span></div></div></label>
+          <label><input type="radio" name="ltcGrade" value="없음"><div class="ocard"><span class="ocard-ico">❌</span><div>없음<span class="ocard-sub">미신청</span></div></div></label>
+          <label><input type="radio" name="ltcGrade" value="신청예정"><div class="ocard"><span class="ocard-ico">📋</span><div>신청 예정</div></div></label>
+          <label><input type="radio" name="ltcGrade" value="잘모름"><div class="ocard"><span class="ocard-ico">🤷</span><div>잘 모르겠어요</div></div></label>
+          <label><input type="radio" name="ltcGrade" value="인지지원"><div class="ocard"><span class="ocard-ico">🧩</span><div>인지지원등급<span class="ocard-sub">치매 전담</span></div></div></label>
+        </div>
+      </div>
+      <div class="q-block">
+        <div class="sbox"><div class="sbox-tag">🗣 읽어보세요</div><div class="sbox-main">"입소는 어느 정도 시기로 생각하고 계세요?"</div><div class="sbox-hint">→ "바로" "1주일 내"이면 즉시 공실 확인 필요</div></div>
+        <div class="opts">
+          <label><input type="radio" name="admitTime" value="바로"><div class="ocard"><span class="ocard-ico">🔴</span><div>바로<span class="ocard-sub">지금 당장</span></div></div></label>
+          <label><input type="radio" name="admitTime" value="1주일내"><div class="ocard"><span class="ocard-ico">🟠</span><div>1주일 내<span class="ocard-sub">긴급</span></div></div></label>
+          <label><input type="radio" name="admitTime" value="2주일내"><div class="ocard"><span class="ocard-ico">🟡</span><div>2주일 내</div></div></label>
+          <label><input type="radio" name="admitTime" value="한달내"><div class="ocard"><span class="ocard-ico">🟢</span><div>한 달 내<span class="ocard-sub">여유 있음</span></div></div></label>
+          <label><input type="radio" name="admitTime" value="고민중"><div class="ocard"><span class="ocard-ico">⚪</span><div>아직 고민 중</div></div></label>
+        </div>
+      </div>
+      <div class="q-block">
+        <div class="sbox"><div class="sbox-tag">🗣 읽어보세요</div><div class="sbox-main">"거동은 어느 정도 가능하세요?"</div><div class="sbox-hint">→ 휠체어·와상이면 욕창·배변 케어 확인 필요</div></div>
+        <div class="opts">
+          <label><input type="radio" name="mobility" value="혼자걸음"><div class="ocard"><span class="ocard-ico">🚶</span><div>혼자 걸으심<span class="ocard-sub">독립 보행</span></div></div></label>
+          <label><input type="radio" name="mobility" value="부축필요"><div class="ocard"><span class="ocard-ico">🤝</span><div>부축 필요<span class="ocard-sub">보조 이동</span></div></div></label>
+          <label><input type="radio" name="mobility" value="휠체어"><div class="ocard"><span class="ocard-ico">🧑‍🦽</span><div>휠체어</div></div></label>
+          <label><input type="radio" name="mobility" value="와상"><div class="ocard"><span class="ocard-ico">🛏</span><div>거의 누워계심<span class="ocard-sub">와상 상태</span></div></div></label>
+        </div>
+      </div>
+      <div class="q-block">
+        <div class="sbox"><div class="sbox-tag">🗣 읽어보세요</div><div class="sbox-main">"인지나 기억력 쪽은 어떠세요?"</div><div class="sbox-hint">→ 치매 진행이면 전담 케어 안내 준비</div></div>
+        <div class="opts">
+          <label><input type="radio" name="cognition" value="대화가능"><div class="ocard"><span class="ocard-ico">💬</span><div>대화 문제 없음</div></div></label>
+          <label><input type="radio" name="cognition" value="약간저하"><div class="ocard"><span class="ocard-ico">🌤</span><div>약간 저하<span class="ocard-sub">가끔 혼동</span></div></div></label>
+          <label><input type="radio" name="cognition" value="많이저하"><div class="ocard"><span class="ocard-ico">🌧</span><div>많이 저하<span class="ocard-sub">지원 필요</span></div></div></label>
+          <label><input type="radio" name="cognition" value="치매진행"><div class="ocard"><span class="ocard-ico">🌩</span><div>치매 진행<span class="ocard-sub">전담 케어</span></div></div></label>
+        </div>
+      </div>
+      <div class="q-block">
+        <div class="sbox green"><div class="sbox-tag">💚 공감 포인트</div><div class="sbox-main">"지금 가장 걱정되시는 부분이 어떤 부분이세요?"</div><div class="sbox-hint">→ 잠시 기다려 보호자가 충분히 이야기하도록 하세요 (복수 선택)</div></div>
+        <div class="opts concern">
+          <label><input type="checkbox" name="concern" value="가정돌봄어려움" data-track><div class="ocard"><span class="ocard-ico">🏠</span><div>집에서 돌보기 어려움</div></div></label>
+          <label><input type="checkbox" name="concern" value="병원퇴원예정" data-track><div class="ocard"><span class="ocard-ico">🏥</span><div>병원 퇴원 예정</div></div></label>
+          <label><input type="checkbox" name="concern" value="야간돌봄어려움" data-track><div class="ocard"><span class="ocard-ico">🌙</span><div>야간 돌봄 어려움</div></div></label>
+          <label><input type="checkbox" name="concern" value="식사배변관리" data-track><div class="ocard"><span class="ocard-ico">🍽</span><div>식사·배변 관리</div></div></label>
+          <label><input type="checkbox" name="concern" value="낙상위험" data-track><div class="ocard"><span class="ocard-ico">⚠️</span><div>낙상 위험</div></div></label>
+          <label><input type="checkbox" name="concern" value="문제행동" data-track><div class="ocard"><span class="ocard-ico">😰</span><div>문제행동</div></div></label>
+          <label><input type="checkbox" name="concern" value="재활필요" data-track><div class="ocard"><span class="ocard-ico">🏃</span><div>재활 필요</div></div></label>
+          <label><input type="checkbox" name="concern" value="기타" data-track><div class="ocard"><span class="ocard-ico">📝</span><div>기타</div></div></label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STAGE 2: 돌봄·의료 ── -->
+  <div class="card open" id="s2">
+    <div class="card-hd" onclick="toggle('s2')">
+      <span class="sdot">2</span>
+      <div class="card-ico ico-red">💊</div>
+      <div class="card-ttl-wrap"><div class="card-ttl">돌봄·의료 확인</div><div class="card-sub">일상 케어 수준 파악</div></div>
+      <span class="card-arr">▾</span>
+    </div>
+    <div class="card-bd">
+      <div class="trans"><div class="trans-tag">💬 연결 멘트</div><p>"말씀해 주신 상황 기준으로 조금만 더 여쭤볼게요. 저희가 맞는 케어를 준비하려면 일상적인 부분도 파악이 필요해서요."</p></div>
+      <div class="q-block">
+        <div class="sbox"><div class="sbox-tag">🗣 읽어보세요</div><div class="sbox-main">"식사는 혼자 가능하신 편이세요?"</div></div>
+        <div class="yn-row yn"><label><input type="radio" name="eating" value="독립"><span class="yn-btn">🍽 혼자 드심</span></label><label><input type="radio" name="eating" value="보조필요"><span class="yn-btn">🤝 도움 필요</span></label><label><input type="radio" name="eating" value="경관식"><span class="yn-btn">🩺 경관식</span></label></div>
+      </div>
+      <div class="q-block">
+        <div class="sbox"><div class="sbox-tag">🗣 읽어보세요</div><div class="sbox-main">"배변 케어가 필요하신 상태세요?"</div></div>
+        <div class="yn-row yn"><label><input type="radio" name="bowel" value="자립"><span class="yn-btn">✅ 자립</span></label><label><input type="radio" name="bowel" value="부분도움"><span class="yn-btn">🤝 부분 도움</span></label><label><input type="radio" name="bowel" value="기저귀"><span class="yn-btn">💧 기저귀</span></label></div>
+      </div>
+      <div class="q-block">
+        <div class="sbox"><div class="sbox-tag">🗣 읽어보세요</div><div class="sbox-main">"현재 드시는 약은 있으세요?"</div></div>
+        <div class="yn-row yn"><label><input type="radio" name="medication" value="있음"><span class="yn-btn">💊 있음</span></label><label><input type="radio" name="medication" value="없음"><span class="yn-btn">없음</span></label><label><input type="radio" name="medication" value="모름"><span class="yn-btn">🤷 모름</span></label></div>
+      </div>
+      <div class="q-block">
+        <div class="sbox"><div class="sbox-tag">🗣 읽어보세요</div><div class="sbox-main">"병원은 자주 가셔야 하는 편이세요?"</div><div class="sbox-hint">→ 정기 외래·투석이면 병원 동행 케어 안내</div></div>
+        <div class="yn-row yn"><label><input type="radio" name="hospital" value="자주"><span class="yn-btn">🚑 자주 (주 1회+)</span></label><label><input type="radio" name="hospital" value="가끔"><span class="yn-btn">월 1~2회</span></label><label><input type="radio" name="hospital" value="거의없음"><span class="yn-btn">거의 없음</span></label></div>
+      </div>
+      <div class="q-block">
+        <div class="sbox"><div class="sbox-tag">🗣 읽어보세요</div><div class="sbox-main">"낙상 위험은 좀 있으신가요?"</div><div class="sbox-hint">→ "높음"이면 안전 시설 강점 강조</div></div>
+        <div class="yn-row yn"><label><input type="radio" name="fallRisk" value="높음"><span class="yn-btn">⚠ 높음</span></label><label><input type="radio" name="fallRisk" value="보통"><span class="yn-btn">보통</span></label><label><input type="radio" name="fallRisk" value="낮음"><span class="yn-btn">낮음</span></label></div>
+      </div>
+      <div class="q-block">
+        <div class="sbox"><div class="sbox-tag">🗣 읽어보세요</div><div class="sbox-main">"야간에도 케어가 필요하신 상황이세요?"</div></div>
+        <div class="yn-row yn"><label><input type="radio" name="nightCare" value="매일필요"><span class="yn-btn">🌙 매일 필요</span></label><label><input type="radio" name="nightCare" value="가끔"><span class="yn-btn">가끔</span></label><label><input type="radio" name="nightCare" value="불필요"><span class="yn-btn">불필요</span></label></div>
+      </div>
+      <div class="div"></div>
+      <div class="sec">추가 의료 항목</div>
+      <div class="pills green" style="gap:7px">
+        <label><input type="checkbox" name="medical" value="당뇨" data-track><span class="pill">🩸 당뇨</span></label>
+        <label><input type="checkbox" name="medical" value="고혈압" data-track><span class="pill">❤️ 고혈압</span></label>
+        <label><input type="checkbox" name="medical" value="심장질환" data-track><span class="pill">💓 심장질환</span></label>
+        <label><input type="checkbox" name="medical" value="뇌졸중" data-track><span class="pill">🧠 뇌졸중 후유증</span></label>
+        <label><input type="checkbox" name="medical" value="욕창" data-track><span class="pill">🩹 욕창</span></label>
+        <label><input type="checkbox" name="medical" value="재활필요" data-track><span class="pill">🏃 재활 필요</span></label>
+        <label><input type="checkbox" name="medical" value="치매전담" data-track><span class="pill">🧩 치매 전담</span></label>
+        <label><input type="checkbox" name="medical" value="석션" data-track><span class="pill">🫁 석션</span></label>
+      </div>
+      <div class="field" style="margin-top:13px">
+        <label class="flabel">보호자 특별 요청 케어</label>
+        <textarea id="careRequest" placeholder="보호자가 특별히 부탁하신 내용…" data-track style="min-height:64px"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STAGE 3: 조건 + 방문 유도 ── -->
+  <div class="card open" id="s3">
+    <div class="card-hd" onclick="toggle('s3')">
+      <span class="sdot">3</span>
+      <div class="card-ico ico-green">🏠</div>
+      <div class="card-ttl-wrap"><div class="card-ttl">입소 조건 + 방문 유도</div><div class="card-sub">조건 확인 → 자연스럽게 방문상담으로 연결</div></div>
+      <span class="card-arr">▾</span>
+    </div>
+    <div class="card-bd">
+      <div class="trans"><div class="trans-tag">💬 연결 멘트</div><p>"입소를 고려하실 때 중요하게 보시는 부분도 여쭤봐도 될까요? 저희가 딱 맞는 케어를 준비해 드리고 싶어서요."</p></div>
+      <div class="q-block">
+        <div class="sbox"><div class="sbox-tag">🗣 읽어보세요</div><div class="sbox-main">"입소 시 어떤 부분이 가장 중요하세요?"</div><div class="sbox-hint">→ 복수 선택 가능 / 선택된 항목을 시설 강점과 연결해 설명</div></div>
+        <div class="opts concern" style="grid-template-columns:1fr 1fr">
+          <label><input type="checkbox" name="priority" value="비용" data-track><div class="ocard"><span class="ocard-ico">💰</span><div>비용</div></div></label>
+          <label><input type="checkbox" name="priority" value="청결" data-track><div class="ocard"><span class="ocard-ico">✨</span><div>청결</div></div></label>
+          <label><input type="checkbox" name="priority" value="위치" data-track><div class="ocard"><span class="ocard-ico">📍</span><div>위치·접근성</div></div></label>
+          <label><input type="checkbox" name="priority" value="돌봄수준" data-track><div class="ocard"><span class="ocard-ico">🏥</span><div>돌봄 수준</div></div></label>
+          <label><input type="checkbox" name="priority" value="재활" data-track><div class="ocard"><span class="ocard-ico">🏃</span><div>재활 가능 여부</div></div></label>
+          <label><input type="checkbox" name="priority" value="식사" data-track><div class="ocard"><span class="ocard-ico">🍱</span><div>식사</div></div></label>
+          <label><input type="checkbox" name="priority" value="면회편의" data-track><div class="ocard"><span class="ocard-ico">👨‍👩‍👧</span><div>면회 편의</div></div></label>
+          <label><input type="checkbox" name="priority" value="응급대응" data-track><div class="ocard"><span class="ocard-ico">🚨</span><div>응급 대응</div></div></label>
+          <label><input type="checkbox" name="priority" value="분위기" data-track><div class="ocard"><span class="ocard-ico">🌿</span><div>시설 분위기</div></div></label>
+          <label><input type="checkbox" name="priority" value="안정감" data-track><div class="ocard"><span class="ocard-ico">🕊</span><div>안정감·편안함</div></div></label>
+        </div>
+      </div>
+      <div class="q-block">
+        <div class="sbox target"><div class="sbox-tag">🎯 방문상담 유도</div><div class="sbox-main">"혹시 방문해서 직접 보시는 건 어떠세요? 직접 보시면 훨씬 도움이 되실 거예요."</div><div class="sbox-hint">→ "가능"이면 바로 일정 잡기 / "조율 필요"면 언제가 편하신지 여쭤보기</div></div>
+        <div class="opts c3">
+          <label><input type="radio" name="visitIntent" value="방문가능"><div class="ocard"><span class="ocard-ico">✅</span><div>방문 가능<span class="ocard-sub">일정 바로 조율</span></div></div></label>
+          <label><input type="radio" name="visitIntent" value="일정조율필요"><div class="ocard"><span class="ocard-ico">📅</span><div>일정 조율 필요<span class="ocard-sub">연락 후 확정</span></div></div></label>
+          <label><input type="radio" name="visitIntent" value="아직고민중"><div class="ocard"><span class="ocard-ico">🤔</span><div>아직 고민 중<span class="ocard-sub">자료 먼저</span></div></div></label>
+        </div>
+      </div>
+      <div class="grid g2">
+        <div class="field"><label class="flabel">방문 가능 일정</label><input type="text" id="visitSchedule" placeholder="예) 이번 주 토요일, 평일 오후…" data-track></div>
+        <div class="field"><label class="flabel">지역 선호</label><input type="text" id="locationPref" placeholder="예) 의정부 근처…" data-track></div>
+      </div>
+      <div class="grid g2" style="margin-top:12px">
+        <div class="field">
+          <label class="flabel">희망 방 형태</label>
+          <div class="yn-row yn"><label><input type="radio" name="roomType" value="1인실"><span class="yn-btn">1인실</span></label><label><input type="radio" name="roomType" value="2인실"><span class="yn-btn">2인실</span></label><label><input type="radio" name="roomType" value="상관없음"><span class="yn-btn">상관없음</span></label></div>
+        </div>
+        <div class="field">
+          <label class="flabel">비용 민감도</label>
+          <div class="yn-row yn"><label><input type="radio" name="budget" value="최우선"><span class="yn-btn">💰 최우선</span></label><label><input type="radio" name="budget" value="보통"><span class="yn-btn">보통</span></label><label><input type="radio" name="budget" value="무관"><span class="yn-btn">무관</span></label></div>
+        </div>
+      </div>
+      <div class="q-block" style="margin-top:18px;margin-bottom:0">
+        <div class="sbox"><div class="sbox-tag">🗣 읽어보세요</div><div class="sbox-main">"연락은 어떤 방식이 편하실까요?"</div></div>
+        <div class="opts c3"><label><input type="radio" name="contactPref" value="전화"><div class="ocard"><span class="ocard-ico">📞</span><div>전화</div></div></label><label><input type="radio" name="contactPref" value="문자"><div class="ocard"><span class="ocard-ico">💬</span><div>문자</div></div></label><label><input type="radio" name="contactPref" value="카카오톡"><div class="ocard"><span class="ocard-ico">💛</span><div>카카오톡</div></div></label></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STAGE 4: 마무리 정보 ── -->
+  <div class="card" id="s4">
+    <div class="card-hd" onclick="toggle('s4')">
+      <span class="sdot">4</span>
+      <div class="card-ico ico-warm">📝</div>
+      <div class="card-ttl-wrap"><div class="card-ttl">마무리 — 정보 수집</div><div class="card-sub">통화 말미에만 · 이름·연락처·유입경로</div></div>
+      <span class="card-arr">▾</span>
+    </div>
+    <div class="card-bd">
+      <div class="trans"><div class="trans-tag">💬 마무리 멘트</div><p>"안내드리기 위해 성함이랑 연락처만 남겨주셔도 괜찮으실까요?"</p></div>
+      <div class="grid g2">
+        <div class="field"><label class="flabel">문의자 이름</label><input type="text" id="callerName" placeholder="보호자 성함" data-track></div>
+        <div class="field"><label class="flabel">연락처 <span class="freq">*</span></label><input type="tel" id="callerPhone" placeholder="010-0000-0000" data-track></div>
+        <div class="field">
+          <label class="flabel">어르신과의 관계</label>
+          <div class="yn-row yn" style="flex-wrap:wrap">
+            <label><input type="radio" name="relation" value="자녀"><span class="yn-btn">자녀</span></label>
+            <label><input type="radio" name="relation" value="배우자"><span class="yn-btn">배우자</span></label>
+            <label><input type="radio" name="relation" value="며느리사위"><span class="yn-btn">며느리·사위</span></label>
+            <label><input type="radio" name="relation" value="형제자매"><span class="yn-btn">형제·자매</span></label>
+            <label><input type="radio" name="relation" value="본인"><span class="yn-btn">본인</span></label>
+          </div>
+        </div>
+        <div class="field"><label class="flabel">상담 일시</label><input type="datetime-local" id="consultDate" data-track></div>
+        <div class="field"><label class="flabel">상담자 이름</label><input type="text" id="consultantName" placeholder="담당자 이름" data-track></div>
+      </div>
+      <div class="div"></div>
+      <div class="q-block" style="margin-bottom:0">
+        <div class="sbox"><div class="sbox-tag">🗣 읽어보세요</div><div class="sbox-main">"혹시 어떻게 알고 연락 주셨어요?"</div></div>
+        <div class="opts c3">
+          <label><input type="radio" name="source" value="네이버검색"><div class="ocard"><span class="ocard-ico">🔍</span><div>네이버 검색</div></div></label>
+          <label><input type="radio" name="source" value="블로그"><div class="ocard"><span class="ocard-ico">📝</span><div>블로그</div></div></label>
+          <label><input type="radio" name="source" value="지도"><div class="ocard"><span class="ocard-ico">🗺</span><div>지도앱</div></div></label>
+          <label><input type="radio" name="source" value="소개"><div class="ocard"><span class="ocard-ico">🤝</span><div>지인 소개</div></div></label>
+          <label><input type="radio" name="source" value="현수막"><div class="ocard"><span class="ocard-ico">🚩</span><div>현수막</div></div></label>
+          <label><input type="radio" name="source" value="기타"><div class="ocard"><span class="ocard-ico">📌</span><div>기타</div></div></label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STAGE 5: 체크 + 후속조치 ── -->
+  <div class="card dark open" id="s5">
+    <div class="card-hd" onclick="toggle('s5')">
+      <span class="sdot">5</span>
+      <div class="card-ico" style="background:rgba(255,255,255,.14);font-size:15px">✅</div>
+      <div class="card-ttl-wrap"><div class="card-ttl">필수 체크 + 후속조치</div><div class="card-sub">통화 중 확인 완료 · 상담 후 할 일</div></div>
+      <span class="card-arr">▾</span>
+    </div>
+    <div class="card-bd">
+      <div style="font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:rgba(255,255,255,.32);margin-bottom:9px">✓ 통화 중 확인 완료</div>
+      <div class="ck-list">
+        <div class="ck-item" onclick="toggleCk(this)"><input type="checkbox" class="ck-cb" data-track><span class="ck-n">01</span><div class="ck-box"><div class="ck-tick"></div></div><span class="ck-txt">어르신 현재 계신 곳 확인했다</span></div>
+        <div class="ck-item" onclick="toggleCk(this)"><input type="checkbox" class="ck-cb" data-track><span class="ck-n">02</span><div class="ck-box"><div class="ck-tick"></div></div><span class="ck-txt">장기요양등급 확인했다 (없으면 신청 안내 포함)</span></div>
+        <div class="ck-item" onclick="toggleCk(this)"><input type="checkbox" class="ck-cb" data-track><span class="ck-n">03</span><div class="ck-box"><div class="ck-tick"></div></div><span class="ck-txt">입소 고려 이유를 파악했다</span></div>
+        <div class="ck-item" onclick="toggleCk(this)"><input type="checkbox" class="ck-cb" data-track><span class="ck-n">04</span><div class="ck-box"><div class="ck-tick"></div></div><span class="ck-txt">보호자 가장 큰 걱정을 파악했다</span></div>
+        <div class="ck-item" onclick="toggleCk(this)"><input type="checkbox" class="ck-cb" data-track><span class="ck-n">05</span><div class="ck-box"><div class="ck-tick"></div></div><span class="ck-txt">거동·인지 상태를 확인했다</span></div>
+        <div class="ck-item" onclick="toggleCk(this)"><input type="checkbox" class="ck-cb" data-track><span class="ck-n">06</span><div class="ck-box"><div class="ck-tick"></div></div><span class="ck-txt">의료·돌봄 필요 여부를 확인했다</span></div>
+        <div class="ck-item" onclick="toggleCk(this)"><input type="checkbox" class="ck-cb" data-track><span class="ck-n">07</span><div class="ck-box"><div class="ck-tick"></div></div><span class="ck-txt">비용 민감도를 확인했다</span></div>
+        <div class="ck-item" id="ck-visit" onclick="toggleCk(this)"><input type="checkbox" class="ck-cb" data-track><span class="ck-n">08</span><div class="ck-box"><div class="ck-tick"></div></div><span class="ck-txt">방문상담 / 시설 투어를 제안했다</span></div>
+      </div>
+      <div style="font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:rgba(255,255,255,.32);margin-bottom:9px">→ 후속조치</div>
+      <div class="ac-grid" style="margin-bottom:14px">
+        <div class="ac-item" onclick="toggleAc(this)"><input type="checkbox" class="ac-cb" data-track><div class="ac-box"><div class="ac-tick"></div></div><span class="ac-txt">📅 방문상담 예약</span></div>
+        <div class="ac-item" onclick="toggleAc(this)"><input type="checkbox" class="ac-cb" data-track><div class="ac-box"><div class="ac-tick"></div></div><span class="ac-txt">🏠 시설 투어 안내</span></div>
+        <div class="ac-item" onclick="toggleAc(this)"><input type="checkbox" class="ac-cb" data-track><div class="ac-box"><div class="ac-tick"></div></div><span class="ac-txt">📄 비용표 발송</span></div>
+        <div class="ac-item" onclick="toggleAc(this)"><input type="checkbox" class="ac-cb" data-track><div class="ac-box"><div class="ac-tick"></div></div><span class="ac-txt">📷 시설 사진 발송</span></div>
+        <div class="ac-item" onclick="toggleAc(this)"><input type="checkbox" class="ac-cb" data-track><div class="ac-box"><div class="ac-tick"></div></div><span class="ac-txt">📞 다시 연락</span></div>
+        <div class="ac-item" onclick="toggleAc(this)"><input type="checkbox" class="ac-cb" data-track><div class="ac-box"><div class="ac-tick"></div></div><span class="ac-txt">🔍 내부 검토</span></div>
+        <div class="ac-item" onclick="toggleAc(this)"><input type="checkbox" class="ac-cb" data-track><div class="ac-box"><div class="ac-tick"></div></div><span class="ac-txt">✅ 입소 가능성 판단</span></div>
+        <div class="ac-item" onclick="toggleAc(this)"><input type="checkbox" class="ac-cb" data-track><div class="ac-box"><div class="ac-tick"></div></div><span class="ac-txt">📝 대기자 등록</span></div>
+      </div>
+      <div class="grid g2" style="padding:0 1px">
+        <div class="field"><label class="flabel" style="color:rgba(255,255,255,.5)">방문상담 예약 일시</label><input type="datetime-local" id="visitDateTime" data-track></div>
+        <div class="field"><label class="flabel" style="color:rgba(255,255,255,.5)">다음 연락 예정일</label><input type="date" id="followUpDate" data-track></div>
+        <div class="field"><label class="flabel" style="color:rgba(255,255,255,.5)">담당자</label><input type="text" id="nextOwner" placeholder="담당자 이름" data-track></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STAGE 6: 상담 메모 ── -->
+  <div class="card open" id="s6">
+    <div class="card-hd" onclick="toggle('s6')">
+      <span class="sdot">6</span>
+      <div class="card-ico ico-purple">📝</div>
+      <div class="card-ttl-wrap"><div class="card-ttl">상담 메모</div><div class="card-sub">걱정·강점 연결·방문 포인트·내부 전달</div></div>
+      <span class="card-arr">▾</span>
+    </div>
+    <div class="card-bd">
+      <div class="field" style="margin-bottom:14px">
+        <label class="flabel" style="font-size:12px;color:var(--navy);font-weight:800">📌 상담 핵심 요약</label>
+        <textarea id="memoOneline" placeholder="예) 82세 여성 3등급, 재활병원 퇴원 예정, 1개월 내 입소 희망, 방문상담 권유 → 토요일 10시 예약" data-track style="min-height:56px"></textarea>
+      </div>
+      <div class="memo-nav no-print">
+        <div class="mtab on" onclick="switchMemo(this,'mp1')">😟 보호자 걱정</div>
+        <div class="mtab" onclick="switchMemo(this,'mp2')">💚 시설 강점 연결</div>
+        <div class="mtab" onclick="switchMemo(this,'mp3')">🏠 방문 포인트</div>
+        <div class="mtab" onclick="switchMemo(this,'mp4')">🔒 내부 전달</div>
+      </div>
+      <div class="mpanel on" id="mp1">
+        <div class="mc mc-w"><div class="mc-lbl">😟 보호자 가장 큰 걱정</div><div class="mc-tags" id="t1"><span class="mc-tag" onclick="toggleTag(this,'h1','낙상안전')">낙상·안전</span><span class="mc-tag" onclick="toggleTag(this,'h1','치매진행')">치매 진행</span><span class="mc-tag" onclick="toggleTag(this,'h1','야간위험')">야간 혼자 계심</span><span class="mc-tag" onclick="toggleTag(this,'h1','보호자소진')">보호자 소진</span><span class="mc-tag" onclick="toggleTag(this,'h1','비용부담')">비용 부담</span><span class="mc-tag" onclick="toggleTag(this,'h1','면회거리')">면회 거리</span><span class="mc-tag" onclick="toggleTag(this,'h1','청결걱정')">청결 걱정</span><span class="mc-tag" onclick="toggleTag(this,'h1','식사영양')">식사·영양</span></div><input type="hidden" id="h1" data-track></div>
+        <div class="field"><label class="flabel">상세 내용</label><textarea id="memoC1" placeholder="보호자가 직접 표현한 걱정, 불안, 망설임…" data-track></textarea></div>
+      </div>
+      <div class="mpanel" id="mp2">
+        <div class="mc mc-s"><div class="mc-lbl">💚 시설 강점 연결 포인트</div><div class="mc-tags" id="t2"><span class="mc-tag" onclick="toggleTag(this,'h2','24시간간호')">24시간 간호사</span><span class="mc-tag" onclick="toggleTag(this,'h2','재활전담')">재활 전담</span><span class="mc-tag" onclick="toggleTag(this,'h2','1인실공실')">1인실 공실</span><span class="mc-tag" onclick="toggleTag(this,'h2','치매전담')">치매 전담 케어</span><span class="mc-tag" onclick="toggleTag(this,'h2','청결환경')">청결한 환경</span><span class="mc-tag" onclick="toggleTag(this,'h2','면회편리')">면회 편리</span><span class="mc-tag" onclick="toggleTag(this,'h2','빠른입소')">빠른 입소</span><span class="mc-tag" onclick="toggleTag(this,'h2','따뜻한분위기')">따뜻한 분위기</span></div><input type="hidden" id="h2" data-track></div>
+        <div class="field"><label class="flabel">강점 연결 메모</label><textarea id="memoC2" placeholder="보호자 걱정 → 시설 강점 연결 방식 기록…" data-track></textarea></div>
+      </div>
+      <div class="mpanel" id="mp3">
+        <div class="mc mc-v"><div class="mc-lbl">🏠 방문 시 보여줄 포인트</div><div class="mc-tags" id="t3"><span class="mc-tag" onclick="toggleTag(this,'h3','식당')">식당 분위기</span><span class="mc-tag" onclick="toggleTag(this,'h3','1인실')">1인실 내부</span><span class="mc-tag" onclick="toggleTag(this,'h3','재활실')">재활 치료실</span><span class="mc-tag" onclick="toggleTag(this,'h3','정원')">정원·야외</span><span class="mc-tag" onclick="toggleTag(this,'h3','욕실')">욕실·위생</span><span class="mc-tag" onclick="toggleTag(this,'h3','어르신생활')">어르신 생활 모습</span></div><input type="hidden" id="h3" data-track></div>
+        <div class="field"><label class="flabel">방문 준비 메모</label><textarea id="memoC3" placeholder="이 보호자 방문 때 특별히 준비할 내용…" data-track></textarea></div>
+      </div>
+      <div class="mpanel" id="mp4">
+        <div class="mc mc-i"><div class="mc-lbl">🔒 내부 전달 (보호자 미노출)</div><div class="mc-tags" id="t4"><span class="mc-tag" onclick="toggleTag(this,'h4','원장면담')">원장님 면담</span><span class="mc-tag" onclick="toggleTag(this,'h4','가격협의')">가격 협의 가능</span><span class="mc-tag" onclick="toggleTag(this,'h4','의료검토')">입소 전 의료 검토</span><span class="mc-tag" onclick="toggleTag(this,'h4','가족갈등')">가족 의견 갈등</span><span class="mc-tag" onclick="toggleTag(this,'h4','입소불확실')">결정 불확실</span></div><input type="hidden" id="h4" data-track></div>
+        <div class="field"><label class="flabel">내부 전달 내용</label><textarea id="memoC4" placeholder="팀 내부 공유 메모…" data-track></textarea></div>
+      </div>
+      <div class="div"></div>
+      <div class="grid g2">
+        <div class="field">
+          <label class="flabel">최종 상담 상태</label>
+          <div class="st-row">
+            <label class="sopt s-new"><input type="radio" name="cStatus" value="신규">🟦 신규</label>
+            <label class="sopt s-prog"><input type="radio" name="cStatus" value="진행중">🔵 진행중</label>
+            <label class="sopt s-book"><input type="radio" name="cStatus" value="방문예약">🟢 방문예약</label>
+            <label class="sopt s-hold"><input type="radio" name="cStatus" value="보류">🟡 보류</label>
+            <label class="sopt s-end"><input type="radio" name="cStatus" value="종료">🔴 종료</label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- ================================================================
+     ② PRINT REPORT LAYER — A4 자동 보고서 (숨김 → 인쇄 시 표시)
+     ================================================================ -->
+<div id="report">
+  <div class="rpt" id="rptBody">
+    <!-- JS가 동적으로 생성 -->
+  </div>
+</div>
+
+<!-- ================================================================
+     PREVIEW MODAL
+     ================================================================ -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <div class="modal-hd">
+      <h3>📄 출력 미리보기 — A4 요약 보고서</h3>
+      <div class="modal-hd-btns">
+        <button class="modal-close" onclick="closePreview()">닫기</button>
+        <button class="btn-print-now" onclick="window.print()">🖨 바로 인쇄</button>
+      </div>
+    </div>
+    <div class="modal-body" id="modalBody">
+      <!-- 미리보기 내용이 여기에 표시됨 -->
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     JAVASCRIPT
+     ================================================================ -->
+<script>
+'use strict';
+const STORE='haengbok_v6';
+const RG=['residence','ltcGrade','admitTime','mobility','cognition','eating','bowel','medication','hospital','fallRisk','nightCare','visitIntent','roomType','budget','contactPref','relation','source','cStatus'];
+
+/* ── TIMER ── */
+let tSec=0,tRun=false,tRef=null;
+const fmt=s=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+function toggleTimer(){const b=document.getElementById('twBtn'),v=document.getElementById('twVal');if(tRun){clearInterval(tRef);b.textContent='▶';v.classList.remove('run');}else{tRef=setInterval(()=>{tSec++;v.textContent=fmt(tSec);},1000);b.textContent='⏸';v.classList.add('run');}tRun=!tRun;}
+function resetTimer(){clearInterval(tRef);tRun=false;tSec=0;document.getElementById('twBtn').textContent='▶';const v=document.getElementById('twVal');v.textContent='00:00';v.classList.remove('run');}
+
+/* ── CARD TOGGLE ── */
+function toggle(id){document.getElementById(id).classList.toggle('open');save();}
+
+/* ── CHECKLIST ── */
+function toggleCk(el){el.classList.toggle('done');const cb=el.querySelector('.ck-cb');if(cb)cb.checked=el.classList.contains('done');onUpdate();}
+
+/* ── ACTION ── */
+function toggleAc(el){el.classList.toggle('done');const cb=el.querySelector('.ac-cb');if(cb)cb.checked=el.classList.contains('done');onUpdate();}
+
+/* ── MEMO TAG ── */
+function toggleTag(el,hId,val){el.classList.toggle('sel');const h=document.getElementById(hId);if(!h)return;let vals=h.value?h.value.split(',').filter(Boolean):[];if(el.classList.contains('sel')){if(!vals.includes(val))vals.push(val);}else vals=vals.filter(v=>v!==val);h.value=vals.join(',');onUpdate();}
+
+/* ── MEMO TAB ── */
+function switchMemo(tab,pid){document.querySelectorAll('.mtab').forEach(t=>t.classList.remove('on'));document.querySelectorAll('.mpanel').forEach(p=>p.classList.remove('on'));tab.classList.add('on');document.getElementById(pid).classList.add('on');}
+
+/* ── CHIPS ── */
+function updateChips(){const c=document.getElementById('callerName')?.value?.trim();const s=document.getElementById('consultantName')?.value?.trim();document.getElementById('chipCaller').innerHTML=`문의자: <strong>${c||'—'}</strong>`;document.getElementById('chipConsultant').innerHTML=`상담자: <strong>${s||'—'}</strong>`;}
+
+/* ── PROGRESS ── */
+function updateProgress(){
+  let total=0,filled=0;
+  document.querySelectorAll('[data-track]').forEach(el=>{if(el.type==='radio'||el.type==='checkbox')return;total++;if(el.value&&el.value.trim())filled++;});
+  RG.forEach(n=>{total++;if(document.querySelector(`input[name="${n}"]:checked`))filled++;});
+  document.querySelectorAll('.ck-item').forEach(e=>{total++;if(e.classList.contains('done'))filled++;});
+  total++;if([...document.querySelectorAll('.ac-item')].some(a=>a.classList.contains('done')))filled++;
+  const pct=total>0?Math.round((filled/total)*100):0;
+  document.getElementById('pbarFill').style.width=pct+'%';document.getElementById('pbarPct').textContent=pct+'%';
+}
+
+/* ── STAGE DOTS ── */
+function updateDots(){
+  const h=(n)=>!!document.querySelector(`input[name="${n}"]:checked`);
+  const s1=!!(h('residence')&&h('ltcGrade')&&h('admitTime')&&h('mobility')&&h('cognition')&&document.querySelector('input[name="concern"]:checked'));
+  const s2=!!(h('eating')&&h('bowel')&&h('medication'));
+  const s3=!!(document.querySelector('input[name="priority"]:checked')&&h('visitIntent')&&h('contactPref'));
+  const s4=!!(document.getElementById('callerPhone')?.value?.trim());
+  const s5=[...document.querySelectorAll('.ck-item')].filter(e=>e.classList.contains('done')).length>=6;
+  const s6=!!(document.getElementById('memoOneline')?.value?.trim());
+  [s1,s2,s3,s4,s5,s6].forEach((done,i)=>{
+    const d=document.getElementById(`pd${i+1}`),l=document.getElementById(`pl${i+1}`);
+    if(!d)return;d.classList.toggle('done',done);d.classList.toggle('active',!done&&(i===0||(i>0&&[s1,s2,s3,s4,s5,s6][i-1])));
+    if(l)l.classList.toggle('done',done);
+  });
+}
+
+/* ── JUDGMENT ── */
+function updateJudgment(){
+  const has=(n,v)=>!!document.querySelector(`input[name="${n}"][value="${v}"]:checked`);
+  const anyV=(n,arr)=>arr.some(v=>has(n,v));
+  const inHosp=anyV('residence',['병원','요양병원','재활병원']);
+  const ltcOk=anyV('ltcGrade',['1~2등급','3~5등급']);
+  const ltcNone=anyV('ltcGrade',['없음','신청예정','잘모름']);
+  const urgent=anyV('admitTime',['바로','1주일내']);
+  const soon=anyV('admitTime',['2주일내','한달내']);
+  const bedRidden=has('mobility','와상');
+  const medCnt=['당뇨','낙상위험','재활필요','욕창','치매전담'].filter(v=>document.querySelector(`input[name="medical"][value="${v}"]:checked`)).length;
+  const highFall=has('fallRisk','높음');
+  const visitProposed=document.getElementById('ck-visit')?.classList.contains('done');
+  const filledCnt=[...document.querySelectorAll('[data-track]')].filter(el=>{if(el.type==='radio'||el.type==='checkbox')return el.checked;return el.value&&el.value.trim();}).length;
+  const rules=[
+    {cls:'jb-red',  txt:'🔴 즉시 입소 확인 필요', on:urgent&&(inHosp||ltcOk)},
+    {cls:'jb-green',txt:'🟢 방문상담 유도 적합',   on:!urgent&&(soon||visitProposed||(ltcOk&&document.querySelector('input[name="concern"]:checked')))},
+    {cls:'jb-purple',txt:'🟣 의료 확인 필요',      on:medCnt>=2||bedRidden||highFall},
+    {cls:'jb-amber',txt:'🟡 정보 추가 확인 필요',   on:filledCnt<8||ltcNone},
+    {cls:'jb-navy', txt:'🔵 등급 신청 안내 필요',   on:ltcNone&&!urgent},
+  ];
+  const wrap=document.getElementById('jbWrap');
+  const on=rules.filter(r=>r.on);
+  wrap.innerHTML=on.length?on.map(r=>`<span class="jb ${r.cls} on">${r.txt}</span>`).join(''):`<span class="jb jb-navy">분석 중…</span>`;
+}
+
+/* ════════════════════════════════════════════════════════
+   AUTO REPORT GENERATOR — 입력값 → A4 보고서 HTML 생성
+   ════════════════════════════════════════════════════════ */
+function gR(n){const el=document.querySelector(`input[name="${n}"]:checked`);return el?el.value:null;}
+function gC(n){return[...document.querySelectorAll(`input[name="${n}"]:checked`)].map(e=>e.value);}
+function gV(id){return document.getElementById(id)?.value?.trim()||null;}
+
+function buildAutoSummary(){
+  /* 어르신 상태 자동 문장 생성 */
+  const residence=gR('residence');const ltc=gR('ltcGrade');const mobility=gR('mobility');const cognition=gR('cognition');
+  const eating=gR('eating');const bowel=gR('bowel');const medication=gR('medication');
+  const hospital=gR('hospital');const fallRisk=gR('fallRisk');const nightCare=gR('nightCare');
+  const medicals=gC('medical');const concerns=gC('concern');
+
+  const residenceMap={'집':'자택 거주 중','병원':'병원 입원 중','요양병원':'요양병원 입원 중','재활병원':'재활병원 치료 중','다른시설':'현 요양시설 입소 중','기타':'기타 상황'};
+  const mobilityMap={'혼자걸음':'독립 보행 가능','부축필요':'부축 보행 필요','휠체어':'휠체어 이동','와상':'와상 상태'};
+  const cognitionMap={'대화가능':'인지 양호','약간저하':'인지 약간 저하','많이저하':'인지 많이 저하','치매진행':'치매 진행 중'};
+
+  let parts=[];
+  if(residence)parts.push(residenceMap[residence]||residence);
+  if(ltc&&ltc!=='잘모름')parts.push(`장기요양 ${ltc}`);
+  if(mobility)parts.push(mobilityMap[mobility]||mobility);
+  if(cognition)parts.push(cognitionMap[cognition]||cognition);
+
+  let careParts=[];
+  if(eating==='보조필요')careParts.push('식사 보조 필요');
+  if(eating==='경관식')careParts.push('경관식');
+  if(bowel==='기저귀')careParts.push('기저귀 케어 필요');
+  if(bowel==='부분도움')careParts.push('배변 부분 도움 필요');
+  if(medication==='있음')careParts.push('투약 관리');
+  if(hospital==='자주')careParts.push('병원 동행 정기 필요');
+  if(nightCare==='매일필요')careParts.push('야간 케어 필요');
+  if(fallRisk==='높음')careParts.push('낙상 위험 높음');
+  if(medicals.includes('욕창'))careParts.push('욕창 관리');
+  if(medicals.includes('재활필요'))careParts.push('재활 필요');
+  if(medicals.includes('치매전담'))careParts.push('치매 전담 케어 필요');
+  if(medicals.includes('석션'))careParts.push('석션 필요');
+
+  let summary=parts.length?parts.join(', '):'정보 미입력';
+  if(careParts.length)summary+='; '+careParts.join(', ');
+
+  return summary;
+}
+
+function buildJudgmentHTML(){
+  const has=(n,v)=>!!document.querySelector(`input[name="${n}"][value="${v}"]:checked`);
+  const anyV=(n,arr)=>arr.some(v=>has(n,v));
+  const inHosp=anyV('residence',['병원','요양병원','재활병원']);
+  const ltcOk=anyV('ltcGrade',['1~2등급','3~5등급']);
+  const ltcNone=anyV('ltcGrade',['없음','신청예정','잘모름']);
+  const urgent=anyV('admitTime',['바로','1주일내']);
+  const soon=anyV('admitTime',['2주일내','한달내']);
+  const bedRidden=has('mobility','와상');
+  const medCnt=['당뇨','낙상위험','재활필요','욕창'].filter(v=>document.querySelector(`input[name="medical"][value="${v}"]:checked`)).length;
+  const highFall=has('fallRisk','높음');
+  const visitProposed=document.getElementById('ck-visit')?.classList.contains('done');
+
+  const items=[];
+  if(urgent&&(inHosp||ltcOk))items.push({cls:'r',txt:'🔴 빠른 입소 검토 필요'});
+  if(!urgent&&(soon||visitProposed||ltcOk))items.push({cls:'g',txt:'🟢 방문상담 유도 추천'});
+  if(medCnt>=2||bedRidden||highFall)items.push({cls:'a',txt:'🟠 의료·돌봄 추가 확인 필요'});
+  if(ltcNone&&!urgent)items.push({cls:'n',txt:'🔵 장기요양등급 신청 안내 필요'});
+  if(visitProposed)items.push({cls:'g',txt:'✅ 방문상담 제안 완료'});
+  if(!items.length)items.push({cls:'n',txt:'⚪ 추가 정보 확인 필요'});
+  return items.map(i=>`<span class="rpt-jitem ${i.cls}">${i.txt}</span>`).join('');
+}
+
+function buildActionsHTML(){
+  const done=[...document.querySelectorAll('.ac-item.done')].map(el=>el.querySelector('.ac-txt')?.textContent?.trim()).filter(Boolean);
+  if(!done.length)return '<span style="color:#bbb;font-style:italic;font-size:10.5px">선택된 후속조치 없음</span>';
+  return done.map(d=>`<span class="rpt-tag">${d}</span>`).join('');
+}
+
+function buildCkDoneHTML(){
+  const done=[...document.querySelectorAll('.ck-item.done')].length;
+  const total=document.querySelectorAll('.ck-item').length;
+  return `${done} / ${total} 완료`;
+}
+
+function generateReport(){
+  const caller=gV('callerName')||'—';
+  const phone=gV('callerPhone')||'—';
+  const relation=gR('relation')||'—';
+  const consultant=gV('consultantName')||'—';
+  const dateRaw=gV('consultDate');
+  let dateStr='—';
+  if(dateRaw){try{const d=new Date(dateRaw);dateStr=`${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}catch(e){}}
+
+  const now=new Date();
+  const printDate=`${now.getFullYear()}.${String(now.getMonth()+1).padStart(2,'0')}.${String(now.getDate()).padStart(2,'0')}`;
+
+  const residence=gR('residence')||'미입력';const ltc=gR('ltcGrade')||'미입력';
+  const admitTime=gR('admitTime')||'미입력';const mobility=gR('mobility')||'미입력';
+  const cognition=gR('cognition')||'미입력';const eating=gR('eating')||'미입력';
+  const bowel=gR('bowel')||'미입력';const medication=gR('medication')||'미입력';
+  const hospital=gR('hospital')||'미입력';const fallRisk=gR('fallRisk')||'미입력';
+  const nightCare=gR('nightCare')||'미입력';
+  const medicals=gC('medical');const concerns=gC('concern');const priorities=gC('priority');
+
+  const visitIntent=gR('visitIntent')||'미입력';const roomType=gR('roomType')||'미입력';
+  const budget=gR('budget')||'미입력';const location=gV('locationPref')||'미입력';
+  const visitSchedule=gV('visitSchedule')||'미입력';
+  const visitDateTime=gV('visitDateTime');const followUpDate=gV('followUpDate');
+  const nextOwner=gV('nextOwner')||'미입력';const cStatus=gR('cStatus')||'신규';
+  const source=gR('source')||'미입력';
+  const contactPref=gR('contactPref')||'미입력';
+
+  const memoOneline=gV('memoOneline')||'—';
+  const memoC1=gV('memoC1')||'';const memoC2=gV('memoC2')||'';
+  const memoC3=gV('memoC3')||'';const memoC4=gV('memoC4')||'';
+  const tagsW=gV('h1')||'';const tagsS=gV('h2')||'';
+  const careRequest=gV('careRequest')||'—';
+
+  const autoSummary=buildAutoSummary();
+  const judgmentHTML=buildJudgmentHTML();
+  const actionsHTML=buildActionsHTML();
+  const ckDone=buildCkDoneHTML();
+
+  const statusColor={'신규':'n','진행중':'n','방문예약':'g','보류':'a','종료':'r'};
+  const sc=statusColor[cStatus]||'n';
+
+  const row=(k,v,empty=false)=>`<div class="rpt-row"><span class="rpt-k">${k}</span><span class="rpt-v${empty||v==='미입력'||v==='—'?' empty':''}">${v||'미입력'}</span></div>`;
+  const tagsHtml=(arr,cls='')=>arr.length?arr.map(t=>`<span class="rpt-tag ${cls}">${t}</span>`).join(''):'<span style="color:#bbb;font-size:10px">없음</span>';
+
+  const visitDT=visitDateTime?new Date(visitDateTime).toLocaleDateString('ko-KR',{year:'numeric',month:'short',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit'}):'—';
+  const followDT=followUpDate?new Date(followUpDate).toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'short'}):'—';
+
+  return `
+<div class="rpt-header">
+  <div class="rpt-brand">
+    <div class="rpt-brand-mark">🌿</div>
+    <div class="rpt-brand-txt">
+      <strong>행복한요양원 녹양역점</strong>
+      <span>전화상담 요약 보고서</span>
+    </div>
+  </div>
+  <div class="rpt-doc-info">
+    <strong>${dateStr}</strong>
+    출력일 ${printDate} · 상담자 ${consultant}
+  </div>
+</div>
+
+<div class="rpt-title">
+  <h1>📞 전화상담 요약지</h1>
+  <p>상담자: ${consultant} &nbsp;|&nbsp; 상태: <span class="rpt-jitem ${sc}" style="font-size:10px;padding:1px 8px">${cStatus}</span> &nbsp;|&nbsp; 확인 체크: ${ckDone}</p>
+</div>
+
+<div class="rpt-body">
+
+  <!-- 기본 정보 -->
+  <div class="rpt-sect">
+    <div class="rpt-sect-ttl">👤 기본 정보</div>
+    ${row('문의자',`${caller} (${relation})`)}
+    ${row('연락처',phone)}
+    ${row('연락 방식',contactPref)}
+    ${row('유입 경로',source)}
+    ${row('상담 일시',dateStr)}
+  </div>
+
+  <!-- 어르신 상태 -->
+  <div class="rpt-sect green">
+    <div class="rpt-sect-ttl">🧓 어르신 상태</div>
+    ${row('현재 위치',residence)}
+    ${row('요양 등급',ltc)}
+    ${row('거동 상태',mobility)}
+    ${row('인지 상태',cognition)}
+    ${row('식사',eating)} ${row('배변',bowel)}
+    ${row('투약',medication)} ${row('병원 동행',hospital)}
+    ${row('낙상 위험',fallRisk)} ${row('야간 케어',nightCare)}
+  </div>
+
+  <!-- 자동 상태 요약 (full width) -->
+  <div class="rpt-col-full">
+    <div class="rpt-sect">
+      <div class="rpt-sect-ttl">📋 어르신 상태 자동 요약</div>
+      <div class="rpt-auto">${autoSummary}</div>
+      ${medicals.length?`<div class="rpt-tags" style="margin-top:6px">${tagsHtml(medicals)}</div>`:''}
+      ${careRequest&&careRequest!=='—'?`<div class="rpt-row" style="margin-top:6px"><span class="rpt-k">특별 요청</span><span class="rpt-v">${careRequest}</span></div>`:''}
+    </div>
+  </div>
+
+  <!-- 보호자 걱정 -->
+  <div class="rpt-sect red">
+    <div class="rpt-sect-ttl">😟 보호자 걱정·요구사항</div>
+    ${concerns.length?`<div class="rpt-tags" style="margin-bottom:6px">${tagsHtml(concerns,'red')}</div>`:''}
+    ${tagsW?`<div class="rpt-row"><span class="rpt-k">걱정 태그</span><span class="rpt-v">${tagsW.split(',').join(' · ')}</span></div>`:''}
+    ${memoC1?`<div class="rpt-row"><span class="rpt-k">상세 내용</span><span class="rpt-v">${memoC1}</span></div>`:''}
+    ${priorities.length?`<div class="rpt-row"><span class="rpt-k">중요 요소</span><span class="rpt-v">${priorities.join(', ')}</span></div>`:''}
+  </div>
+
+  <!-- 입소 조건 -->
+  <div class="rpt-sect amber">
+    <div class="rpt-sect-ttl">🏠 입소 희망 조건</div>
+    ${row('희망 시기',admitTime)}
+    ${row('방 형태',roomType)}
+    ${row('지역 선호',location)}
+    ${row('비용 민감도',budget)}
+    ${row('방문 의향',visitIntent)}
+    ${row('방문 일정',visitSchedule)}
+  </div>
+
+  <!-- 상담 판단 -->
+  <div class="rpt-sect" style="grid-column:1/-1">
+    <div class="rpt-sect-ttl">🔍 상담 판단 &amp; 추천 액션</div>
+    <div class="rpt-judgment">${judgmentHTML}</div>
+    ${memoC2?`<div class="rpt-auto" style="margin-top:7px;font-size:10.5px">${memoC2}</div>`:''}
+  </div>
+
+  <!-- 상담 요약 -->
+  <div class="rpt-sect" style="grid-column:1/-1">
+    <div class="rpt-sect-ttl">📌 상담 핵심 요약</div>
+    <div class="rpt-auto">${memoOneline||'미작성'}</div>
+    ${tagsS?`<div class="rpt-row" style="margin-top:6px"><span class="rpt-k">강점 포인트</span><span class="rpt-v">${tagsS.split(',').join(' · ')}</span></div>`:''}
+    ${memoC3?`<div class="rpt-row"><span class="rpt-k">방문 준비</span><span class="rpt-v">${memoC3}</span></div>`:''}
+  </div>
+
+  <!-- 후속조치 -->
+  <div class="rpt-sect green">
+    <div class="rpt-sect-ttl">📌 후속조치</div>
+    <div class="rpt-tags" style="margin-bottom:6px">${actionsHTML}</div>
+    ${row('방문 예약',visitDT)}
+    ${row('다음 연락',followDT)}
+    ${row('담당자',nextOwner)}
+    ${memoC4?`<div class="rpt-row"><span class="rpt-k">내부 메모</span><span class="rpt-v">${memoC4}</span></div>`:''}
+  </div>
+
+  <!-- 서명란 -->
+  <div class="rpt-col-full">
+    <div class="rpt-footer">
+      <span>행복한요양원 녹양역점 · 전화상담 시스템 v6.0</span>
+      <div class="rpt-sig">
+        <div class="rpt-sig-item"><span>상담자 (서명)</span>${consultant}</div>
+        <div class="rpt-sig-item"><span>검토자 (서명)</span>&nbsp;</div>
+        <div class="rpt-sig-item"><span>시설장 (서명)</span>&nbsp;</div>
+      </div>
+    </div>
+  </div>
+
+</div>`;
+}
+
+/* ── SHOW / CLOSE PREVIEW ── */
+function showPreview(){
+  const html=generateReport();
+  document.getElementById('modalBody').innerHTML=`<div class="rpt">${html}</div>`;
+  document.getElementById('rptBody').innerHTML=html;
+  document.getElementById('modalBg').classList.add('show');
+}
+function closePreview(){document.getElementById('modalBg').classList.remove('show');}
+
+/* Close modal on background click */
+document.addEventListener('click',e=>{if(e.target.id==='modalBg')closePreview();});
+
+/* ── ONUPDATE ── */
+function onUpdate(){updateProgress();updateJudgment();updateDots();updateChips();/* report 갱신 */const html=generateReport();document.getElementById('rptBody').innerHTML=html;save();}
+
+/* ── SAVE / LOAD ── */
+function save(){
+  const d={};
+  document.querySelectorAll('input[id],textarea[id],select[id]').forEach(el=>{if(el.id)d['f_'+el.id]=el.value;});
+  document.querySelectorAll('input[type="radio"]:checked').forEach(el=>{d['r_'+el.name]=el.value;});
+  const cbMap={};document.querySelectorAll('input[type="checkbox"][name]').forEach(el=>{if(!cbMap[el.name])cbMap[el.name]=[];if(el.checked)cbMap[el.name].push(el.value);});Object.assign(d,cbMap);
+  d['_ck']=[...document.querySelectorAll('.ck-item')].map(e=>e.classList.contains('done'));
+  d['_ac']=[...document.querySelectorAll('.ac-item')].map(e=>e.classList.contains('done'));
+  ['h1','h2','h3','h4'].forEach(id=>{const el=document.getElementById(id);if(el)d['ht_'+id]=el.value;});
+  d['_cards']=[...document.querySelectorAll('.card[id]')].map(e=>({id:e.id,open:e.classList.contains('open')}));
+  try{localStorage.setItem(STORE,JSON.stringify(d));}catch(e){}
+}
+
+function load(){
+  let d;try{const r=localStorage.getItem(STORE);if(!r)return;d=JSON.parse(r);}catch(e){return;}
+  document.querySelectorAll('input[id],textarea[id],select[id]').forEach(el=>{const v=d['f_'+el.id];if(v!==undefined)el.value=v;});
+  Object.keys(d).filter(k=>k.startsWith('r_')).forEach(k=>{const el=document.querySelector(`input[type="radio"][name="${k.slice(2)}"][value="${d[k]}"]`);if(el)el.checked=true;});
+  ['concern','medical','priority'].forEach(n=>{(d[n]||[]).forEach(v=>{const el=document.querySelector(`input[type="checkbox"][name="${n}"][value="${v}"]`);if(el)el.checked=true;});});
+  if(Array.isArray(d['_ck']))document.querySelectorAll('.ck-item').forEach((el,i)=>{if(d['_ck'][i]){el.classList.add('done');const cb=el.querySelector('.ck-cb');if(cb)cb.checked=true;}});
+  if(Array.isArray(d['_ac']))document.querySelectorAll('.ac-item').forEach((el,i)=>{if(d['_ac'][i]){el.classList.add('done');const cb=el.querySelector('.ac-cb');if(cb)cb.checked=true;}});
+  ['h1','h2','h3','h4'].forEach(id=>{const hEl=document.getElementById(id);if(!hEl||!d['ht_'+id])return;hEl.value=d['ht_'+id];const vals=d['ht_'+id].split(',').filter(Boolean);hEl.closest('.mc')?.querySelectorAll('.mc-tag').forEach(tag=>{const m=(tag.getAttribute('onclick')||'').match(/'([^']+)'\)$/);if(m&&vals.includes(m[1]))tag.classList.add('sel');});});
+  if(Array.isArray(d['_cards']))d['_cards'].forEach(({id,open})=>{const c=document.getElementById(id);if(!c)return;open?c.classList.add('open'):c.classList.remove('open');});
+}
+
+/* ── LISTENERS ── */
+function attachListeners(){
+  document.querySelectorAll('input:not([type="radio"]):not([type="checkbox"]),textarea,select').forEach(el=>el.addEventListener('input',onUpdate));
+  document.querySelectorAll('input[type="radio"],input[type="checkbox"]').forEach(el=>el.addEventListener('change',onUpdate));
+}
+
+/* ── RESET ── */
+function resetAll(){
+  if(!confirm('모든 상담 내용을 초기화하시겠습니까?\n이 작업은 되돌릴 수 없습니다.'))return;
+  document.querySelectorAll('input,textarea,select').forEach(el=>{if(el.type==='radio'||el.type==='checkbox')el.checked=false;else el.value='';});
+  document.querySelectorAll('.ck-item').forEach(e=>e.classList.remove('done'));
+  document.querySelectorAll('.ac-item').forEach(e=>e.classList.remove('done'));
+  document.querySelectorAll('.mc-tag').forEach(e=>e.classList.remove('sel'));
+  const now=new Date(),pad=n=>String(n).padStart(2,'0');
+  const dtEl=document.getElementById('consultDate');
+  if(dtEl)dtEl.value=`${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  resetTimer();localStorage.removeItem(STORE);onUpdate();
+}
+
+/* ── INIT ── */
+document.addEventListener('DOMContentLoaded',()=>{
+  const now=new Date(),pad=n=>String(n).padStart(2,'0');
+  const dtEl=document.getElementById('consultDate');
+  if(dtEl&&!dtEl.value)dtEl.value=`${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  load();attachListeners();onUpdate();
+});
+</script>
+
+</body>
+</html>
