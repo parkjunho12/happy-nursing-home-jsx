@@ -1,14 +1,28 @@
-import Header from '@/components/layout/Header'
-import Footer from '@/components/layout/Footer'
-import MobileCTA from '@/components/layout/MobileCTA'
+"use client";
 
-export default function SiteLayout({ children }: { children: React.ReactNode }) {
+import { usePathname } from "next/navigation";
+
+import Header from "@/components/layout/Header";
+import Footer from "@/components/layout/Footer";
+import MobileCTA from "@/components/layout/MobileCTA";
+
+export default function SiteLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const pathname = usePathname();
+
+  const isCouncelPage = pathname.startsWith("/councel");
+
   return (
     <>
-      <Header />
+      {!isCouncelPage && <Header />}
+
       <main className="min-h-screen">{children}</main>
-      <Footer />
-      <MobileCTA />
+
+      {!isCouncelPage && <Footer />}
+      {!isCouncelPage && <MobileCTA />}
     </>
-  )
+  );
 }
