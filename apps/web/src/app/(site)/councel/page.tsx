@@ -29,7 +29,7 @@ export default function Page() {
         width: "100%",
         height: "100vh",
         position: "relative",
-        paddingTop: "100px",
+        paddingTop: "40px",
         boxSizing: "border-box",
       }}
     >
