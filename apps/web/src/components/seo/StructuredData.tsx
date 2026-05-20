@@ -20,12 +20,12 @@ interface OrganizationSchemaProps {
     logo = 'https://www.행복한요양원녹양역.com/logo.png',
     address = {
       streetAddress: '녹양역 인근',
-      addressLocality: '의정부시',
+      addressLocality: '양주시',
       addressRegion: '경기도',
       postalCode: '11600',
     },
     contactPoint = {
-      telephone: '02-1234-5678',
+      telephone: '031-856-8090',
       contactType: 'customer service',
     },
   }: OrganizationSchemaProps) {
@@ -36,7 +36,7 @@ interface OrganizationSchemaProps {
       url,
       logo,
       image: logo,
-      description: '의정부 녹양역 인근 프리미엄 요양원. 전문 의료진과 함께하는 따뜻한 돌봄 서비스.',
+      description: '의정부 양주 녹양역 인근 프리미엄 요양원. 전문 의료진과 함께하는 따뜻한 돌봄 서비스.',
       address: {
         '@type': 'PostalAddress',
         ...address,
