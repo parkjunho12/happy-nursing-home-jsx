@@ -19,7 +19,7 @@ export default function NaverSEO({
   type = 'website',
   publishedTime,
   modifiedTime,
-  keywords = '요양원, 노인요양, 의정부요양원, 녹양역요양원, 행복한요양원, 장기요양, 노인돌봄',
+  keywords = '요양원, 노인요양, 양주요양원, 의정부요양원, 녹양역요양원, 행복한요양원 녹양역점, 장기요양, 노인돌봄',
 }: NaverSEOProps) {
   const siteName = '행복한요양원 녹양역점'
   const fullUrl = `https://www.행복한요양원녹양역.com${url}`

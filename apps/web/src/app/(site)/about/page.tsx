@@ -20,9 +20,9 @@ import KakaoMap from '@/components/map/KaKaoMap'
 import HeroSlider from '@/components/home/HeroSlider'
 
 export const metadata: Metadata = {
-  title: '시설 소개 | 행복한요양원 녹양역점',
+  title: '시설 소개 | 양주요양원 행복한요양원 녹양역점',
   description:
-    '행복한요양원 녹양역점의 시설 소개, 케어 철학, 주요 공간, 오시는 길을 안내합니다.',
+    '양주요양원 행복한요양원 녹양역점의 시설 소개, 케어 철학, 주요 공간, 오시는 길을 안내합니다.',
 }
 
 const coreValues = [
@@ -166,7 +166,7 @@ export default function AboutPage() {
 
                 <span className="inline-flex items-center gap-2 rounded-full bg-white/12 px-4 py-2 text-sm font-medium text-white/90 backdrop-blur-sm">
                   <ShieldCheck className="h-4 w-4 text-orange-300" />
-                  안전 중심 환경
+                  양주요양원, 의정부요양원 안전 중심 환경
                 </span>
 
                 <span className="inline-flex items-center gap-2 rounded-full bg-white/12 px-4 py-2 text-sm font-medium text-white/90 backdrop-blur-sm">
