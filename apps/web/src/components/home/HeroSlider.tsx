@@ -14,22 +14,27 @@ import {
 
 const slides = [
   {
-    image: '/assets/images/hero-6-image.png',
+    image: '/assets/images/04_easystep2.jpg',
     alt: '어르신들이 함께 운동 프로그램에 참여하는 모습',
     position: 'object-center',
   },
   {
-    image: '/assets/images/hero-7-image.png',
+    image: '/assets/images/15_sign_wide.png',
     alt: '어르신들이 즐겁게 대화하며 식사하는 모습',
     position: 'object-[58%_center]',
   },
   {
-    image: '/assets/images/hero-8-image.png',
+    image: '/assets/images/31_physical_treatment.jpg',
+    alt: '어르신들이 즐겁게 대화하며 식사하는 모습',
+    position: 'object-[58%_center]',
+  },
+  {
+    image: '/assets/images/08_programs.jpg',
     alt: '케어 선생님과 어르신이 함께 웃는 모습',
     position: 'object-center',
   },
   {
-    image: '/assets/images/hero-9-image.png',
+    image: '/assets/images/easystep1.jpg',
     alt: '어르신들이 원예 활동을 즐기는 모습',
     position: 'object-[56%_center]',
   },
