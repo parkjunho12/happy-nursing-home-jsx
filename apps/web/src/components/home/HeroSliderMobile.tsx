@@ -6,24 +6,29 @@ import { Phone, MessageCircle, MapPin, Award } from 'lucide-react'
 
 const slides = [
   {
-    image: '/assets/images/hero-6-image.png',
+    image: '/assets/images/04_easystep2.jpg',
     alt: '어르신들이 함께 운동 프로그램에 참여하는 모습',
     position: 'object-center',
   },
   {
-    image: '/assets/images/hero-7-image.png',
+    image: '/assets/images/15_sign_wide.png',
     alt: '어르신들이 즐겁게 대화하며 식사하는 모습',
-    position: 'object-[60%_center]',
+    position: 'object-[58%_center]',
   },
   {
-    image: '/assets/images/hero-8-image.png',
+    image: '/assets/images/31_physical_treatment.jpg',
+    alt: '어르신들이 즐겁게 대화하며 식사하는 모습',
+    position: 'object-[58%_center]',
+  },
+  {
+    image: '/assets/images/08_programs.jpg',
     alt: '케어 선생님과 어르신이 함께 웃는 모습',
     position: 'object-center',
   },
   {
-    image: '/assets/images/hero-9-image.png',
+    image: '/assets/images/easystep1.jpg',
     alt: '어르신들이 원예 활동을 즐기는 모습',
-    position: 'object-[55%_center]',
+    position: 'object-[56%_center]',
   },
 ]
 
@@ -39,7 +44,7 @@ export default function HeroSliderMobile() {
   }, [])
 
   return (
-    <section className="relative min-h-[680px] overflow-hidden bg-[#f8f4ee]">
+    <section className="relative min-h-[280px] overflow-hidden bg-[#f8f4ee]">
       <div className="absolute inset-0">
         {slides.map((slide, index) => (
           <div
@@ -76,13 +81,13 @@ export default function HeroSliderMobile() {
 
             {/* Headline */}
             <div>
-              <h1 className="hero-animate hero-delay-2 font-hero text-[1.9rem] font-bold leading-[1.18] tracking-[-0.03em] text-[#18212b]">
+              <h2 className="hero-animate hero-delay-2 font-hero text-[1.9rem] font-bold leading-[1.18] tracking-[-0.03em] text-[#18212b]">
                 가족처럼 모시는
                 <br />
                 <span className="hero-animate hero-delay-3 text-orange-500">행복한요양원 녹양역점</span>
-              </h1>
+              </h2>
 
-              <p className="hero-animate hero-delay-4 mt-3 font-body text-[14px] leading-relaxed text-[#4b5563]">
+              <p className="hero-animate hero-delay-4 mt-3 font-body text-[14px] leading-relaxed text-[#ffffff]">
                 규정이 아닌 어르신의 삶을 기준으로 운영합니다.
               </p>
             </div>
@@ -92,10 +97,10 @@ export default function HeroSliderMobile() {
               <span className="rounded-full bg-[#fff7ed]/95 px-3 py-1.5 text-[11px] font-semibold text-[#9a5a18]">
                 삶을 돌보는 요양원
               </span>
-              <span className="rounded-full bg-white/92 px-3 py-1.5 text-[11px] font-medium text-[#4b5563]">
+              <span className="rounded-full bg-white/92 px-3 py-1.5 text-[11px] font-medium text-[#ffffff]">
                 최신 시설
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-white/92 px-3 py-1.5 text-[11px] font-medium text-[#4b5563]">
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/92 px-3 py-1.5 text-[11px] font-medium text-[#ffffff]">
                 <MapPin className="h-3.5 w-3.5" />
                 녹양역 8분
               </span>

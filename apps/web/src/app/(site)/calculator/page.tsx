@@ -154,9 +154,9 @@ export default function CostCalculatorPage() {
             </span>
           </div>
 
-          <h1 className="mb-6 text-4xl font-bold leading-tight text-gray-900 sm:text-5xl lg:text-6xl">
+          <h2 className="mb-6 text-4xl font-bold leading-tight text-gray-900 sm:text-5xl lg:text-6xl">
             입소비용 안내
-          </h1>
+          </h2>
 
           <div className="mx-auto max-w-3xl space-y-6 text-lg leading-relaxed text-gray-700">
             <p className="text-xl font-medium text-gray-800">

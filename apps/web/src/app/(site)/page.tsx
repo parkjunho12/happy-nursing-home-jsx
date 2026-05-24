@@ -1,4 +1,5 @@
 import HeroSlider from '@/components/home/HeroSlider'
+import HeroSliderMobile from '@/components/home/HeroSliderMobile'
 import { 
   QuickContact, 
   ServicesSection, 
@@ -13,7 +14,13 @@ export default function HomePage() {
   return (
     <main className="overflow-hidden">
       {/* Hero Slider - 감성 중심 메인 배너 */}
-      <HeroSlider />
+      <div className="hidden md:block">
+        <HeroSlider />
+      </div>
+
+      <div className="block md:hidden">
+        <HeroSliderMobile />
+      </div>  
       
       {/* Quick Contact Bar - 빠른 상담 접근 */}
       <QuickContact />

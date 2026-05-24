@@ -235,14 +235,14 @@ export default function WhyChooseUsPage() {
               <span className="text-sm font-semibold text-slate-700">프리미엄 케어 포인트</span>
             </div>
 
-            <h1 className="text-balance text-4xl font-bold leading-tight tracking-tight text-slate-950 sm:text-5xl lg:text-6xl">
+            <h2 className="text-balance text-4xl font-bold leading-tight tracking-tight text-slate-950 sm:text-5xl lg:text-6xl">
               왜 많은 보호자분들이
               <br />
               <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-sky-500 bg-clip-text text-transparent">
                 행복한요양원 녹양역점
               </span>
               을 선택하실까요?
-            </h1>
+            </h2>
 
             <p className="mx-auto mt-6 max-w-3xl text-pretty text-lg leading-8 text-slate-600 sm:text-xl">
               같은 본인부담금 안에서도 더 쾌적한 환경, 더 세심한 돌봄, 더 검증된 운영,

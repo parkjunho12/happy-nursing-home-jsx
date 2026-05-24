@@ -22,9 +22,9 @@ export default async function NewsPage() {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* 헤더 */}
         <div className="mb-12">
-          <h1 className="text-3xl md:text-4xl font-bold text-stone-800">
+          <h2 className="text-3xl md:text-4xl font-bold text-stone-800">
             요양원 소식
-          </h1>
+          </h2>
           <p className="mt-2 text-stone-500">
             행복한요양원 녹양역점의 모든 소식을 확인하세요.
           </p>

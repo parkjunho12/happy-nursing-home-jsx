@@ -168,9 +168,9 @@ export default function ServicesPage() {
                 어르신의 편안한 일상을 위한 체계적인 돌봄 서비스
               </div>
 
-              <h1 className="text-balance text-4xl font-bold leading-[1.08] tracking-[-0.04em] text-white sm:text-5xl lg:text-7xl">
+              <h2 className="text-balance text-4xl font-bold leading-[1.08] tracking-[-0.04em] text-white sm:text-5xl lg:text-7xl">
                 서비스 안내
-              </h1>
+              </h2>
 
               <p className="mt-4 max-w-2xl text-base leading-7 text-white/90 sm:text-lg sm:leading-8 lg:text-xl">
                 건강 관리부터 일상 케어, 생활 프로그램까지

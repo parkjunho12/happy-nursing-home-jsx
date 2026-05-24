@@ -148,9 +148,9 @@ export default function AboutPage() {
                 </span>
               </div>
 
-              <h1 className="text-balance text-4xl font-bold leading-[1.08] tracking-[-0.04em] text-white sm:text-5xl lg:text-7xl">
+              <h2 className="text-balance text-4xl font-bold leading-[1.08] tracking-[-0.04em] text-white sm:text-5xl lg:text-7xl">
                 시설 소개
-              </h1>
+              </h2>
 
               <p className="mt-5 max-w-2xl text-base leading-7 text-white/85 sm:text-lg sm:leading-8 lg:text-xl">
                 어르신께서 편안하게 지내실 수 있도록
