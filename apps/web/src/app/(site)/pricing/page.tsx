@@ -193,9 +193,9 @@ export default function PricingPage() {
         <div className="absolute inset-0 z-10 flex items-center">
           <div className="mx-auto w-full max-w-7xl px-6 sm:px-8 lg:px-10">
             <div className="max-w-3xl">
-              <h1 className="text-balance text-4xl font-bold leading-[1.08] tracking-[-0.04em] text-white sm:text-5xl lg:text-7xl">
+              <h2 className="text-balance text-4xl font-bold leading-[1.08] tracking-[-0.04em] text-white sm:text-5xl lg:text-7xl">
                 입소비용 안내
-              </h1>
+              </h2>
 
               <p className="mt-5 max-w-2xl text-base leading-7 text-white/85 sm:text-lg sm:leading-8 lg:text-xl">
                 요양원 비용은 대부분 국가에서 지원됩니다.

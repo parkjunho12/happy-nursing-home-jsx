@@ -119,9 +119,9 @@ export default async function HistoryPage({
           <div className="mx-auto w-full max-w-7xl px-6 sm:px-8 lg:px-10">
             <div className="max-w-3xl">
 
-              <h1 className="text-balance text-4xl font-bold leading-[1.08] tracking-[-0.04em] text-white sm:text-5xl lg:text-7xl">
+              <h2 className="text-balance text-4xl font-bold leading-[1.08] tracking-[-0.04em] text-white sm:text-5xl lg:text-7xl">
               따뜻한 소식들
-              </h1>
+              </h2>
 
               <p className="mt-5 max-w-2xl text-base leading-7 text-white/85 sm:text-lg sm:leading-8 lg:text-xl">
               행복한요양원의 다양한 활동과

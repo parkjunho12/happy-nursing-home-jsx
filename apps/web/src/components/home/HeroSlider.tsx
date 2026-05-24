@@ -106,11 +106,11 @@ export default function HeroSlider() {
             <div className="max-w-[620px]">
               <div className="hero-animate hero-delay-2 mb-4 h-px w-16 bg-gradient-to-r from-orange-300 to-transparent" />
 
-              <h1 className="hero-animate hero-delay-2 font-hero text-balance text-[2.35rem] font-bold leading-[1.06] tracking-[-0.045em] text-[#142132] sm:text-[3rem] lg:text-[3.7rem]">
+              <h2 className="hero-animate hero-delay-2 font-hero text-balance text-[2.35rem] font-bold leading-[1.06] tracking-[-0.045em] text-[#142132] sm:text-[3rem] lg:text-[3.7rem]">
                 어르신을 가족처럼 모시는
                 <br />
                 <span className="text-orange-500">행복한요양원 녹양역점</span>
-              </h1>
+              </h2>
 
               <p className="hero-animate hero-delay-3 font-body mt-4 inline-flex items-center gap-2 rounded-full bg-white/72 px-3.5 py-2 text-[13px] font-semibold text-[#334155] shadow-[0_4px_12px_rgba(15,23,42,0.04)] backdrop-blur-sm sm:text-[14px]">
                 <MapPin className="h-4 w-4 text-orange-500" />

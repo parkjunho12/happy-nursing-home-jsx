@@ -42,11 +42,11 @@ export default function HeroSection() {
 
             {/* Main Headline - Glass Panel */}
             <div className="glass-panel space-y-4">
-              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight text-shadow-premium">
+              <h2 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight text-shadow-premium">
                 <span className="text-gray-900">어르신은 편안하게,</span>
                 <br />
                 <span className="text-orange-600">보호자는 안심하게</span>
-              </h1>
+              </h2>
               
               <p className="text-xl sm:text-2xl text-gray-700 leading-relaxed">
                 24시간 전문 케어와 가족같은 따뜻함으로

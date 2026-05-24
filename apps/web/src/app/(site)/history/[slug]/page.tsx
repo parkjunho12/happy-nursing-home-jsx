@@ -135,9 +135,9 @@ export default async function HistoryDetailPage({ params }: { params: PageParams
             </span>
           </div>
 
-          <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-6">
+          <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-6">
             {raw.title}
-          </h1>
+          </h2>
 
           <div className="flex flex-wrap items-center gap-6 text-gray-600">
             <div className="flex items-center gap-2">
