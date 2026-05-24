@@ -217,7 +217,7 @@ export default function ServicesPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="relative h-56 overflow-hidden rounded-3xl shadow-lg sm:h-64">
                 <Image
-                  src="/assets/images/dining.JPG"
+                  src="/assets/images/09_cafeteria.jpg"
                   alt="어르신 생활 공간 이미지"
                   fill
                   className="object-cover"
