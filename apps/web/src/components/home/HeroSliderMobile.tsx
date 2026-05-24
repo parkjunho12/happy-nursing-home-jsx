@@ -6,27 +6,27 @@ import { Phone, MessageCircle, MapPin, Award } from 'lucide-react'
 
 const slides = [
   {
-    image: '/assets/images/04_easystep2.jpg',
+    image: '/assets/images/37_care_physics.jpg',
     alt: '어르신들이 함께 운동 프로그램에 참여하는 모습',
     position: 'object-center',
   },
   {
-    image: '/assets/images/15_sign_wide.png',
+    image: '/assets/images/18_sign.png',
     alt: '어르신들이 즐겁게 대화하며 식사하는 모습',
     position: 'object-[58%_center]',
   },
   {
-    image: '/assets/images/31_physical_treatment.jpg',
+    image: '/assets/images/40_throwing.jpg',
     alt: '어르신들이 즐겁게 대화하며 식사하는 모습',
     position: 'object-[58%_center]',
   },
   {
-    image: '/assets/images/08_programs.jpg',
+    image: '/assets/images/28_walking.jpg',
     alt: '케어 선생님과 어르신이 함께 웃는 모습',
     position: 'object-center',
   },
   {
-    image: '/assets/images/easystep1.jpg',
+    image: '/assets/images/04_easystep2.jpg',
     alt: '어르신들이 원예 활동을 즐기는 모습',
     position: 'object-[56%_center]',
   },
