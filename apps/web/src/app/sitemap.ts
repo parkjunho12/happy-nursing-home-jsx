@@ -6,7 +6,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   // 정적 페이지
   const staticPages = [
     '',
-    '/about',
+    '/yangju-nursing-home',
     '/facilities',
     '/programs',
     '/costs',

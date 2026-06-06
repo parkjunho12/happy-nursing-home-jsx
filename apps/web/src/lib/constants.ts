@@ -61,8 +61,8 @@ import {
   export const NAVIGATION: NavigationItem[] = [
     {
       id: 'about',
-      label: '소개',
-      href: '/about',
+      label: '양주요양원',
+      href: '/yangju-nursing-home',
     },
     {
       id: 'services',
@@ -231,7 +231,7 @@ import {
   // 푸터 링크
   export const FOOTER_LINKS = {
     quickLinks: [
-      { label: '소개', href: '/about' },
+      { label: '양주요양원', href: '/yangju-nursing-home' },
       { label: '서비스', href: '/services' },
       { label: '입소비용', href: '/pricing' },
       { label: '후기', href: '/reviews' },
@@ -247,7 +247,7 @@ import {
       { label: '개인정보처리방침', href: '/privacy' },
       { label: '입소비용', href: '/pricing' },
       { label: '이용약관', href: '/terms' },
-      { label: '시설 안내', href: '/about#facility' },
+      { label: '양주요양원', href: '/yangju-nursing-home#facility' },
     ],
   }
   

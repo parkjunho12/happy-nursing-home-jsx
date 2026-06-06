@@ -1,6 +1,7 @@
 import { Metadata } from 'next'
 import Link from 'next/link'
 import Image from 'next/image'
+import Script from 'next/script'
 import {
   Heart,
   ShieldCheck,
@@ -17,12 +18,32 @@ import {
 } from 'lucide-react'
 import { SITE_INFO } from '@/lib/constants'
 import KakaoMap from '@/components/map/KaKaoMap'
-import HeroSlider from '@/components/home/HeroSlider'
 
 export const metadata: Metadata = {
-  title: '시설 소개 | 양주요양원 행복한요양원 녹양역점',
+  title: '양주요양원 찾으신다면 | 행복한요양원 녹양역점',
   description:
-    '양주요양원 행복한요양원 녹양역점의 시설 소개, 케어 철학, 주요 공간, 오시는 길을 안내합니다.',
+    '양주요양원을 찾는 보호자님께 행복한요양원 녹양역점을 안내드립니다. 양주·의정부 인근 접근성, 장기요양등급 입소상담, 치매·거동불편 어르신 케어, 낙상 예방 중심의 생활관리와 보행재활 환경을 확인해보세요.',
+  keywords: [
+    '양주요양원',
+    '의정부요양원',
+    '녹양역요양원',
+    '양주 근처 요양원',
+    '양주 치매 요양원',
+    '양주 장기요양등급 요양원',
+    '거동불편 요양원',
+    '행복한요양원 녹양역점',
+  ],
+  openGraph: {
+    title: '양주요양원 찾으신다면 | 행복한요양원 녹양역점',
+    description:
+      '양주·의정부 인근 보호자님을 위한 요양원 입소상담, 생활환경, 안전관리, 보행재활 안내.',
+    type: 'website',
+    locale: 'ko_KR',
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 }
 
 const coreValues = [
@@ -61,6 +82,36 @@ const highlights = [
   '편안한 생활 중심의 요양 환경',
   '밝고 정돈된 공용 공간과 생활 공간',
   '입소 전 상담부터 차분하게 안내',
+]
+
+const seoHighlights = [
+  '양주·의정부 인근 보호자님 방문 상담 가능',
+  '장기요양등급 입소 절차 및 준비서류 안내',
+  '치매·거동불편 어르신 생활 케어 상담',
+  '낙상 예방과 보행 상태를 고려한 안전 중심 운영',
+]
+
+const admissionFaqs = [
+  {
+    question: '양주에 거주 중인데 행복한요양원 녹양역점 입소 상담이 가능한가요?',
+    answer:
+      '가능합니다. 어르신의 장기요양등급, 건강 상태, 현재 돌봄 상황을 확인한 뒤 입소 가능 여부와 준비서류를 안내드립니다.',
+  },
+  {
+    question: '양주요양원을 알아볼 때 무엇을 먼저 확인해야 하나요?',
+    answer:
+      '거리뿐 아니라 낙상 위험 관리, 식사·배설·목욕 등 일상생활 지원, 간호 관찰 체계, 보호자 소통 방식을 함께 확인하는 것이 좋습니다.',
+  },
+  {
+    question: '치매 어르신도 상담 가능한가요?',
+    answer:
+      '상담 가능합니다. 배회, 불안, 수면, 식사, 배설, 낙상 위험도 등을 함께 확인하여 시설 생활 가능 여부를 안내드립니다.',
+  },
+  {
+    question: '방문 상담은 예약해야 하나요?',
+    answer:
+      '보호자님께 충분한 상담 시간을 드리기 위해 방문 전 전화 또는 온라인 상담 예약을 권장드립니다.',
+  },
 ]
 
 const facilityPhotos = [
@@ -117,9 +168,56 @@ const facilitySpaces = [
   },
 ]
 
+const localBusinessJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'NursingHome',
+  name: '행복한요양원 녹양역점',
+  description:
+    '양주·의정부 인근 보호자님을 위한 요양원 입소상담, 장기요양등급 상담, 치매·거동불편 어르신 케어, 낙상 예방 중심 생활관리 안내.',
+  telephone: SITE_INFO.phone,
+  email: SITE_INFO.email,
+  address: {
+    '@type': 'PostalAddress',
+    streetAddress: SITE_INFO.address.full,
+    addressCountry: 'KR',
+  },
+  geo: {
+    '@type': 'GeoCoordinates',
+    latitude: 37.76774123217728,
+    longitude: 127.04359415733941,
+  },
+  areaServed: ['양주시', '의정부시', '녹양동', '가능동', '덕계동', '옥정동'],
+  keywords:
+    '양주요양원, 의정부요양원, 녹양역요양원, 장기요양등급 요양원, 치매 요양원, 거동불편 요양원',
+}
+
+const faqJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: admissionFaqs.map((faq) => ({
+    '@type': 'Question',
+    name: faq.question,
+    acceptedAnswer: {
+      '@type': 'Answer',
+      text: faq.answer,
+    },
+  })),
+}
+
 export default function AboutPage() {
   return (
     <div className="min-h-screen bg-white pt-20">
+      <Script
+        id="local-business-jsonld"
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(localBusinessJsonLd) }}
+      />
+      <Script
+        id="faq-jsonld"
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+      />
+
       {/* Hero */}
       {/* Hero */}
       <section className="relative overflow-hidden">
@@ -149,13 +247,15 @@ export default function AboutPage() {
               </div>
 
               <h2 className="text-balance text-4xl font-bold leading-[1.08] tracking-[-0.04em] text-white sm:text-5xl lg:text-7xl">
-                시설 소개
+                양주요양원을 찾는
+                <br />
+                보호자님께
               </h2>
 
               <p className="mt-5 max-w-2xl text-base leading-7 text-white/85 sm:text-lg sm:leading-8 lg:text-xl">
-                어르신께서 편안하게 지내실 수 있도록
-                <br className="hidden sm:block" />
-                생활 환경, 건강 관리, 보호자 상담 체계를 갖추고 있습니다.
+                행복한요양원 녹양역점은 양주·의정부 인근 보호자님들이
+                방문 상담하기 편한 위치에서 어르신의 안전, 건강관리, 생활 적응을
+                세심하게 돕는 요양시설입니다.
               </p>
 
               <div className="mt-7 flex flex-wrap items-center gap-3">
@@ -190,30 +290,32 @@ export default function AboutPage() {
               </div>
 
               <h2 className="text-3xl lg:text-5xl font-bold leading-tight text-gray-900 mb-6">
-                어르신께는 편안한 생활을,
+                양주요양원 선택,
                 <br />
-                보호자분께는 안심할 수 있는 안내를
+                위치보다 중요한 것은
+                <br />
+                매일의 돌봄입니다
               </h2>
 
               <div className="space-y-4 text-gray-700 text-lg leading-relaxed">
                 <p>
-                  행복한요양원 녹양역점은 어르신께서 하루하루를 보다 안정되고
-                  편안하게 보내실 수 있도록 생활 중심의 요양 환경을 갖추고 있습니다.
+                  양주요양원을 알아보실 때는 거리뿐 아니라 어르신의 상태를 얼마나
+                  세심하게 살피는지, 낙상 예방과 건강 관찰 체계가 갖춰져 있는지
+                  함께 확인해야 합니다.
                 </p>
                 <p>
-                  단순히 머무는 공간이 아니라,
-                  <strong className="text-primary-orange"> 안전, 청결, 건강관리, 정서적 안정</strong>이
-                  함께 유지되는 생활 공간이 되도록 세심하게 운영합니다.
+                  행복한요양원 녹양역점은 양주·의정부 인근 보호자님께
+                  <strong className="text-primary-orange"> 입소 상담, 생활 환경, 비용 안내, 장기요양등급 관련 절차</strong>를
+                  차분하게 설명드립니다.
                 </p>
                 <p>
-                  또한 보호자분들이 가장 궁금해하시는
-                  <strong className="text-primary-orange"> 비용, 입소 절차, 준비사항</strong>을
-                  어렵지 않게 안내드리는 것을 중요하게 생각합니다.
+                  치매, 거동불편, 낙상 위험, 식사·배설·목욕 도움이 필요한 어르신의
+                  생활 상태를 확인하고 보호자님께 현실적인 입소 방향을 안내합니다.
                 </p>
               </div>
 
               <div className="mt-8 grid sm:grid-cols-2 gap-3">
-                {highlights.map((item) => (
+                {seoHighlights.map((item) => (
                   <div
                     key={item}
                     className="flex items-start gap-3 rounded-2xl bg-gray-50 px-4 py-4"
@@ -477,11 +579,41 @@ export default function AboutPage() {
         </div>
       </section>
 
+      {/* FAQ for SEO */}
+      <section className="py-16 lg:py-24 bg-white">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
+              양주요양원 상담 전 자주 묻는 질문
+            </h2>
+            <p className="text-lg text-gray-600">
+              보호자님들이 상담 전에 많이 궁금해하시는 내용을 정리했습니다.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            {admissionFaqs.map((faq) => (
+              <div
+                key={faq.question}
+                className="rounded-2xl border border-gray-100 bg-gray-50 p-6"
+              >
+                <h3 className="text-lg font-bold text-gray-900 mb-3">
+                  {faq.question}
+                </h3>
+                <p className="text-gray-700 leading-relaxed">
+                  {faq.answer}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* CTA */}
       <section className="py-16 bg-gradient-to-br from-primary-orange to-primary-brown text-white">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl lg:text-4xl font-bold mb-4">
-            직접 상담받아 보세요
+            양주요양원 상담이 필요하시다면
           </h2>
           <p className="text-xl mb-8 text-white/90 leading-relaxed">
             입소 절차, 비용, 생활 환경까지

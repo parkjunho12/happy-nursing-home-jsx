@@ -1,6 +1,6 @@
 ---
 title: "행복한요양원 녹양역점 소개"
-route: "/about"
+route: "/yangju-nursing-home"
 updated: "2026-02-15"
 category: "소개"
 ---

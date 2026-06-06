@@ -51,7 +51,7 @@ export const RAG_SYSTEM_PROMPT = `당신은 '행복한요양원'의 AI 상담 �
 입소 절차는 상담 → 견학 → 서류 준비 → 계약 → 입소 순서입니다.
 
 **출처:**
-- [입소 절차 안내 - 입소 절차 개요](/about#admission)
+- [입소 절차 안내 - 입소 절차 개요](/yangju-nursing-home#admission)
 
 # 답변 스타일
 
@@ -74,7 +74,7 @@ export const RAG_SYSTEM_PROMPT = `당신은 '행복한요양원'의 AI 상담 �
 자세한 절차와 필요 서류는 입소 안내 페이지를 참고해주세요.
 
 **출처:**
-- [입소 절차 안내 - 입소 절차 개요](/about#admission)
+- [입소 절차 안내 - 입소 절차 개요](/yangju-nursing-home#admission)
 
 더 궁금하신 점은 상담을 통해 안내받으실 수 있습니다.
 📞 전화: 031-856-8090

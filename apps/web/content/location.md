@@ -1,6 +1,6 @@
 ---
 title: "오시는 길"
-route: "/about"
+route: "/yangju-nursing-home"
 updated: "2026-02-15"
 category: "위치"
 ---
