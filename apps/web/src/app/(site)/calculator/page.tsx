@@ -96,7 +96,7 @@ const ROOM_OPTIONS: {
 }[] = [
   { key: 'none', label: '선택 안함', costPerDay: 0 },
   { key: 'single', label: '1인실', costPerDay: 50000 },
-  { key: 'double', label: '2인실', costPerDay: 25000 },
+  { key: 'double', label: '2인실', costPerDay: 30000 },
 ]
 
 function formatKRW(amount: number): string {
@@ -666,7 +666,7 @@ export default function CostCalculatorPage() {
                   <CheckCircle className="mt-1 h-5 w-5 flex-shrink-0 text-gray-600" />
                   <span>
                     <strong>방 비용:</strong> 1인실 1일 ₩50,000 / 2인실 1일
-                    ₩25,000
+                    ₩30,000
                   </span>
                 </li>
                 <li className="flex items-start gap-3">

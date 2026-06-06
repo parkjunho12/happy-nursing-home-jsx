@@ -82,7 +82,7 @@ export default function SuspiciousIPPage() {
         source_breakdown: generateMockSourceBreakdown(),
         recent_clicks: generateMockRecentClicks(),
         user_agents: ['Mozilla/5.0 (Windows NT 10.0; Win64; x64)...'],
-        pages: ['/', '/about', '/contact'],
+        pages: ['/', '/yangju-nursing-home', '/contact'],
       }))
 
       setSuspiciousIPs(enhancedIPs)

@@ -1,6 +1,6 @@
 ---
 title: "입소 절차 안내"
-route: "/about"
+route: "/yangju-nursing-home"
 updated: "2026-02-15"
 category: "입소"
 ---
