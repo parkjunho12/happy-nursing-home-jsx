@@ -17,12 +17,7 @@ import type { SuspiciousIP, TrackStatsResponse } from '@/api/client'
 // 확장된 IP 정보 (API에서 추가로 받아올 데이터)
 interface EnhancedSuspiciousIP extends SuspiciousIP {
   // 유입 소스별 클릭 분포
-  source_breakdown?: {
-    naver?: number
-    google?: number
-    direct?: number
-    other?: number
-  }
+  source_breakdown?: SourceBreakdown
   // 최근 클릭 이력
   recent_clicks?: Array<{
     timestamp: string
@@ -38,6 +33,12 @@ interface EnhancedSuspiciousIP extends SuspiciousIP {
 }
 
 type SourceFilter = 'all' | 'naver' | 'google' | 'direct' | 'other'
+type SourceKey = Exclude<SourceFilter, 'all'>
+
+type SourceBreakdown = Partial<Record<SourceKey, number>>
+type RecentClick = NonNullable<EnhancedSuspiciousIP['recent_clicks']>[number]
+type RiskMeta = { label: string; className: string }
+type SourceColorMeta = { bg: string; text: string; dot: string }
 
 export default function SuspiciousIPPage() {
   const [loading, setLoading] = useState(true)
@@ -470,10 +471,24 @@ export default function SuspiciousIPPage() {
 }
 
 // IP Card Component
-function IPCard({ ip, index, expanded, onToggle, getRiskMeta, shortHash }: any) {
+function IPCard({
+  ip,
+  index,
+  expanded,
+  onToggle,
+  getRiskMeta,
+  shortHash,
+}: {
+  ip: EnhancedSuspiciousIP
+  index: number
+  expanded: boolean
+  onToggle: () => void
+  getRiskMeta: (clickCount: number) => RiskMeta
+  shortHash: (hash: string) => string
+}) {
   const riskMeta = getRiskMeta(ip.click_count)
   
-  const sourceColors = {
+  const sourceColors: Record<SourceKey, SourceColorMeta> = {
     naver: { bg: 'bg-green-100', text: 'text-green-700', dot: 'bg-green-500' },
     google: { bg: 'bg-blue-100', text: 'text-blue-700', dot: 'bg-blue-500' },
     direct: { bg: 'bg-gray-100', text: 'text-gray-700', dot: 'bg-gray-500' },
@@ -507,15 +522,20 @@ function IPCard({ ip, index, expanded, onToggle, getRiskMeta, shortHash }: any) 
             {ip.source_breakdown && (
               <div className="flex flex-wrap gap-2">
                 {Object.entries(ip.source_breakdown).map(([source, count]) => {
-                  if (!count || count === 0) return null
-                  const colors = sourceColors[source as keyof typeof sourceColors]
+                  const sourceKey = source as SourceKey
+                  const clickCount = Number(count)
+                  if (!Number.isFinite(clickCount) || clickCount <= 0) return null
+
+                  const colors = sourceColors[sourceKey]
+                  if (!colors) return null
+
                   return (
                     <div
                       key={source}
                       className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${colors.bg} ${colors.text}`}
                     >
                       <div className={`h-2 w-2 rounded-full ${colors.dot}`} />
-                      {source.toUpperCase()} · {count}회
+                      {source.toUpperCase()} · {clickCount}회
                     </div>
                   )
                 })}
@@ -548,8 +568,9 @@ function IPCard({ ip, index, expanded, onToggle, getRiskMeta, shortHash }: any) 
             <div>
               <h4 className="mb-4 font-semibold text-gray-900">최근 클릭 이력</h4>
               <div className="space-y-3">
-                {ip.recent_clicks.slice(0, 10).map((click: any, idx: number) => {
-                  const colors = sourceColors[click.source as keyof typeof sourceColors]
+                {ip.recent_clicks.slice(0, 10).map((click: RecentClick, idx: number) => {
+                  const sourceKey = click.source as SourceKey
+                  const colors = sourceColors[sourceKey] ?? sourceColors.other
                   return (
                     <div key={idx} className="rounded-lg bg-white p-3 text-sm">
                       <div className="flex items-start gap-3">
@@ -631,12 +652,12 @@ function IPCard({ ip, index, expanded, onToggle, getRiskMeta, shortHash }: any) 
 }
 
 // Mock 데이터 생성 함수들
-function generateMockSourceBreakdown() {
-  const sources = ['naver', 'google', 'direct', 'other']
+function generateMockSourceBreakdown(): SourceBreakdown {
+  const sources: SourceKey[] = ['naver', 'google', 'direct', 'other']
   const numSources = Math.floor(Math.random() * 3) + 1
   const selectedSources = sources.slice(0, numSources)
   
-  const breakdown: any = {}
+  const breakdown: SourceBreakdown = {}
   selectedSources.forEach(source => {
     breakdown[source] = Math.floor(Math.random() * 30) + 1
   })
@@ -644,12 +665,12 @@ function generateMockSourceBreakdown() {
   return breakdown
 }
 
-function generateMockRecentClicks() {
-  const sources = ['naver', 'google', 'direct', 'other']
-  const clicks = []
+function generateMockRecentClicks(): RecentClick[] {
+  const sources: SourceKey[] = ['naver', 'google', 'direct', 'other']
+  const clicks: RecentClick[] = []
   
   for (let i = 0; i < 15; i++) {
-    const source = sources[Math.floor(Math.random() * sources.length)]
+    const source = sources[Math.floor(Math.random() * sources.length)] ?? 'other'
     clicks.push({
       timestamp: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
       source,
