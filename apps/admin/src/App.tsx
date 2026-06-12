@@ -1,11 +1,13 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './store/auth'
+import { useLtcStore } from './store/ltc'
 
 // Layout
 import Layout from './components/layout/Layout'
 
-// Pages
+// 기존 페이지
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import ResidentsPage from './pages/ResidentsPage'
@@ -19,35 +21,50 @@ import SettingsPage from './pages/settings/SettingsPage'
 import PageViewStats from './pages/analytics/PageViewStats'
 import SuspiciousIPPage from './pages/analytics/SuspiciousIPPage'
 
+// 평가 관리 페이지 (추가)
+import EvalChecklistPage from './pages/eval/EvalChecklistPage'
+import EvalCalendarPage  from './pages/eval/EvalCalendarPage'
+import EvalResidentsPage from './pages/eval/EvalResidentsPage'
+import EvalStaffPage     from './pages/eval/EvalStaffPage'
+import EvalAIReviewPage  from './pages/eval/EvalAIReviewPage'
+
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      retry: 1,
-    },
+    queries: { refetchOnWindowFocus: false, retry: 1 },
   },
 })
 
-// Protected Route Component
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
-  
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />
-  }
-  
+  if (!isAuthenticated) return <Navigate to="/login" replace />
   return <>{children}</>
+}
+
+// 로그인 후 LTC 데이터 자동 로드
+function LtcLoader() {
+  const { isAuthenticated } = useAuthStore()
+  const loadAll = useLtcStore(s => s.loadAll)
+  const loaded  = useLtcStore(s => s.loaded)
+
+  useEffect(() => {
+    // isAuthenticated가 true이고 아직 로드 안 됐으면 로드
+    // apiClient는 localStorage의 access_token을 자동으로 사용하므로 별도 토큰 전달 불필요
+    if (isAuthenticated && !loaded) {
+      loadAll()
+    }
+  }, [isAuthenticated, loaded, loadAll])
+
+  return null
 }
 
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
+        <LtcLoader />
         <Routes>
-          {/* Public Route */}
           <Route path="/login" element={<LoginPage />} />
 
-          {/* Protected Routes */}
           <Route
             path="/"
             element={
@@ -56,21 +73,28 @@ function App() {
               </ProtectedRoute>
             }
           >
+            {/* 기존 페이지 */}
             <Route index element={<DashboardPage />} />
-            <Route path="residents" element={<ResidentsPage />} />
-            <Route path="staff" element={<StaffPage />} />
-            <Route path="contacts" element={<ContactsPage />} />
-            <Route path="contacts/:id" element={<ContactDetailPage />} />
-            <Route path="history" element={<HistoryPage />} />
-            <Route path="history/new" element={<HistoryEditPage />} />
-            <Route path="history/edit/:id" element={<HistoryEditPage />} />
-            <Route path="reviews" element={<ReviewsPage />} />
-            <Route path="analytics/page-views" element={<PageViewStats />} />
+            <Route path="residents"                element={<ResidentsPage />} />
+            <Route path="staff"                    element={<StaffPage />} />
+            <Route path="contacts"                 element={<ContactsPage />} />
+            <Route path="contacts/:id"             element={<ContactDetailPage />} />
+            <Route path="history"                  element={<HistoryPage />} />
+            <Route path="history/new"              element={<HistoryEditPage />} />
+            <Route path="history/edit/:id"         element={<HistoryEditPage />} />
+            <Route path="reviews"                  element={<ReviewsPage />} />
+            <Route path="analytics/page-views"     element={<PageViewStats />} />
             <Route path="analytics/suspicious-ips" element={<SuspiciousIPPage />} />
-            <Route path="settings" element={<SettingsPage />} />
+            <Route path="settings"                 element={<SettingsPage />} />
+
+            {/* 평가 관리 페이지 */}
+            <Route path="eval/checklist"  element={<EvalChecklistPage />} />
+            <Route path="eval/calendar"   element={<EvalCalendarPage />} />
+            <Route path="eval/residents"  element={<EvalResidentsPage />} />
+            <Route path="eval/staff"      element={<EvalStaffPage />} />
+            <Route path="eval/ai-review"  element={<EvalAIReviewPage />} />
           </Route>
 
-          {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
