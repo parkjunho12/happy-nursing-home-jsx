@@ -43,7 +43,7 @@ export function getPeriodKey(freq: Frequency, date: Date): string {
   const y = date.getFullYear()
   const m = date.getMonth()
   switch (freq) {
-    case 'daily':       return date.toISOString().split('T')[0]
+    case 'daily':       return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(date)
     case 'weekly': {
       const jan1 = new Date(y, 0, 1)
       const week = Math.ceil(((date.getTime() - jan1.getTime()) / 86400000 + jan1.getDay() + 1) / 7)
@@ -53,12 +53,12 @@ export function getPeriodKey(freq: Frequency, date: Date): string {
     case 'quarterly':   return `${y}-Q${Math.floor(m / 3) + 1}`
     case 'half-yearly': return m < 6 ? `${y}-H1` : `${y}-H2`
     case 'yearly':      return `${y}`
-    default:            return date.toISOString().split('T')[0]
+    default:            return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(date)
   }
 }
 
 export function getCurrentPeriodKey(freq: Frequency): string {
-  return getPeriodKey(freq, new Date())
+  return getPeriodKey(freq, todayDateKST())
 }
 
 export function getPeriodLabel(freq: Frequency, key: string): string {
@@ -102,6 +102,19 @@ export interface CompletionRecord {
   attachmentName: string
 }
 
+export interface OccurrenceRecord {
+  id: string
+  checklistItemId: string
+  periodKey: string
+  frequency: string
+  scheduledDate: string
+  dueDate: string
+  status: 'pending' | 'completed' | 'overdue'
+  completedDate?: string
+  memo: string
+  attachmentName: string
+}
+
 export interface ChecklistItem {
   id: string
   title: string
@@ -122,6 +135,7 @@ export interface ChecklistItem {
   completed: boolean
   completedDate?: string
   completionHistory: CompletionRecord[]
+  occurrences: OccurrenceRecord[]   // occurrence 기반 완료 이력 (없으면 [])
   personId?: string
   personName?: string
   personType?: string
@@ -132,19 +146,33 @@ export interface ChecklistItem {
 export function isPeriodCompleted(item: ChecklistItem, periodKey?: string): boolean {
   if (EVENT_FREQS.includes(item.frequency as Frequency)) return item.completed
   const key = periodKey ?? getCurrentPeriodKey(item.frequency as Frequency)
+
+  // occurrence 우선 — 있으면 occurrence.status 기준
+  if (item.occurrences && item.occurrences.length > 0) {
+    const occ = item.occurrences.find(o => o.periodKey === key)
+    if (occ) return occ.status === 'completed'
+  }
+  // fallback — completion_history 기준 (occurrence 없을 때)
   return item.completionHistory.some(r => r.periodKey === key)
 }
 
 export function isItemDone(item: ChecklistItem): boolean {
-  return RECURRING.includes(item.frequency as Frequency)
-    ? isPeriodCompleted(item, getCurrentPeriodKey(item.frequency as Frequency))
-    : item.completed
+  if (EVENT_FREQS.includes(item.frequency as Frequency)) return item.completed
+  const key = getCurrentPeriodKey(item.frequency as Frequency)
+
+  // occurrence 우선
+  if (item.occurrences && item.occurrences.length > 0) {
+    const occ = item.occurrences.find(o => o.periodKey === key)
+    if (occ) return occ.status === 'completed'
+  }
+  // fallback
+  return item.completionHistory.some(r => r.periodKey === key)
 }
 
 export function shouldShowOnDate(item: ChecklistItem, date: Date): boolean {
   if (!item.active) return false
 
-  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const today = todayDateKST()
   const d     = new Date(date); d.setHours(0, 0, 0, 0)
 
   // ── 이벤트성 (입소/퇴소/입사) ─────────────────────────────────
@@ -152,7 +180,7 @@ export function shouldShowOnDate(item: ChecklistItem, date: Date): boolean {
   // 완료:   completedDate 당일에만 표시
   if (EVENT_FREQS.includes(item.frequency as Frequency)) {
     if (item.completed) {
-      return (item.completedDate ?? '') === date.toISOString().split('T')[0]
+      return (item.completedDate ?? '') === new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(date)
     }
     const created = new Date(item.createdAt); created.setHours(0, 0, 0, 0)
     return d >= created && d <= today
@@ -163,13 +191,13 @@ export function shouldShowOnDate(item: ChecklistItem, date: Date): boolean {
   const done = item.completionHistory.some(r => r.periodKey === periodKey)
   if (done) {
     const rec = item.completionHistory.find(r => r.periodKey === periodKey)!
-    return rec.completedDate === date.toISOString().split('T')[0]
+    return rec.completedDate === new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(date)
   }
   return isDateInActivePeriod(item.frequency as Frequency, date)
 }
 
 function isDateInActivePeriod(freq: Frequency, date: Date): boolean {
-  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const today = todayDateKST()
   const d = new Date(date); d.setHours(0, 0, 0, 0)
   if (d > today) return false
   switch (freq) {
@@ -201,4 +229,22 @@ export function calcAge(birthDate: string): number {
 
 export function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2)
+}
+
+// ── KST(한국 시간) 기준 오늘 날짜 ──────────────────────────────────────────
+// new Date().toISOString()은 UTC 기준이라 오전 9시 이전에는 어제 날짜를 반환함.
+// 이 함수는 항상 KST 기준 "오늘" 날짜를 YYYY-MM-DD로 반환한다.
+/**
+ * KST(Asia/Seoul) 기준 오늘 날짜를 YYYY-MM-DD 문자열로 반환.
+ * - 브라우저 로컬타임에 관계없이 항상 한국 시간 기준으로 계산.
+ * - Intl.DateTimeFormat으로 명시적으로 타임존 지정.
+ */
+export function todayKST(): string {
+  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(new Date())
+  // sv-SE 로케일은 YYYY-MM-DD 형식을 반환함
+}
+
+// KST 기준 오늘 Date 객체 (비교 등에 사용)
+export function todayDateKST(): Date {
+  return new Date(todayKST() + 'T00:00:00')
 }

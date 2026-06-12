@@ -7,6 +7,7 @@ from sqlalchemy import Column, String, Integer, Text, DateTime
 from sqlalchemy.sql import func
 import uuid
 
+
 from app.core.database import Base
 
 

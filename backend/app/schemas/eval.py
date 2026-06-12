@@ -1,10 +1,12 @@
 import json
 from datetime import datetime
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Literal
 from pydantic import BaseModel, ConfigDict, field_validator
 
 
-# ── 공통 ──────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# CompletionRecord (기존 — 하위 호환 유지)
+# ══════════════════════════════════════════════════════════════════════════════
 
 class CompletionRecordOut(BaseModel):
     period_key:      str
@@ -14,7 +16,46 @@ class CompletionRecordOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# ── 체크리스트 ──────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# ChecklistOccurrence (신규)
+# ══════════════════════════════════════════════════════════════════════════════
+
+OccurrenceStatus = Literal["pending", "completed", "overdue"]
+
+
+class OccurrenceOut(BaseModel):
+    """ChecklistOccurrence 응답 스키마"""
+    id:                str
+    checklist_item_id: str
+    period_key:        str
+    frequency:         str
+    scheduled_date:    str
+    due_date:          str
+    status:            str                  # pending | completed | overdue
+    completed_date:    Optional[str] = None
+    memo:              str = ""
+    attachment_name:   str = ""
+    created_at:        datetime
+    updated_at:        datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OccurrenceComplete(BaseModel):
+    """완료 처리 요청"""
+    completed_date:  str
+    memo:            str = ""
+    attachment_name: str = ""
+
+
+class OccurrenceSyncResult(BaseModel):
+    """sync 엔드포인트 응답"""
+    created: int
+    overdue: int
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ChecklistItem (기존 + occurrences 필드 추가)
+# ══════════════════════════════════════════════════════════════════════════════
 
 class ChecklistItemOut(BaseModel):
     id:                   str
@@ -33,6 +74,7 @@ class ChecklistItemOut(BaseModel):
     active:               bool
     memo:                 str
     attachment_name:      str
+    # 기존 호환 필드 — 이벤트성은 여기서, 반복 주기는 completion_history/occurrences 사용
     completed:            bool
     completed_date:       Optional[str] = None
     last_checked_date:    Optional[str] = None
@@ -41,7 +83,10 @@ class ChecklistItemOut(BaseModel):
     person_type:          Optional[str] = None
     template_id:          Optional[str] = None
     created_at:           datetime
+    # 완료 이력 (기존 CompletionRecord 기반 — 하위 호환)
     completion_history:   List[CompletionRecordOut] = []
+    # occurrence 이력 (신규 — 없으면 빈 리스트, 있으면 우선 사용)
+    occurrences:          List[OccurrenceOut] = []
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -67,29 +112,30 @@ class ChecklistItemCreate(BaseModel):
 
 
 class ChecklistItemUpdate(BaseModel):
-    title:             Optional[str] = None
-    description:       Optional[str] = None
-    frequency:         Optional[str] = None
+    title:                Optional[str] = None
+    description:          Optional[str] = None
+    frequency:            Optional[str] = None
     related_indicator_id: Optional[str] = None
     related_category_id:  Optional[str] = None
     related_domain_id:    Optional[str] = None
-    assignee:          Optional[str] = None
-    evidence_required: Optional[str] = None
-    storage_location:  Optional[str] = None
-    how_to:            Optional[str] = None
-    eval_note:         Optional[str] = None
-    risk_level:        Optional[str] = None
-    memo:              Optional[str] = None
-    attachment_name:   Optional[str] = None
-    active:            Optional[bool] = None
-    completed:         Optional[bool] = None
-    completed_date:    Optional[str] = None
-    person_id:         Optional[str] = None
-    person_name:       Optional[str] = None
-    person_type:       Optional[str] = None
+    assignee:             Optional[str] = None
+    evidence_required:    Optional[str] = None
+    storage_location:     Optional[str] = None
+    how_to:               Optional[str] = None
+    eval_note:            Optional[str] = None
+    risk_level:           Optional[str] = None
+    memo:                 Optional[str] = None
+    attachment_name:      Optional[str] = None
+    active:               Optional[bool] = None
+    completed:            Optional[bool] = None
+    completed_date:       Optional[str] = None
+    person_id:            Optional[str] = None
+    person_name:          Optional[str] = None
+    person_type:          Optional[str] = None
 
 
 class ToggleRequest(BaseModel):
+    """기존 toggle API — CompletionRecord + Occurrence 동시 업데이트"""
     period_key:      str
     completed_date:  str
     memo:            str = ""
@@ -97,12 +143,14 @@ class ToggleRequest(BaseModel):
     is_event:        bool = False
 
 
-# ── 평가 지표 ──────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# 평가 지표
+# ══════════════════════════════════════════════════════════════════════════════
 
 class EvalDomainOut(BaseModel):
-    id:    str
-    name:  str
-    color: str
+    id:     str
+    name:   str
+    color:  str
     active: bool
     model_config = ConfigDict(from_attributes=True)
 
@@ -141,7 +189,9 @@ class EvalSubIndicatorOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# ── 수급자 ─────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# 수급자
+# ══════════════════════════════════════════════════════════════════════════════
 
 class LtcResidentCreate(BaseModel):
     name:                  str
@@ -179,7 +229,9 @@ class DischargeRequest(BaseModel):
     discharge_date: str
 
 
-# ── 직원 ──────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# 직원
+# ══════════════════════════════════════════════════════════════════════════════
 
 class LtcStaffCreate(BaseModel):
     name:       str
@@ -214,7 +266,9 @@ class ResignRequest(BaseModel):
     resign_date: str
 
 
-# ── 설정 ──────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# 설정
+# ══════════════════════════════════════════════════════════════════════════════
 
 class EvalSettingOut(BaseModel):
     facility_name:                str

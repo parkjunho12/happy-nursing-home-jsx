@@ -192,3 +192,61 @@ export const evalAIReviewAPI = {
     return unwrap<any>(res)
   },
 }
+
+// ── Occurrence API ─────────────────────────────────────────────
+export const occurrenceAPI = {
+  /** 앱 로드 시 1회: 현재 주기 생성 + 만료 처리 */
+  sync: async () => {
+    const res = await apiClient.post('/api/v1/eval/occurrences/sync', {})
+    return unwrap<{ created: number; overdue: number }>(res)
+  },
+
+  /** 전체 조회 (필터 지원) */
+  list: async (params?: {
+    checklist_item_id?: string
+    period_key?: string
+    status?: 'pending' | 'completed' | 'overdue'
+    due_from?: string
+    due_to?: string
+    person_id?: string
+    domain_id?: string
+  }) => {
+    const res = await apiClient.get('/api/v1/eval/occurrences', { params })
+    return unwrap<any[]>(res)
+  },
+
+  /** 오늘 해야 할 것 (과거 미완료 포함) */
+  today: async () => {
+    const res = await apiClient.get('/api/v1/eval/occurrences/today')
+    return unwrap<any[]>(res)
+  },
+
+  /** 월별 캘린더 */
+  calendar: async (year: number, month: number) => {
+    const res = await apiClient.get('/api/v1/eval/occurrences/calendar', {
+      params: { year, month },
+    })
+    return unwrap<Record<string, any[]>>(res)
+  },
+
+  get: async (id: string) => {
+    const res = await apiClient.get(`/api/v1/eval/occurrences/${id}`)
+    return unwrap<any>(res)
+  },
+
+  complete: async (id: string, d: { completed_date: string; memo?: string; attachment_name?: string }) => {
+    const res = await apiClient.post(`/api/v1/eval/occurrences/${id}/complete`, d)
+    return unwrap<any>(res)
+  },
+
+  uncomplete: async (id: string) => {
+    const res = await apiClient.post(`/api/v1/eval/occurrences/${id}/uncomplete`, {})
+    return unwrap<any>(res)
+  },
+
+  /** 특정 아이템의 현재 주기 occurrence 즉시 생성 */
+  ensure: async (itemId: string) => {
+    const res = await apiClient.post(`/api/v1/eval/occurrences/ensure/${itemId}`, {})
+    return unwrap<any>(res)
+  },
+}

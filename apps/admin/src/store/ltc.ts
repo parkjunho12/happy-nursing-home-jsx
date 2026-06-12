@@ -5,8 +5,9 @@ import {
   evalStaffAPI,
   evalIndicatorsAPI,
   evalSettingsAPI,
+  occurrenceAPI,
 } from '@/api/evalClient'
-import { getCurrentPeriodKey, EVENT_FREQS } from '@/utils/period'
+import { getCurrentPeriodKey, EVENT_FREQS, todayKST } from '@/utils/period'
 import {
   generateResidentAdmissionChecklists,
   generateResidentDischargeChecklists,
@@ -43,6 +44,7 @@ export interface ChecklistItem {
   completedDate?: string
   lastCheckedDate?: string
   completionHistory: CompletionRecord[]
+  occurrences: ChecklistOccurrence[]   // 신규 — 없으면 [], 있으면 우선 사용
   personId?: string
   personName?: string
   personType?: string
@@ -66,7 +68,39 @@ export interface EvalCategory   { id: string; domainId: string; name: string; qu
 export interface EvalIndicator  { id: string; categoryId: string; name: string; score: number; criteria: string; evidenceList: string[]; active: boolean }
 export interface EvalSettings   { facilityName: string; evalYear: number; alertDaysBeforeDue: number; longInactiveThresholdDays: number }
 
+export interface ChecklistOccurrence {
+  id: string
+  checklistItemId: string
+  periodKey: string
+  frequency: string
+  scheduledDate: string
+  dueDate: string
+  status: 'pending' | 'completed' | 'overdue'
+  completedDate?: string
+  memo: string
+  attachmentName: string
+  createdAt: string
+  updatedAt: string
+}
+
 // ── 매핑 헬퍼 ────────────────────────────────────────────────────────────
+
+function mapOcc(raw: any): ChecklistOccurrence {
+  return {
+    id:              raw.id,
+    checklistItemId: raw.checklist_item_id,
+    periodKey:       raw.period_key,
+    frequency:       raw.frequency,
+    scheduledDate:   raw.scheduled_date,
+    dueDate:         raw.due_date,
+    status:          raw.status,
+    completedDate:   raw.completed_date ?? undefined,
+    memo:            raw.memo ?? '',
+    attachmentName:  raw.attachment_name ?? '',
+    createdAt:       raw.created_at ?? '',
+    updatedAt:       raw.updated_at ?? '',
+  }
+}
 
 function mapCL(raw: any): ChecklistItem {
   return {
@@ -98,6 +132,8 @@ function mapCL(raw: any): ChecklistItem {
       memo:           r.memo           ?? '',
       attachmentName: r.attachment_name ?? '',
     })),
+    // 신규: occurrence 이력 (없으면 빈 배열, 있으면 우선 사용)
+    occurrences: (raw.occurrences ?? []).map(mapOcc),
   }
 }
 function mapR(raw: any): LtcResident {
@@ -132,17 +168,21 @@ function clPayload(item: Omit<ChecklistItem,'id'|'createdAt'|'completionHistory'
 // ── 스토어 ───────────────────────────────────────────────────────────────
 
 interface LtcState {
-  checklists:  ChecklistItem[]
-  residents:   LtcResident[]
-  staffList:   LtcStaff[]
-  domains:     EvalDomain[]
-  categories:  EvalCategory[]
-  indicators:  EvalIndicator[]
-  settings:    EvalSettings
-  loaded:      boolean
-  loading:     boolean
+  checklists:   ChecklistItem[]
+  residents:    LtcResident[]
+  staffList:    LtcStaff[]
+  domains:      EvalDomain[]
+  categories:   EvalCategory[]
+  indicators:   EvalIndicator[]
+  settings:     EvalSettings
+  occurrences:  ChecklistOccurrence[]   // 신규
+  loaded:       boolean
+  loading:      boolean
 
   loadAll:           () => Promise<void>
+  syncOccurrences:   () => Promise<void>   // 신규
+  completeOccurrence:   (id: string, completedDate: string, memo?: string, attachmentName?: string) => Promise<void>
+  uncompleteOccurrence: (id: string) => Promise<void>
   addChecklist:      (item: Omit<ChecklistItem,'id'|'createdAt'|'completionHistory'>) => Promise<void>
   updateChecklist:   (id: string, u: Partial<ChecklistItem>) => Promise<void>
   deleteChecklist:   (id: string) => Promise<void>
@@ -160,13 +200,13 @@ const DEFAULT_SETTINGS: EvalSettings = { facilityName:'행복한 요양원', eva
 
 export const useLtcStore = create<LtcState>((set, get) => ({
   checklists:[], residents:[], staffList:[], domains:[], categories:[], indicators:[],
-  settings: DEFAULT_SETTINGS, loaded:false, loading:false,
+  settings: DEFAULT_SETTINGS, occurrences: [], loaded:false, loading:false,
 
   loadAll: async () => {
     if (get().loading) return
     set({ loading: true })
     try {
-      const [cls, res, stf, doms, cats, inds, settings] = await Promise.all([
+      const [cls, res, stf, doms, cats, inds, settings, occs] = await Promise.all([
         evalChecklistAPI.list({ active_only: false }),
         evalResidentsAPI.list(),
         evalStaffAPI.list(),
@@ -174,6 +214,7 @@ export const useLtcStore = create<LtcState>((set, get) => ({
         evalIndicatorsAPI.categories(),
         evalIndicatorsAPI.indicators(),
         evalSettingsAPI.get(),
+        occurrenceAPI.list().catch(() => []),  // occurrence는 실패해도 무시
       ])
       set({
         checklists:  cls.map(mapCL),
@@ -183,15 +224,46 @@ export const useLtcStore = create<LtcState>((set, get) => ({
         categories:  cats.map((c:any) => ({ id:c.id, domainId:c.domain_id, name:c.name, questionCount:c.question_count, totalScore:c.total_score, active:c.active })),
         indicators:  inds.map((i:any) => ({ id:i.id, categoryId:i.category_id, name:i.name, score:i.score, criteria:i.criteria, evidenceList:i.evidence_list??[], active:i.active })),
         settings:    mapSettings(settings),
+        occurrences: occs.map(mapOcc),
         loaded:      true,
       })
     } catch(e) { console.error('[LTC] loadAll failed', e) }
     finally { set({ loading: false }) }
   },
 
+  syncOccurrences: async () => {
+    try {
+      await occurrenceAPI.sync()
+      const occs = await occurrenceAPI.list()
+      set({ occurrences: occs.map(mapOcc) })
+    } catch(e) { console.error('[LTC] syncOccurrences failed', e) }
+  },
+
+  completeOccurrence: async (id, completedDate, memo='', attachmentName='') => {
+    const raw = await occurrenceAPI.complete(id, { completed_date: completedDate, memo, attachment_name: attachmentName })
+    set(s => ({ occurrences: s.occurrences.map(o => o.id===id ? mapOcc(raw) : o) }))
+    // checklist 상태도 갱신
+    const updated = await evalChecklistAPI.list({ active_only: false }).catch(() => null)
+    if (updated) set(_s => ({ checklists: updated.map(mapCL) }))
+  },
+
+  uncompleteOccurrence: async (id) => {
+    const raw = await occurrenceAPI.uncomplete(id)
+    set(s => ({ occurrences: s.occurrences.map(o => o.id===id ? mapOcc(raw) : o) }))
+    const updated = await evalChecklistAPI.list({ active_only: false }).catch(() => null)
+    if (updated) set(_s => ({ checklists: updated.map(mapCL) }))
+  },
+
   addChecklist: async (item) => {
     const raw = await evalChecklistAPI.create(clPayload({ ...item, completionHistory:[] } as any))
-    set(s => ({ checklists: [...s.checklists, mapCL(raw)] }))
+    const newItem = mapCL(raw)
+    set(s => ({ checklists: [...s.checklists, newItem] }))
+
+    // 백엔드에서 occurrence를 생성했으므로 해당 아이템 occurrence를 당겨온다
+    const newOccs = await occurrenceAPI.list({ checklist_item_id: newItem.id }).catch(() => [])
+    if (newOccs.length > 0) {
+      set(s => ({ occurrences: [...s.occurrences.filter(o => o.checklistItemId !== newItem.id), ...newOccs.map(mapOcc)] }))
+    }
   },
   updateChecklist: async (id, u) => {
     const p: any = {}
@@ -223,19 +295,34 @@ export const useLtcStore = create<LtcState>((set, get) => ({
   toggleComplete: async (id) => {
     const item = get().checklists.find(c => c.id===id)
     if (!item) return
-    const today     = new Date().toISOString().split('T')[0]
+    const today     = todayKST()
     const isEvent   = EVENT_FREQS.includes(item.frequency as any)
     const periodKey = isEvent ? today : getCurrentPeriodKey(item.frequency as any)
     const raw = await evalChecklistAPI.toggle(id, { period_key:periodKey, completed_date:today, is_event:isEvent })
-    set(s => ({ checklists: s.checklists.map(c => c.id===id ? mapCL(raw) : c) }))
+    const updated = mapCL(raw)
+    set(s => ({ checklists: s.checklists.map(c => c.id===id ? updated : c) }))
+    // occurrences 스토어도 동기화
+    if (updated.occurrences.length > 0) {
+      set(s => ({
+        occurrences: [
+          ...s.occurrences.filter(o => o.checklistItemId !== id),
+          ...updated.occurrences,
+        ]
+      }))
+    }
   },
 
   addResident: async (r) => {
     const raw = await evalResidentsAPI.create({ name:r.name, birth_date:r.birthDate, gender:r.gender, admission_date:r.admissionDate, care_grade_start_date:r.careGradeStartDate, memo:r.memo })
     const newR = mapR(raw)
     const templates = generateResidentAdmissionChecklists(newR as any)
-    const newCls    = await evalChecklistAPI.createBulk(templates.map(clPayload as any))
+    const newCls = await evalChecklistAPI.createBulk(templates.map(clPayload as any))
+    const newItemIds = newCls.map((c: any) => c.id)
     set(s => ({ residents:[newR,...s.residents], checklists:[...s.checklists,...newCls.map(mapCL)] }))
+    // 새 체크리스트의 occurrence 즉시 반영
+    const newOccs = await occurrenceAPI.list({ person_id: newR.id }).catch(() => [])
+    if (newOccs.length > 0)
+      set(s => ({ occurrences: [...s.occurrences.filter(o => !newItemIds.includes(o.checklistItemId)), ...newOccs.map(mapOcc)] }))
   },
   updateResident: async (id, u) => {
     const p: any = {}
@@ -256,18 +343,26 @@ export const useLtcStore = create<LtcState>((set, get) => ({
       evalResidentsAPI.discharge(id, date),
       evalChecklistAPI.createBulk(templates.map(clPayload as any)),
     ])
+    const newItemIds = newCls.map((c: any) => c.id)
     set(s => ({
       residents:  s.residents.map(r => r.id===id ? mapR(raw) : r),
       checklists: [...s.checklists.map(c => c.personId===id&&!c.completed ? {...c,active:false} : c), ...newCls.map(mapCL)],
     }))
+    const newOccs = await occurrenceAPI.list({ person_id: id }).catch(() => [])
+    if (newOccs.length > 0)
+      set(s => ({ occurrences: [...s.occurrences.filter(o => !newItemIds.includes(o.checklistItemId)), ...newOccs.map(mapOcc)] }))
   },
 
   addStaff: async (s) => {
     const raw = await evalStaffAPI.create({ name:s.name, birth_date:s.birthDate, gender:s.gender, hire_date:s.hireDate, memo:s.memo })
-    const newS    = mapS(raw)
+    const newS = mapS(raw)
     const templates = generateStaffHireChecklists(newS as any)
-    const newCls    = await evalChecklistAPI.createBulk(templates.map(clPayload as any))
+    const newCls = await evalChecklistAPI.createBulk(templates.map(clPayload as any))
+    const newItemIds = newCls.map((c: any) => c.id)
     set(st => ({ staffList:[newS,...st.staffList], checklists:[...st.checklists,...newCls.map(mapCL)] }))
+    const newOccs = await occurrenceAPI.list({ person_id: newS.id }).catch(() => [])
+    if (newOccs.length > 0)
+      set(st => ({ occurrences: [...st.occurrences.filter(o => !newItemIds.includes(o.checklistItemId)), ...newOccs.map(mapOcc)] }))
   },
   updateStaff: async (id, u) => {
     const p: any = {}

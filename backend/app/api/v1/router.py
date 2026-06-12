@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 from app.api.v1.endpoints import auth, public, residents, staff, contacts, reviews, history, dashboard, tracking, eval_checklists, eval_indicators, eval_people
 from app.api.v1.endpoints.eval_ai_review import router as eval_ai_router
+from app.api.v1.endpoints.eval_occurrences import router as eval_occ_router
 api_router = APIRouter()
 
 # Public endpoints (인증 불필요)
@@ -68,3 +69,4 @@ api_router.include_router(eval_indicators.eval_router,       prefix="/eval",    
 api_router.include_router(eval_indicators.settings_router,   prefix="/eval/settings",     tags=["eval-settings"])
 api_router.include_router(eval_indicators.eval_dash_router,  prefix="/eval/dashboard",    tags=["eval-dashboard"])
 api_router.include_router(eval_ai_router,    prefix="/eval",              tags=["eval-ai-review"])
+api_router.include_router(eval_occ_router,   prefix="/eval/occurrences",  tags=["eval-occurrences"])
