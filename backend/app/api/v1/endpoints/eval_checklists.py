@@ -12,6 +12,9 @@ from app.schemas.eval import (
     ToggleRequest,
 )
 from app.schemas.response import ApiResponse
+from app.services.occurrence import (
+    get_or_create_occurrence, complete_occurrence, uncomplete_occurrence,
+)
 
 router = APIRouter()
 
@@ -19,6 +22,7 @@ router = APIRouter()
 # ── 응답 변환 헬퍼 ────────────────────────────────────────────────────────
 
 def _cl_to_out(item: ChecklistItem) -> dict:
+    # completion_history (기존 CompletionRecord)
     history = [
         {
             "period_key":      r.period_key,
@@ -28,21 +32,36 @@ def _cl_to_out(item: ChecklistItem) -> dict:
         }
         for r in sorted(item.completion_records, key=lambda x: x.period_key)
     ]
+
+    # occurrences (신규)
+    occs = [
+        {
+            "id":                o.id,
+            "checklist_item_id": o.checklist_item_id,
+            "period_key":        o.period_key,
+            "frequency":         o.frequency,
+            "scheduled_date":    o.scheduled_date,
+            "due_date":          o.due_date,
+            "status":            o.status,
+            "completed_date":    o.completed_date,
+            "memo":              o.memo or "",
+            "attachment_name":   o.attachment_name or "",
+            "created_at":        o.created_at,
+            "updated_at":        o.updated_at,
+        }
+        for o in sorted(item.occurrences, key=lambda x: x.period_key)
+    ]
+
     d = {c.key: getattr(item, c.key) for c in item.__table__.columns}
     d["completion_history"] = history
-    # Enum → string
-    if d.get("frequency"):
-        d["frequency"] = str(d["frequency"].value) if hasattr(d["frequency"], "value") else d["frequency"]
-    if d.get("risk_level"):
-        d["risk_level"] = str(d["risk_level"].value) if hasattr(d["risk_level"], "value") else d["risk_level"]
-    if d.get("person_type"):
-        d["person_type"] = str(d["person_type"].value) if hasattr(d["person_type"], "value") else d["person_type"]
+    d["occurrences"]        = occs
     return d
 
 
 def _query_with_history(db: Session):
     return db.query(ChecklistItem).options(
-        selectinload(ChecklistItem.completion_records)
+        selectinload(ChecklistItem.completion_records),
+        selectinload(ChecklistItem.occurrences),
     )
 
 
@@ -168,17 +187,26 @@ def toggle_complete(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """반복 주기 완료/취소 토글"""
+    """반복 주기 완료/취소 토글 — CompletionRecord + ChecklistOccurrence 동시 업데이트"""
     item = _query_with_history(db).filter(ChecklistItem.id == item_id).first()
     if not item:
         raise HTTPException(404, "Not found")
 
     if payload.is_event:
-        # 이벤트성: boolean 토글
+        # ── 이벤트성 ──────────────────────────────────────────────────────
         item.completed = not item.completed
         item.completed_date = payload.completed_date if item.completed else None
+
+        # occurrence 동기화
+        occ = get_or_create_occurrence(db, item)
+        if item.completed:
+            complete_occurrence(db, occ, payload.completed_date, payload.memo, payload.attachment_name)
+        else:
+            uncomplete_occurrence(db, occ)
+
     else:
-        # 반복 주기: period_key로 이력 관리
+        # ── 반복 주기 ─────────────────────────────────────────────────────
+        # 1) CompletionRecord (기존 호환)
         existing = next(
             (r for r in item.completion_records if r.period_key == payload.period_key),
             None
@@ -198,6 +226,13 @@ def toggle_complete(
             db.add(rec)
             item.completed = True
             item.completed_date = payload.completed_date
+
+        # 2) occurrence 동기화
+        occ = get_or_create_occurrence(db, item)
+        if item.completed:
+            complete_occurrence(db, occ, payload.completed_date, payload.memo, payload.attachment_name)
+        else:
+            uncomplete_occurrence(db, occ)
 
     db.commit()
     item = _query_with_history(db).filter(ChecklistItem.id == item_id).first()

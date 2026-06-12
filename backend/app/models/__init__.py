@@ -24,6 +24,22 @@ from app.models.public import (
 
 from app.models.click_event import ClickEvent
 
+# -------------------------
+# Evaluation Management Models
+# -------------------------
+from app.models.eval import (
+    EvalDomain,
+    EvalCategory,
+    EvalSubIndicator,
+    ChecklistItem,
+    CompletionRecord,
+    ChecklistOccurrence,
+    LtcResident,
+    LtcStaffMember,
+    EvalSetting,
+)
+from app.models.eval_ai import EvalGuideline, EvalAIReview
+
 __all__ = [
     # Internal
     "User",

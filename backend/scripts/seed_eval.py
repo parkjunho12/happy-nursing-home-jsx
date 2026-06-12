@@ -5,7 +5,6 @@
 
 frequency 허용값:
   반복: daily, weekly, monthly, quarterly, half-yearly, yearly
-  이벤트: on_admission(입소 시), on_discharge(퇴소 시), on_hire(입사 시)
 """
 import sys
 import os
@@ -24,7 +23,6 @@ from app.models.eval import (
 # ─────────────────────────────────────────────────────────────
 VALID_FREQUENCIES = {
     'daily', 'weekly', 'monthly', 'quarterly', 'half-yearly', 'yearly',
-    'on_admission', 'on_discharge', 'on_hire',
 }
 
 # ─────────────────────────────────────────────────────────────
@@ -178,31 +176,6 @@ CHECKLISTS = [
     {"title":"필수 비치 지침 확인","description":"급여제공지침 10종 및 기타 지침 비치","frequency":"yearly","related_indicator_id":"si04","related_category_id":"cat1","related_domain_id":"dom1","assignee":"시설장","evidence_required":"비치 지침 목록 및 비치 사진","storage_location":"지침파일","how_to":"급여제공지침 10종, 직원 인권침해 대응지침, 고충처리 지침, 야간근무지침 확인","eval_note":"잠금장치 없는 장소에서 쉽게 열람 가능해야 함","risk_level":"high","person_type":"facility"},
     {"title":"급여이용 정보 게시","description":"수급자에게 급여이용 정보를 게시하여 제공","frequency":"yearly","related_indicator_id":"si18","related_category_id":"cat3","related_domain_id":"dom2","assignee":"시설장","evidence_required":"게시판 사진","storage_location":"행정파일 > 게시자료","how_to":"운영규정 개요, 종사자 근무체계, 급여 종류, 비급여 비용, 시설 규모, 보험증권, 평가결과, 월간 프로그램표 게시","eval_note":"노인장기요양보험 홈페이지 정보도 최신화 필요","risk_level":"medium","person_type":"facility"},
 
-    # ── 입사 시 (on_hire) ─────────────────────────────────────────────────
-    {"title":"입사 후 7일 이내 운영규정 교육","description":"신규 직원 입사 후 7일 이내 운영규정 교육 실시","frequency":"on_hire","related_indicator_id":"si01","related_category_id":"cat1","related_domain_id":"dom1","assignee":"시설장","evidence_required":"신규직원 운영규정 교육확인서","storage_location":"직원별 개인파일 > 교육","how_to":"입사일 기준 7일 이내 교육일지와 서명부 작성","eval_note":"입사일과 교육일자 차이 확인 필요","risk_level":"high","person_type":"staff"},
-    {"title":"입사 전 1년 이내 건강검진 결과 확인","description":"신규 직원의 입사 전 1년 이내 건강검진 결과 확인","frequency":"on_hire","related_indicator_id":"si05","related_category_id":"cat1","related_domain_id":"dom1","assignee":"사무국","evidence_required":"건강검진 결과 통보서","storage_location":"직원별 개인파일 > 건강검진","how_to":"입사일 기준 1년 이내 결과인지 확인하고 보관","eval_note":"기간 초과 자료는 인정되지 않을 수 있음","risk_level":"high","person_type":"staff"},
-
-    # ── 입소 시 (on_admission) ────────────────────────────────────────────
-    {"title":"상호존중 안내","description":"입소 시 직원과 수급자의 상호존중 내용 안내","frequency":"on_admission","related_indicator_id":"si15","related_category_id":"cat3","related_domain_id":"dom2","assignee":"사회복지사","evidence_required":"문자 발송내역 또는 안내확인서","storage_location":"어르신별 개인파일 > 입소서류","how_to":"보호자에게 문자 등으로 안내하고 발송내역 보관","eval_note":"폭언·폭행·성희롱 예방 안내와 함께 관리","risk_level":"medium","person_type":"resident"},
-    {"title":"폭언·폭행·성희롱 예방 안내","description":"입소 시 폭언, 폭행, 성희롱 예방 내용 안내","frequency":"on_admission","related_indicator_id":"si15","related_category_id":"cat3","related_domain_id":"dom2","assignee":"사회복지사","evidence_required":"문자 발송내역 또는 안내확인서","storage_location":"어르신별 개인파일 > 입소서류","how_to":"보호자에게 문자 등으로 안내하고 발송내역 보관","eval_note":"입소 시 안내 여부 확인 가능해야 함","risk_level":"medium","person_type":"resident"},
-    {"title":"노인인권지침 제공","description":"입소 시 노인인권보호지침 제공","frequency":"on_admission","related_indicator_id":"si19","related_category_id":"cat3","related_domain_id":"dom2","assignee":"사회복지사","evidence_required":"노인인권보호지침 제공 확인서","storage_location":"어르신별 개인파일 > 입소서류","how_to":"수급자 또는 보호자에게 지침 제공 후 확인자료 보관","eval_note":"제공일자와 대상자 확인 필요","risk_level":"medium","person_type":"resident"},
-    {"title":"연명의료결정제도 설명","description":"입소 시 보호자에게 연명의료결정제도 설명","frequency":"on_admission","related_indicator_id":"si20","related_category_id":"cat3","related_domain_id":"dom2","assignee":"사회복지사","evidence_required":"연명의료결정제도 안내기록","storage_location":"어르신별 개인파일 > 입소서류","how_to":"설명일자, 설명자, 보호자명, 안내내용 기록","eval_note":"생애말기돌봄 지표와 연결","risk_level":"medium","person_type":"resident"},
-    {"title":"입소 후 4주간 주 1회 면담","description":"입소 후 4주간 주 1회 이상 면담 실시","frequency":"on_admission","related_indicator_id":"si13","related_category_id":"cat3","related_domain_id":"dom2","assignee":"사회복지사","evidence_required":"입소 초기 적응 면담기록","storage_location":"어르신별 개인파일 > 상담","how_to":"상담일자, 상담직원명, 상담방법, 수급자명, 상담내용 기록","eval_note":"입소일 기준 4주간 매주 1회 누락 주의","risk_level":"high","person_type":"resident"},
-    {"title":"입소 시 욕구사정","description":"입소 후 인정서 시작월일 기준 반기 주기로 욕구사정 실시","frequency":"on_admission","related_indicator_id":"si24","related_category_id":"cat5","related_domain_id":"dom3","assignee":"사회복지사","evidence_required":"욕구사정지","storage_location":"어르신별 개인파일 > 사정평가","how_to":"입소 초기 욕구사정 후 반기 주기로 재평가","eval_note":"인정서 시작월일 기준 주기 관리 필요","risk_level":"high","person_type":"resident"},
-    {"title":"입소 시 낙상위험도 평가","description":"입소 후 인정서 시작월일 기준 반기 주기로 낙상위험도 평가 실시","frequency":"on_admission","related_indicator_id":"si24","related_category_id":"cat5","related_domain_id":"dom3","assignee":"간호사","evidence_required":"낙상위험도 평가지","storage_location":"어르신별 개인파일 > 사정평가","how_to":"입소 초기 평가 후 반기 주기로 재평가","eval_note":"낙상고위험 표지와 관리방법 숙지로 연결","risk_level":"high","person_type":"resident"},
-    {"title":"입소 시 욕창위험도 평가","description":"입소 후 인정서 시작월일 기준 반기 주기로 욕창위험도 평가 실시","frequency":"on_admission","related_indicator_id":"si24","related_category_id":"cat5","related_domain_id":"dom3","assignee":"간호사","evidence_required":"욕창위험도 평가지","storage_location":"어르신별 개인파일 > 사정평가","how_to":"입소 초기 평가 후 반기 주기로 재평가","eval_note":"고위험군은 일일관찰 및 체위변경 기록과 연결","risk_level":"high","person_type":"resident"},
-    {"title":"입소 시 인지기능 평가","description":"입소 후 인정서 시작월일 기준 반기 주기로 인지기능 평가 실시","frequency":"on_admission","related_indicator_id":"si24","related_category_id":"cat5","related_domain_id":"dom3","assignee":"사회복지사","evidence_required":"인지기능 평가지","storage_location":"어르신별 개인파일 > 사정평가","how_to":"입소 초기 평가 후 반기 주기로 재평가","eval_note":"인지프로그램 계획 수립과 연결","risk_level":"high","person_type":"resident"},
-    {"title":"급여제공계획 수립","description":"입소 후 반기 주기로 급여제공계획 수립","frequency":"on_admission","related_indicator_id":"si25","related_category_id":"cat5","related_domain_id":"dom3","assignee":"사회복지사","evidence_required":"급여제공계획서","storage_location":"어르신별 개인파일 > 급여계획","how_to":"욕구사정 결과를 바탕으로 개별 급여제공계획 작성","eval_note":"사정평가와 계획 내용이 연결되어야 함","risk_level":"high","person_type":"resident"},
-    {"title":"급여제공계획 공단 통보","description":"급여제공계획을 공단에 통보","frequency":"on_admission","related_indicator_id":"si25","related_category_id":"cat5","related_domain_id":"dom3","assignee":"사회복지사","evidence_required":"공단 통보 확인서","storage_location":"어르신별 개인파일 > 급여계획","how_to":"급여제공계획 수립 후 공단 통보 내역 보관","eval_note":"작성만 하고 통보 누락되지 않도록 확인","risk_level":"high","person_type":"resident"},
-    {"title":"급여제공결과 평가","description":"급여제공계획에 따른 결과평가를 반기 주기로 실시","frequency":"on_admission","related_indicator_id":"si37","related_category_id":"cat7","related_domain_id":"dom4","assignee":"사회복지사","evidence_required":"급여제공결과 평가지","storage_location":"어르신별 개인파일 > 급여평가","how_to":"목표 달성 여부와 추후 계획 기록","eval_note":"계획-제공-평가 흐름이 맞아야 함","risk_level":"high","person_type":"resident"},
-    {"title":"72시간 집중배설관리","description":"입소 후 14일 이내 72시간 집중배설 관찰기록표 작성","frequency":"on_admission","related_indicator_id":"si28","related_category_id":"cat6","related_domain_id":"dom3","assignee":"요양보호사","evidence_required":"집중배설 관찰기록표","storage_location":"어르신별 개인파일 > 배설관리","how_to":"기저귀 교환시간, 배뇨·배변 상태를 실제 시간 기준으로 기록","eval_note":"주기적으로 교환했다는 표현만으로는 부족. 시간기록 필요","risk_level":"high","person_type":"resident"},
-    {"title":"기능회복훈련계획 작성","description":"입소 시 기능회복훈련계획 작성 및 연 주기로 재작성","frequency":"on_admission","related_indicator_id":"si34","related_category_id":"cat6","related_domain_id":"dom3","assignee":"물리치료사","evidence_required":"기능회복훈련계획서","storage_location":"어르신별 개인파일 > 기능회복","how_to":"수급자 신체상태를 반영하여 기능회복훈련계획 수립","eval_note":"입소 시 작성 여부 확인","risk_level":"high","person_type":"resident"},
-    {"title":"기피식품 확인","description":"입소 시 수급자의 기피식품 파악","frequency":"on_admission","related_indicator_id":"si16","related_category_id":"cat3","related_domain_id":"dom2","assignee":"사회복지사","evidence_required":"기피식품 파악기록","storage_location":"어르신별 개인파일 > 영양","how_to":"수급자 또는 보호자에게 기피식품, 알레르기, 선호식품 확인","eval_note":"대체식품 제공기록과 연결 필요","risk_level":"medium","person_type":"resident"},
-    {"title":"대체식품 제공","description":"기피식품이 있는 경우 대체식품 제공","frequency":"on_admission","related_indicator_id":"si16","related_category_id":"cat3","related_domain_id":"dom2","assignee":"영양·급식 담당자","evidence_required":"대체식품 제공기록","storage_location":"어르신별 개인파일 > 영양","how_to":"기피식품이 제공되는 날 대체식품 제공 여부 기록","eval_note":"기피식품 파악만 있고 대체 제공기록이 없으면 부족","risk_level":"medium","person_type":"resident"},
-
-    # ── 퇴소 시 (on_discharge) ────────────────────────────────────────────
-    {"title":"연계기록지 작성","description":"퇴소 시 연계기록지 작성","frequency":"on_discharge","related_indicator_id":"si25","related_category_id":"cat5","related_domain_id":"dom3","assignee":"사회복지사","evidence_required":"연계기록지","storage_location":"어르신별 개인파일 > 퇴소","how_to":"퇴소 후 연계기관 또는 보호자에게 필요한 정보 정리","eval_note":"퇴소상담 기록과 함께 관리","risk_level":"medium","person_type":"resident"},
-    {"title":"퇴소상담 실시","description":"급여이용종료 상담 실시","frequency":"on_discharge","related_indicator_id":"si25","related_category_id":"cat5","related_domain_id":"dom3","assignee":"사회복지사","evidence_required":"급여이용종료 상담기록","storage_location":"어르신별 개인파일 > 퇴소","how_to":"퇴소사유, 상담내용, 보호자 의견, 연계사항 기록","eval_note":"퇴소 시점 누락 주의","risk_level":"medium","person_type":"resident"},
 ]
 
 

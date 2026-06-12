@@ -43,16 +43,18 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 // 로그인 후 LTC 데이터 자동 로드
 function LtcLoader() {
   const { isAuthenticated } = useAuthStore()
-  const loadAll = useLtcStore(s => s.loadAll)
-  const loaded  = useLtcStore(s => s.loaded)
+  const loadAll          = useLtcStore(s => s.loadAll)
+  const syncOccurrences  = useLtcStore(s => s.syncOccurrences)
+  const loaded           = useLtcStore(s => s.loaded)
 
   useEffect(() => {
-    // isAuthenticated가 true이고 아직 로드 안 됐으면 로드
-    // apiClient는 localStorage의 access_token을 자동으로 사용하므로 별도 토큰 전달 불필요
     if (isAuthenticated && !loaded) {
-      loadAll()
+      loadAll().then(() => {
+        // 로드 완료 후 occurrence sync (현재 주기 생성 + 만료 처리)
+        syncOccurrences()
+      })
     }
-  }, [isAuthenticated, loaded, loadAll])
+  }, [isAuthenticated, loaded, loadAll, syncOccurrences])
 
   return null
 }
