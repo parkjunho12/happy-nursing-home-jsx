@@ -1,243 +1,463 @@
-import { useEffect, useState } from 'react'
-import { Users, UserCog, MessageSquare, TrendingUp, Calendar, Activity } from 'lucide-react'
+import { useEffect, useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
+import {
+  Users, UserCog, MessageSquare, TrendingUp, Calendar,
+  AlertTriangle, CheckCircle2, Clock, ChevronRight,
+  LogIn, LogOut, UserPlus, UserMinus, ClipboardList, Sparkles,
+} from 'lucide-react'
 import { dashboardAPI } from '@/api/client'
+import { useLtcStore } from '@/store/ltc'
 import type { DashboardStats } from '@/types'
+import {
+  RECURRING, EVENT_FREQS, FREQUENCY_LABELS,
+  isItemDone, isPeriodCompleted, getCurrentPeriodKey, getPeriodEnd,
+  shouldShowOnDate,
+} from '@/utils/period'
 
-const DashboardPage = () => {
-  const [stats, setStats] = useState<DashboardStats | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+// ── 타입 ──────────────────────────────────────────────────────────────────
+interface TodayTask {
+  id: string
+  title: string
+  frequency: string
+  riskLevel: string
+  personName?: string
+  assignee?: string
+  isEvent: boolean
+  elapsedDays?: number   // 이벤트성 미완료 경과일
+}
+
+// ── 유틸 ──────────────────────────────────────────────────────────────────
+const today = new Date()
+today.setHours(0, 0, 0, 0)
+const todayStr = today.toISOString().split('T')[0]
+
+export default function DashboardPage() {
+  const navigate = useNavigate()
+  const [siteStats, setSiteStats] = useState<DashboardStats | null>(null)
+  const [loadingSite, setLoadingSite] = useState(true)
+
+  const { checklists, residents, staffList, loaded, loadAll } = useLtcStore()
 
   useEffect(() => {
-    loadStats()
+    loadSiteStats()
   }, [])
 
-  const loadStats = async () => {
+  useEffect(() => {
+    if (!loaded) loadAll()
+  }, [loaded, loadAll])
+
+  const loadSiteStats = async () => {
     try {
-      setLoading(true)
-      setError(null)
-      const response = await dashboardAPI.stats()
-      setStats(response || null)
-    } catch (error: any) {
-      console.error('Failed to load stats:', error)
-      setError(error.response?.data?.message || 'Failed to load dashboard data')
-      setStats(null)
+      setLoadingSite(true)
+      const res = await dashboardAPI.stats()
+      setSiteStats(res || null)
+    } catch (e) {
+      console.error(e)
     } finally {
-      setLoading(false)
+      setLoadingSite(false)
     }
   }
 
-  const statCards = stats ? [
-    {
-      title: '전체 입소자',
-      value: stats.totalResidents,
-      change: '+3',
-      icon: Users,
-      color: 'bg-blue-500',
-      bgColor: 'bg-blue-50',
-      textColor: 'text-blue-600',
-    },
-    {
-      title: '활동 중 입소자',
-      value: stats.activeResidents,
-      change: `${stats.activeResidents}/${stats.totalResidents}`,
-      icon: Activity,
-      color: 'bg-green-500',
-      bgColor: 'bg-green-50',
-      textColor: 'text-green-600',
-    },
-    {
-      title: '전체 직원',
-      value: stats.totalStaff,
-      change: 'Active',
-      icon: UserCog,
-      color: 'bg-purple-500',
-      bgColor: 'bg-purple-50',
-      textColor: 'text-purple-600',
-    },
-    {
-      title: '대기 상담',
-      value: stats.pendingContacts,
-      change: 'Pending',
-      icon: MessageSquare,
-      color: 'bg-orange-500',
-      bgColor: 'bg-orange-50',
-      textColor: 'text-orange-600',
-    },
-    {
-      title: '오늘 입소',
-      value: stats.todayAdmissions,
-      change: 'Today',
-      icon: Calendar,
-      color: 'bg-pink-500',
-      bgColor: 'bg-pink-50',
-      textColor: 'text-pink-600',
-    },
-    {
-      title: '이번 달 입소',
-      value: stats.monthlyAdmissions,
-      change: '+5',
-      icon: TrendingUp,
-      color: 'bg-indigo-500',
-      bgColor: 'bg-indigo-50',
-      textColor: 'text-indigo-600',
-    },
-  ] : []
+  // ── 오늘 해야 할 체크리스트 ─────────────────────────────────────────────
+  const { todayTasks, urgentTasks, eventPendingTasks } = useMemo(() => {
+    const todayDate = new Date()
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-primary-orange border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">데이터 로딩 중...</p>
-        </div>
-      </div>
-    )
-  }
+    // 오늘 표시되어야 하는 항목 (shouldShowOnDate 활용)
+    const showing = checklists.filter(c => c.active && shouldShowOnDate(c, todayDate))
 
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center max-w-md mx-auto">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <p className="text-gray-900 text-lg font-semibold mb-2">데이터를 불러올 수 없습니다</p>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <button
-            onClick={loadStats}
-            className="px-6 py-2 bg-primary-orange text-white rounded-lg font-semibold hover:bg-primary-orange/90 transition-colors"
-          >
-            다시 시도
-          </button>
-        </div>
-      </div>
-    )
-  }
+    const todayT: TodayTask[] = []
+    const urgentT: TodayTask[] = []
+    const eventT: TodayTask[] = []
 
-  if (!stats) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <p className="text-gray-600 text-lg">데이터가 없습니다</p>
-          <button
-            onClick={loadStats}
-            className="mt-4 px-6 py-2 bg-primary-orange text-white rounded-lg font-semibold hover:bg-primary-orange/90 transition-colors"
-          >
-            새로고침
-          </button>
-        </div>
-      </div>
-    )
-  }
+    showing.forEach(c => {
+      const isEvent = EVENT_FREQS.includes(c.frequency as any)
+      const done = isEvent
+        ? c.completed
+        : isPeriodCompleted(c, getCurrentPeriodKey(c.frequency as any))
+
+      if (done) return   // 완료된 건 제외
+
+      const elapsedDays = isEvent
+        ? Math.floor((Date.now() - new Date(c.createdAt).getTime()) / 86400000)
+        : undefined
+
+      const task: TodayTask = {
+        id: c.id, title: c.title, frequency: c.frequency,
+        riskLevel: c.riskLevel, personName: c.personName,
+        assignee: c.assignee, isEvent, elapsedDays,
+      }
+
+      if (isEvent) {
+        eventT.push(task)
+      } else {
+        todayT.push(task)
+        if (c.riskLevel === 'high') urgentT.push(task)
+      }
+    })
+
+    return {
+      todayTasks:        todayT.sort((a, b) => (b.riskLevel === 'high' ? 1 : 0) - (a.riskLevel === 'high' ? 1 : 0)),
+      urgentTasks:       urgentT,
+      eventPendingTasks: eventT.sort((a, b) => (b.elapsedDays ?? 0) - (a.elapsedDays ?? 0)),
+    }
+  }, [checklists])
+
+  // ── 주기별 완료 현황 ────────────────────────────────────────────────────
+  const periodProgress = useMemo(() => {
+    return RECURRING.map(freq => {
+      const items    = checklists.filter(c => c.active && c.frequency === freq)
+      const key      = getCurrentPeriodKey(freq)
+      const done     = items.filter(c => isPeriodCompleted(c, key)).length
+      const end      = getPeriodEnd(freq)
+      const daysLeft = Math.max(0, Math.ceil((end.getTime() - Date.now()) / 86400000))
+      return { freq, total: items.length, done, daysLeft, rate: items.length ? Math.round(done / items.length * 100) : 0 }
+    }).filter(p => p.total > 0)
+  }, [checklists])
+
+  // ── 오늘 인물 이벤트 ────────────────────────────────────────────────────
+  const todayPersonEvents = useMemo(() => {
+    const events: { type: string; name: string; category: string }[] = []
+    residents.forEach(r => {
+      if (r.admissionDate === todayStr) events.push({ type: 'admission', name: r.name, category: '수급자' })
+      if (r.dischargeDate === todayStr) events.push({ type: 'discharge', name: r.name, category: '수급자' })
+    })
+    staffList.forEach(s => {
+      if (s.hireDate   === todayStr) events.push({ type: 'hire',   name: s.name, category: '직원' })
+      if (s.resignDate === todayStr) events.push({ type: 'resign', name: s.name, category: '직원' })
+    })
+    return events
+  }, [residents, staffList])
+
+  // ── 집계 ───────────────────────────────────────────────────────────────
+  const activeResidents = residents.filter(r => r.status === 'active').length
+  const activeStaff     = staffList.filter(s => s.status === 'active').length
+  const totalActive     = checklists.filter(c => c.active).length
+  const totalDoneToday  = checklists.filter(c => c.active && !EVENT_FREQS.includes(c.frequency as any) && isItemDone(c)).length
+
+  const greetHour = new Date().getHours()
+  const greet = greetHour < 12 ? '좋은 아침입니다' : greetHour < 18 ? '안녕하세요' : '수고 많으셨습니다'
 
   return (
-    <div>
-      {/* Page Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">대시보드</h1>
-        <p className="text-gray-600">행복한요양원 운영 현황</p>
-      </div>
-
-      {/* Stats Grid */}
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-        {statCards.map((stat, index) => (
-          <div
-            key={index}
-            className="bg-white rounded-2xl p-6 shadow-sm border-2 border-gray-100 hover:shadow-lg transition-all duration-300"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <div className={`w-14 h-14 ${stat.bgColor} rounded-xl flex items-center justify-center`}>
-                <stat.icon className={`w-7 h-7 ${stat.textColor}`} />
-              </div>
-              <span className="text-sm font-semibold text-gray-500">
-                {stat.change}
+    <div className="space-y-6">
+      {/* ── 인사말 헤더 ───────────────────────────────────────────── */}
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <p className="text-sm text-gray-400 font-medium">
+            {new Date().toLocaleDateString('ko-KR', { year:'numeric', month:'long', day:'numeric', weekday:'long' })}
+          </p>
+          <h1 className="text-2xl font-bold text-gray-900 mt-0.5">{greet} 👋</h1>
+          <p className="text-sm text-gray-500 mt-0.5">행복한요양원 오늘의 현황입니다</p>
+        </div>
+        {todayPersonEvents.length > 0 && (
+          <div className="flex gap-1.5 flex-wrap">
+            {todayPersonEvents.map((ev, i) => (
+              <span key={i} className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border ${
+                ev.type === 'admission' ? 'bg-teal-50 text-teal-700 border-teal-200' :
+                ev.type === 'discharge' ? 'bg-gray-100 text-gray-600 border-gray-200' :
+                ev.type === 'hire'      ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
+                'bg-orange-50 text-orange-700 border-orange-200'
+              }`}>
+                {ev.type === 'admission' && <LogIn size={11}/>}
+                {ev.type === 'discharge' && <LogOut size={11}/>}
+                {ev.type === 'hire'      && <UserPlus size={11}/>}
+                {ev.type === 'resign'    && <UserMinus size={11}/>}
+                {ev.name} {ev.category} {ev.type === 'admission' ? '입소' : ev.type === 'discharge' ? '퇴소' : ev.type === 'hire' ? '입사' : '퇴사'}
               </span>
-            </div>
-            <h3 className="text-sm font-medium text-gray-600 mb-1">
-              {stat.title}
-            </h3>
-            <p className="text-3xl font-bold text-gray-900">
-              {stat.value}
-            </p>
+            ))}
           </div>
-        ))}
+        )}
       </div>
 
-      {/* Quick Actions */}
-      <div className="grid lg:grid-cols-2 gap-6">
-        {/* Recent Activities */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border-2 border-gray-100">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">최근 활동</h2>
-          <div className="space-y-4">
-            <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
-              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                <Users className="w-5 h-5 text-blue-600" />
+      {/* ── 핵심 지표 4개 ─────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard
+          label="입소 수급자"
+          value={activeResidents}
+          sub={siteStats ? `전체 ${siteStats.totalResidents}명` : ''}
+          color="teal"
+          icon={<Users size={18}/>}
+          onClick={() => navigate('/eval/residents')}
+        />
+        <KpiCard
+          label="재직 직원"
+          value={activeStaff}
+          sub={loadingSite ? '' : `전체 ${siteStats?.totalStaff ?? 0}명`}
+          color="indigo"
+          icon={<UserCog size={18}/>}
+          onClick={() => navigate('/eval/staff')}
+        />
+        <KpiCard
+          label="오늘 미완료"
+          value={todayTasks.length}
+          sub={urgentTasks.length > 0 ? `위험 ${urgentTasks.length}건 포함` : '정기 반복 업무'}
+          color={urgentTasks.length > 0 ? 'red' : 'orange'}
+          icon={<ClipboardList size={18}/>}
+          onClick={() => navigate('/eval/checklist')}
+          alert={urgentTasks.length > 0}
+        />
+        <KpiCard
+          label="이벤트 미완료"
+          value={eventPendingTasks.length}
+          sub="입소·입사 관련 누적"
+          color={eventPendingTasks.length > 0 ? 'purple' : 'gray'}
+          icon={<AlertTriangle size={18}/>}
+          onClick={() => navigate('/eval/checklist')}
+          alert={eventPendingTasks.some(t => (t.elapsedDays ?? 0) >= 7)}
+        />
+      </div>
+
+      {/* ── 메인 2열 ──────────────────────────────────────────────── */}
+      <div className="grid lg:grid-cols-5 gap-4">
+
+        {/* 왼쪽: 오늘 해야 할 것 + 이벤트 미완료 (3열) */}
+        <div className="lg:col-span-3 space-y-4">
+
+          {/* 오늘 정기 업무 */}
+          <section className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-50">
+              <div className="flex items-center gap-2">
+                <Clock size={15} className="text-primary-orange"/>
+                <h2 className="text-sm font-bold text-gray-800">오늘 해야 할 정기 업무</h2>
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                  todayTasks.length === 0 ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
+                }`}>
+                  {todayTasks.length === 0 ? '✓ 모두 완료' : `${todayTasks.length}건 남음`}
+                </span>
               </div>
-              <div className="flex-1">
-                <p className="font-medium text-gray-900">새 입소자 등록</p>
-                <p className="text-sm text-gray-500">김**님 - 2시간 전</p>
-              </div>
+              <button onClick={() => navigate('/eval/checklist')} className="text-xs text-gray-400 hover:text-primary-orange flex items-center gap-0.5">
+                전체보기<ChevronRight size={13}/>
+              </button>
             </div>
-            <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
-              <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
-                <MessageSquare className="w-5 h-5 text-orange-600" />
+
+            {todayTasks.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-gray-400">
+                <CheckCircle2 size={32} className="mb-2 text-green-400"/>
+                <p className="text-sm font-medium text-green-600">오늘 정기 업무 모두 완료!</p>
               </div>
-              <div className="flex-1">
-                <p className="font-medium text-gray-900">새 상담 신청</p>
-                <p className="text-sm text-gray-500">박**님 - 5시간 전</p>
+            ) : (
+              <div className="divide-y divide-gray-50">
+                {todayTasks.slice(0, 8).map(task => (
+                  <TaskRow key={task.id} task={task} onClick={() => navigate('/eval/checklist')}/>
+                ))}
+                {todayTasks.length > 8 && (
+                  <button onClick={() => navigate('/eval/checklist')}
+                    className="w-full py-2.5 text-xs text-center text-gray-400 hover:text-primary-orange hover:bg-orange-50 transition-colors">
+                    +{todayTasks.length - 8}건 더 보기
+                  </button>
+                )}
               </div>
-            </div>
-            <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
-              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                <Activity className="w-5 h-5 text-green-600" />
+            )}
+          </section>
+
+          {/* 이벤트 미완료 누적 */}
+          {eventPendingTasks.length > 0 && (
+            <section className="bg-white rounded-2xl border border-purple-100 shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-purple-50 bg-purple-50/50">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle size={14} className="text-purple-500"/>
+                  <h2 className="text-sm font-bold text-gray-800">입소·입사 관련 미완료 누적</h2>
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                    {eventPendingTasks.length}건
+                  </span>
+                </div>
+                <button onClick={() => navigate('/eval/checklist')} className="text-xs text-gray-400 hover:text-purple-600 flex items-center gap-0.5">
+                  전체보기<ChevronRight size={13}/>
+                </button>
               </div>
-              <div className="flex-1">
-                <p className="font-medium text-gray-900">건강 체크 완료</p>
-                <p className="text-sm text-gray-500">정기 검진 - 1일 전</p>
+              <div className="divide-y divide-gray-50">
+                {eventPendingTasks.slice(0, 5).map(task => (
+                  <EventTaskRow key={task.id} task={task} onClick={() => navigate('/eval/checklist')}/>
+                ))}
+                {eventPendingTasks.length > 5 && (
+                  <button onClick={() => navigate('/eval/checklist')}
+                    className="w-full py-2.5 text-xs text-center text-gray-400 hover:text-purple-600 hover:bg-purple-50 transition-colors">
+                    +{eventPendingTasks.length - 5}건 더 보기
+                  </button>
+                )}
               </div>
-            </div>
-          </div>
+            </section>
+          )}
         </div>
 
-        {/* Pending Tasks */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border-2 border-gray-100">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">대기 중인 작업</h2>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <div>
-                <p className="font-medium text-gray-900">상담 답변 대기</p>
-                <p className="text-sm text-gray-600">8건</p>
-              </div>
-              <button className="px-4 py-2 bg-yellow-600 text-white rounded-lg text-sm font-semibold hover:bg-yellow-700 transition-colors">
-                확인
-              </button>
+        {/* 오른쪽: 주기별 현황 + 운영 현황 (2열) */}
+        <div className="lg:col-span-2 space-y-4">
+
+          {/* 주기별 완료율 */}
+          <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <TrendingUp size={14} className="text-primary-orange"/>
+              <h2 className="text-sm font-bold text-gray-800">주기별 완료 현황</h2>
             </div>
-            <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <div>
-                <p className="font-medium text-gray-900">후기 승인 대기</p>
-                <p className="text-sm text-gray-600">3건</p>
+            {periodProgress.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-4">체크리스트가 없습니다</p>
+            ) : (
+              <div className="space-y-2.5">
+                {periodProgress.map(p => {
+                  const urgent = !p.rate || (p.rate < 100 && p.daysLeft <= 3)
+                  return (
+                    <div key={p.freq}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-semibold text-gray-600">{FREQUENCY_LABELS[p.freq]}</span>
+                        <div className="flex items-center gap-1.5">
+                          {urgent && p.total !== p.done && (
+                            <span className="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full">D-{p.daysLeft}</span>
+                          )}
+                          <span className={`text-xs font-bold ${p.done === p.total ? 'text-green-600' : urgent ? 'text-red-500' : 'text-orange-500'}`}>
+                            {p.done}/{p.total}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-2 rounded-full transition-all ${
+                            p.done === p.total ? 'bg-green-500' : urgent ? 'bg-red-400' : 'bg-primary-orange'
+                          }`}
+                          style={{ width: `${p.rate}%` }}
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
+                <div className="pt-2 border-t border-gray-50 flex items-center justify-between">
+                  <span className="text-xs text-gray-400">전체 활성 항목</span>
+                  <span className="text-xs font-bold text-gray-700">{totalDoneToday}/{totalActive}건</span>
+                </div>
               </div>
-              <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors">
-                확인
-              </button>
+            )}
+          </section>
+
+          {/* 운영 현황 (기존 사이트 stats) */}
+          <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Calendar size={14} className="text-primary-orange"/>
+              <h2 className="text-sm font-bold text-gray-800">운영 현황</h2>
             </div>
-            <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
-              <div>
-                <p className="font-medium text-gray-900">블로그 작성</p>
-                <p className="text-sm text-gray-600">2건</p>
+            {loadingSite ? (
+              <div className="flex justify-center py-4">
+                <div className="w-5 h-5 border-2 border-primary-orange border-t-transparent rounded-full animate-spin"/>
               </div>
-              <button className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors">
-                작성
-              </button>
+            ) : siteStats ? (
+              <div className="space-y-2">
+                <SiteStatRow label="전체 입소자" value={siteStats.totalResidents} unit="명"/>
+                <SiteStatRow label="활동 중 입소자" value={siteStats.activeResidents} unit="명" highlight/>
+                <SiteStatRow label="재직 직원" value={siteStats.totalStaff} unit="명"/>
+                <SiteStatRow label="대기 상담" value={siteStats.pendingContacts} unit="건" alert={siteStats.pendingContacts > 0}/>
+                <SiteStatRow label="오늘 입소" value={siteStats.todayAdmissions} unit="명"/>
+                <SiteStatRow label="이번 달 입소" value={siteStats.monthlyAdmissions} unit="명"/>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400 text-center py-4">불러올 수 없습니다</p>
+            )}
+          </section>
+
+          {/* 빠른 이동 */}
+          <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+            <h2 className="text-sm font-bold text-gray-800 mb-3">빠른 이동</h2>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { label: '체크리스트', icon: ClipboardList, to: '/eval/checklist', color: 'text-primary-orange' },
+                { label: '캘린더',     icon: Calendar,      to: '/eval/calendar',  color: 'text-teal-600' },
+                { label: '수급자',     icon: Users,         to: '/eval/residents', color: 'text-indigo-600' },
+                { label: 'AI 검토',    icon: Sparkles,      to: '/eval/ai-review', color: 'text-purple-600' },
+                { label: '상담',       icon: MessageSquare, to: '/contacts',       color: 'text-orange-600' },
+                { label: '직원',       icon: UserCog,       to: '/eval/staff',     color: 'text-pink-600' },
+              ].map(item => (
+                <button key={item.to} onClick={() => navigate(item.to)}
+                  className="flex items-center gap-2 p-2.5 rounded-xl border border-gray-100 hover:border-gray-200 hover:bg-gray-50 text-left transition-colors">
+                  <item.icon size={14} className={item.color}/>
+                  <span className="text-xs font-semibold text-gray-700">{item.label}</span>
+                </button>
+              ))}
             </div>
-          </div>
+          </section>
         </div>
       </div>
     </div>
   )
 }
 
-export default DashboardPage
+// ── 서브 컴포넌트 ──────────────────────────────────────────────────────────
+
+function KpiCard({ label, value, sub, color, icon, onClick, alert }: {
+  label: string; value: number; sub: string
+  color: string; icon: React.ReactNode
+  onClick?: () => void; alert?: boolean
+}) {
+  const colors: Record<string, { bg: string; text: string; ring: string }> = {
+    teal:   { bg: 'bg-teal-50',   text: 'text-teal-600',   ring: 'ring-teal-200' },
+    indigo: { bg: 'bg-indigo-50', text: 'text-indigo-600', ring: 'ring-indigo-200' },
+    orange: { bg: 'bg-orange-50', text: 'text-orange-600', ring: 'ring-orange-200' },
+    red:    { bg: 'bg-red-50',    text: 'text-red-600',    ring: 'ring-red-300' },
+    purple: { bg: 'bg-purple-50', text: 'text-purple-600', ring: 'ring-purple-200' },
+    gray:   { bg: 'bg-gray-50',   text: 'text-gray-500',   ring: 'ring-gray-200' },
+  }
+  const c = colors[color] ?? colors.gray
+  return (
+    <button onClick={onClick}
+      className={`bg-white rounded-2xl border shadow-sm p-4 text-left hover:shadow-md transition-all w-full ${alert ? 'border-red-200' : 'border-gray-100'}`}>
+      <div className={`w-9 h-9 ${c.bg} ${c.text} rounded-xl flex items-center justify-center mb-3 ${alert ? `ring-2 ${c.ring}` : ''}`}>
+        {icon}
+      </div>
+      <p className="text-2xl font-bold text-gray-900">{value}</p>
+      <p className="text-xs font-semibold text-gray-600 mt-0.5">{label}</p>
+      {sub && <p className="text-[11px] text-gray-400 mt-0.5">{sub}</p>}
+    </button>
+  )
+}
+
+function TaskRow({ task, onClick }: { task: TodayTask; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="w-full flex items-center gap-3 px-5 py-3 hover:bg-orange-50/40 text-left transition-colors">
+      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+        task.riskLevel === 'high' ? 'bg-red-500' : task.riskLevel === 'medium' ? 'bg-orange-400' : 'bg-gray-300'
+      }`}/>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-gray-800 truncate">{task.title}</p>
+        <div className="flex items-center gap-2 mt-0.5">
+          <span className="text-[10px] text-gray-400">{FREQUENCY_LABELS[task.frequency] ?? task.frequency}</span>
+          {task.personName && <span className="text-[10px] text-purple-500 font-medium">👤 {task.personName}</span>}
+          {task.assignee && !task.personName && <span className="text-[10px] text-gray-400">{task.assignee}</span>}
+        </div>
+      </div>
+      {task.riskLevel === 'high' && (
+        <span className="text-[10px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full flex-shrink-0">위험</span>
+      )}
+    </button>
+  )
+}
+
+function EventTaskRow({ task, onClick }: { task: TodayTask; onClick: () => void }) {
+  const days = task.elapsedDays ?? 0
+  return (
+    <button onClick={onClick} className="w-full flex items-center gap-3 px-5 py-3 hover:bg-purple-50/40 text-left transition-colors">
+      <div className="w-2 h-2 rounded-full bg-purple-400 flex-shrink-0"/>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-gray-800 truncate">{task.title}</p>
+        <div className="flex items-center gap-2 mt-0.5">
+          <span className="text-[10px] text-gray-400">{FREQUENCY_LABELS[task.frequency] ?? task.frequency}</span>
+          {task.personName && <span className="text-[10px] text-purple-500 font-medium">👤 {task.personName}</span>}
+        </div>
+      </div>
+      {days > 0 && (
+        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+          days >= 14 ? 'bg-red-100 text-red-600' : days >= 7 ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-500'
+        }`}>{days}일째</span>
+      )}
+    </button>
+  )
+}
+
+function SiteStatRow({ label, value, unit, highlight, alert }: {
+  label: string; value: number; unit: string; highlight?: boolean; alert?: boolean
+}) {
+  return (
+    <div className="flex items-center justify-between py-1">
+      <span className="text-xs text-gray-500">{label}</span>
+      <span className={`text-sm font-bold ${
+        alert ? 'text-orange-500' : highlight ? 'text-primary-orange' : 'text-gray-800'
+      }`}>
+        {value}<span className="text-xs font-normal text-gray-400 ml-0.5">{unit}</span>
+      </span>
+    </div>
+  )
+}
