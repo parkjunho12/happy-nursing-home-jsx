@@ -3,7 +3,6 @@ from datetime import datetime
 from typing import Optional, List, Any, Literal
 from pydantic import BaseModel, ConfigDict, field_validator
 
-
 # ══════════════════════════════════════════════════════════════════════════════
 # CompletionRecord (기존 — 하위 호환 유지)
 # ══════════════════════════════════════════════════════════════════════════════
@@ -82,6 +81,7 @@ class ChecklistItemOut(BaseModel):
     person_name:          Optional[str] = None
     person_type:          Optional[str] = None
     template_id:          Optional[str] = None
+    due_date:             Optional[str] = None   # one_time 기한
     created_at:           datetime
     # 완료 이력 (기존 CompletionRecord 기반 — 하위 호환)
     completion_history:   List[CompletionRecordOut] = []
@@ -109,6 +109,7 @@ class ChecklistItemCreate(BaseModel):
     person_name:          Optional[str] = None
     person_type:          Optional[str] = "facility"
     template_id:          Optional[str] = None
+    due_date:             Optional[str] = None
 
 
 class ChecklistItemUpdate(BaseModel):
@@ -132,15 +133,13 @@ class ChecklistItemUpdate(BaseModel):
     person_id:            Optional[str] = None
     person_name:          Optional[str] = None
     person_type:          Optional[str] = None
+    due_date:             Optional[str] = None
 
 
 class ToggleRequest(BaseModel):
-    """기존 toggle API — CompletionRecord + Occurrence 동시 업데이트"""
-    period_key:      str
-    completed_date:  str
+    """toggle API — 서버가 KST 기준으로 period_key와 completed_date를 결정"""
     memo:            str = ""
     attachment_name: str = ""
-    is_event:        bool = False
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -264,8 +263,6 @@ class LtcStaffOut(BaseModel):
 
 class ResignRequest(BaseModel):
     resign_date: str
-
-
 # ══════════════════════════════════════════════════════════════════════════════
 # 설정
 # ══════════════════════════════════════════════════════════════════════════════

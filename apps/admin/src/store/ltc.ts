@@ -7,7 +7,6 @@ import {
   evalSettingsAPI,
   occurrenceAPI,
 } from '@/api/evalClient'
-import { getCurrentPeriodKey, EVENT_FREQS, todayKST } from '@/utils/period'
 import {
   generateResidentAdmissionChecklists,
   generateResidentDischargeChecklists,
@@ -45,6 +44,7 @@ export interface ChecklistItem {
   lastCheckedDate?: string
   completionHistory: CompletionRecord[]
   occurrences: ChecklistOccurrence[]   // 신규 — 없으면 [], 있으면 우선 사용
+  dueDate?: string         // one_time 기한
   personId?: string
   personName?: string
   personType?: string
@@ -126,6 +126,7 @@ function mapCL(raw: any): ChecklistItem {
     personType:      raw.person_type      ?? 'facility',
     templateId:      raw.template_id      ?? undefined,
     createdAt:       raw.created_at       ?? '',
+    dueDate:         raw.due_date          ?? undefined,
     completionHistory: (raw.completion_history ?? []).map((r: any) => ({
       periodKey:      r.period_key,
       completedDate:  r.completed_date,
@@ -293,12 +294,8 @@ export const useLtcStore = create<LtcState>((set, get) => ({
     set(s => ({ checklists: s.checklists.filter(c => c.id!==id) }))
   },
   toggleComplete: async (id) => {
-    const item = get().checklists.find(c => c.id===id)
-    if (!item) return
-    const today     = todayKST()
-    const isEvent   = EVENT_FREQS.includes(item.frequency as any)
-    const periodKey = isEvent ? today : getCurrentPeriodKey(item.frequency as any)
-    const raw = await evalChecklistAPI.toggle(id, { period_key:periodKey, completed_date:today, is_event:isEvent })
+    // period_key와 completed_date는 서버(KST)가 결정 — 프론트는 id만 전달
+    const raw = await evalChecklistAPI.toggle(id, {})
     const updated = mapCL(raw)
     set(s => ({ checklists: s.checklists.map(c => c.id===id ? updated : c) }))
     // occurrences 스토어도 동기화

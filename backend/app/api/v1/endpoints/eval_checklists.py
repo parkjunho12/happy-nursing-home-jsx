@@ -55,6 +55,9 @@ def _cl_to_out(item: ChecklistItem) -> dict:
     d = {c.key: getattr(item, c.key) for c in item.__table__.columns}
     d["completion_history"] = history
     d["occurrences"]        = occs
+    # due_date는 마이그레이션 전에는 컬럼이 없을 수 있으므로 안전하게 처리
+    if "due_date" not in d:
+        d["due_date"] = getattr(item, "due_date", None)
     return d
 
 
@@ -115,8 +118,12 @@ def create_checklist(
         active=True, completed=False,
     )
     db.add(item)
+    db.flush()  # id 확보
+
+    # 현재 주기 occurrence 즉시 생성
+    get_or_create_occurrence(db, item)
+
     db.commit()
-    db.refresh(item)
     item = _query_with_history(db).filter(ChecklistItem.id == item.id).first()
     return ApiResponse(success=True, data=_cl_to_out(item))
 
@@ -146,6 +153,12 @@ def create_checklists_bulk(
         )
         db.add(item)
         new_items.append(item)
+
+    db.flush()  # id 확보
+
+    # 모든 새 아이템의 현재 주기 occurrence 즉시 생성
+    for item in new_items:
+        get_or_create_occurrence(db, item)
 
     db.commit()
     ids = [i.id for i in new_items]
@@ -187,52 +200,77 @@ def toggle_complete(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """반복 주기 완료/취소 토글 — CompletionRecord + ChecklistOccurrence 동시 업데이트"""
+    """
+    완료/취소 토글.
+    period_key와 completed_date는 서버가 KST 기준으로 직접 계산.
+    프론트의 시간대에 의존하지 않음.
+    """
+    from app.services.occurrence import (
+        today_kst, get_period_key as _gpk, EVENT_FREQS as _EV,
+        ONE_TIME_FREQ,
+    )
+
     item = _query_with_history(db).filter(ChecklistItem.id == item_id).first()
     if not item:
         raise HTTPException(404, "Not found")
 
-    if payload.is_event:
-        # ── 이벤트성 ──────────────────────────────────────────────────────
-        item.completed = not item.completed
-        item.completed_date = payload.completed_date if item.completed else None
+    today      = today_kst()
+    today_str  = today.isoformat()
+    is_event   = item.frequency in _EV
+    is_one_time = item.frequency == ONE_TIME_FREQ
+    period_key = today_str if is_event else _gpk(item.frequency, today)
 
-        # occurrence 동기화
-        occ = get_or_create_occurrence(db, item)
+    if is_event or is_one_time:
+        # ── 이벤트성 / 일회성: boolean 토글 ─────────────────────────────
+        item.completed = not item.completed
+        item.completed_date = today_str if item.completed else None
+
+        # one_time: period_key = item.due_date (기한 날짜)
+        if is_one_time:
+            target_date = None
+            if hasattr(item, 'due_date') and item.due_date:
+                from datetime import date as _date
+                target_date = _date.fromisoformat(item.due_date)
+
+        occ = get_or_create_occurrence(db, item, target_date if is_one_time else None)
         if item.completed:
-            complete_occurrence(db, occ, payload.completed_date, payload.memo, payload.attachment_name)
+            complete_occurrence(db, occ, today_str, payload.memo, payload.attachment_name)
         else:
             uncomplete_occurrence(db, occ)
 
     else:
         # ── 반복 주기 ─────────────────────────────────────────────────────
-        # 1) CompletionRecord (기존 호환)
-        existing = next(
-            (r for r in item.completion_records if r.period_key == payload.period_key),
-            None
-        )
-        if existing:
-            db.delete(existing)
+        # 현재 주기 occurrence 찾기 (없으면 생성)
+        occ = get_or_create_occurrence(db, item)
+
+        if occ.status == 'completed':
+            # 이미 완료 → 취소
+            uncomplete_occurrence(db, occ)
             item.completed = False
             item.completed_date = None
-        else:
-            rec = CompletionRecord(
-                checklist_id=item.id,
-                period_key=payload.period_key,
-                completed_date=payload.completed_date,
-                memo=payload.memo,
-                attachment_name=payload.attachment_name,
+            # CompletionRecord도 제거 (기존 호환)
+            existing = next(
+                (r for r in item.completion_records if r.period_key == period_key), None
             )
-            db.add(rec)
-            item.completed = True
-            item.completed_date = payload.completed_date
-
-        # 2) occurrence 동기화
-        occ = get_or_create_occurrence(db, item)
-        if item.completed:
-            complete_occurrence(db, occ, payload.completed_date, payload.memo, payload.attachment_name)
+            if existing:
+                db.delete(existing)
         else:
-            uncomplete_occurrence(db, occ)
+            # 미완료 → 완료
+            complete_occurrence(db, occ, today_str, payload.memo, payload.attachment_name)
+            item.completed = True
+            item.completed_date = today_str
+            # CompletionRecord 추가 (기존 호환, 없을 때만)
+            existing = next(
+                (r for r in item.completion_records if r.period_key == period_key), None
+            )
+            if not existing:
+                db.add(CompletionRecord(
+                    checklist_id=item.id,
+                    period_key=period_key,
+                    completed_date=today_str,
+                    memo=payload.memo,
+                    attachment_name=payload.attachment_name,
+                ))
 
     db.commit()
     item = _query_with_history(db).filter(ChecklistItem.id == item_id).first()

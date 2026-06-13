@@ -514,10 +514,17 @@ function OccurrenceRow({ occ, item, toggling, onToggle, onDetail }: {
   onDetail: () => void
 }) {
   const done = occ.status === 'completed'
-  const isOverdue = occ.status === 'overdue'
+  const isOverdue  = occ.status === 'overdue'
+  const isOneTime  = occ.frequency === 'one_time'
   const daysOverdue = isOverdue
     ? Math.floor((new Date(todayKST()).getTime() - new Date(occ.dueDate).getTime()) / 86400000)
     : 0
+  const daysLeft = (!done && !isOverdue && isOneTime && occ.dueDate)
+    ? Math.max(0, Math.ceil(
+        (new Date(occ.dueDate + 'T23:59:59').getTime() - new Date(todayKST() + 'T00:00:00').getTime())
+        / 86400000
+      ))
+    : null
 
   return (
     <div className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
@@ -547,6 +554,11 @@ function OccurrenceRow({ occ, item, toggling, onToggle, onDetail }: {
             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
               daysOverdue>=14?'bg-red-100 text-red-600':daysOverdue>=7?'bg-orange-100 text-orange-600':'bg-gray-100 text-gray-500'
             }`}>{daysOverdue}일째 미완료</span>
+          )}
+          {daysLeft !== null && (
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+              daysLeft===0?'bg-red-100 text-red-600':daysLeft<=3?'bg-orange-100 text-orange-600':'bg-amber-100 text-amber-700'
+            }`}>{daysLeft===0?'오늘 마감':`D-${daysLeft}`}</span>
           )}
         </div>
       </div>
