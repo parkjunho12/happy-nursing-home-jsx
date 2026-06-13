@@ -30,6 +30,7 @@ from app.models.eval import ChecklistItem, ChecklistOccurrence
 # ── 상수 ──────────────────────────────────────────────────────────────────
 RECURRING_FREQS = {'daily', 'weekly', 'monthly', 'quarterly', 'half-yearly', 'yearly'}
 EVENT_FREQS     = {'on_admission', 'on_discharge', 'on_hire'}
+ONE_TIME_FREQ   = 'one_time'
 
 # 일일 occurrence 최대 소급 일수 (너무 오래된 것까지 만들면 DB 부담)
 DAILY_BACKFILL_LIMIT = 90
@@ -75,6 +76,8 @@ def get_period_key(freq: str, d: date) -> str:
         return f"{d.year}-H{h}"
     if freq == 'yearly':
         return str(d.year)
+    if freq == 'one_time':
+        return d.isoformat()   # 기한 날짜를 key로
     return d.isoformat()   # 이벤트성
 
 
@@ -263,6 +266,32 @@ def backfill_occurrences(
         freq = item.frequency
         item_existing = existing.get(item.id, set())
 
+        # ── 일회성 (one_time) ─────────────────────────────────────────
+        if freq == ONE_TIME_FREQ:
+            if item_existing:
+                continue  # 이미 생성됨
+            # item.due_date가 기한, 없으면 생성일
+            if hasattr(item, 'due_date') and item.due_date:
+                due_date_str = item.due_date
+                due_d = date.fromisoformat(due_date_str)
+            else:
+                due_d = to_kst_date(item.created_at) if item.created_at else today
+                due_date_str = due_d.isoformat()
+            created_date = to_kst_date(item.created_at) if item.created_at else today
+            period_key   = due_date_str   # 기한 날짜를 period_key로
+            status       = 'overdue' if due_d < today else 'pending'
+            new_occs.append(ChecklistOccurrence(
+                id=str(uuid.uuid4()),
+                checklist_item_id=item.id,
+                period_key=period_key,
+                frequency=freq,
+                scheduled_date=created_date.isoformat(),
+                due_date=due_date_str,
+                status=status,
+            ))
+            created += 1
+            continue
+
         # ── 이벤트성 ──────────────────────────────────────────────────
         if freq in EVENT_FREQS:
             # 이미 occurrence가 1개라도 있으면 스킵
@@ -286,7 +315,7 @@ def backfill_occurrences(
 
         # ── 반복 주기 ─────────────────────────────────────────────────
         if freq not in RECURRING_FREQS:
-            continue
+            continue  # 위에서 처리 안 된 알 수 없는 frequency는 스킵
 
         # 시작일: created_at 날짜 (단, 일일은 최대 90일 전까지)
         created_date = to_kst_date(item.created_at) if item.created_at else today

@@ -21,6 +21,8 @@ interface TodayTask {
   assignee?: string
   isEvent: boolean
   daysOverdue: number   // 0 = 오늘 기한, 양수 = n일 지남
+  isOneTime?: boolean
+  daysLeft?: number      // one_time: 기한까지 남은 일수
 }
 
 const todayStr = todayKST()
@@ -59,7 +61,11 @@ export default function DashboardPage() {
       const itemMap = new Map(checklists.map(c => [c.id, c]))
 
       occurrences
-        .filter(o => (o.status === 'pending' || o.status === 'overdue') && o.dueDate <= todayStr)
+        .filter(o => {
+          if (o.status !== 'pending' && o.status !== 'overdue') return false
+          if (o.frequency === 'one_time') return o.dueDate >= todayStr  // 기한 지나지 않은 것만
+          return o.dueDate <= todayStr
+        })
         .forEach(o => {
           const item = itemMap.get(o.checklistItemId)
           if (!item || !item.active) return
@@ -68,6 +74,14 @@ export default function DashboardPage() {
           const daysOverdue = Math.max(0, Math.floor(
             (new Date(todayStr).getTime() - new Date(o.dueDate).getTime()) / 86400000
           ))
+
+          // one_time: 기한까지 남은 일수 계산
+          const daysLeft = o.frequency === 'one_time' && o.dueDate
+            ? Math.max(0, Math.ceil(
+                (new Date(o.dueDate + 'T23:59:59').getTime() - new Date(todayStr + 'T00:00:00').getTime())
+                / 86400000
+              ))
+            : undefined
 
           const task: TodayTask = {
             occId: o.id,
@@ -79,6 +93,8 @@ export default function DashboardPage() {
             assignee: item.assignee,
             isEvent,
             daysOverdue,
+            isOneTime: o.frequency === 'one_time',
+            daysLeft,
           }
 
           if (isEvent) {
@@ -457,6 +473,9 @@ function TaskRow({ task, onClick }: { task: TodayTask; onClick: () => void }) {
             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
               task.daysOverdue>=7 ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'
             }`}>{task.daysOverdue}일 지남</span>
+          )}
+          {task.isOneTime && task.daysLeft !== undefined && task.daysOverdue === 0 && (
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${task.daysLeft===0?'bg-red-100 text-red-600':task.daysLeft<=3?'bg-orange-100 text-orange-600':'bg-amber-100 text-amber-700'}`}>{task.daysLeft===0?'오늘 마감':`D-${task.daysLeft}`}</span>
           )}
         </div>
       </div>

@@ -3,6 +3,7 @@
 export type Frequency =
   | 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'half-yearly' | 'yearly'
   | 'on_admission' | 'on_discharge' | 'on_hire'
+  | 'one_time'
 
 export const RECURRING: Frequency[] = ['daily','weekly','monthly','quarterly','half-yearly','yearly']
 export const EVENT_FREQS: Frequency[] = ['on_admission','on_discharge','on_hire']
@@ -11,6 +12,7 @@ export const FREQUENCY_LABELS: Record<string, string> = {
   daily: '일일', weekly: '주별', monthly: '월별', quarterly: '분기별',
   'half-yearly': '반기별', yearly: '연별',
   on_admission: '입소 시', on_discharge: '퇴소 시', on_hire: '입사 시',
+  one_time: '일회성',
 }
 
 export const FREQUENCY_COLORS: Record<string, string> = {
@@ -23,6 +25,7 @@ export const FREQUENCY_COLORS: Record<string, string> = {
   on_admission: 'bg-teal-100 text-teal-800',
   on_discharge: 'bg-gray-200 text-gray-700',
   on_hire:      'bg-indigo-100 text-indigo-800',
+  one_time:     'bg-amber-100 text-amber-800',
 }
 
 export const RISK_COLORS: Record<string, string> = {
@@ -136,6 +139,7 @@ export interface ChecklistItem {
   completedDate?: string
   completionHistory: CompletionRecord[]
   occurrences: OccurrenceRecord[]   // occurrence 기반 완료 이력 (없으면 [])
+  dueDate?: string         // one_time 기한 (YYYY-MM-DD)
   personId?: string
   personName?: string
   personType?: string
