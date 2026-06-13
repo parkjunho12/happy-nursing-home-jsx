@@ -43,12 +43,9 @@ export const evalChecklistAPI = {
     return unwrap<any>(res)
   },
   toggle: async (id: string, d: {
-    period_key: string
-    completed_date: string
     memo?: string
     attachment_name?: string
-    is_event?: boolean
-  }) => {
+  } = {}) => {
     const res = await apiClient.post(`/api/v1/eval/checklists/${id}/toggle`, d)
     return unwrap<any>(res)
   },
