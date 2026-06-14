@@ -56,7 +56,24 @@ type CustomFeed = {
   image?: CustomImage;
 };
 
-export function stripHtml(html: string): string {
+export function normalizeCategory(category?: string | string[] | unknown): string {
+  if (Array.isArray(category)) {
+    return category.find((c): c is string => typeof c === 'string' && c.trim().length > 0)?.trim() ?? "기타"
+  }
+  if (typeof category === 'string') return category.trim() || "기타"
+  return "기타"
+}
+
+export function normalizeTags(tag?: string | unknown): string[] {
+  if (typeof tag !== 'string' || !tag) return []
+  return tag
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+}
+
+export function stripHtml(html: unknown): string {
+  if (typeof html !== 'string') return ''
   return html
     .replace(/<img[^>]*>/gi, " ")
     .replace(/<br\s*\/?>/gi, " ")
@@ -68,13 +85,13 @@ export function stripHtml(html: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/\s+/g, " ")
-    .trim();
+    .trim()
 }
 
-export function truncateText(text: string, maxLength = 90): string {
-  const clean = stripHtml(text);
-  if (clean.length <= maxLength) return clean;
-  return clean.slice(0, maxLength).trimEnd() + "…";
+export function truncateText(text: unknown, maxLength = 90): string {
+  const clean = stripHtml(text)
+  if (clean.length <= maxLength) return clean
+  return clean.slice(0, maxLength).trimEnd() + "…"
 }
 
 export function formatDateKo(dateString: string): string {
@@ -109,21 +126,6 @@ export function getBlogSourceLabel(rssUrl: string): string {
 export function isLikelyImageUrl(url?: string | null): boolean {
   if (!url) return false;
   return /^https?:\/\//i.test(url);
-}
-
-export function normalizeCategory(category?: string | string[]): string {
-  if (Array.isArray(category)) {
-    return category.find(Boolean)?.trim() ?? "기타";
-  }
-  return category?.trim() ?? "기타";
-}
-
-export function normalizeTags(tag?: string): string[] {
-  if (!tag) return [];
-  return tag
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
 }
 
 const parser = new Parser<CustomFeed, CustomItem>({
@@ -224,26 +226,31 @@ export async function getNaverBlogPosts(): Promise<{
 
     const normalizedPosts: BlogPost[] = successItems
       .map((item) => {
-        const pubDate = item.pubDate ?? item.isoDate ?? "";
-        const rawDescription =
-          item.contentSnippet ??
-          item.description ??
-          item.content ??
-          item.summary ??
-          "";
+        try {
+          const pubDate = item.pubDate ?? item.isoDate ?? ""
+          const rawDescription =
+            item.contentSnippet ??
+            item.description ??
+            item.content ??
+            item.summary ??
+            ""
 
-        return {
-          title: stripHtml(item.title ?? "제목 없음"),
-          link: item.link ?? "#",
-          pubDate,
-          formattedDate: formatDateKo(pubDate),
-          summary: truncateText(rawDescription, 90),
-          thumbnail: resolveThumbnail(item, item.__channelThumbnail) ?? null,
-          source: item.__source,
-          category: normalizeCategory(item.category),
-          tags: normalizeTags(item.tag),
-        };
+          return {
+            title: stripHtml(item.title ?? "제목 없음"),
+            link: typeof item.link === 'string' ? item.link : "#",
+            pubDate,
+            formattedDate: formatDateKo(pubDate),
+            summary: truncateText(rawDescription, 90),
+            thumbnail: resolveThumbnail(item, item.__channelThumbnail) ?? null,
+            source: item.__source,
+            category: normalizeCategory(item.category),
+            tags: normalizeTags(item.tag),
+          }
+        } catch {
+          return null
+        }
       })
+      .filter((p): p is BlogPost => p !== null)
       .sort((a, b) => {
         const aTime = new Date(a.pubDate).getTime();
         const bTime = new Date(b.pubDate).getTime();
