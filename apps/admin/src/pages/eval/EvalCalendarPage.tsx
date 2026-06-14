@@ -7,7 +7,7 @@ import { useLtcStore } from '@/store/ltc'
 import type { ChecklistOccurrence } from '@/store/ltc'
 import ChecklistDetailModal from '@/components/eval/ChecklistDetailModal'
 import type { ChecklistItem } from '@/utils/period'
-import { RECURRING, EVENT_FREQS, FREQUENCY_LABELS, FREQUENCY_COLORS, getPeriodEnd, getCurrentPeriodKey, shouldShowOnDate, isPeriodCompleted, getPeriodKey, todayKST, todayDateKST } from '@/utils/period'
+import { RECURRING, EVENT_FREQS, FREQUENCY_LABELS, FREQUENCY_COLORS, getPeriodEnd, getCurrentPeriodKey, shouldShowOnDate, isPeriodCompleted, getPeriodKey, todayKST, todayDateKST, daysFromToday } from '@/utils/period'
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   eachDayOfInterval, isSameMonth, isSameDay, isToday, addMonths, subMonths,
@@ -115,20 +115,28 @@ export default function EvalCalendarPage() {
     const today = todayKST()
     return RECURRING.map(freq => {
       if (hasOccurrences) {
-        // occurrence 기반: 현재 주기 occurrence 중 아이템별 1개
-        const itemSeen = new Set<string>()
-        let total = 0, done = 0
+        // 현재 진행 중인 주기: scheduledDate <= 오늘 <= dueDate
+        // 같은 아이템 중 dueDate 가장 큰(최신 주기) occurrence만 사용
+        const candidateMap = new Map<string, ChecklistOccurrence>()
         occurrences
-          .filter(o => o.frequency === freq && o.dueDate >= today)
+          .filter(o =>
+            o.frequency === freq &&
+            o.scheduledDate <= today &&
+            o.dueDate >= today &&
+            itemMap.get(o.checklistItemId)?.active
+          )
           .forEach(o => {
-            const item = itemMap.get(o.checklistItemId)
-            if (!item?.active || itemSeen.has(o.checklistItemId)) return
-            itemSeen.add(o.checklistItemId)
-            total++
-            if (o.status === 'completed') done++
+            const existing = candidateMap.get(o.checklistItemId)
+            if (!existing || o.dueDate > existing.dueDate)
+              candidateMap.set(o.checklistItemId, o)
           })
+        let total = 0, done = 0
+        candidateMap.forEach(o => {
+          total++
+          if (o.status === 'completed') done++
+        })
         const end = getPeriodEnd(freq as any)
-        const daysLeft = Math.max(0, Math.ceil((end.getTime() - Date.now()) / 86400000))
+        const daysLeft = Math.max(0, daysFromToday(end.toISOString().split('T')[0]))
         return { freq, total, done, daysLeft }
       } else {
         // fallback
@@ -136,7 +144,7 @@ export default function EvalCalendarPage() {
         const key = getCurrentPeriodKey(freq as any)
         const done = items.filter(c => isPeriodCompleted(c, key)).length
         const end = getPeriodEnd(freq as any)
-        const daysLeft = Math.max(0, Math.ceil((end.getTime() - Date.now()) / 86400000))
+        const daysLeft = Math.max(0, daysFromToday(end.toISOString().split('T')[0]))
         return { freq, total: items.length, done, daysLeft }
       }
     }).filter(s => s.total > 0)
@@ -516,14 +524,9 @@ function OccurrenceRow({ occ, item, toggling, onToggle, onDetail }: {
   const done = occ.status === 'completed'
   const isOverdue  = occ.status === 'overdue'
   const isOneTime  = occ.frequency === 'one_time'
-  const daysOverdue = isOverdue
-    ? Math.floor((new Date(todayKST()).getTime() - new Date(occ.dueDate).getTime()) / 86400000)
-    : 0
+  const daysOverdue = isOverdue ? Math.max(0, -daysFromToday(occ.dueDate)) : 0
   const daysLeft = (!done && !isOverdue && isOneTime && occ.dueDate)
-    ? Math.max(0, Math.ceil(
-        (new Date(occ.dueDate + 'T23:59:59').getTime() - new Date(todayKST() + 'T00:00:00').getTime())
-        / 86400000
-      ))
+    ? Math.max(0, daysFromToday(occ.dueDate))
     : null
 
   return (

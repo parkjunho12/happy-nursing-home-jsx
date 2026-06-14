@@ -1,8 +1,8 @@
 import { NavLink } from 'react-router-dom'
 import {
-  LayoutDashboard, Users, UserCog, MessageSquare, FileText,
+  LayoutDashboard, UserCog, MessageSquare, FileText,
   Star, Settings, LogOut, ClipboardList, CalendarDays,
-  UserRound, ShieldCheck, ChevronDown, ChevronRight, Sparkles,
+  UserRound, ShieldCheck, ChevronDown, ChevronRight, Sparkles, FileSearch,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth'
 import { useLtcStore } from '@/store/ltc'
@@ -21,8 +21,6 @@ const Sidebar = () => {
 
   const mainNav = [
     { to: '/',                          icon: LayoutDashboard,  label: '대시보드', exact: true },
-    { to: '/residents',                 icon: Users,            label: '입소자 관리' },
-    { to: '/staff',                     icon: UserCog,          label: '직원 관리' },
     { to: '/contacts',                  icon: MessageSquare,    label: '상담 관리' },
     { to: '/history',                   icon: FileText,         label: '블로그' },
     { to: '/reviews',                   icon: Star,             label: '후기 관리' },
@@ -32,11 +30,12 @@ const Sidebar = () => {
   ]
 
   const evalNav = [
-    { to: '/eval/checklist', icon: ClipboardList, label: '체크리스트', badge: todayTodo > 0 ? `${todayTodo}` : undefined },
-    { to: '/eval/calendar',  icon: CalendarDays,  label: '평가 캘린더' },
-    { to: '/eval/residents', icon: UserRound,     label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined },
-    { to: '/eval/staff',     icon: UserCog,       label: '직원 관리(평가)', badge: activeStaff > 0 ? `${activeStaff}명` : undefined },
-    { to: '/eval/ai-review', icon: Sparkles,      label: 'AI 체크리스트 검토' },
+    { to: '/eval/checklist',    icon: ClipboardList, label: '체크리스트', badge: todayTodo > 0 ? `${todayTodo}` : undefined },
+    { to: '/eval/calendar',     icon: CalendarDays,  label: '평가 캘린더' },
+    { to: '/eval/residents',    icon: UserRound,     label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined },
+    { to: '/eval/staff',        icon: UserCog,       label: '직원 관리(평가)', badge: activeStaff > 0 ? `${activeStaff}명` : undefined },
+    { to: '/eval/record-audit', icon: FileSearch,    label: '제공기록지 검수' },
+    { to: '/eval/ai-review',    icon: Sparkles,      label: 'AI 체크리스트 검토' },
   ]
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>

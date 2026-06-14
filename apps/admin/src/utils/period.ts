@@ -48,9 +48,16 @@ export function getPeriodKey(freq: Frequency, date: Date): string {
   switch (freq) {
     case 'daily':       return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(date)
     case 'weekly': {
-      const jan1 = new Date(y, 0, 1)
-      const week = Math.ceil(((date.getTime() - jan1.getTime()) / 86400000 + jan1.getDay() + 1) / 7)
-      return `${y}-W${String(week).padStart(2, '0')}`
+      // 일요일 시작 기준 (일~토), 백엔드와 동일
+      const dayOfWeek = date.getDay()  // 일=0, 월=1, ..., 토=6
+      const sunday = new Date(date)
+      sunday.setDate(date.getDate() - dayOfWeek)  // 이 주의 일요일
+      sunday.setHours(0, 0, 0, 0)
+      const jan1   = new Date(sunday.getFullYear(), 0, 1)
+      const jan1Dow = jan1.getDay()  // jan1의 요일(일=0)
+      const diff = Math.floor((sunday.getTime() - jan1.getTime()) / 86400000)
+      const week = Math.floor((diff + jan1Dow) / 7) + 1
+      return `${sunday.getFullYear()}-W${String(week).padStart(2, '0')}`
     }
     case 'monthly':     return `${y}-${String(m + 1).padStart(2, '0')}`
     case 'quarterly':   return `${y}-Q${Math.floor(m / 3) + 1}`
@@ -92,8 +99,9 @@ export function getPeriodEnd(freq: Frequency, date: Date = new Date()): Date {
 }
 
 function getWeekStart(date: Date): Date {
+  // 일요일 시작 기준 (일~토), 백엔드와 동일
   const d = new Date(date)
-  d.setDate(d.getDate() - d.getDay())
+  d.setDate(d.getDate() - d.getDay())  // getDay(): 일=0
   d.setHours(0, 0, 0, 0)
   return d
 }
@@ -251,4 +259,24 @@ export function todayKST(): string {
 // KST 기준 오늘 Date 객체 (비교 등에 사용)
 export function todayDateKST(): Date {
   return new Date(todayKST() + 'T00:00:00')
+}
+
+/**
+ * 두 YYYY-MM-DD 문자열 간의 날짜 차이 (target - base, 양수=미래)
+ * new Date() 변환 없이 순수 문자열 산술로 계산 → timezone 무관
+ */
+export function dateDiffDays(baseDateStr: string, targetDateStr: string): number {
+  const [by, bm, bd] = baseDateStr.split('-').map(Number)
+  const [ty, tm, td] = targetDateStr.split('-').map(Number)
+  const base   = Date.UTC(by, bm - 1, bd)
+  const target = Date.UTC(ty, tm - 1, td)
+  return Math.round((target - base) / 86400000)
+}
+
+/**
+ * YYYY-MM-DD 문자열을 받아 오늘(KST)로부터 남은 날수 반환
+ * 양수 = 미래, 0 = 오늘, 음수 = 과거
+ */
+export function daysFromToday(dueDateStr: string): number {
+  return dateDiffDays(todayKST(), dueDateStr)
 }
