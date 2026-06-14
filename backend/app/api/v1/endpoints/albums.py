@@ -31,6 +31,14 @@ KST     = timezone(timedelta(hours=9))
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 bearer  = HTTPBearer(auto_error=False)
 
+
+def _normalize_phone(phone: str) -> str:
+    """010-1234-1234 / 01012341234 모두 010-1234-1234 형식으로 통일"""
+    digits = "".join(ch for ch in phone if ch.isdigit())
+    if len(digits) == 11 and digits.startswith("0"):
+        return f"{digits[:3]}-{digits[3:7]}-{digits[7:]}"
+    return phone  # 형식 불일치면 원본 반환
+
 admin_router  = APIRouter()
 family_router = APIRouter()
 
@@ -133,6 +141,7 @@ def create_guardian(
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
+    phone = _normalize_phone(phone)
     if db.query(GuardianAccount).filter(GuardianAccount.phone == phone).first():
         raise HTTPException(400, "이미 등록된 전화번호입니다")
     g = GuardianAccount(
@@ -155,6 +164,71 @@ def delete_guardian(guardian_id: str, db: Session = Depends(get_db), _=Depends(g
     if not g: raise HTTPException(404, "보호자를 찾을 수 없습니다")
     db.query(ResidentGuardian).filter(ResidentGuardian.guardian_id == guardian_id).delete()
     db.delete(g); db.commit()
+    return ApiResponse(success=True, data=None)
+
+
+
+@admin_router.patch("/guardians/{guardian_id}")
+def update_guardian(
+    guardian_id: str,
+    name: Optional[str] = Form(None),
+    phone: Optional[str] = Form(None),
+    password: Optional[str] = Form(None),
+    is_active: Optional[bool] = Form(None),
+    resident_id: Optional[str] = Form(None),   # 새로 연결할 수급자
+    relation: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    """보호자 정보 수정 (이름, 전화번호, 비밀번호, 활성상태, 수급자 연결)"""
+    g = db.query(GuardianAccount).filter(GuardianAccount.id == guardian_id).first()
+    if not g: raise HTTPException(404, "보호자를 찾을 수 없습니다")
+
+    if name is not None:      g.name        = name
+    if is_active is not None: g.is_active   = is_active
+    if password:              g.password_hash = pwd_ctx.hash(password)
+    if phone is not None:
+        normalized = _normalize_phone(phone)
+        # 중복 체크 (본인 제외)
+        dup = db.query(GuardianAccount).filter(
+            GuardianAccount.phone == normalized,
+            GuardianAccount.id != guardian_id
+        ).first()
+        if dup: raise HTTPException(400, "이미 사용 중인 전화번호입니다")
+        g.phone = normalized
+
+    # 수급자 연결 추가
+    if resident_id:
+        existing = db.query(ResidentGuardian).filter(
+            ResidentGuardian.guardian_id == guardian_id,
+            ResidentGuardian.resident_id == resident_id,
+        ).first()
+        if not existing:
+            db.add(ResidentGuardian(
+                id=str(uuid.uuid4()),
+                resident_id=resident_id,
+                guardian_id=guardian_id,
+                relation=relation or "보호자",
+            ))
+
+    db.commit()
+    return ApiResponse(success=True, data={"id": g.id, "name": g.name, "phone": g.phone})
+
+
+@admin_router.delete("/guardians/{guardian_id}/residents/{resident_id}")
+def unlink_guardian_resident(
+    guardian_id: str,
+    resident_id: str,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    """보호자-수급자 연결 해제"""
+    link = db.query(ResidentGuardian).filter(
+        ResidentGuardian.guardian_id == guardian_id,
+        ResidentGuardian.resident_id == resident_id,
+    ).first()
+    if not link: raise HTTPException(404, "연결 정보를 찾을 수 없습니다")
+    db.delete(link); db.commit()
     return ApiResponse(success=True, data=None)
 
 
@@ -293,6 +367,7 @@ def family_login(
     password: str = Form(...),
     db: Session = Depends(get_db),
 ):
+    phone = _normalize_phone(phone)
     g = db.query(GuardianAccount).filter(
         GuardianAccount.phone == phone, GuardianAccount.is_active == True
     ).first()

@@ -49,6 +49,8 @@ export default function EvalAlbumPage() {
   const [uploading, setUploading] = useState(false)
   const [albumsLoading, setAlbumsLoading] = useState(false)
   const [albumsError,   setAlbumsError]   = useState('')
+  const [editAlbum,    setEditAlbum]    = useState<Album | null>(null)
+  const [editGuardian, setEditGuardian] = useState<Guardian | null>(null)
 
   // 필터 / 검색
   const [filterRes,    setFilterRes]    = useState('')       // 수급자 ID
@@ -343,6 +345,7 @@ export default function EvalAlbumPage() {
                     key={album.id}
                     album={album}
                     onOpen={() => openAlbum(album)}
+                    onEdit={() => setEditAlbum(album)}
                     onToggle={() => togglePublic(album)}
                     onDelete={() => deleteAlbum(album.id)}
                   />
@@ -416,6 +419,11 @@ export default function EvalAlbumPage() {
                       {g.is_active ? '활성' : '비활성'}
                     </span>
                     <button
+                      onClick={() => setEditGuardian(g)}
+                      className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors flex-shrink-0">
+                      <svg className="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    </button>
+                    <button
                       onClick={async () => {
                         if (!confirm(`${g.name} 보호자를 삭제할까요?`)) return
                         await adminAlbumAPI.deleteGuardian(g.id)
@@ -447,6 +455,23 @@ export default function EvalAlbumPage() {
           residents={activeResidents}
           onClose={() => setModal('none')}
           onCreated={() => { fetchGuardians(); setModal('none') }}
+        />
+      )}
+
+      {editAlbum && (
+        <AlbumEditModal
+          album={editAlbum}
+          onClose={() => setEditAlbum(null)}
+          onSaved={() => { fetchAlbums(); setEditAlbum(null) }}
+        />
+      )}
+
+      {editGuardian && (
+        <GuardianEditModal
+          guardian={editGuardian}
+          residents={activeResidents}
+          onClose={() => setEditGuardian(null)}
+          onSaved={() => { fetchGuardians(); setEditGuardian(null) }}
         />
       )}
 
@@ -486,8 +511,8 @@ export default function EvalAlbumPage() {
 }
 
 // ── 앨범 카드 ──────────────────────────────────────────────────────────────────
-function AlbumCard({ album, onOpen, onToggle, onDelete }: {
-  album: Album; onOpen: ()=>void; onToggle: ()=>void; onDelete: ()=>void
+function AlbumCard({ album, onOpen, onEdit, onToggle, onDelete }: {
+  album: Album; onOpen: ()=>void; onEdit: ()=>void; onToggle: ()=>void; onDelete: ()=>void
 }) {
   const fmt = (s: string) => {
     const d = new Date(s)
@@ -546,6 +571,10 @@ function AlbumCard({ album, onOpen, onToggle, onDelete }: {
           <button onClick={onOpen}
             className="flex-1 text-xs py-1.5 rounded-lg bg-orange-50 text-primary-orange font-semibold hover:bg-orange-100 transition-colors">
             사진 관리
+          </button>
+          <button onClick={onEdit}
+            className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors" title="앨범 수정">
+            <svg className="w-3.5 h-3.5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           </button>
           <button onClick={onToggle}
             className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors" title={album.is_public ? '비공개로 변경' : '공개로 변경'}>
@@ -792,6 +821,279 @@ function GuardianCreateModal({ residents, onClose, onCreated }: {
           </button>
           <button onClick={onClose}
             className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-xl text-sm hover:bg-gray-50">취소</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── 보호자 수정 모달 ──────────────────────────────────────────────────────────
+function GuardianEditModal({ guardian, residents, onClose, onSaved }: {
+  guardian: Guardian
+  residents: { id: string; name: string }[]
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [name,       setName]       = useState(guardian.name)
+  const [phone,      setPhone]      = useState(guardian.phone)
+  const [password,   setPassword]   = useState('')
+  const [isActive,   setIsActive]   = useState(guardian.is_active)
+  const [newResId,   setNewResId]   = useState('')
+  const [relation,   setRelation]   = useState('보호자')
+  const [saving,     setSaving]     = useState(false)
+  const [error,      setError]      = useState('')
+
+  const ic = "w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+
+  const save = async () => {
+    setSaving(true); setError('')
+    try {
+      const fd = new FormData()
+      if (name  !== guardian.name)     fd.append('name',      name)
+      if (phone !== guardian.phone)    fd.append('phone',     phone)
+      if (password)                    fd.append('password',  password)
+      if (isActive !== guardian.is_active) fd.append('is_active', String(isActive))
+      if (newResId) {
+        fd.append('resident_id', newResId)
+        fd.append('relation',    relation)
+      }
+      await adminAlbumAPI.updateGuardian(guardian.id, fd)
+      onSaved()
+    } catch (e: any) {
+      setError(e?.response?.data?.detail ?? '저장 중 오류가 발생했습니다')
+    } finally { setSaving(false) }
+  }
+
+  const unlink = async (residentId: string, residentName: string) => {
+    if (!confirm(`${residentName} 수급자와의 연결을 해제할까요?`)) return
+    try {
+      await adminAlbumAPI.unlinkResident(guardian.id, residentId)
+      onSaved()
+    } catch { setError('연결 해제 실패') }
+  }
+
+  // 이미 연결된 수급자 제외
+  const linkedIds     = guardian.residents.map(r => r.id)
+  const unlinkableRes = residents.filter(r => !linkedIds.includes(r.id))
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        {/* 헤더 */}
+        <div className="flex items-center justify-between px-5 py-4 border-b sticky top-0 bg-white rounded-t-2xl z-10">
+          <div>
+            <h2 className="font-bold text-gray-900">보호자 정보 수정</h2>
+            <p className="text-xs text-gray-400 mt-0.5">{guardian.name}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* 기본 정보 */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">이름</label>
+            <input className={ic} value={name} onChange={e => setName(e.target.value)}/>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              전화번호 <span className="text-gray-400 font-normal">(로그인 아이디)</span>
+            </label>
+            <input className={ic} value={phone} type="tel"
+              onChange={e => setPhone(e.target.value)}
+              placeholder="010-0000-0000 또는 01000000000"/>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              새 비밀번호 <span className="text-gray-400 font-normal">(변경 시에만 입력)</span>
+            </label>
+            <input className={ic} value={password} type="password"
+              onChange={e => setPassword(e.target.value)} placeholder="변경하지 않으면 비워두세요"/>
+          </div>
+
+          <label className="flex items-center gap-2 cursor-pointer py-1">
+            <input type="checkbox" checked={isActive}
+              onChange={e => setIsActive(e.target.checked)}
+              className="w-4 h-4 accent-teal-600"/>
+            <span className="text-sm text-gray-700">계정 활성화</span>
+            <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ml-auto ${isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+              {isActive ? '활성' : '비활성'}
+            </span>
+          </label>
+
+          {/* 연결된 수급자 */}
+          <div>
+            <p className="text-xs font-semibold text-gray-600 mb-2">연결된 수급자</p>
+            {guardian.residents.length === 0 ? (
+              <p className="text-xs text-gray-400 py-2">연결된 수급자 없음</p>
+            ) : (
+              <div className="space-y-1.5">
+                {guardian.residents.map(r => (
+                  <div key={r.id}
+                    className="flex items-center gap-2 px-3 py-2 bg-purple-50 border border-purple-100 rounded-xl">
+                    <span className="w-6 h-6 bg-purple-200 rounded-lg flex items-center justify-center text-[10px] font-bold text-purple-800 flex-shrink-0">
+                      {r.name[0]}
+                    </span>
+                    <span className="text-sm font-medium text-purple-900 flex-1">{r.name}</span>
+                    <span className="text-[10px] text-purple-500">{r.relation}</span>
+                    <button onClick={() => unlink(r.id, r.name)}
+                      className="text-[10px] text-red-400 hover:text-red-600 hover:bg-red-50 px-1.5 py-0.5 rounded-lg transition-colors">
+                      연결 해제
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 수급자 추가 연결 */}
+          {unlinkableRes.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-600 mb-2">수급자 추가 연결</p>
+              <div className="flex gap-2">
+                <select className={`${ic} flex-1`} value={newResId}
+                  onChange={e => setNewResId(e.target.value)}>
+                  <option value="">수급자 선택</option>
+                  {unlinkableRes.map(r => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
+                </select>
+                <select className={`${ic} w-28`} value={relation}
+                  onChange={e => setRelation(e.target.value)}>
+                  {['보호자','아들','딸','배우자','며느리','사위','손자','손녀','형제/자매','기타'].map(r => (
+                    <option key={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div className="bg-red-50 border border-red-100 rounded-xl px-3 py-2.5 text-xs text-red-600">
+              ⚠️ {error}
+            </div>
+          )}
+        </div>
+
+        {/* 저장 */}
+        <div className="flex gap-3 px-5 pb-5">
+          <button onClick={save} disabled={saving}
+            className="flex-1 bg-teal-600 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-teal-700 disabled:opacity-50">
+            {saving ? '저장 중...' : '저장'}
+          </button>
+          <button onClick={onClose}
+            className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-xl text-sm hover:bg-gray-50">
+            취소
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── 앨범 수정 모달 ────────────────────────────────────────────────────────────
+function AlbumEditModal({ album, onClose, onSaved }: {
+  album: Album; onClose: () => void; onSaved: () => void
+}) {
+  const [title,       setTitle]       = useState(album.title)
+  const [description, setDescription] = useState(album.description ?? '')
+  const [isPublic,    setIsPublic]    = useState(album.is_public)
+  const [saving,      setSaving]      = useState(false)
+  const [error,       setError]       = useState('')
+
+  const ic = "w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40"
+
+  const save = async () => {
+    if (!title.trim()) { setError('앨범 제목을 입력해주세요'); return }
+    setSaving(true); setError('')
+    try {
+      const fd = new FormData()
+      fd.append('title',       title.trim())
+      fd.append('description', description.trim())
+      fd.append('is_public',   String(isPublic))
+      await adminAlbumAPI.updateAlbum(album.id, fd)
+      onSaved()
+    } catch {
+      setError('저장 중 오류가 발생했습니다')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between px-5 py-4 border-b">
+          <div>
+            <h2 className="font-bold text-gray-900">앨범 수정</h2>
+            <p className="text-xs text-gray-400 mt-0.5">{album.resident_name}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">앨범 제목 *</label>
+            <input
+              className={ic}
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="예: 2026년 봄 나들이"
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">설명</label>
+            <textarea
+              className={ic}
+              rows={3}
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="앨범에 대한 설명을 입력하세요"
+            />
+          </div>
+
+          <label className="flex items-center gap-3 cursor-pointer py-1">
+            <input
+              type="checkbox"
+              checked={isPublic}
+              onChange={e => setIsPublic(e.target.checked)}
+              className="w-4 h-4 accent-orange-500"
+            />
+            <div className="flex-1">
+              <p className="text-sm text-gray-700 font-medium">보호자에게 공개</p>
+              <p className="text-xs text-gray-400">
+                {isPublic ? '보호자가 이 앨범을 볼 수 있습니다' : '보호자에게 숨겨집니다'}
+              </p>
+            </div>
+            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${isPublic ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+              {isPublic ? '공개' : '비공개'}
+            </span>
+          </label>
+
+          {error && (
+            <div className="bg-red-50 border border-red-100 rounded-xl px-3 py-2.5 text-xs text-red-600">
+              ⚠️ {error}
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-3 px-5 pb-5">
+          <button
+            onClick={save}
+            disabled={saving || !title.trim()}
+            className="flex-1 bg-primary-orange text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-primary-orange/90 disabled:opacity-50"
+          >
+            {saving ? '저장 중...' : '저장'}
+          </button>
+          <button
+            onClick={onClose}
+            className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-xl text-sm hover:bg-gray-50"
+          >
+            취소
+          </button>
         </div>
       </div>
     </div>
