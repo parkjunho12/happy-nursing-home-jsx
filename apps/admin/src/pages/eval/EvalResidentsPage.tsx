@@ -5,6 +5,7 @@ import type { LtcResident } from '@/store/ltc'
 import type { ChecklistItem } from '@/utils/period'
 import { calcAge, isItemDone } from '@/utils/period'
 import ChecklistDetailModal from '@/components/eval/ChecklistDetailModal'
+import { adminAlbumAPI } from '@/api/albumClient'
 
 type Tab = 'active' | 'discharged' | 'all'
 
@@ -16,6 +17,7 @@ export default function EvalResidentsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [showDischarge, setShowDischarge] = useState<string | null>(null)
   const [selectedCl, setSelectedCl] = useState<ChecklistItem | null>(null)
+  const [addGuardianFor, setAddGuardianFor] = useState<{ id: string; name: string } | null>(null)
 
   useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
 
@@ -93,7 +95,8 @@ export default function EvalResidentsPage() {
               onEdit={() => setEditingId(r.id)}
               onDischarge={() => setShowDischarge(r.id)}
               checklists={resCls[r.id]??[]}
-              onClClick={setSelectedCl} />
+              onClClick={setSelectedCl}
+              onAddGuardian={() => setAddGuardianFor({ id: r.id, name: r.name })} />
           ))}
         </div>
       )}
@@ -102,13 +105,20 @@ export default function EvalResidentsPage() {
       {editingId     && <ResidentForm existing={residents.find(r=>r.id===editingId)} onClose={() => setEditingId(null)} />}
       {showDischarge && <DischargeModal residentId={showDischarge} onClose={() => setShowDischarge(null)} />}
       {selectedCl    && <ChecklistDetailModal item={selectedCl} onClose={() => setSelectedCl(null)} />}
+      {addGuardianFor && (
+        <GuardianAddModal
+          residentId={addGuardianFor.id}
+          residentName={addGuardianFor.name}
+          onClose={() => setAddGuardianFor(null)}
+        />
+      )}
     </div>
   )
 }
 
-function ResidentCard({ r, expanded, onExpand, onEdit, onDischarge, checklists, onClClick }: {
+function ResidentCard({ r, expanded, onExpand, onEdit, onDischarge, checklists, onClClick, onAddGuardian }: {
   r: LtcResident; expanded:boolean; onExpand:()=>void; onEdit:()=>void; onDischarge:()=>void;
-  checklists: ChecklistItem[]; onClClick:(c:ChecklistItem)=>void;
+  checklists: ChecklistItem[]; onClClick:(c:ChecklistItem)=>void; onAddGuardian:()=>void;
 }) {
   const age = calcAge(r.birthDate)
   const done = checklists.filter(c => isItemDone(c)).length
@@ -144,6 +154,10 @@ function ResidentCard({ r, expanded, onExpand, onEdit, onDischarge, checklists, 
         <div className="flex items-center gap-2 flex-shrink-0">
           {r.status==='active' && (
             <>
+              <button onClick={e=>{e.stopPropagation();onAddGuardian()}}
+                className="flex items-center gap-1 text-xs font-medium text-teal-600 border border-teal-200 px-2.5 py-1.5 rounded-xl hover:bg-teal-50">
+                🌸 보호자
+              </button>
               <button onClick={e=>{e.stopPropagation();onEdit()}} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"><Edit2 size={14}/></button>
               <button onClick={e=>{e.stopPropagation();onDischarge()}} className="flex items-center gap-1 text-xs font-medium text-red-500 border border-red-200 px-2.5 py-1.5 rounded-xl hover:bg-red-50"><LogOut size={12}/>퇴소</button>
             </>
@@ -251,6 +265,145 @@ function DischargeModal({ residentId, onClose }: { residentId:string; onClose:()
             <button type="button" onClick={onClose} className="flex-1 border border-gray-200 text-gray-700 rounded-xl py-2.5 text-sm">취소</button>
           </div>
         </form>
+      </div>
+    </div>
+  )
+}
+
+// ── 보호자 추가 모달 ─────────────────────────────────────────────────────────
+function GuardianAddModal({ residentId, residentName, onClose }: {
+  residentId: string; residentName: string; onClose: () => void
+}) {
+  const [form, setForm] = useState({
+    name: '', phone: '', password: '', relation: '보호자',
+  })
+  const [saving,  setSaving]  = useState(false)
+  const [success, setSuccess] = useState(false)
+  const [error,   setError]   = useState('')
+
+  const submit = async () => {
+    if (!form.name || !form.phone || !form.password) {
+      setError('이름, 전화번호, 비밀번호를 모두 입력해주세요'); return
+    }
+    setSaving(true); setError('')
+    try {
+      const fd = new FormData()
+      fd.append('name',        form.name)
+      fd.append('phone',       form.phone)
+      fd.append('password',    form.password)
+      fd.append('resident_id', residentId)
+      fd.append('relation',    form.relation)
+      await adminAlbumAPI.createGuardian(fd)
+      setSuccess(true)
+    } catch (e: any) {
+      setError(e?.response?.data?.detail ?? '이미 등록된 전화번호이거나 오류가 발생했습니다')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/50"
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        {/* 헤더 */}
+        <div className="px-5 py-4 border-b flex items-center justify-between">
+          <div>
+            <h2 className="font-bold text-gray-900">보호자 계정 추가</h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              <span className="font-semibold text-teal-600">{residentName}</span> 수급자와 연결됩니다
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+        </div>
+
+        {success ? (
+          /* 성공 화면 */
+          <div className="p-8 text-center space-y-4">
+            <div className="w-16 h-16 bg-green-100 rounded-2xl flex items-center justify-center mx-auto text-3xl">✅</div>
+            <div>
+              <p className="font-bold text-gray-900 text-lg">보호자 등록 완료!</p>
+              <p className="text-sm text-gray-500 mt-1">
+                <strong>{form.name}</strong>님이 <strong>{residentName}</strong> 수급자의 보호자로 등록되었습니다.
+              </p>
+            </div>
+            <div className="bg-teal-50 border border-teal-100 rounded-2xl p-4 text-left space-y-1.5">
+              <p className="text-xs font-bold text-teal-700">📱 보호자 로그인 정보</p>
+              <p className="text-xs text-teal-700">전화번호: <strong>{form.phone}</strong></p>
+              <p className="text-xs text-teal-700">비밀번호: <strong>{'•'.repeat(form.password.length)}</strong> (설정한 값)</p>
+              <p className="text-xs text-teal-600 mt-2">
+                홈페이지 → 보호자 앨범에서 로그인할 수 있습니다
+              </p>
+            </div>
+            <button onClick={onClose}
+              className="w-full bg-teal-600 text-white py-3 rounded-xl font-semibold hover:bg-teal-700">
+              확인
+            </button>
+          </div>
+        ) : (
+          /* 입력 폼 */
+          <div className="p-5 space-y-4">
+            {/* 수급자 연결 표시 */}
+            <div className="flex items-center gap-3 bg-teal-50 border border-teal-100 rounded-xl px-4 py-3">
+              <div className="w-8 h-8 bg-teal-200 rounded-lg flex items-center justify-center text-sm font-bold text-teal-800">
+                {residentName[0]}
+              </div>
+              <div>
+                <p className="text-sm font-bold text-teal-800">{residentName}</p>
+                <p className="text-xs text-teal-600">이 수급자와 자동 연결됩니다</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">이름 *</label>
+                <input className={ic} value={form.name}
+                  onChange={e => setForm({...form, name: e.target.value})} placeholder="홍길동"/>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">관계</label>
+                <select className={ic} value={form.relation}
+                  onChange={e => setForm({...form, relation: e.target.value})}>
+                  {['보호자','아들','딸','배우자','며느리','사위','손자','손녀','형제/자매','기타'].map(r => (
+                    <option key={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                전화번호 * <span className="text-gray-400 font-normal">(로그인 아이디로 사용됩니다)</span>
+              </label>
+              <input className={ic} value={form.phone} type="tel"
+                onChange={e => setForm({...form, phone: e.target.value})} placeholder="010-0000-0000"/>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                초기 비밀번호 *
+              </label>
+              <input className={ic} value={form.password} type="password"
+                onChange={e => setForm({...form, password: e.target.value})} placeholder="보호자에게 전달할 비밀번호"/>
+              <p className="text-xs text-gray-400 mt-1">보호자에게 이 비밀번호를 알려주세요</p>
+            </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-sm text-red-600">
+                ⚠️ {error}
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-1">
+              <button onClick={submit} disabled={saving}
+                className="flex-1 bg-teal-600 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-teal-700 disabled:opacity-50">
+                {saving ? '등록 중...' : '🌸 보호자 등록'}
+              </button>
+              <button onClick={onClose}
+                className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-xl text-sm hover:bg-gray-50">
+                취소
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
