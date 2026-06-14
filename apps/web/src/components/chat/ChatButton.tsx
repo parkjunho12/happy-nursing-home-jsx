@@ -1,11 +1,16 @@
 'use client'
 
 import { useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { MessageCircle } from 'lucide-react'
 import ChatWidget from './ChatWidget'
 
 export default function ChatButton() {
   const [isOpen, setIsOpen] = useState(false)
+  const pathname = usePathname()
+
+  // 보호자 페이지에서는 채팅 버튼 숨김
+  if (pathname.startsWith('/family')) return null
 
   return (
     <>
