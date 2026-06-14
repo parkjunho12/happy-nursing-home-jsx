@@ -21,7 +21,7 @@ export default function Header() {
 
   const navLinks = [
     { href: '/', label: '홈' },
-    { href: '/yangju-nursing-home', label: '양주 요양원' },
+    { href: '/yangju-nursing-home', label: '소개' },
     { href: '/services', label: '서비스' },
     { href: '/pricing', label: '입소비용' },
     { href: '/reviews', label: '이용 후기' },

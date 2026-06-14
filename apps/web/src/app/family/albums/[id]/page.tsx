@@ -28,6 +28,26 @@ function mediaUrl(url: string) {
   return url.startsWith('http') ? url : `${API_BASE_URL}${url}`
 }
 
+/**
+ * 다운로드 URL 생성
+ * - 백엔드 /api/v1/family/download/:id?token=JWT
+ * - <a href download> 방식 → CORS 완전 우회, 강제 저장
+ */
+function downloadUrl(mediaId: string): string {
+  const token = localStorage.getItem('family_token') ?? ''
+  return `${API_BASE_URL}/api/v1/family/download/${mediaId}?token=${encodeURIComponent(token)}`
+}
+
+function triggerDownload(mediaId: string, fileName: string) {
+  const a = document.createElement('a')
+  a.href = downloadUrl(mediaId)
+  a.download = fileName || 'download'
+  a.target = '_blank'          // 혹시 브라우저가 새 탭으로 열어도 OK
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+}
+
 function formatDate(s: string) {
   const d = new Date(s)
   return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`
@@ -93,6 +113,17 @@ export default function FamilyAlbumDetailPage() {
             <p className="font-bold text-gray-900 truncate">{album.title}</p>
             <p className="text-xs text-gray-400">{album.resident_name} · {formatDate(album.created_at)}</p>
           </div>
+          {/* 전체 다운로드 */}
+          {album.media.length > 0 && (
+            <button
+              onClick={() => album.media.forEach((m, i) => {
+                setTimeout(() => triggerDownload(m.id, m.file_name || `photo_${i+1}`), i * 400)
+              })}
+              className="flex items-center gap-1.5 text-xs font-semibold text-orange-600 bg-orange-50 border border-orange-200 px-3 py-2 rounded-xl hover:bg-orange-100 transition-colors flex-shrink-0"
+            >
+              ⬇ 전체 저장
+            </button>
+          )}
         </div>
       </header>
 
@@ -124,17 +155,26 @@ export default function FamilyAlbumDetailPage() {
             <p className="text-sm font-semibold text-gray-700 mb-3">전체 {album.media.length}개</p>
             <div className="grid grid-cols-3 gap-1">
               {album.media.map((m, idx) => (
-                <button key={m.id} onClick={() => setViewer({ media: m, idx })}
-                  className="relative aspect-square bg-gray-100 rounded-lg overflow-hidden active:scale-95 transition-transform hover:opacity-90">
-                  {m.media_type === 'photo' ? (
-                    <Image src={mediaUrl(m.file_url)} alt="" fill className="object-cover" unoptimized/>
-                  ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-gray-700 to-gray-900">
-                      <span className="text-2xl text-white">▶</span>
-                      <span className="text-[10px] text-white/60 mt-1">동영상</span>
-                    </div>
-                  )}
-                </button>
+                <div key={m.id} className="relative aspect-square bg-gray-100 rounded-lg overflow-hidden group">
+                  <button onClick={() => setViewer({ media: m, idx })} className="absolute inset-0 w-full h-full">
+                    {m.media_type === 'photo' ? (
+                      <Image src={mediaUrl(m.file_url)} alt="" fill className="object-cover" unoptimized/>
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-gray-700 to-gray-900">
+                        <span className="text-2xl text-white">▶</span>
+                        <span className="text-[10px] text-white/60 mt-1">동영상</span>
+                      </div>
+                    )}
+                  </button>
+                  {/* 다운로드 버튼 */}
+                  <button
+                    onClick={e => { e.stopPropagation(); triggerDownload(m.id, m.file_name || `photo_${idx + 1}`) }}
+                    className="absolute top-1 right-1 w-7 h-7 bg-black/60 hover:bg-black/80 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs"
+                    title="다운로드"
+                  >
+                    ⬇
+                  </button>
+                </div>
               ))}
             </div>
           </div>
@@ -150,7 +190,13 @@ export default function FamilyAlbumDetailPage() {
           <div className="flex items-center justify-between px-5 py-4 absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/80 to-transparent">
             <button onClick={() => setViewer(null)} className="text-white/80 hover:text-white text-2xl w-10 h-10 flex items-center justify-center">✕</button>
             <span className="text-white/60 text-sm">{viewer.idx + 1} / {album.media.length}</span>
-            <div className="w-10"/>
+            <button
+              onClick={e => { e.stopPropagation(); triggerDownload(viewer.media.id, viewer.media.file_name || `photo_${viewer.idx + 1}`) }}
+              className="w-10 h-10 flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-colors"
+              title="다운로드"
+            >
+              ⬇
+            </button>
           </div>
 
           <div className="flex-1 flex items-center justify-center relative" onClick={e => e.stopPropagation()}>
