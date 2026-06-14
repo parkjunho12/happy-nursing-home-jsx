@@ -1,13 +1,15 @@
 """
-앨범 API
+앨범 API — Cloudflare R2 스토리지 연동
 - 관리자: /api/v1/admin/albums
 - 보호자: /api/v1/family
 """
-import os, uuid, shutil
+import os, uuid
 from typing import List, Optional
 from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from fastapi.responses import JSONResponse
+from fastapi.responses import RedirectResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 from jose import jwt, JWTError
@@ -17,24 +19,23 @@ from app.core.security import get_current_user
 from app.models.album import GuardianAccount, ResidentGuardian, Album, AlbumMedia
 from app.models.eval import LtcResident
 from app.schemas.response import ApiResponse
+from app.services.r2_storage import r2
 
 # ── 상수 ──────────────────────────────────────────────────────────────────────
-UPLOAD_DIR   = "uploads/albums"
-SECRET_KEY   = os.getenv("SECRET_KEY", "nursing-home-album-secret-2026")
+from app.core.config import settings as _settings
+SECRET_KEY   = _settings.SECRET_KEY
 ALGORITHM    = "HS256"
-TOKEN_EXPIRE = 60 * 24 * 30   # 30일
-ALLOWED_EXT  = {'.jpg','.jpeg','.png','.webp','.gif','.mp4','.mov','.avi'}
+TOKEN_EXPIRE = 60 * 24 * 30   # 30일 (분 단위)
 
-KST = timezone(timedelta(hours=9))
+KST     = timezone(timedelta(hours=9))
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+bearer  = HTTPBearer(auto_error=False)
 
 admin_router  = APIRouter()
 family_router = APIRouter()
 
 
-# ── 유틸 ──────────────────────────────────────────────────────────────────────
+# ── 보호자 인증 ────────────────────────────────────────────────────────────────
 def _guardian_token(guardian_id: str) -> str:
     exp = datetime.now(KST) + timedelta(minutes=TOKEN_EXPIRE)
     return jwt.encode({"sub": guardian_id, "exp": exp, "type": "guardian"}, SECRET_KEY, ALGORITHM)
@@ -43,49 +44,60 @@ def _verify_guardian_token(token: str) -> str:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         if payload.get("type") != "guardian":
-            raise HTTPException(401, "Invalid token type")
+            raise HTTPException(401, "잘못된 토큰 타입")
         return payload["sub"]
     except JWTError:
-        raise HTTPException(401, "Invalid or expired token")
-
-def _get_guardian(token: str = Depends(lambda: None)) -> str:
-    """Authorization 헤더 또는 쿼리파라미터 token에서 보호자 ID 추출"""
-    from fastapi import Header, Query
-    raise HTTPException(401, "Use get_guardian_from_request")
-
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-bearer = HTTPBearer(auto_error=False)
+        raise HTTPException(401, "토큰이 만료되었거나 유효하지 않습니다")
 
 def get_guardian_id(
     creds: Optional[HTTPAuthorizationCredentials] = Depends(bearer),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ) -> str:
     if not creds:
         raise HTTPException(401, "로그인이 필요합니다")
     gid = _verify_guardian_token(creds.credentials)
-    g   = db.query(GuardianAccount).filter(
+    g = db.query(GuardianAccount).filter(
         GuardianAccount.id == gid, GuardianAccount.is_active == True
     ).first()
     if not g:
         raise HTTPException(401, "계정을 찾을 수 없습니다")
     return gid
 
-def _save_file(file: UploadFile, subdir: str) -> tuple[str, str, int]:
-    """파일 저장 → (file_url, media_type, file_size)"""
-    ext = os.path.splitext(file.filename or "")[1].lower()
-    if ext not in ALLOWED_EXT:
-        raise HTTPException(400, f"지원하지 않는 파일 형식: {ext}")
-    fid      = str(uuid.uuid4())
-    save_dir = os.path.join(UPLOAD_DIR, subdir)
-    os.makedirs(save_dir, exist_ok=True)
-    path     = os.path.join(save_dir, f"{fid}{ext}")
-    size     = 0
-    with open(path, "wb") as f:
-        shutil.copyfileobj(file.file, f)
-        size = f.tell()
-    url        = f"/uploads/albums/{subdir}/{fid}{ext}"
-    media_type = "video" if ext in {'.mp4','.mov','.avi'} else "photo"
-    return url, media_type, size
+
+# ── 공통 헬퍼 ─────────────────────────────────────────────────────────────────
+def _get_album_or_404(db: Session, album_id: str) -> Album:
+    a = db.query(Album).filter(Album.id == album_id).first()
+    if not a:
+        raise HTTPException(404, "앨범을 찾을 수 없습니다")
+    return a
+
+def _check_guardian_access(db: Session, gid: str, resident_id: str):
+    link = db.query(ResidentGuardian).filter(
+        ResidentGuardian.guardian_id == gid,
+        ResidentGuardian.resident_id == resident_id,
+    ).first()
+    if not link:
+        raise HTTPException(403, "접근 권한이 없습니다")
+
+def _album_dict(a: Album, db: Session, include_resident: bool = True) -> dict:
+    count = db.query(AlbumMedia).filter(AlbumMedia.album_id == a.id).count()
+    res   = db.query(LtcResident).filter(LtcResident.id == a.resident_id).first() if include_resident else None
+    return {
+        "id": a.id, "title": a.title, "description": a.description,
+        "cover_url": a.cover_url, "is_public": a.is_public,
+        "media_count": count,
+        "resident_name": res.name if res else "",
+        "resident_id": a.resident_id,
+        "created_at": a.created_at.isoformat(),
+    }
+
+def _media_dict(m: AlbumMedia) -> dict:
+    return {
+        "id": m.id, "media_type": m.media_type,
+        "file_url": m.file_url, "thumbnail_url": m.thumbnail_url,
+        "file_name": m.file_name, "file_size": m.file_size,
+        "created_at": m.created_at.isoformat(),
+    }
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -94,19 +106,19 @@ def _save_file(file: UploadFile, subdir: str) -> tuple[str, str, int]:
 
 @admin_router.get("/guardians")
 def list_guardians(db: Session = Depends(get_db), _=Depends(get_current_user)):
-    """보호자 계정 목록"""
     guardians = db.query(GuardianAccount).order_by(GuardianAccount.created_at.desc()).all()
     result = []
     for g in guardians:
         links = db.query(ResidentGuardian).filter(ResidentGuardian.guardian_id == g.id).all()
-        resident_names = []
+        residents = []
         for lk in links:
-            r = db.query(LtcResident).filter(LtcResident.id == lk.resident_id).first()
-            if r: resident_names.append({"id": r.id, "name": r.name, "relation": lk.relation})
+            res = db.query(LtcResident).filter(LtcResident.id == lk.resident_id).first()
+            if res:
+                residents.append({"id": res.id, "name": res.name, "relation": lk.relation})
         result.append({
             "id": g.id, "name": g.name, "phone": g.phone,
             "is_active": g.is_active, "created_at": g.created_at.isoformat(),
-            "residents": resident_names,
+            "residents": residents,
         })
     return ApiResponse(success=True, data=result)
 
@@ -121,19 +133,17 @@ def create_guardian(
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
-    """보호자 계정 생성"""
     if db.query(GuardianAccount).filter(GuardianAccount.phone == phone).first():
         raise HTTPException(400, "이미 등록된 전화번호입니다")
     g = GuardianAccount(
         id=str(uuid.uuid4()), name=name, phone=phone,
         password_hash=pwd_ctx.hash(password),
     )
-    db.add(g)
-    db.flush()
+    db.add(g); db.flush()
     if resident_id:
         db.add(ResidentGuardian(
             id=str(uuid.uuid4()), resident_id=resident_id,
-            guardian_id=g.id, relation=relation or "보호자"
+            guardian_id=g.id, relation=relation or "보호자",
         ))
     db.commit()
     return ApiResponse(success=True, data={"id": g.id, "name": g.name, "phone": g.phone})
@@ -149,23 +159,16 @@ def delete_guardian(guardian_id: str, db: Session = Depends(get_db), _=Depends(g
 
 
 @admin_router.get("/albums")
-def list_albums(resident_id: Optional[str] = None, db: Session = Depends(get_db), _=Depends(get_current_user)):
+def list_albums(
+    resident_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
     q = db.query(Album)
-    if resident_id: q = q.filter(Album.resident_id == resident_id)
+    if resident_id:
+        q = q.filter(Album.resident_id == resident_id)
     albums = q.order_by(Album.created_at.desc()).all()
-    result = []
-    for a in albums:
-        count = db.query(AlbumMedia).filter(AlbumMedia.album_id == a.id).count()
-        res   = db.query(LtcResident).filter(LtcResident.id == a.resident_id).first()
-        result.append({
-            "id": a.id, "title": a.title, "description": a.description,
-            "cover_url": a.cover_url, "is_public": a.is_public,
-            "media_count": count,
-            "resident_name": res.name if res else "",
-            "resident_id": a.resident_id,
-            "created_at": a.created_at.isoformat(),
-        })
-    return ApiResponse(success=True, data=result)
+    return ApiResponse(success=True, data=[_album_dict(a, db) for a in albums])
 
 
 @admin_router.post("/albums")
@@ -194,8 +197,7 @@ def update_album(
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
-    a = db.query(Album).filter(Album.id == album_id).first()
-    if not a: raise HTTPException(404, "앨범을 찾을 수 없습니다")
+    a = _get_album_or_404(db, album_id)
     if title is not None:       a.title       = title
     if description is not None: a.description = description
     if is_public is not None:   a.is_public   = is_public
@@ -205,11 +207,21 @@ def update_album(
 
 @admin_router.delete("/albums/{album_id}")
 def delete_album(album_id: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    a = db.query(Album).filter(Album.id == album_id).first()
-    if not a: raise HTTPException(404, "앨범을 찾을 수 없습니다")
+    a = _get_album_or_404(db, album_id)
+    # R2에서 미디어 파일 삭제
+    media_list = db.query(AlbumMedia).filter(AlbumMedia.album_id == album_id).all()
+    for m in media_list:
+        r2.delete_file(m.file_url, m.thumbnail_url)
     db.query(AlbumMedia).filter(AlbumMedia.album_id == album_id).delete()
     db.delete(a); db.commit()
     return ApiResponse(success=True, data=None)
+
+
+@admin_router.get("/albums/{album_id}/media")
+def list_media(album_id: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+    media = db.query(AlbumMedia).filter(AlbumMedia.album_id == album_id)\
+              .order_by(AlbumMedia.sort_order, AlbumMedia.created_at).all()
+    return ApiResponse(success=True, data=[_media_dict(m) for m in media])
 
 
 @admin_router.post("/albums/{album_id}/media")
@@ -219,44 +231,56 @@ def upload_media(
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
-    a = db.query(Album).filter(Album.id == album_id).first()
-    if not a: raise HTTPException(404, "앨범을 찾을 수 없습니다")
+    a = _get_album_or_404(db, album_id)
+
+    # R2 미설정 시 안내
+    if not r2.is_configured():
+        raise HTTPException(503, "R2 스토리지가 설정되지 않았습니다. R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY 환경변수를 확인하세요.")
+
     saved = []
     for file in files:
-        url, mtype, size = _save_file(file, album_id)
+        try:
+            file_url, thumb_url, media_type, file_size = r2.upload_file(file, album_id)
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(500, f"파일 업로드 실패: {e}")
+
         m = AlbumMedia(
             id=str(uuid.uuid4()), album_id=album_id,
-            media_type=mtype, file_url=url,
-            file_name=file.filename, file_size=size,
+            media_type=media_type,
+            file_url=file_url,
+            thumbnail_url=thumb_url or None,
+            file_name=file.filename,
+            file_size=file_size,
         )
         db.add(m)
-        if not a.cover_url and mtype == "photo":
-            a.cover_url = url
-        saved.append({"id": m.id, "url": url, "type": mtype})
+
+        # 첫 번째 사진을 커버로
+        if not a.cover_url and media_type == "photo":
+            a.cover_url = thumb_url or file_url
+
+        saved.append({"id": m.id, "url": file_url, "thumb": thumb_url, "type": media_type})
+
     db.commit()
     return ApiResponse(success=True, data=saved)
 
 
 @admin_router.delete("/albums/{album_id}/media/{media_id}")
-def delete_media(album_id: str, media_id: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    m = db.query(AlbumMedia).filter(AlbumMedia.id == media_id, AlbumMedia.album_id == album_id).first()
+def delete_media(
+    album_id: str, media_id: str,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    m = db.query(AlbumMedia).filter(
+        AlbumMedia.id == media_id, AlbumMedia.album_id == album_id
+    ).first()
     if not m: raise HTTPException(404, "미디어를 찾을 수 없습니다")
-    # 파일 삭제 시도
-    local = m.file_url.lstrip("/")
-    if os.path.exists(local): os.remove(local)
+
+    # R2에서 삭제
+    r2.delete_file(m.file_url, m.thumbnail_url)
     db.delete(m); db.commit()
     return ApiResponse(success=True, data=None)
-
-
-@admin_router.get("/albums/{album_id}/media")
-def list_media(album_id: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
-    media = db.query(AlbumMedia).filter(AlbumMedia.album_id == album_id)\
-              .order_by(AlbumMedia.sort_order, AlbumMedia.created_at).all()
-    return ApiResponse(success=True, data=[{
-        "id": m.id, "media_type": m.media_type, "file_url": m.file_url,
-        "thumbnail_url": m.thumbnail_url, "file_name": m.file_name,
-        "file_size": m.file_size, "created_at": m.created_at.isoformat(),
-    } for m in media])
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -274,13 +298,15 @@ def family_login(
     ).first()
     if not g or not pwd_ctx.verify(password, g.password_hash):
         raise HTTPException(401, "전화번호 또는 비밀번호가 올바르지 않습니다")
+
     token = _guardian_token(g.id)
-    # 연결된 수급자 목록
     links = db.query(ResidentGuardian).filter(ResidentGuardian.guardian_id == g.id).all()
     residents = []
     for lk in links:
-        r = db.query(LtcResident).filter(LtcResident.id == lk.resident_id).first()
-        if r: residents.append({"id": r.id, "name": r.name, "relation": lk.relation})
+        res = db.query(LtcResident).filter(LtcResident.id == lk.resident_id).first()
+        if res:
+            residents.append({"id": res.id, "name": res.name, "relation": lk.relation})
+
     return ApiResponse(success=True, data={
         "token": token,
         "guardian": {"id": g.id, "name": g.name, "phone": g.phone},
@@ -294,8 +320,9 @@ def family_me(gid: str = Depends(get_guardian_id), db: Session = Depends(get_db)
     links = db.query(ResidentGuardian).filter(ResidentGuardian.guardian_id == gid).all()
     residents = []
     for lk in links:
-        r = db.query(LtcResident).filter(LtcResident.id == lk.resident_id).first()
-        if r: residents.append({"id": r.id, "name": r.name, "relation": lk.relation})
+        res = db.query(LtcResident).filter(LtcResident.id == lk.resident_id).first()
+        if res:
+            residents.append({"id": res.id, "name": res.name, "relation": lk.relation})
     return ApiResponse(success=True, data={
         "guardian": {"id": g.id, "name": g.name},
         "residents": residents,
@@ -304,26 +331,14 @@ def family_me(gid: str = Depends(get_guardian_id), db: Session = Depends(get_db)
 
 @family_router.get("/albums")
 def family_albums(gid: str = Depends(get_guardian_id), db: Session = Depends(get_db)):
-    """보호자가 볼 수 있는 앨범 목록 (연결된 수급자 앨범만)"""
-    links     = db.query(ResidentGuardian).filter(ResidentGuardian.guardian_id == gid).all()
-    res_ids   = [lk.resident_id for lk in links]
+    links   = db.query(ResidentGuardian).filter(ResidentGuardian.guardian_id == gid).all()
+    res_ids = [lk.resident_id for lk in links]
     if not res_ids:
         return ApiResponse(success=True, data=[])
-    albums    = db.query(Album).filter(
+    albums = db.query(Album).filter(
         Album.resident_id.in_(res_ids), Album.is_public == True
     ).order_by(Album.created_at.desc()).all()
-    result = []
-    for a in albums:
-        count = db.query(AlbumMedia).filter(AlbumMedia.album_id == a.id).count()
-        res   = db.query(LtcResident).filter(LtcResident.id == a.resident_id).first()
-        result.append({
-            "id": a.id, "title": a.title, "description": a.description,
-            "cover_url": a.cover_url, "is_public": a.is_public,
-            "media_count": count,
-            "resident_name": res.name if res else "",
-            "created_at": a.created_at.isoformat(),
-        })
-    return ApiResponse(success=True, data=result)
+    return ApiResponse(success=True, data=[_album_dict(a, db) for a in albums])
 
 
 @family_router.get("/albums/{album_id}")
@@ -332,25 +347,70 @@ def family_album_detail(
     gid: str = Depends(get_guardian_id),
     db: Session = Depends(get_db),
 ):
-    """앨범 상세 + 권한 체크"""
     a = db.query(Album).filter(Album.id == album_id, Album.is_public == True).first()
     if not a: raise HTTPException(404, "앨범을 찾을 수 없습니다")
-    # 권한: 이 수급자와 연결된 보호자인지 확인
-    link = db.query(ResidentGuardian).filter(
-        ResidentGuardian.guardian_id == gid,
-        ResidentGuardian.resident_id == a.resident_id,
-    ).first()
-    if not link: raise HTTPException(403, "접근 권한이 없습니다")
+    _check_guardian_access(db, gid, a.resident_id)
+
     media = db.query(AlbumMedia).filter(AlbumMedia.album_id == album_id)\
               .order_by(AlbumMedia.sort_order, AlbumMedia.created_at).all()
     res = db.query(LtcResident).filter(LtcResident.id == a.resident_id).first()
+
     return ApiResponse(success=True, data={
         "id": a.id, "title": a.title, "description": a.description,
-        "cover_url": a.cover_url, "resident_name": res.name if res else "",
+        "cover_url": a.cover_url,
+        "resident_name": res.name if res else "",
         "created_at": a.created_at.isoformat(),
-        "media": [{
-            "id": m.id, "media_type": m.media_type, "file_url": m.file_url,
-            "thumbnail_url": m.thumbnail_url, "file_name": m.file_name,
-            "created_at": m.created_at.isoformat(),
-        } for m in media],
+        "media": [_media_dict(m) for m in media],
     })
+
+
+@family_router.get("/download/{media_id}")
+def family_download(
+    media_id: str,
+    token: str,          # query param — <a href="...?token=JWT" download>
+    db: Session = Depends(get_db),
+):
+    """
+    보호자 다운로드
+    - JWT 인증 후 R2 presigned URL(5분)을 발급해 302 리디렉트
+    - 브라우저가 R2에 직접 요청 → iWinv 트래픽 소모 없음
+    - Content-Disposition: attachment → 강제 저장
+    """
+    gid = _verify_guardian_token(token)
+    g = db.query(GuardianAccount).filter(
+        GuardianAccount.id == gid, GuardianAccount.is_active == True
+    ).first()
+    if not g: raise HTTPException(401, "인증 실패")
+
+    m = db.query(AlbumMedia).filter(AlbumMedia.id == media_id).first()
+    if not m: raise HTTPException(404, "파일을 찾을 수 없습니다")
+
+    album = db.query(Album).filter(Album.id == m.album_id).first()
+    if not album: raise HTTPException(404, "앨범을 찾을 수 없습니다")
+    _check_guardian_access(db, gid, album.resident_id)
+
+    # R2 presigned URL 발급 → 302 리디렉트
+    download_url = r2.presigned_download_url(
+        file_url=m.file_url,
+        file_name=m.file_name or f"photo_{media_id[:8]}",
+        expires_in=300,   # 5분
+    )
+    return RedirectResponse(url=download_url, status_code=302)
+
+
+@family_router.get("/albums/{album_id}/download-all")
+def family_download_all_info(
+    album_id: str,
+    gid: str = Depends(get_guardian_id),
+    db: Session = Depends(get_db),
+):
+    """전체 다운로드용 미디어 ID 목록"""
+    a = db.query(Album).filter(Album.id == album_id, Album.is_public == True).first()
+    if not a: raise HTTPException(404, "앨범을 찾을 수 없습니다")
+    _check_guardian_access(db, gid, a.resident_id)
+
+    media = db.query(AlbumMedia).filter(AlbumMedia.album_id == album_id)\
+              .order_by(AlbumMedia.sort_order, AlbumMedia.created_at).all()
+    return ApiResponse(success=True, data=[{
+        "id": m.id, "file_name": m.file_name, "media_type": m.media_type,
+    } for m in media])

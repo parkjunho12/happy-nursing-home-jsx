@@ -53,6 +53,24 @@ class Settings(BaseSettings):
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
     
+
+    # =============================
+    # Cloudflare R2 Storage
+    # =============================
+    R2_ACCOUNT_ID: str = ""
+    R2_ACCESS_KEY_ID: str = ""
+    R2_SECRET_ACCESS_KEY: str = ""
+    R2_BUCKET_NAME: str = "happy-nursing-home-albums"
+    R2_PUBLIC_URL: str = ""        # https://pub-xxxx.r2.dev 또는 커스텀 도메인
+    R2_PRESIGN_EXPIRE: int = 300   # presigned URL 만료 시간 (초, 기본 5분)
+
+    @property
+    def R2_ENDPOINT_URL(self) -> str:
+        return f"https://{self.R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+
+    @property
+    def R2_CONFIGURED(self) -> bool:
+        return bool(self.R2_ACCOUNT_ID and self.R2_ACCESS_KEY_ID and self.R2_SECRET_ACCESS_KEY)
     class Config:
         env_file = ".env"
         case_sensitive = True
