@@ -36,8 +36,8 @@ ALLOWED_EXT = {'.jpg', '.jpeg', '.png', '.webp', '.gif', '.mp4', '.mov', '.avi'}
 VIDEO_EXT   = {'.mp4', '.mov', '.avi'}
 IMAGE_EXT   = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
 
-THUMB_SIZE  = (480, 480)   # 썸네일 최대 크기
-THUMB_QUALITY = 80          # WebP 품질
+THUMB_WIDTH   = 600         # 썸네일 너비 (세로는 비율 유지)
+THUMB_QUALITY = 75          # WebP 품질
 
 
 def _get_client():
@@ -70,15 +70,28 @@ def _make_cdn_url(key: str) -> str:
 
 
 def _make_thumbnail(data: bytes, ext: str) -> Optional[bytes]:
-    """이미지 썸네일 생성 (WebP 480x480)"""
+    """이미지 썸네일 생성 (WebP, 가로 600px 고정 / 세로 비율 유지)"""
     if ext.lower() not in IMAGE_EXT:
         return None
     try:
-        from PIL import Image
+        from PIL import Image, ImageOps
         img = Image.open(io.BytesIO(data))
-        img.thumbnail(THUMB_SIZE, Image.LANCZOS)
+
+        # EXIF 회전 자동 보정 (스마트폰 사진 대응)
+        img = ImageOps.exif_transpose(img)
+
+        # RGBA → RGB 변환 (WebP 저장 전)
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+
+        # 가로 600px 고정, 세로 비율 유지
+        if img.width > THUMB_WIDTH:
+            ratio  = THUMB_WIDTH / img.width
+            height = int(img.height * ratio)
+            img    = img.resize((THUMB_WIDTH, height), Image.LANCZOS)
+
         buf = io.BytesIO()
-        img.save(buf, format="WEBP", quality=THUMB_QUALITY)
+        img.save(buf, format="WEBP", quality=THUMB_QUALITY, method=4)
         return buf.getvalue()
     except Exception:
         return None   # PIL 없거나 실패 시 썸네일 스킵

@@ -7,7 +7,7 @@ import { API_BASE_URL } from '@/lib/api-client'
 
 type Media = {
   id: string; media_type: string; file_url: string
-  file_name: string; created_at: string
+  thumbnail_url?: string | null; file_name: string; created_at: string
 }
 type Album = {
   id: string; title: string; description: string
@@ -158,7 +158,14 @@ export default function FamilyAlbumDetailPage() {
                 <div key={m.id} className="relative aspect-square bg-gray-100 rounded-lg overflow-hidden group">
                   <button onClick={() => setViewer({ media: m, idx })} className="absolute inset-0 w-full h-full">
                     {m.media_type === 'photo' ? (
-                      <Image src={mediaUrl(m.file_url)} alt="" fill className="object-cover" unoptimized/>
+                      <Image
+                    src={mediaUrl(m.thumbnail_url || m.file_url)}
+                    alt=""
+                    fill
+                    className="object-cover"
+                    loading="lazy"
+                    unoptimized
+                  />
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-gray-700 to-gray-900">
                         <span className="text-2xl text-white">▶</span>
@@ -225,7 +232,7 @@ export default function FamilyAlbumDetailPage() {
                     idx === viewer.idx ? 'border-orange-400 scale-110' : 'border-white/20 opacity-50'
                   }`}>
                   {m.media_type === 'photo' ? (
-                    <Image src={mediaUrl(m.file_url)} alt="" width={56} height={56} className="object-cover w-full h-full" unoptimized/>
+                    <Image src={mediaUrl(m.thumbnail_url || m.file_url)} alt="" width={56} height={56} className="object-cover w-full h-full" loading="lazy" unoptimized/>
                   ) : (
                     <div className="w-full h-full bg-gray-700 flex items-center justify-center text-white">▶</div>
                   )}
