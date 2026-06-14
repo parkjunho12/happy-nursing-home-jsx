@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { BlogPost } from "@/lib/blog/naverBlog";
 
-const PLACEHOLDER_IMG = "/assets/images/dining.JPG";
+const PLACEHOLDER_IMG = "/assets/images/hero_co.png";
 
 interface NaverBlogCardProps {
   post: BlogPost;
