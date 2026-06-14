@@ -525,7 +525,7 @@ function AlbumCard({ album, onOpen, onEdit, onToggle, onDelete }: {
       <div className="relative aspect-video bg-gradient-to-br from-orange-100 to-amber-100 cursor-pointer"
         onClick={onOpen}>
         {album.cover_url ? (
-          <img src={mediaUrl(album.cover_url)} className="w-full h-full object-cover" alt={album.title}/>
+          <img src={mediaUrl(album.cover_url)} className="w-full h-full object-cover" loading="lazy" decoding="async" alt={album.title}/>
         ) : (
           <div className="flex flex-col items-center justify-center h-full gap-1.5">
             <Image size={28} className="text-orange-300"/>
@@ -651,7 +651,12 @@ function MediaModal({ album, media, uploading, onUpload, onDeleteMedia, onViewMe
                 <div key={m.id} className="relative group aspect-square bg-gray-100 rounded-xl overflow-hidden cursor-pointer"
                   onClick={() => onViewMedia(m)}>
                   {m.media_type === 'photo' ? (
-                    <img src={mediaUrl(m.file_url)} className="w-full h-full object-cover" alt=""/>
+                    <img
+                      src={mediaUrl(m.thumbnail_url || m.file_url)}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                      decoding="async"
+                      alt=""/>
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-gray-800">
                       <Play size={24} className="text-white"/>

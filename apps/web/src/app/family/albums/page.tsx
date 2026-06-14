@@ -138,6 +138,7 @@ export default function FamilyAlbumsPage() {
                           alt={album.title}
                           fill
                           className="object-cover"
+                          loading="lazy"
                           unoptimized
                         />
                       ) : (
