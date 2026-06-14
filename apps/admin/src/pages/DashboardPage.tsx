@@ -8,7 +8,7 @@ import {
 import { dashboardAPI } from '@/api/client'
 import { useLtcStore } from '@/store/ltc'
 import type { DashboardStats } from '@/types'
-import { RECURRING, FREQUENCY_LABELS, getPeriodEnd, todayKST, todayDateKST, getCurrentPeriodKey } from '@/utils/period'
+import { RECURRING, FREQUENCY_LABELS, getPeriodEnd, todayKST, todayDateKST, getCurrentPeriodKey, daysFromToday } from '@/utils/period'
 
 // ── 타입 ──────────────────────────────────────────────────────────────────
 interface TodayTask {
@@ -60,27 +60,31 @@ export default function DashboardPage() {
       // ── 새 방식: occurrence 기반 ──────────────────────────────────────
       const itemMap = new Map(checklists.map(c => [c.id, c]))
 
+      // 같은 아이템 중 dueDate 가장 큰(최신) occurrence만 사용
+      const latestOccMap = new Map<string, typeof occurrences[0]>()
       occurrences
         .filter(o => {
           if (o.status !== 'pending' && o.status !== 'overdue') return false
-          if (o.frequency === 'one_time') return o.dueDate >= todayStr  // 기한 지나지 않은 것만
-          return o.dueDate <= todayStr
+          if (o.frequency === 'one_time') return o.dueDate >= todayStr
+          if (o.status === 'overdue') return true
+          return o.scheduledDate <= todayStr && o.dueDate >= todayStr
         })
         .forEach(o => {
+          const existing = latestOccMap.get(o.checklistItemId)
+          if (!existing || o.dueDate > existing.dueDate)
+            latestOccMap.set(o.checklistItemId, o)
+        })
+
+      Array.from(latestOccMap.values()).forEach(o => {
           const item = itemMap.get(o.checklistItemId)
           if (!item || !item.active) return
 
           const isEvent = ['on_admission', 'on_discharge', 'on_hire'].includes(o.frequency)
-          const daysOverdue = Math.max(0, Math.floor(
-            (new Date(todayStr).getTime() - new Date(o.dueDate).getTime()) / 86400000
-          ))
+          const daysOverdue = Math.max(0, -daysFromToday(o.dueDate))
 
           // one_time: 기한까지 남은 일수 계산
           const daysLeft = o.frequency === 'one_time' && o.dueDate
-            ? Math.max(0, Math.ceil(
-                (new Date(o.dueDate + 'T23:59:59').getTime() - new Date(todayStr + 'T00:00:00').getTime())
-                / 86400000
-              ))
+            ? Math.max(0, daysFromToday(o.dueDate))
             : undefined
 
           const task: TodayTask = {
@@ -155,25 +159,30 @@ export default function DashboardPage() {
 
     return RECURRING.map(freq => {
       if (hasOccurrences) {
-        // occurrence 기준: 현재 주기 occurrence 중 completed 비율
-        const freqOccs = occurrences.filter(o => o.frequency === freq && o.dueDate >= todayStr)
-        // 현재 주기 (due_date 기준으로 오늘이 포함된 것)
-        const currentOccs = freqOccs.filter(o => {
-          const item = checklists.find(c => c.id === o.checklistItemId)
-          return item?.active
-        })
-        // 아이템 기준으로 중복 제거 (아이템당 1개만)
-        const itemSet = new Set<string>()
+        // 현재 진행 중인 주기: scheduledDate <= 오늘 <= dueDate
+        // 같은 아이템에 여러 occurrence가 있으면 dueDate가 가장 큰(최신 주기) 것만 사용
+        const candidateMap = new Map<string, typeof occurrences[0]>()
+        occurrences
+          .filter(o =>
+            o.frequency === freq &&
+            o.scheduledDate <= todayStr &&
+            o.dueDate >= todayStr &&
+            checklists.find(c => c.id === o.checklistItemId)?.active
+          )
+          .forEach(o => {
+            const existing = candidateMap.get(o.checklistItemId)
+            if (!existing || o.dueDate > existing.dueDate)
+              candidateMap.set(o.checklistItemId, o)
+          })
+
         let total = 0, done = 0
-        currentOccs.forEach(o => {
-          if (itemSet.has(o.checklistItemId)) return
-          itemSet.add(o.checklistItemId)
+        candidateMap.forEach(o => {
           total++
           if (o.status === 'completed') done++
         })
 
         const end = getPeriodEnd(freq as any)
-        const daysLeft = Math.max(0, Math.ceil((end.getTime() - Date.now()) / 86400000))
+        const daysLeft = Math.max(0, daysFromToday(end.toISOString().split('T')[0]))
         return { freq, total, done, daysLeft, rate: total ? Math.round(done / total * 100) : 0 }
 
       } else {
@@ -183,7 +192,7 @@ export default function DashboardPage() {
           : getCurrentPeriodKey(freq as any) !== todayStr ? getCurrentPeriodKey(freq as any) : todayStr
         const done = items.filter(c => c.completionHistory.some(r => r.periodKey === key)).length
         const end = getPeriodEnd(freq as any)
-        const daysLeft = Math.max(0, Math.ceil((end.getTime() - Date.now()) / 86400000))
+        const daysLeft = Math.max(0, daysFromToday(end.toISOString().split('T')[0]))
         return { freq, total: items.length, done, daysLeft, rate: items.length ? Math.round(done/items.length*100) : 0 }
       }
     }).filter(p => p.total > 0)
@@ -208,7 +217,7 @@ export default function DashboardPage() {
   const activeStaff     = staffList.filter(s => s.status === 'active').length
   const totalActive     = checklists.filter(c => c.active).length
   const totalDone       = occurrences.length > 0
-    ? occurrences.filter(o => o.status === 'completed' && o.dueDate === todayStr).length
+    ? occurrences.filter(o => o.status === 'completed' && o.scheduledDate <= todayStr && o.dueDate >= todayStr).length
     : 0
 
   const greetHour = parseInt(new Intl.DateTimeFormat('ko-KR', { timeZone:'Asia/Seoul', hour:'numeric', hour12:false }).format(new Date()))
@@ -356,8 +365,11 @@ export default function DashboardPage() {
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-xs font-semibold text-gray-600">{FREQUENCY_LABELS[p.freq]}</span>
                         <div className="flex items-center gap-1.5">
-                          {urgent && p.done < p.total && (
+                          {urgent && p.done < p.total && p.daysLeft > 0 && (
                             <span className="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full">D-{p.daysLeft}</span>
+                          )}
+                        {p.done < p.total && p.daysLeft === 0 && (
+                            <span className="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full">오늘 마감</span>
                           )}
                           <span className={`text-xs font-bold ${p.done===p.total?'text-green-600':urgent?'text-red-500':'text-orange-500'}`}>
                             {p.done}/{p.total}
