@@ -7,11 +7,19 @@ export const MAX_POSTS = 12;
 function normalizeRssUrl(url?: string): string | null {
   if (!url) return null;
 
-  const trimmed = url.trim();
+  let trimmed = url.trim();
 
   if (!trimmed) return null;
   if (trimmed.includes("your_blog_id")) return null;
   if (!/^https?:\/\//i.test(trimmed)) return null;
+
+  // 네이버 RSS는 .xml까지 붙이는 것이 안정적
+  if (
+    trimmed.includes("rss.blog.naver.com") &&
+    !trimmed.toLowerCase().endsWith(".xml")
+  ) {
+    trimmed = `${trimmed}.xml`;
+  }
 
   return trimmed;
 }
@@ -39,35 +47,35 @@ export interface BlogPost {
 }
 
 type CustomImage = {
-  url?: string;
-  title?: string;
-  link?: string;
+  url?: unknown;
+  title?: unknown;
+  link?: unknown;
 };
 
 type RssMediaField = {
   $?: {
-    url?: string;
+    url?: unknown;
   };
 };
 
 type CustomItem = {
-  title?: string;
-  link?: string;
-  pubDate?: string;
-  isoDate?: string;
-  summary?: string;
-  description?: string;
-  content?: string;
-  contentSnippet?: string;
-  category?: string | string[];
-  categories?: string[];
-  tag?: string;
-  tags?: string[];
+  title?: unknown;
+  link?: unknown;
+  pubDate?: unknown;
+  isoDate?: unknown;
+  summary?: unknown;
+  description?: unknown;
+  content?: unknown;
+  contentSnippet?: unknown;
+  category?: unknown;
+  categories?: unknown;
+  tag?: unknown;
+  tags?: unknown;
   "media:content"?: RssMediaField | RssMediaField[];
   "media:thumbnail"?: RssMediaField | RssMediaField[];
   enclosure?: {
-    url?: string;
-    type?: string;
+    url?: unknown;
+    type?: unknown;
   };
 };
 
@@ -78,9 +86,7 @@ type ParsedItem = CustomItem & {
 
 type CustomFeed = {
   items?: CustomItem[];
-  image?: CustomImage;
-  title?: string;
-  link?: string;
+  image?: CustomImage | string;
 };
 
 const parser = new Parser<CustomFeed, CustomItem>({
@@ -100,6 +106,10 @@ const parser = new Parser<CustomFeed, CustomItem>({
   },
 });
 
+function asString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
 function decodeHtmlEntities(value: string): string {
   return value
     .replace(/&nbsp;/g, " ")
@@ -113,9 +123,10 @@ function decodeHtmlEntities(value: string): string {
 }
 
 export function stripHtml(html: unknown): string {
-  if (typeof html !== "string") return "";
+  const value = asString(html);
+  if (!value) return "";
 
-  return decodeHtmlEntities(html)
+  return decodeHtmlEntities(value)
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<img[^>]*>/gi, " ")
@@ -135,8 +146,11 @@ export function truncateText(text: unknown, maxLength = 90): string {
   return `${clean.slice(0, maxLength).trimEnd()}…`;
 }
 
-export function formatDateKo(dateString: string): string {
-  const date = new Date(dateString);
+export function formatDateKo(dateString: unknown): string {
+  const value = asString(dateString);
+  if (!value) return "";
+
+  const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) return "";
 
@@ -148,10 +162,11 @@ export function formatDateKo(dateString: string): string {
   });
 }
 
-export function extractFirstImage(html?: string): string | null {
-  if (!html) return null;
+export function extractFirstImage(html: unknown): string | null {
+  const value = asString(html);
+  if (!value) return null;
 
-  const match = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+  const match = value.match(/<img[^>]+src=["']([^"']+)["']/i);
   const src = match?.[1];
 
   return src ? decodeHtmlEntities(src) : null;
@@ -160,21 +175,20 @@ export function extractFirstImage(html?: string): string | null {
 export function getBlogSourceLabel(rssUrl: string): string {
   try {
     const url = new URL(rssUrl);
-    const pathParts = url.pathname.split("/").filter(Boolean);
-    return pathParts.at(-1) ?? url.hostname;
+    const fileName = url.pathname.split("/").filter(Boolean).at(-1);
+
+    return fileName?.replace(".xml", "") || url.hostname;
   } catch {
     return "naver-blog";
   }
 }
 
-export function isLikelyImageUrl(url?: string | null): boolean {
-  if (!url) return false;
+export function isLikelyImageUrl(url?: unknown): url is string {
+  if (typeof url !== "string") return false;
 
   const trimmed = url.trim();
 
-  if (!/^https?:\/\//i.test(trimmed)) return false;
-
-  return true;
+  return /^https?:\/\//i.test(trimmed);
 }
 
 function pickMediaUrl(media?: RssMediaField | RssMediaField[]): string | null {
@@ -182,27 +196,27 @@ function pickMediaUrl(media?: RssMediaField | RssMediaField[]): string | null {
 
   const list = Array.isArray(media) ? media : [media];
 
-  return list.find((item) => isLikelyImageUrl(item.$?.url))?.$?.url ?? null;
+  const found = list.find((item) => isLikelyImageUrl(item.$?.url))?.$?.url;
+
+  return isLikelyImageUrl(found) ? found : null;
 }
 
-function normalizeCategory(category?: string | string[] | unknown): string {
+function normalizeCategory(category?: unknown): string {
   if (Array.isArray(category)) {
     return (
       category
-        .map((value) => (typeof value === "string" ? stripHtml(value) : ""))
-        .find(Boolean) ?? "기타"
+        .map((value) => stripHtml(value))
+        .find((value) => value.length > 0) ?? "기타"
     );
   }
 
-  if (typeof category === "string") {
-    return stripHtml(category) || "기타";
-  }
+  const clean = stripHtml(category);
 
-  return "기타";
+  return clean || "기타";
 }
 
 function normalizeTags(item: CustomItem): string[] {
-  const rawValues = [
+  const rawValues: unknown[] = [
     item.tag,
     ...(Array.isArray(item.tags) ? item.tags : []),
     ...(Array.isArray(item.categories) ? item.categories : []),
@@ -222,6 +236,7 @@ function normalizeTags(item: CustomItem): string[] {
 
 function getSortableTime(post: BlogPost): number {
   const time = new Date(post.pubDate).getTime();
+
   return Number.isNaN(time) ? 0 : time;
 }
 
@@ -232,24 +247,24 @@ function resolveThumbnail(
   const candidates = [
     pickMediaUrl(item["media:thumbnail"]),
     pickMediaUrl(item["media:content"]),
-    item.enclosure?.url ?? null,
+    item.enclosure?.url,
     extractFirstImage(item.description),
     extractFirstImage(item.content),
     extractFirstImage(item.summary),
     channelThumbnail,
   ];
 
-  const image = candidates.find(isLikelyImageUrl);
+  const found = candidates.find(isLikelyImageUrl);
 
-  return image ?? null;
+  return found ?? null;
 }
 
 function normalizePost(item: ParsedItem): BlogPost | null {
-  const title = stripHtml(item.title ?? "");
+  const title = stripHtml(item.title);
 
   if (!title) return null;
 
-  const pubDate = item.pubDate ?? item.isoDate ?? "";
+  const pubDate = asString(item.pubDate) ?? asString(item.isoDate) ?? "";
 
   const rawDescription =
     item.contentSnippet ??
@@ -258,9 +273,11 @@ function normalizePost(item: ParsedItem): BlogPost | null {
     item.summary ??
     "";
 
+  const link = asString(item.link);
+
   return {
     title,
-    link: typeof item.link === "string" && item.link.trim() ? item.link : "#",
+    link: link && link.trim() ? link : "#",
     pubDate,
     formattedDate: formatDateKo(pubDate),
     summary: truncateText(rawDescription, 90),
@@ -271,14 +288,28 @@ function normalizePost(item: ParsedItem): BlogPost | null {
   };
 }
 
+function getFeedImageUrl(feed: CustomFeed): string | null {
+  if (typeof feed.image === "string") {
+    return isLikelyImageUrl(feed.image) ? feed.image : null;
+  }
+
+  const imageUrl = feed.image?.url;
+
+  return isLikelyImageUrl(imageUrl) ? imageUrl : null;
+}
+
 async function fetchSingleBlogItems(rssUrl: string): Promise<ParsedItem[]> {
+  console.log("[NaverBlog] RSS 요청:", rssUrl);
+
   const res = await fetch(rssUrl, {
     next: { revalidate: RSS_REVALIDATE_SECONDS },
     headers: {
       "User-Agent": "Mozilla/5.0 (compatible; HappyNursingHomeRSSReader/1.0)",
-      Accept: "application/rss+xml, application/xml, text/xml",
+      Accept: "application/rss+xml, application/xml, text/xml, */*",
     },
   });
+
+  console.log("[NaverBlog] RSS 응답:", rssUrl, res.status, res.statusText);
 
   if (!res.ok) {
     throw new Error(`RSS 응답 오류: ${res.status} ${res.statusText} (${rssUrl})`);
@@ -286,15 +317,25 @@ async function fetchSingleBlogItems(rssUrl: string): Promise<ParsedItem[]> {
 
   const xml = await res.text();
 
+  console.log("[NaverBlog] RSS XML 길이:", rssUrl, xml.length);
+
   if (!xml.trim()) {
     throw new Error(`RSS 응답이 비어있습니다. (${rssUrl})`);
   }
 
+  const lowerXml = xml.slice(0, 300).toLowerCase();
+
+  if (lowerXml.includes("<html") || lowerXml.includes("<!doctype html")) {
+    throw new Error(
+      `RSS가 아니라 HTML이 반환되었습니다. RSS 주소를 확인하세요. (${rssUrl})`
+    );
+  }
+
   const feed = await parser.parseString(xml);
   const source = getBlogSourceLabel(rssUrl);
+  const channelThumbnail = getFeedImageUrl(feed);
 
-  const channelThumbnail =
-    feed.image?.url && isLikelyImageUrl(feed.image.url) ? feed.image.url : null;
+  console.log("[NaverBlog] RSS 파싱 글 개수:", rssUrl, feed.items?.length ?? 0);
 
   return (feed.items ?? []).map((item) => ({
     ...item,
@@ -308,6 +349,8 @@ export async function getNaverBlogPosts(): Promise<{
   categories: string[];
   error: string | null;
 }> {
+  console.log("[NaverBlog] 사용 RSS URL 목록:", NAVER_BLOG_RSS_URLS);
+
   if (!NAVER_BLOG_RSS_URLS.length) {
     return {
       posts: [],
@@ -320,6 +363,16 @@ export async function getNaverBlogPosts(): Promise<{
     NAVER_BLOG_RSS_URLS.map((url) => fetchSingleBlogItems(url))
   );
 
+  settled.forEach((result, index) => {
+    if (result.status === "rejected") {
+      console.error(
+        "[NaverBlog] RSS 실패:",
+        NAVER_BLOG_RSS_URLS[index],
+        result.reason
+      );
+    }
+  });
+
   const successItems = settled
     .filter(
       (result): result is PromiseFulfilledResult<ParsedItem[]> =>
@@ -327,10 +380,14 @@ export async function getNaverBlogPosts(): Promise<{
     )
     .flatMap((result) => result.value);
 
+  console.log("[NaverBlog] 성공 item 총 개수:", successItems.length);
+
   const normalizedPosts = successItems
     .map(normalizePost)
     .filter((post): post is BlogPost => post !== null)
     .sort((a, b) => getSortableTime(b) - getSortableTime(a));
+
+  console.log("[NaverBlog] 정규화 post 총 개수:", normalizedPosts.length);
 
   const categories = [
     "전체",
@@ -344,7 +401,7 @@ export async function getNaverBlogPosts(): Promise<{
   if (!normalizedPosts.length) {
     return {
       posts: [],
-      categories: [],
+      categories,
       error: hasFailure
         ? "블로그 RSS 데이터를 불러오지 못했습니다. RSS 주소 또는 네이버 블로그 공개 상태를 확인해주세요."
         : "현재 등록된 블로그 글이 없습니다.",
