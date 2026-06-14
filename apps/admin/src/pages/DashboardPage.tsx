@@ -32,7 +32,7 @@ export default function DashboardPage() {
   const [siteStats, setSiteStats] = useState<DashboardStats | null>(null)
   const [loadingSite, setLoadingSite] = useState(true)
 
-  const { checklists, occurrences, residents, staffList, loaded, loadAll } = useLtcStore()
+  const { checklists, occurrences, residents, staffList, loaded, loadAll, toggleComplete, completeOccurrence } = useLtcStore()
 
   useEffect(() => { loadSiteStats() }, [])
   useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
@@ -153,6 +153,10 @@ export default function DashboardPage() {
     }
   }, [occurrences, checklists])
 
+  // 일일 vs 비일일(주별+월별+...) 분리
+  const dailyTasks    = todayTasks.filter(t => t.frequency === 'daily')
+  const nonDailyTasks = todayTasks.filter(t => t.frequency !== 'daily')
+
   // ── occurrence 기반: 주기별 완료 현황 ────────────────────────────────────
   const periodProgress = useMemo(() => {
     const hasOccurrences = occurrences.length > 0
@@ -220,6 +224,16 @@ export default function DashboardPage() {
     ? occurrences.filter(o => o.status === 'completed' && o.scheduledDate <= todayStr && o.dueDate >= todayStr).length
     : 0
 
+  const [toggling, setToggling] = useState<string | null>(null)
+
+  const handleToggle = async (occId: string, itemId: string) => {
+    setToggling(occId || itemId)
+    try {
+      if (occId) await completeOccurrence(occId, todayStr)
+      else await toggleComplete(itemId)
+    } finally { setToggling(null) }
+  }
+
   const greetHour = parseInt(new Intl.DateTimeFormat('ko-KR', { timeZone:'Asia/Seoul', hour:'numeric', hour12:false }).format(new Date()))
   const greet = greetHour < 12 ? '좋은 아침입니다' : greetHour < 18 ? '안녕하세요' : '수고 많으셨습니다'
 
@@ -278,42 +292,105 @@ export default function DashboardPage() {
         {/* 왼쪽 3열 */}
         <div className="lg:col-span-3 space-y-4">
 
-          {/* 오늘 정기 업무 */}
+          {/* 오늘 일일 업무 — 바로 토글 가능 */}
           <section className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-50">
               <div className="flex items-center gap-2">
                 <Clock size={15} className="text-primary-orange"/>
-                <h2 className="text-sm font-bold text-gray-800">오늘 해야 할 정기 업무</h2>
+                <h2 className="text-sm font-bold text-gray-800">오늘 일일 업무</h2>
                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                  todayTasks.length===0 ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
+                  dailyTasks.length===0 ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
                 }`}>
-                  {todayTasks.length===0 ? '✓ 모두 완료' : `${todayTasks.length}건 남음`}
+                  {dailyTasks.length===0 ? '✓ 모두 완료' : `${dailyTasks.length}건 남음`}
                 </span>
               </div>
               <button onClick={() => navigate('/eval/checklist')} className="text-xs text-gray-400 hover:text-primary-orange flex items-center gap-0.5">
                 전체보기<ChevronRight size={13}/>
               </button>
             </div>
-            {todayTasks.length === 0 ? (
+            {dailyTasks.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10">
                 <CheckCircle2 size={32} className="mb-2 text-green-400"/>
-                <p className="text-sm font-medium text-green-600">오늘 정기 업무 모두 완료!</p>
+                <p className="text-sm font-medium text-green-600">오늘 일일 업무 모두 완료!</p>
                 {totalDone > 0 && <p className="text-xs text-gray-400 mt-1">오늘 완료 {totalDone}건</p>}
               </div>
             ) : (
               <div className="divide-y divide-gray-50">
-                {todayTasks.slice(0, 8).map(task => (
-                  <TaskRow key={task.occId || task.itemId} task={task} onClick={() => navigate('/eval/checklist')}/>
+                {dailyTasks.slice(0, 10).map(task => (
+                  <DailyTaskRow
+                    key={task.occId || task.itemId}
+                    task={task}
+                    toggling={toggling}
+                    onToggle={() => handleToggle(task.occId, task.itemId)}
+                    onClick={() => navigate('/eval/checklist')}
+                  />
                 ))}
-                {todayTasks.length > 8 && (
+                {dailyTasks.length > 10 && (
                   <button onClick={() => navigate('/eval/checklist')}
                     className="w-full py-2.5 text-xs text-center text-gray-400 hover:text-primary-orange hover:bg-orange-50 transition-colors">
-                    +{todayTasks.length - 8}건 더 보기
+                    +{dailyTasks.length - 10}건 더 보기
                   </button>
                 )}
               </div>
             )}
           </section>
+
+          {/* 주별/월별/분기/반기/연별 — 남은 건수 요약 */}
+          {nonDailyTasks.length > 0 && (
+            <section className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-50">
+                <div className="flex items-center gap-2">
+                  <TrendingUp size={15} className="text-indigo-500"/>
+                  <h2 className="text-sm font-bold text-gray-800">진행 중인 정기 업무</h2>
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                    {nonDailyTasks.length}건 미완료
+                  </span>
+                </div>
+                <button onClick={() => navigate('/eval/checklist')} className="text-xs text-gray-400 hover:text-indigo-500 flex items-center gap-0.5">
+                  전체보기<ChevronRight size={13}/>
+                </button>
+              </div>
+              {/* 주기별 그룹핑 */}
+              <div className="p-4">
+                {(['weekly','monthly','quarterly','half-yearly','yearly'] as const)
+                  .map(freq => {
+                    const tasks = nonDailyTasks.filter(t => t.frequency === freq)
+                    if (tasks.length === 0) return null
+                    const label = FREQUENCY_LABELS[freq]
+                    const hasUrgent = tasks.some(t => t.riskLevel === 'high')
+                    return (
+                      <button key={freq} onClick={() => navigate('/eval/checklist')}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl mb-2 text-left transition-colors hover:brightness-95 ${
+                          hasUrgent ? 'bg-red-50 border border-red-100' : 'bg-gray-50 border border-gray-100'
+                        }`}>
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-sm ${
+                          hasUrgent ? 'bg-red-100' : 'bg-indigo-100'
+                        }`}>
+                          {freq==='weekly'?'주':freq==='monthly'?'월':freq==='quarterly'?'분':freq==='half-yearly'?'반':'연'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-800">{label}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {tasks.map(t => t.title).slice(0, 2).join(', ')}
+                            {tasks.length > 2 ? ` 외 ${tasks.length - 2}건` : ''}
+                          </p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                            hasUrgent ? 'bg-red-100 text-red-700' : 'bg-indigo-100 text-indigo-700'
+                          }`}>
+                            {tasks.length}건 남음
+                          </span>
+                          {hasUrgent && <span className="text-[10px] text-red-500 font-medium">⚠ 위험</span>}
+                        </div>
+                        <ChevronRight size={14} className="text-gray-300 flex-shrink-0"/>
+                      </button>
+                    )
+                  })
+                }
+              </div>
+            </section>
+          )}
 
           {/* 이벤트 미완료 누적 */}
           {eventPendingTasks.length > 0 && (
@@ -469,16 +546,25 @@ function KpiCard({ label, value, sub, color, icon, onClick, alert }: {
   )
 }
 
-function TaskRow({ task, onClick }: { task: TodayTask; onClick: () => void }) {
+function DailyTaskRow({ task, toggling, onToggle, onClick }: {
+  task: TodayTask; toggling: string | null; onToggle: ()=>void; onClick: ()=>void
+}) {
+  const isBusy = toggling === (task.occId || task.itemId)
   return (
-    <button onClick={onClick} className="w-full flex items-center gap-3 px-5 py-3 hover:bg-orange-50/40 text-left transition-colors">
-      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-        task.riskLevel==='high' ? 'bg-red-500' : task.riskLevel==='medium' ? 'bg-orange-400' : 'bg-gray-300'
-      }`}/>
-      <div className="flex-1 min-w-0">
+    <div className="flex items-center gap-3 px-5 py-3 hover:bg-orange-50/30 transition-colors">
+      {/* 토글 버튼 */}
+      <button
+        onClick={e => { e.stopPropagation(); onToggle() }}
+        disabled={isBusy}
+        className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors disabled:opacity-50 ${
+          isBusy ? 'border-primary-orange' : 'border-gray-300 hover:border-primary-orange hover:bg-orange-50'
+        }`}>
+        {isBusy && <div className="w-2.5 h-2.5 border border-primary-orange border-t-transparent rounded-full animate-spin"/>}
+      </button>
+      {/* 내용 */}
+      <div className="flex-1 min-w-0 cursor-pointer" onClick={onClick}>
         <p className="text-sm font-medium text-gray-800 truncate">{task.title}</p>
         <div className="flex items-center gap-2 mt-0.5">
-          <span className="text-[10px] text-gray-400">{FREQUENCY_LABELS[task.frequency] ?? task.frequency}</span>
           {task.personName && <span className="text-[10px] text-purple-500 font-medium">👤 {task.personName}</span>}
           {task.assignee && !task.personName && <span className="text-[10px] text-gray-400">{task.assignee}</span>}
           {task.daysOverdue > 0 && (
@@ -486,17 +572,13 @@ function TaskRow({ task, onClick }: { task: TodayTask; onClick: () => void }) {
               task.daysOverdue>=7 ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'
             }`}>{task.daysOverdue}일 지남</span>
           )}
-          {task.isOneTime && task.daysLeft !== undefined && task.daysOverdue === 0 && (
-            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${task.daysLeft===0?'bg-red-100 text-red-600':task.daysLeft<=3?'bg-orange-100 text-orange-600':'bg-amber-100 text-amber-700'}`}>{task.daysLeft===0?'오늘 마감':`D-${task.daysLeft}`}</span>
-          )}
         </div>
       </div>
-      {task.riskLevel==='high' && (
-        <span className="text-[10px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full flex-shrink-0">위험</span>
-      )}
-    </button>
+      {task.riskLevel==='high' && <AlertTriangle size={13} className="text-red-400 flex-shrink-0"/>}
+    </div>
   )
 }
+
 
 function EventTaskRow({ task, onClick }: { task: TodayTask; onClick: () => void }) {
   return (

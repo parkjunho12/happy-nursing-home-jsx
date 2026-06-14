@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, UserCog, MessageSquare, FileText,
   Star, Settings, LogOut, ClipboardList, CalendarDays,
-  UserRound, ShieldCheck, ChevronDown, ChevronRight, Sparkles, FileSearch,
+  UserRound, ShieldCheck, ChevronDown, ChevronRight, Sparkles, FileSearch, Image as ImageIcon,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth'
 import { useLtcStore } from '@/store/ltc'
@@ -35,6 +35,7 @@ const Sidebar = () => {
     { to: '/eval/residents',    icon: UserRound,     label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined },
     { to: '/eval/staff',        icon: UserCog,       label: '직원 관리(평가)', badge: activeStaff > 0 ? `${activeStaff}명` : undefined },
     { to: '/eval/record-audit', icon: FileSearch,    label: '제공기록지 검수' },
+    { to: '/eval/albums',       icon: ImageIcon,     label: '보호자 앨범' },
     { to: '/eval/ai-review',    icon: Sparkles,      label: 'AI 체크리스트 검토' },
   ]
 
