@@ -26,9 +26,10 @@ export default function Header() {
     { href: '/pricing', label: '입소비용' },
     { href: '/reviews', label: '이용 후기' },
     { href: '/blog', label: '블로그' },
-    { href: '/history', label: '히스토리' },
     { href: '/contact', label: '상담 신청' },
   ]
+
+  const familyLink = { href: '/family', label: '보호자 앨범' }
 
   return (
     <header
@@ -72,15 +73,24 @@ export default function Header() {
             ))}
           </nav>
 
-          {/* Phone Button */}
-          <a
-            href={`tel:${SITE_INFO.phone}`}
-            className="hidden lg:flex items-center gap-2 px-6 py-3 bg-primary-orange text-white rounded-full font-semibold hover:bg-primary-orange/90 transition-all hover:scale-105"
-          >
-            <Phone className="w-4 h-4" />
-            {SITE_INFO.phone}
-          </a>
-
+          {/* 버튼 그룹 */}
+          <div className="hidden lg:flex items-center gap-3">
+            {/* 보호자 앨범 */}
+            <Link
+              href={familyLink.href}
+              className="flex items-center gap-1.5 px-4 py-2.5 border-2 border-orange-300 text-orange-600 rounded-full font-semibold hover:bg-orange-50 transition-all text-sm"
+            >
+              🌸 {familyLink.label}
+            </Link>
+            {/* Phone Button */}
+            <a
+              href={`tel:${SITE_INFO.phone}`}
+              className="flex items-center gap-2 px-6 py-3 bg-primary-orange text-white rounded-full font-semibold hover:bg-primary-orange/90 transition-all hover:scale-105"
+            >
+              <Phone className="w-4 h-4" />
+              {SITE_INFO.phone}
+            </a>
+          </div>
           {/* Mobile Menu Button */}
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -109,9 +119,17 @@ export default function Header() {
                 {link.label}
               </Link>
             ))}
+            {/* 보호자 앨범 */}
+            <Link
+              href={familyLink.href}
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="flex items-center gap-2 px-4 py-3 border-2 border-orange-200 text-orange-600 rounded-lg font-semibold bg-orange-50 mt-2"
+            >
+              🌸 {familyLink.label}
+            </Link>
             <a
               href={`tel:${SITE_INFO.phone}`}
-              className="flex items-center justify-center gap-2 px-4 py-3 bg-primary-orange text-white rounded-lg font-semibold mt-4"
+              className="flex items-center justify-center gap-2 px-4 py-3 bg-primary-orange text-white rounded-lg font-semibold mt-2"
             >
               <Phone className="w-4 h-4" />
               {SITE_INFO.phone}
