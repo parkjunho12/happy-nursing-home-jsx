@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import logging
 import os
@@ -75,6 +76,10 @@ app.add_middleware(
 
 # API 라우터 등록
 app.include_router(api_router, prefix="/api/v1")
+
+# 업로드 파일 정적 서빙
+os.makedirs("uploads", exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # Health Check
 @app.get("/health")

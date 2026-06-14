@@ -22,11 +22,15 @@ import PageViewStats from './pages/analytics/PageViewStats'
 import SuspiciousIPPage from './pages/analytics/SuspiciousIPPage'
 
 // 평가 관리 페이지 (추가)
-import EvalChecklistPage from './pages/eval/EvalChecklistPage'
-import EvalCalendarPage  from './pages/eval/EvalCalendarPage'
-import EvalResidentsPage from './pages/eval/EvalResidentsPage'
-import EvalStaffPage     from './pages/eval/EvalStaffPage'
-import EvalAIReviewPage  from './pages/eval/EvalAIReviewPage'
+import EvalChecklistPage  from './pages/eval/EvalChecklistPage'
+import EvalCalendarPage   from './pages/eval/EvalCalendarPage'
+import EvalResidentsPage  from './pages/eval/EvalResidentsPage'
+import EvalStaffPage      from './pages/eval/EvalStaffPage'
+import EvalAIReviewPage   from './pages/eval/EvalAIReviewPage'
+import EvalAlbumPage       from './pages/eval/EvalAlbumPage'
+import FamilyLoginPage     from './pages/family/FamilyLoginPage'
+import FamilyAlbumsPage    from './pages/family/FamilyAlbumsPage'
+import FamilyAlbumDetailPage from './pages/family/FamilyAlbumDetailPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -66,6 +70,10 @@ function App() {
         <LtcLoader />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          {/* 보호자 페이지 — 별도 인증 */}
+          <Route path="/family/login"        element={<FamilyLoginPage />} />
+          <Route path="/family/albums"       element={<FamilyAlbumsPage />} />
+          <Route path="/family/albums/:id"   element={<FamilyAlbumDetailPage />} />
 
           <Route
             path="/"
@@ -90,11 +98,12 @@ function App() {
             <Route path="settings"                 element={<SettingsPage />} />
 
             {/* 평가 관리 페이지 */}
-            <Route path="eval/checklist"  element={<EvalChecklistPage />} />
-            <Route path="eval/calendar"   element={<EvalCalendarPage />} />
-            <Route path="eval/residents"  element={<EvalResidentsPage />} />
-            <Route path="eval/staff"      element={<EvalStaffPage />} />
-            <Route path="eval/ai-review"  element={<EvalAIReviewPage />} />
+            <Route path="eval/checklist"     element={<EvalChecklistPage />} />
+            <Route path="eval/calendar"      element={<EvalCalendarPage />} />
+            <Route path="eval/residents"     element={<EvalResidentsPage />} />
+            <Route path="eval/staff"         element={<EvalStaffPage />} />
+            <Route path="eval/ai-review"     element={<EvalAIReviewPage />} />
+            <Route path="eval/albums"        element={<EvalAlbumPage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
