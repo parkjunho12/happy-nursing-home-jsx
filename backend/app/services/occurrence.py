@@ -64,8 +64,13 @@ def get_period_key(freq: str, d: date) -> str:
     if freq == 'daily':
         return d.isoformat()
     if freq == 'weekly':
-        year, week, _ = d.isocalendar()
-        return f"{year}-W{week:02d}"
+        # 일요일 시작 기준 (일~토)
+        day_of_week = d.isoweekday() % 7   # 일=0, 월=1, ..., 토=6
+        sunday      = d - timedelta(days=day_of_week)
+        jan1        = date(sunday.year, 1, 1)
+        jan1_dow    = jan1.isoweekday() % 7
+        week_num    = ((sunday - jan1).days + jan1_dow) // 7 + 1
+        return f"{sunday.year}-W{week_num:02d}" 
     if freq == 'monthly':
         return f"{d.year}-{d.month:02d}"
     if freq == 'quarterly':
@@ -87,8 +92,10 @@ def get_period_bounds(freq: str, d: date) -> Tuple[date, date]:
         return d, d
 
     if freq == 'weekly':
-        start = d - timedelta(days=d.weekday())   # 월요일
-        return start, start + timedelta(days=6)
+        # 일요일 시작 기준
+        day_of_week = d.isoweekday() % 7  # 일=0
+        start = d - timedelta(days=day_of_week)  # 이 주 일요일
+        return start, start + timedelta(days=6)   # ~ 토요일
 
     if freq == 'monthly':
         start = date(d.year, d.month, 1)
@@ -132,10 +139,12 @@ def _period_start_dates(freq: str, from_date: date, to_date: date) -> List[date]
         return starts
 
     if freq == 'weekly':
-        # 이번 주의 월요일부터 시작
-        cur = from_date - timedelta(days=from_date.weekday())
+        # 일요일 시작 기준
+        day_of_week = from_date.isoweekday() % 7  # 일=0
+        cur = from_date - timedelta(days=day_of_week)  # from_date가 속한 주의 일요일
         while cur <= to_date:
-            if cur >= from_date or (cur + timedelta(days=6)) >= from_date:
+            # 이 주의 일요일이 from_date 이전이어도 토요일이 from_date 이후면 포함
+            if cur + timedelta(days=6) >= from_date:
                 starts.append(cur)
             cur += timedelta(weeks=1)
         return starts
