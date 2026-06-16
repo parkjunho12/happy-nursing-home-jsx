@@ -27,6 +27,10 @@ import EvalCalendarPage   from './pages/eval/EvalCalendarPage'
 import EvalResidentsPage  from './pages/eval/EvalResidentsPage'
 import EvalStaffPage      from './pages/eval/EvalStaffPage'
 import EvalAIReviewPage   from './pages/eval/EvalAIReviewPage'
+import EvalRecordAuditPage    from './pages/eval/EvalRecordAuditPage'
+import EvalStaffAccountsPage from './pages/eval/EvalStaffAccountsPage'
+import EvalMyTasksPage       from './pages/eval/EvalMyTasksPage'
+import EvalStaffProgressPage from './pages/eval/EvalStaffProgressPage'
 import EvalAlbumPage       from './pages/eval/EvalAlbumPage'
 import FamilyLoginPage     from './pages/family/FamilyLoginPage'
 import FamilyAlbumsPage    from './pages/family/FamilyAlbumsPage'
@@ -103,6 +107,10 @@ function App() {
             <Route path="eval/residents"     element={<EvalResidentsPage />} />
             <Route path="eval/staff"         element={<EvalStaffPage />} />
             <Route path="eval/ai-review"     element={<EvalAIReviewPage />} />
+            <Route path="eval/record-audit"  element={<EvalRecordAuditPage />} />
+            <Route path="eval/staff-accounts" element={<EvalStaffAccountsPage />} />
+            <Route path="eval/my-tasks"       element={<EvalMyTasksPage />} />
+            <Route path="eval/staff-progress" element={<EvalStaffProgressPage />} />
             <Route path="eval/albums"        element={<EvalAlbumPage />} />
           </Route>
 

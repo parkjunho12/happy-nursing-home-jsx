@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
-from app.models.eval import ChecklistItem, CompletionRecord
+from app.models.eval import ChecklistItem, CompletionRecord, ChecklistItemAssignee
 from app.schemas.eval import (
     ChecklistItemCreate, ChecklistItemUpdate, ChecklistItemOut,
     ToggleRequest,
@@ -58,8 +58,46 @@ def _cl_to_out(item: ChecklistItem) -> dict:
     # due_date는 마이그레이션 전에는 컬럼이 없을 수 있으므로 안전하게 처리
     if "due_date" not in d:
         d["due_date"] = getattr(item, "due_date", None)
+    # assignees는 별도 함수로 채움 (db 접근 필요)
+    d["assignees"] = []
     return d
 
+
+
+
+def _fill_assignees(items: list, db) -> list:
+    """체크리스트 목록에 assignees 정보 채우기"""
+    from app.models.user import User as UserModel
+    if not items:
+        return items
+    item_ids = [it["id"] for it in items if "id" in it]
+    if not item_ids:
+        return items
+
+    rows = db.query(ChecklistItemAssignee).filter(
+        ChecklistItemAssignee.checklist_item_id.in_(item_ids)
+    ).all()
+
+    # user 정보 한 번에 조회
+    user_ids = list({r.user_id for r in rows})
+    users = {u.id: u for u in db.query(UserModel).filter(UserModel.id.in_(user_ids)).all()} if user_ids else {}
+
+    # item_id → assignees 매핑
+    from collections import defaultdict
+    mapping = defaultdict(list)
+    for row in rows:
+        u = users.get(row.user_id)
+        if u:
+            mapping[row.checklist_item_id].append({
+                "user_id":  u.id,
+                "name":     u.name,
+                "position": u.position,
+            })
+
+    for it in items:
+        it["assignees"] = mapping.get(it["id"], [])
+
+    return items
 
 def _query_with_history(db: Session):
     return db.query(ChecklistItem).options(
@@ -86,7 +124,8 @@ def list_checklists(
     if person_id:
         q = q.filter(ChecklistItem.person_id == person_id)
     items = q.order_by(ChecklistItem.created_at).all()
-    return ApiResponse(success=True, data=[_cl_to_out(i) for i in items])
+    out = _fill_assignees([_cl_to_out(i) for i in items], db)
+    return ApiResponse(success=True, data=out)
 
 
 @router.get("/{item_id}", response_model=ApiResponse)

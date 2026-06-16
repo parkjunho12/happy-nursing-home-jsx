@@ -4,6 +4,8 @@ import {
   RotateCcw, UserPlus, UserMinus, LogIn, LogOut, Users,
 } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
+import { useAuthStore } from '@/store/auth'
+import { checklistAssignAPI } from '@/api/staffAccountClient'
 import type { ChecklistOccurrence } from '@/store/ltc'
 import ChecklistDetailModal from '@/components/eval/ChecklistDetailModal'
 import type { ChecklistItem } from '@/utils/period'
@@ -29,6 +31,11 @@ type ViewTab = 'checklist' | 'people' | 'all'
 
 export default function EvalCalendarPage() {
   const { checklists, occurrences, residents, staffList, loaded, loadAll, completeOccurrence, uncompleteOccurrence, toggleComplete } = useLtcStore()
+  const { user } = useAuthStore()
+
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'MANAGER'
+  const [myTaskItemIds, setMyTaskItemIds] = useState<Set<string>>(new Set())
+  const [tasksLoaded,   setTasksLoaded]   = useState(false)
   const [currentDate, setCurrentDate] = useState(todayDateKST())
   const [selectedItem, setSelectedItem] = useState<ChecklistItem | null>(null)
   const [selectedDay, setSelectedDay] = useState<Date | null>(todayDateKST())
@@ -37,7 +44,26 @@ export default function EvalCalendarPage() {
 
   useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
 
-  const hasOccurrences = occurrences.length > 0
+  useEffect(() => {
+    if (isAdmin) { setTasksLoaded(true); return }
+    checklistAssignAPI.myTasks()
+      .then(tasks => {
+        setMyTaskItemIds(new Set(tasks.map((t: any) => t.item_id)))
+        setTasksLoaded(true)
+      })
+      .catch(() => setTasksLoaded(true))
+  }, [isAdmin])
+
+  // 역할에 따라 필터링된 체크리스트
+  const visibleChecklists = useMemo(() =>
+    isAdmin ? checklists : checklists.filter(c => myTaskItemIds.has(c.id))
+  , [checklists, isAdmin, myTaskItemIds])
+
+  const visibleOccurrences = useMemo(() =>
+    isAdmin ? occurrences : occurrences.filter(o => myTaskItemIds.has(o.checklistItemId))
+  , [occurrences, isAdmin, myTaskItemIds])
+
+  const hasOccurrences = visibleOccurrences.length > 0
 
   // ── 아이템 맵 (id → item) ────────────────────────────────────────────
   const itemMap = useMemo(() =>
@@ -59,7 +85,7 @@ export default function EvalCalendarPage() {
 
     if (!hasOccurrences) return map
 
-    occurrences.forEach(occ => {
+    visibleOccurrences.forEach(occ => {
       const item = itemMap.get(occ.checklistItemId)
       if (!item?.active) return
 
@@ -98,7 +124,7 @@ export default function EvalCalendarPage() {
     days.forEach(day => {
       const key = format(day, 'yyyy-MM-dd')
       const entries: { item: ChecklistItem; done: boolean; isEvent: boolean }[] = []
-      checklists.forEach(item => {
+      visibleChecklists.forEach(item => {
         if (shouldShowOnDate(item, day)) {
           const isEvent = EVENT_FREQS.includes(item.frequency as any)
           const done = isEvent ? item.completed : isPeriodCompleted(item, getPeriodKey(item.frequency as any, day))
@@ -118,7 +144,7 @@ export default function EvalCalendarPage() {
         // 현재 진행 중인 주기: scheduledDate <= 오늘 <= dueDate
         // 같은 아이템 중 dueDate 가장 큰(최신 주기) occurrence만 사용
         const candidateMap = new Map<string, ChecklistOccurrence>()
-        occurrences
+        visibleOccurrences
           .filter(o =>
             o.frequency === freq &&
             o.scheduledDate <= today &&
@@ -140,7 +166,7 @@ export default function EvalCalendarPage() {
         return { freq, total, done, daysLeft }
       } else {
         // fallback
-        const items = checklists.filter(c => c.active && c.frequency === freq)
+        const items = visibleChecklists.filter(c => c.active && c.frequency === freq)
         const key = getCurrentPeriodKey(freq as any)
         const done = items.filter(c => isPeriodCompleted(c, key)).length
         const end = getPeriodEnd(freq as any)
@@ -220,6 +246,16 @@ export default function EvalCalendarPage() {
   const handleToggleLegacy = async (id: string) => {
     setToggling(id)
     try { await toggleComplete(id) } finally { setToggling(null) }
+  }
+
+  // ── 로딩 가드 (Hook 이후에 위치 — Rules of Hooks 준수) ──────────────
+  if (!isAdmin && !tasksLoaded) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="w-6 h-6 border-2 border-primary-orange border-t-transparent rounded-full animate-spin mr-2"/>
+        <span className="text-sm text-gray-500">담당 항목 불러오는 중...</span>
+      </div>
+    )
   }
 
   if (!loaded) return (

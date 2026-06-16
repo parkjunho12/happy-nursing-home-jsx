@@ -1,9 +1,9 @@
 from fastapi import APIRouter
 from app.api.v1.endpoints import auth, public, residents, staff, contacts, reviews, history, dashboard, tracking, eval_checklists, eval_indicators, eval_people
 from app.api.v1.endpoints.eval_ai_review import router as eval_ai_router
+from app.api.v1.endpoints.staff_accounts import router as staff_accounts_router
+from app.api.v1.endpoints.checklist_assign import router as checklist_assign_router
 from app.api.v1.endpoints.eval_occurrences import router as eval_occ_router
-
-from app.api.v1.endpoints.albums import admin_router as album_admin_router, family_router as album_family_router
 api_router = APIRouter()
 
 # Public endpoints (인증 불필요)
@@ -73,6 +73,8 @@ api_router.include_router(eval_indicators.eval_dash_router,  prefix="/eval/dashb
 api_router.include_router(eval_ai_router,    prefix="/eval",              tags=["eval-ai-review"])
 api_router.include_router(eval_occ_router,   prefix="/eval/occurrences",  tags=["eval-occurrences"])
 
-# ── 앨범 (관리자 + 보호자) ─────────────────────────────────────────
-api_router.include_router(album_admin_router,  prefix="/admin",  tags=["admin-albums"])
-api_router.include_router(album_family_router, prefix="/family", tags=["family-albums"])
+# ── 직원 계정 관리 ────────────────────────────────────────────────────────────
+api_router.include_router(staff_accounts_router,   prefix="/staff-accounts",  tags=["staff-accounts"])
+
+# ── 체크리스트 다중 담당자 ────────────────────────────────────────────────────
+api_router.include_router(checklist_assign_router, prefix="/eval/checklist", tags=["checklist-assign"])

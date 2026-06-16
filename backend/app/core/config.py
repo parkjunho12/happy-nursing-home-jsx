@@ -54,6 +54,15 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     
 
+
+    # =============================
+    # AI Provider (검수 기능)
+    # =============================
+    AI_PROVIDER: str = "claude"          # claude | openai
+    CLAUDE_API_KEY: str = ""
+    CLAUDE_MODEL: str = "claude-3-5-sonnet-latest"
+    OPENAI_MODEL: str = "gpt-4o-mini"
+
     # =============================
     # Cloudflare R2 Storage
     # =============================
