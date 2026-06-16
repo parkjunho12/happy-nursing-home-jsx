@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { Search, AlertTriangle, CheckCircle2, User, RotateCcw, Plus, Clock } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
+import { useAuthStore } from '@/store/auth'
+import { apiClient } from '@/api/client'
 import ChecklistDetailModal from '@/components/eval/ChecklistDetailModal'
 import ChecklistFormModal from '@/components/eval/ChecklistFormModal'
 import type { ChecklistItem } from '@/utils/period'
@@ -39,6 +41,11 @@ function checkDone(item: ChecklistItem, _todayStr: string): boolean {
 
 export default function EvalChecklistPage() {
   const { checklists, residents, staffList, domains, loaded, loadAll, toggleComplete } = useLtcStore()
+  const { user } = useAuthStore()
+  const isAdmin = user?.role === 'ADMIN'
+
+  // 담당자 선택 목록 (/api/v1/users/assignee-options)
+  const [assigneeOptions, setAssigneeOptions] = useState<Array<{id:string;name:string;position?:string|null}>>([]) 
 
   const [selectedItem, setSelectedItem] = useState<ChecklistItem | null>(null)
   const [editItem, setEditItem]         = useState<ChecklistItem | null>(null)
@@ -48,8 +55,21 @@ export default function EvalChecklistPage() {
   const [search, setSearch]             = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'done' | 'todo'>('all')
   const [toggling, setToggling]         = useState<string | null>(null)
+  const [assigningId, setAssigningId]   = useState<string | null>(null)
+  const [savingAssign, setSavingAssign] = useState(false)
 
   useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
+
+  // 담당자 선택 목록 — ADMIN일 때 로드 (user가 확정된 후 실행)
+  useEffect(() => {
+    if (user?.role !== 'ADMIN') return
+    apiClient.get('/api/v1/users/assignee-options')
+      .then(res => {
+        const data = (res.data as any)?.data ?? []
+        setAssigneeOptions(data)
+      })
+      .catch(err => console.error('assignee-options 로드 실패:', err))
+  }, [user?.role])
 
   const todayStr = todayKST()
 
@@ -138,6 +158,21 @@ export default function EvalChecklistPage() {
   const handleToggle = async (id: string) => {
     setToggling(id)
     try { await toggleComplete(id) } finally { setToggling(null) }
+  }
+
+  const handleAssign = async (itemId: string, userId: string | null) => {
+    setSavingAssign(true)
+    try {
+      await apiClient.patch(`/api/v1/eval/checklists/${itemId}/assign`, {
+        assigned_user_id: userId,
+      })
+      await loadAll()
+      setAssigningId(null)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setSavingAssign(false)
+    }
   }
 
   if (!loaded) return (
@@ -341,8 +376,21 @@ export default function EvalChecklistPage() {
                           <Clock size={9}/>{periodLabel}
                         </span>
                       )}
+                      {/* 담당자 표시 */}
                       {item.assignee && (
-                        <span className="text-[11px] text-gray-400">👤 {item.assignee}</span>
+                        <span className="text-[11px] bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded-full font-medium">
+                          👤 {item.assignee}
+                        </span>
+                      )}
+                      {/* 담당자 지정 버튼 - ADMIN만 */}
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={e => { e.stopPropagation(); setAssigningId(assigningId === item.id ? null : item.id) }}
+                          className="text-[11px] text-gray-400 hover:text-primary-orange border border-dashed border-gray-200 hover:border-primary-orange px-1.5 py-0.5 rounded-full transition-colors"
+                        >
+                          {item.assignee ? '담당자 변경' : '+ 담당자'}
+                        </button>
                       )}
                       {/* D-day: 미완료 + 기한 초과 아닐 때 */}
                       {daysLeft !== null && !done && !isExpired && (
@@ -367,6 +415,18 @@ export default function EvalChecklistPage() {
                     </button>
                   </div>
                 </div>
+
+                {/* ── 담당자 인라인 선택 패널 ── */}
+                {isAdmin && assigningId === item.id && (
+                  <AssignPanel
+                    itemId={item.id}
+                    currentUserId={item.assigned_user_id ?? null}
+                    options={assigneeOptions}
+                    saving={savingAssign}
+                    onSave={handleAssign}
+                    onClose={() => setAssigningId(null)}
+                  />
+                )}
               </div>
             )
           })}
@@ -441,5 +501,56 @@ function TabBtn({ active, onClick, children, event, amber }: {
       }`}>
       {children}
     </button>
+  )
+}
+
+// ── 담당자 지정 패널 (제어 컴포넌트 — 저장 버튼으로 명시적 저장) ────────────
+function AssignPanel({ itemId, currentUserId, options, saving, onSave, onClose }: {
+  itemId: string
+  currentUserId: string | null
+  options: Array<{ id: string; name: string; position?: string | null }>
+  saving: boolean
+  onSave: (itemId: string, userId: string | null) => Promise<void>
+  onClose: () => void
+}) {
+  const [selectedId, setSelectedId] = useState<string>(currentUserId ?? '')
+
+  return (
+    <div
+      className="border-t border-orange-100 bg-orange-50/50 px-4 py-3"
+      onClick={e => e.stopPropagation()}
+    >
+      <p className="text-xs font-semibold text-gray-600 mb-2">담당자 지정</p>
+      <div className="flex gap-2">
+        <select
+          className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-orange/40"
+          value={selectedId}
+          onChange={e => setSelectedId(e.target.value)}
+          disabled={saving}
+        >
+          <option value="">담당자 없음 (해제)</option>
+          {options.map(u => (
+            <option key={u.id} value={u.id}>
+              {u.name}{u.position ? ` (${u.position})` : ''}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          disabled={saving}
+          onClick={() => onSave(itemId, selectedId || null)}
+          className="text-xs font-semibold text-white bg-primary-orange px-3 py-2 rounded-xl hover:bg-primary-orange/90 disabled:opacity-50"
+        >
+          {saving ? '저장 중...' : '저장'}
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-xs text-gray-500 border border-gray-200 px-3 py-2 rounded-xl hover:bg-gray-50"
+        >
+          취소
+        </button>
+      </div>
+    </div>
   )
 }

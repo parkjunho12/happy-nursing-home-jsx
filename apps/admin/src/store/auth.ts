@@ -47,9 +47,12 @@ export const useAuthStore = create<AuthState>()(
         } catch (error) {
           console.error('Logout error:', error)
         } finally {
-          // 토큰 제거
           localStorage.removeItem(TOKEN_KEY)
-          
+
+          // ltc 스토어 초기화 — 다음 로그인 시 해당 계정 권한으로 재로드
+          const { useLtcStore } = await import('./ltc')
+          useLtcStore.getState().reset()
+
           set({
             user: null,
             isAuthenticated: false,

@@ -7,7 +7,7 @@ import { useLtcStore } from './store/ltc'
 // Layout
 import Layout from './components/layout/Layout'
 
-// 기존 페이지
+// 페이지
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import ResidentsPage from './pages/ResidentsPage'
@@ -21,44 +21,56 @@ import SettingsPage from './pages/settings/SettingsPage'
 import PageViewStats from './pages/analytics/PageViewStats'
 import SuspiciousIPPage from './pages/analytics/SuspiciousIPPage'
 
-// 평가 관리 페이지 (추가)
-import EvalChecklistPage  from './pages/eval/EvalChecklistPage'
-import EvalCalendarPage   from './pages/eval/EvalCalendarPage'
-import EvalResidentsPage  from './pages/eval/EvalResidentsPage'
-import EvalStaffPage      from './pages/eval/EvalStaffPage'
-import EvalAIReviewPage   from './pages/eval/EvalAIReviewPage'
-import EvalAlbumPage       from './pages/eval/EvalAlbumPage'
-import FamilyLoginPage     from './pages/family/FamilyLoginPage'
-import FamilyAlbumsPage    from './pages/family/FamilyAlbumsPage'
+import EvalChecklistPage    from './pages/eval/EvalChecklistPage'
+import EvalCalendarPage     from './pages/eval/EvalCalendarPage'
+import EvalResidentsPage    from './pages/eval/EvalResidentsPage'
+import EvalStaffPage        from './pages/eval/EvalStaffPage'
+import EvalAIReviewPage     from './pages/eval/EvalAIReviewPage'
+import EvalAlbumPage        from './pages/eval/EvalAlbumPage'
+import EvalUsersPage        from './pages/eval/EvalUsersPage'
+import FamilyLoginPage      from './pages/family/FamilyLoginPage'
+import FamilyAlbumsPage     from './pages/family/FamilyAlbumsPage'
 import FamilyAlbumDetailPage from './pages/family/FamilyAlbumDetailPage'
 
 const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: { refetchOnWindowFocus: false, retry: 1 },
-  },
+  defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
 })
 
+// 인증 필요
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
   return <>{children}</>
 }
 
-// 로그인 후 LTC 데이터 자동 로드
+// ADMIN 전용 route guard — STAFF가 직접 URL 접근 시 /eval/checklist 로 redirect
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, user } = useAuthStore()
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  if (user?.role !== 'ADMIN') return <Navigate to="/eval/checklist" replace />
+  return <>{children}</>
+}
+
+// 사회복지사 또는 ADMIN만 접근 가능
+function SocialWorkerRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, user } = useAuthStore()
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  if (user?.role !== 'ADMIN' && user?.position !== '사회복지사')
+    return <Navigate to="/eval/checklist" replace />
+  return <>{children}</>
+}
+
 function LtcLoader() {
-  const { isAuthenticated } = useAuthStore()
-  const loadAll          = useLtcStore(s => s.loadAll)
-  const syncOccurrences  = useLtcStore(s => s.syncOccurrences)
-  const loaded           = useLtcStore(s => s.loaded)
+  const { isAuthenticated, user } = useAuthStore()
+  const loadAll         = useLtcStore(s => s.loadAll)
+  const syncOccurrences = useLtcStore(s => s.syncOccurrences)
+  const loaded          = useLtcStore(s => s.loaded)
 
   useEffect(() => {
     if (isAuthenticated && !loaded) {
-      loadAll().then(() => {
-        // 로드 완료 후 occurrence sync (현재 주기 생성 + 만료 처리)
-        syncOccurrences()
-      })
+      loadAll().then(() => syncOccurrences())
     }
-  }, [isAuthenticated, loaded, loadAll, syncOccurrences])
+  }, [isAuthenticated, loaded, user?.id, loadAll, syncOccurrences])
 
   return null
 }
@@ -70,10 +82,9 @@ function App() {
         <LtcLoader />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          {/* 보호자 페이지 — 별도 인증 */}
-          <Route path="/family/login"        element={<FamilyLoginPage />} />
-          <Route path="/family/albums"       element={<FamilyAlbumsPage />} />
-          <Route path="/family/albums/:id"   element={<FamilyAlbumDetailPage />} />
+          <Route path="/family/login"      element={<FamilyLoginPage />} />
+          <Route path="/family/albums"     element={<FamilyAlbumsPage />} />
+          <Route path="/family/albums/:id" element={<FamilyAlbumDetailPage />} />
 
           <Route
             path="/"
@@ -83,27 +94,39 @@ function App() {
               </ProtectedRoute>
             }
           >
-            {/* 기존 페이지 */}
+            {/* 공통 */}
             <Route index element={<DashboardPage />} />
-            <Route path="residents"                element={<ResidentsPage />} />
-            <Route path="staff"                    element={<StaffPage />} />
-            <Route path="contacts"                 element={<ContactsPage />} />
-            <Route path="contacts/:id"             element={<ContactDetailPage />} />
-            <Route path="history"                  element={<HistoryPage />} />
-            <Route path="history/new"              element={<HistoryEditPage />} />
-            <Route path="history/edit/:id"         element={<HistoryEditPage />} />
-            <Route path="reviews"                  element={<ReviewsPage />} />
-            <Route path="analytics/page-views"     element={<PageViewStats />} />
-            <Route path="analytics/suspicious-ips" element={<SuspiciousIPPage />} />
-            <Route path="settings"                 element={<SettingsPage />} />
 
-            {/* 평가 관리 페이지 */}
-            <Route path="eval/checklist"     element={<EvalChecklistPage />} />
-            <Route path="eval/calendar"      element={<EvalCalendarPage />} />
-            <Route path="eval/residents"     element={<EvalResidentsPage />} />
-            <Route path="eval/staff"         element={<EvalStaffPage />} />
-            <Route path="eval/ai-review"     element={<EvalAIReviewPage />} />
-            <Route path="eval/albums"        element={<EvalAlbumPage />} />
+            {/* 상담 관리 — ADMIN + STAFF 공통 */}
+            <Route path="contacts"     element={<ContactsPage />} />
+            <Route path="contacts/:id" element={<ContactDetailPage />} />
+
+            {/* ADMIN 전용 일반 메뉴 */}
+            <Route path="residents"                element={<AdminRoute><ResidentsPage /></AdminRoute>} />
+            <Route path="staff"                    element={<AdminRoute><StaffPage /></AdminRoute>} />
+            <Route path="history"                  element={<AdminRoute><HistoryPage /></AdminRoute>} />
+            <Route path="history/new"              element={<AdminRoute><HistoryEditPage /></AdminRoute>} />
+            <Route path="history/edit/:id"         element={<AdminRoute><HistoryEditPage /></AdminRoute>} />
+            <Route path="reviews"                  element={<AdminRoute><ReviewsPage /></AdminRoute>} />
+            <Route path="analytics/page-views"     element={<AdminRoute><PageViewStats /></AdminRoute>} />
+            <Route path="analytics/suspicious-ips" element={<AdminRoute><SuspiciousIPPage /></AdminRoute>} />
+            <Route path="settings"                 element={<AdminRoute><SettingsPage /></AdminRoute>} />
+
+            {/* 평가 관리 — 공통 (role 필터는 백엔드에서) */}
+            <Route path="eval/checklist" element={<EvalChecklistPage />} />
+            <Route path="eval/calendar"  element={<EvalCalendarPage />} />
+            <Route path="eval/albums"    element={<EvalAlbumPage />} />
+
+            {/* 모든 STAFF 접근 가능 — 제공기록지 검수 */}
+            <Route path="eval/record-audit" element={<EvalAIReviewPage />} />
+
+            {/* 사회복지사 + ADMIN — 수급자/직원 관리 */}
+            <Route path="eval/residents" element={<SocialWorkerRoute><EvalResidentsPage /></SocialWorkerRoute>} />
+            <Route path="eval/staff"     element={<SocialWorkerRoute><EvalStaffPage /></SocialWorkerRoute>} />
+
+            {/* ADMIN 전용 */}
+            <Route path="eval/ai-review" element={<AdminRoute><EvalAIReviewPage /></AdminRoute>} />
+            <Route path="eval/users"     element={<AdminRoute><EvalUsersPage /></AdminRoute>} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
