@@ -1,3 +1,4 @@
+import { SEO_PAGES } from '@/lib/seo-pages'
 import { MetadataRoute } from 'next'
 
 const BASE_URL = 'https://www.행복한요양원녹양역.com'
@@ -43,5 +44,14 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.7,
   }))
 
-  return [...staticRoutes, ...localRoutes]
+
+  // SEO 랜딩 페이지 (5개)
+  const seoRoutes = SEO_PAGES.map((page) => ({
+    url: `${BASE_URL}/seo/${page.slug}`,
+    lastModified: new Date(),
+    changeFrequency: 'monthly' as const,
+    priority: 0.8,
+  }))
+
+  return [...staticRoutes, ...localRoutes, ...seoRoutes]
 }
