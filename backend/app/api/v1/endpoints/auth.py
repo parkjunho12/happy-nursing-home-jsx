@@ -22,6 +22,7 @@ class UserResponse(BaseModel):
     email: EmailStr
     name: str
     role: str  # "ADMIN" | "STAFF"
+    position: str | None = None
 
 
 class LoginRequest(BaseModel):
@@ -82,6 +83,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
             email=user.email,
             name=user.name,
             role=user.role.value,
+            position=user.position if hasattr(user, "position") else None,
         ),
     )
 
@@ -95,17 +97,15 @@ def logout():
     return LogoutResponse()
 
 
-@router.get("/me", response_model=MeResponse)
+@router.get("/me", response_model=UserResponse)
 def me(current_user: User = Depends(get_current_user)):
     """
-    현재 유저 정보
-    - get_current_user는 User ORM을 반환 (security.py 기준)
+    현재 유저 정보 — UserResponse 직접 반환
     """
-    return MeResponse(
-        user=UserResponse(
-            id=current_user.id,
-            email=current_user.email,
-            name=current_user.name,
-            role=current_user.role.value,
-        )
+    return UserResponse(
+        id=current_user.id,
+        email=current_user.email,
+        name=current_user.name,
+        role=current_user.role.value,
+        position=current_user.position if hasattr(current_user, "position") else None,
     )

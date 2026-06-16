@@ -33,6 +33,14 @@ api_router.include_router(
     tags=["staff"]
 )
 
+# 직원 계정 관리 (User CRUD)
+api_router.include_router(
+    staff.router,
+    prefix="/users",
+    tags=["users"]
+)
+
+
 api_router.include_router(
     contacts.router,
     prefix="/contacts",

@@ -1,5 +1,6 @@
 import json
 from typing import Optional, List
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, selectinload
 
@@ -76,17 +77,31 @@ def list_checklists(
     person_id: Optional[str] = Query(None),
     active_only: bool = Query(True),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     q = _query_with_history(db)
+
     if active_only:
         q = q.filter(ChecklistItem.active == True)
+
     if frequency:
         q = q.filter(ChecklistItem.frequency == frequency)
+
     if person_id:
         q = q.filter(ChecklistItem.person_id == person_id)
+
+    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+
+    # 핵심: STAFF는 본인에게 배정된 것만
+    if role != "ADMIN":
+        q = q.filter(ChecklistItem.assigned_user_id == current_user.id)
+
     items = q.order_by(ChecklistItem.created_at).all()
-    return ApiResponse(success=True, data=[_cl_to_out(i) for i in items])
+
+    return ApiResponse(
+        success=True,
+        data=[_cl_to_out(i) for i in items],
+    )
 
 
 @router.get("/{item_id}", response_model=ApiResponse)
@@ -180,6 +195,46 @@ def update_checklist(
         setattr(item, field, val)
     db.commit()
     item = _query_with_history(db).filter(ChecklistItem.id == item_id).first()
+    return ApiResponse(success=True, data=_cl_to_out(item))
+
+
+
+class AssignBody(BaseModel):
+    assigned_user_id: Optional[str] = None
+
+
+@router.patch("/{item_id}/assign", response_model=ApiResponse)
+def assign_checklist(
+    item_id: str,
+    body: AssignBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """담당자 지정 — ADMIN만 가능"""
+    import logging
+    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    if role != "ADMIN":
+        raise HTTPException(403, "담당자 지정은 관리자만 가능합니다")
+
+    item = db.query(ChecklistItem).filter(ChecklistItem.id == item_id).first()
+    if not item:
+        raise HTTPException(404, "항목을 찾을 수 없습니다")
+
+    assigned_user_id = body.assigned_user_id
+    logging.warning(f"[ASSIGN] item={item_id!r} assigned_user_id={assigned_user_id!r}")
+
+    if assigned_user_id:
+        u = db.query(User).filter(User.id == assigned_user_id).first()
+        if not u:
+            raise HTTPException(404, f"직원을 찾을 수 없습니다: {assigned_user_id}")
+        item.assigned_user_id = assigned_user_id
+        item.assignee = u.name
+        logging.warning(f"[ASSIGN] → user.name={u.name!r} user.id={u.id!r}")
+    else:
+        item.assigned_user_id = None
+        item.assignee = ""
+
+    db.commit()
     return ApiResponse(success=True, data=_cl_to_out(item))
 
 

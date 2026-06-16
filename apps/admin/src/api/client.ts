@@ -86,15 +86,19 @@ export const authAPI = {
     }
   },
 
-  // ⚠️ 백엔드 /me가 {success:true, data:{...}}면 아래처럼 파싱
+  // /auth/me — 백엔드 응답 형태에 따라 파싱
   me: async (): Promise<User> => {
-    const res = await apiClient.get<ApiResponse<User>>(`${API_PREFIX}/auth/me`)
+    const res = await apiClient.get(`${API_PREFIX}/auth/me`)
+    const d = res.data as any
 
-    // 케이스1) ApiResponse<User> = { success, data }
-    if ((res.data as any)?.data) return (res.data as any).data as User
+    // { user: {...} } 형태 (MeResponse)
+    if (d?.user?.id) return d.user as User
+    // { data: {...} } 형태 (ApiResponse)
+    if (d?.data?.id) return d.data as User
+    // UserResponse 직접 반환
+    if (d?.id) return d as User
 
-    // 케이스2) 그냥 User를 바로 주는 경우
-    return res.data as unknown as User
+    throw new Error('me() 응답 파싱 실패')
   },
 }
 

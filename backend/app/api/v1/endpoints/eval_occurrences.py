@@ -82,7 +82,7 @@ def list_occurrences(
     person_id:         Optional[str] = Query(None),
     domain_id:         Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     q = (
         db.query(ChecklistOccurrence)
@@ -90,6 +90,18 @@ def list_occurrences(
         .filter(ChecklistItem.active == True)
         .order_by(ChecklistOccurrence.due_date, ChecklistOccurrence.period_key)
     )
+
+    # STAFF: 본인 assigned_user_id 항목의 occurrence만
+    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    if role == "STAFF":
+        from sqlalchemy import text
+        q = q.filter(
+            ChecklistOccurrence.checklist_item_id.in_(
+                db.query(ChecklistItem.id).filter(
+                    text("assigned_user_id = :uid")
+                ).params(uid=current_user.id)
+            )
+        )
     if checklist_item_id:
         q = q.filter(ChecklistOccurrence.checklist_item_id == checklist_item_id)
     if period_key:

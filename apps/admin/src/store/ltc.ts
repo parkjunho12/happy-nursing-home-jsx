@@ -31,6 +31,7 @@ export interface ChecklistItem {
   relatedCategoryId: string
   relatedDomainId: string
   assignee: string
+  assigned_user_id?: string | null
   evidenceRequired: string
   storageLocation: string
   howTo: string
@@ -110,6 +111,7 @@ function mapCL(raw: any): ChecklistItem {
     relatedCategoryId:  raw.related_category_id  ?? '',
     relatedDomainId:    raw.related_domain_id    ?? '',
     assignee:        raw.assignee        ?? '',
+    assigned_user_id: raw.assigned_user_id ?? null,
     evidenceRequired:raw.evidence_required ?? '',
     storageLocation: raw.storage_location  ?? '',
     howTo:           raw.how_to           ?? '',
@@ -182,6 +184,7 @@ interface LtcState {
 
   loadAll:           () => Promise<void>
   syncOccurrences:   () => Promise<void>   // 신규
+  reset:             () => void            // 로그아웃 시 캐시 초기화
   completeOccurrence:   (id: string, completedDate: string, memo?: string, attachmentName?: string) => Promise<void>
   uncompleteOccurrence: (id: string) => Promise<void>
   addChecklist:      (item: Omit<ChecklistItem,'id'|'createdAt'|'completionHistory'>) => Promise<void>
@@ -230,6 +233,14 @@ export const useLtcStore = create<LtcState>((set, get) => ({
       })
     } catch(e) { console.error('[LTC] loadAll failed', e) }
     finally { set({ loading: false }) }
+  },
+
+  reset: () => {
+    set({
+      checklists: [], residents: [], staffList: [], domains: [],
+      categories: [], indicators: [], occurrences: [],
+      loaded: false, loading: false,
+    })
   },
 
   syncOccurrences: async () => {

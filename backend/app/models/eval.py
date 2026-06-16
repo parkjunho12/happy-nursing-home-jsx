@@ -138,7 +138,8 @@ class ChecklistItem(Base):
         index=True,
     )
 
-    assignee = Column(String(100), default="")
+    assignee         = Column(String(100), default="")
+    assigned_user_id = Column(String, nullable=True, index=True)  # users.id FK
     evidence_required = Column(Text, default="")
     storage_location = Column(String(200), default="")
     how_to = Column(Text, default="")
