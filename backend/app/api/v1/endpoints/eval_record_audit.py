@@ -44,15 +44,21 @@ DEFAULT_RULES = [
 - 동일 시각 한 직원이 3명 이상 어르신에게 동시 서비스 기록
 - 입소일 이전 기록, 퇴소일 이후 기록
 
+[HIGH] 즉시 조치 — 미기재 항목
+- 혈압/체온 미기재: 매일 혈압·체온 수치가 반드시 기록되어야 함. 공란이거나 "-" 처리된 날짜는 HIGH로 지적
+- 작성자 성명 미기재: 각 섹션(신체활동/인지관리/건강간호/기능회복) 작성자 성명란이 공란인 날짜는 HIGH로 지적
+
 [HIGH] 법적 필수 항목
 - 서비스 날짜 공란 또는 미래 날짜 기록
-- 작성자(종사자) 서명·성명 누락
 - 필수 급여항목 누락: 식사도움, 기저귀교환, 체위변경, 이동도움, 프로그램명
 - 특이사항 미기록 (낙상·발열·설사·응급상황·거부행동 발생 시)
 - 급여계획 대비 실제 제공 불일치
 - 외박·외출 기간 중 시설 내 서비스 기록
 
-[참고] 수급자 입·퇴소시간/외박·외출 기재란은 해당 사항이 없으면 공란으로 두어도 무방함. 공란 자체를 문제로 지적하지 말 것.""",
+[참고] 아래 항목은 문제로 지적하지 말 것
+- 수급자 입·퇴소시간/외박·외출 기재란 공란: 해당 사항 없으면 공란 정상
+- 특이사항란 공란: 특이사항이 없으면 공란으로 두어도 무방함
+- 혈압 수치가 높더라도 특이사항란 미기재는 지적 대상 아님""",
         "is_default": True,
     },
     {
@@ -62,10 +68,15 @@ DEFAULT_RULES = [
 - 인력 근무시간 대비 서비스 제공 시간 초과
 - 체위변경 2시간 간격 미준수 (와상 어르신)
 
+[HIGH] 목욕 제공 횟수 기준 (월 단위 판단)
+- 한 달(월 전체) 기준으로 목욕(■) 제공 횟수가 5회 미만이면 기준 미달로 지적
+- 5회 이상이면 정상 — 주 단위 횟수로 지적하지 말 것
+- 월 제공 횟수가 5회 이상이면 주별 분포가 고르지 않아도 문제 없음
+
 [HIGH] 와상 어르신 이동도움 패턴
-- 와상(완전와상) 수급자는 이동도움 및 신체기능유지·증진 항목이 일요일에만 체크되어야 함
+- 완전와상 수급자는 이동도움 및 신체기능유지·증진 항목이 일요일에만 체크되어야 함
 - 월~토에 이동도움이 체크된 경우 이상 패턴으로 지적
-- 단, 수급자 상태가 "준와상" 또는 "자립"이면 이 규칙 적용 제외
+- 준와상 또는 자립 수급자는 이 규칙 적용 제외
 
 [MEDIUM] 복붙·반복 패턴
 - 5일 이상 동일 문장 95% 유사도 반복
@@ -82,9 +93,12 @@ DEFAULT_RULES = [
         "title":    "기록 품질 기준",
         "content":  """[LOW] 기록 품질
 - "식사 잘함" → "점심 2/3공기 섭취" 수준 권고
-- "특이사항 없음" → 구체적 관찰 내용 기재 권고
 - 날짜·시간 형식 불일치
 - 프로그램명 미기재 (단순 "프로그램 참여"만 기록)
+
+[참고] 지적하지 말 것
+- 특이사항란 공란: 특이사항 없으면 공란 정상
+- 혈압·체온 수치 이상 시 특이사항 미기재: 지적 대상 아님
 
 [LOW] 점수화 기준
 - critical: -20점 / high: -10점 / medium: -5점 / low: -1점
@@ -122,17 +136,30 @@ def _ensure_default_rules(db: Session):
 
 
 def _get_active_rule_content(db: Session) -> str:
-    """활성 룰 전체를 합쳐서 반환"""
-    _ensure_default_rules(db)
-    rows = db.execute(text(
-        "SELECT title, content FROM audit_rules "
-        "WHERE is_active=true AND title NOT LIKE '__%%' ORDER BY id"
-    )).fetchall()
-    if not rows:
-        return ""
+    """
+    활성 룰 반환:
+    1. DEFAULT_RULES는 항상 포함 (DB 유무 무관)
+    2. DB에 추가된 시설 자체 룰도 함께 포함
+    """
     parts = []
-    for title, content in rows:
-        parts.append(f"## {title}\n{content}")
+
+    # 1. DEFAULT_RULES 항상 포함
+    for rule in DEFAULT_RULES:
+        parts.append(f"## {rule['title']}\n{rule['content']}")
+
+    # 2. DB에서 시설 자체 추가 룰 (기본 룰 제목이 아닌 것만)
+    default_titles = {r["title"] for r in DEFAULT_RULES}
+    try:
+        rows = db.execute(text(
+            "SELECT title, content FROM audit_rules "
+            "WHERE is_active=true AND title NOT LIKE '__%%' ORDER BY id"
+        )).fetchall()
+        for title, content in rows:
+            if title not in default_titles:
+                parts.append(f"## {title} (시설 추가 룰)\n{content}")
+    except Exception as e:
+        logger.warning(f"DB 룰 조회 실패: {e}")
+
     return '\n\n'.join(parts)
 
 
