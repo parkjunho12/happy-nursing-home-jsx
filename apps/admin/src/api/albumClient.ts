@@ -18,6 +18,12 @@ export const adminAlbumAPI = {
   createGuardian: (form: FormData) =>
     apiClient.post(`${BASE}/admin/guardians`, form, formHeaders).then(unwrap<any>),
 
+  updateGuardian: (id: string, form: FormData) =>
+    apiClient.patch(`${BASE}/admin/guardians/${id}`, form, formHeaders).then(unwrap<any>),
+  
+  unlinkResident: (guardianId: string, residentId: string) =>
+    apiClient.delete(`${BASE}/admin/guardians/${guardianId}/residents/${residentId}`).then(unwrap<any>),
+
   deleteGuardian: (id: string) =>
     apiClient.delete(`${BASE}/admin/guardians/${id}`).then(unwrap<any>),
 
