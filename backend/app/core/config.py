@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str
     
     OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = "gpt-4o-mini"
+
+    # Claude (Anthropic) — 제공기록지 AI 검수에서 OpenAI보다 우선 사용
+    ANTHROPIC_API_KEY: str = ""
+    CLAUDE_MODEL: str = "claude-sonnet-4-6"
     
     # =============================
     # Email Provider
