@@ -113,7 +113,9 @@ export default function EvalRecordAuditPage() {
   const isAdmin = user?.role === 'ADMIN'
   const isSocial = user?.position === '사회복지사'
 
-  const [tab, setTab] = useState<'audit'|'residents'|'leaves'|'rules'>('audit')
+  const [tab, setTab] = useState<
+    'audit' | 'residents' | 'leaves' | 'schedules' | 'rules'
+  >('audit')
 
   // 검수 탭
   const [dragging,    setDragging]    = useState(false)
