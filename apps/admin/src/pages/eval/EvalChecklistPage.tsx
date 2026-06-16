@@ -1,5 +1,14 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
-import { Search, AlertTriangle, CheckCircle2, User, RotateCcw, Plus, Clock } from 'lucide-react'
+import {
+  Search,
+  AlertTriangle,
+  CheckCircle2,
+  User,
+  RotateCcw,
+  Plus,
+  Clock,
+  Filter,
+} from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
 import { useAuthStore } from '@/store/auth'
 import { apiClient } from '@/api/client'
@@ -7,161 +16,239 @@ import ChecklistDetailModal from '@/components/eval/ChecklistDetailModal'
 import ChecklistFormModal from '@/components/eval/ChecklistFormModal'
 import type { ChecklistItem } from '@/utils/period'
 import {
-  FREQUENCY_LABELS, FREQUENCY_COLORS, RISK_COLORS, RISK_LABELS, DOMAIN_COLORS,
-  RECURRING, EVENT_FREQS, getCurrentPeriodKey, getPeriodLabel, getPeriodEnd,
+  FREQUENCY_LABELS,
+  FREQUENCY_COLORS,
+  RISK_COLORS,
+  RISK_LABELS,
+  DOMAIN_COLORS,
+  RECURRING,
+  EVENT_FREQS,
+  getCurrentPeriodKey,
+  getPeriodLabel,
+  getPeriodEnd,
   todayKST,
 } from '@/utils/period'
 
 const ONE_TIME = 'one_time'
 
-// ── 완료 여부 판단 (순수 함수 — useMemo 밖) ───────────────────────────────
-// occurrence가 있으면 period_key가 현재 주기와 일치하는 것의 status 우선
-// one_time은 어떤 occurrence든 completed이면 완료
 function checkDone(item: ChecklistItem, _todayStr: string): boolean {
   const freq = item.frequency
 
   if (freq === ONE_TIME) {
-    if (item.occurrences?.length > 0)
+    if (item.occurrences?.length > 0) {
       return item.occurrences.some(o => o.status === 'completed')
+    }
     return item.completed
   }
 
   if (EVENT_FREQS.includes(freq as any)) return item.completed
 
-  // 반복 주기: 현재 주기 occurrence 우선
   if (item.occurrences?.length > 0) {
     const pk = getCurrentPeriodKey(freq as any)
     const occ = item.occurrences.find(o => o.periodKey === pk)
     if (occ) return occ.status === 'completed'
   }
-  // fallback: completion_history
+
   const pk = getCurrentPeriodKey(freq as any)
   return item.completionHistory.some(r => r.periodKey === pk)
 }
 
 export default function EvalChecklistPage() {
-  const { checklists, residents, staffList, domains, loaded, loadAll, toggleComplete } = useLtcStore()
+  const {
+    checklists,
+    residents,
+    staffList,
+    domains,
+    loaded,
+    loadAll,
+    toggleComplete,
+  } = useLtcStore()
+
   const { user } = useAuthStore()
   const isAdmin = user?.role === 'ADMIN'
 
-  // 담당자 선택 목록 (/api/v1/users/assignee-options)
-  const [assigneeOptions, setAssigneeOptions] = useState<Array<{id:string;name:string;position?:string|null}>>([]) 
+  const [assigneeOptions, setAssigneeOptions] = useState<
+    Array<{ id: string; name: string; position?: string | null }>
+  >([])
 
   const [selectedItem, setSelectedItem] = useState<ChecklistItem | null>(null)
-  const [editItem, setEditItem]         = useState<ChecklistItem | null>(null)
+  const [editItem, setEditItem] = useState<ChecklistItem | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
-  const [activeFreq, setActiveFreq]     = useState<string>('all')
+  const [activeFreq, setActiveFreq] = useState<string>('all')
   const [activePerson, setActivePerson] = useState('all')
-  const [search, setSearch]             = useState('')
+  const [personSearch, setPersonSearch] = useState('')
+  const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'done' | 'todo'>('all')
-  const [toggling, setToggling]         = useState<string | null>(null)
-  const [assigningId, setAssigningId]   = useState<string | null>(null)
+  const [toggling, setToggling] = useState<string | null>(null)
+  const [assigningId, setAssigningId] = useState<string | null>(null)
   const [savingAssign, setSavingAssign] = useState(false)
 
-  useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
-
-  // 담당자 선택 목록 — ADMIN일 때 로드 (user가 확정된 후 실행)
   useEffect(() => {
-    if (user?.role !== 'ADMIN') return
-    apiClient.get('/api/v1/users/assignee-options')
+    if (!loaded) loadAll()
+  }, [loaded, loadAll])
+
+  useEffect(() => {
+    if (!isAdmin) return
+
+    apiClient
+      .get('/api/v1/users/assignee-options')
       .then(res => {
-        const data = (res.data as any)?.data ?? []
+        const data = Array.isArray(res.data)
+          ? res.data
+          : (res.data as any)?.data ?? []
+
         setAssigneeOptions(data)
       })
       .catch(err => console.error('assignee-options 로드 실패:', err))
-  }, [user?.role])
+  }, [isAdmin])
 
   const todayStr = todayKST()
 
-  // selectedItem / editItem을 checklists 업데이트 시 동기화
   useEffect(() => {
-    if (selectedItem) {
-      const updated = checklists.find(c => c.id === selectedItem.id)
-      if (updated) setSelectedItem(updated)
-    }
-  }, [checklists])
+    if (!selectedItem) return
+    const updated = checklists.find(c => c.id === selectedItem.id)
+    if (updated) setSelectedItem(updated)
+  }, [checklists, selectedItem])
 
   useEffect(() => {
-    if (editItem) {
-      const updated = checklists.find(c => c.id === editItem.id)
-      if (updated) setEditItem(updated)
-    }
-  }, [checklists])
+    if (!editItem) return
+    const updated = checklists.find(c => c.id === editItem.id)
+    if (updated) setEditItem(updated)
+  }, [checklists, editItem])
 
   const isDone = useCallback(
     (item: ChecklistItem) => checkDone(item, todayStr),
-    [todayStr]
+    [todayStr],
   )
 
   const activeResidents = residents.filter(r => r.status === 'active')
-  const activeStaff     = staffList.filter(s => s.status === 'active')
+  const activeStaff = staffList.filter(s => s.status === 'active')
 
-  // ── 개인별 카운트 ─────────────────────────────────────────────────────
   const personCounts = useMemo(() => {
     const map: Record<string, { total: number; done: number }> = {}
-    checklists.filter(c => c.active && c.personId).forEach(c => {
-      const pid = c.personId!
-      if (!map[pid]) map[pid] = { total: 0, done: 0 }
-      map[pid].total++
-      if (isDone(c)) map[pid].done++
-    })
+
+    checklists
+      .filter(c => c.active && c.personId)
+      .forEach(c => {
+        const pid = c.personId!
+        if (!map[pid]) map[pid] = { total: 0, done: 0 }
+        map[pid].total += 1
+        if (isDone(c)) map[pid].done += 1
+      })
+
     return map
   }, [checklists, isDone])
 
-  // ── 요약 통계 ─────────────────────────────────────────────────────────
+  const personOptions = useMemo(() => {
+    const options = [
+      { id: 'all', label: '전체', type: 'all' },
+      { id: 'facility', label: '시설 공통', type: 'facility' },
+      ...activeResidents.map(r => ({
+        id: r.id,
+        label: r.name,
+        type: 'resident',
+      })),
+      ...activeStaff.map(s => ({
+        id: s.id,
+        label: s.name,
+        type: 'staff',
+      })),
+    ]
+
+    if (!personSearch.trim()) return options
+
+    const q = personSearch.trim().toLowerCase()
+    return options.filter(o => o.label.toLowerCase().includes(q))
+  }, [activeResidents, activeStaff, personSearch])
+
   const stats = useMemo(() => {
-    const recurring = checklists.filter(c => c.active && RECURRING.includes(c.frequency as any))
-    const oneTimePending = checklists.filter(c =>
-      c.active && c.frequency === ONE_TIME && !isDone(c) &&
-      (!c.dueDate || c.dueDate >= todayStr)
+    const recurring = checklists.filter(
+      c => c.active && RECURRING.includes(c.frequency as any),
     )
+
+    const oneTimePending = checklists.filter(
+      c =>
+        c.active &&
+        c.frequency === ONE_TIME &&
+        !isDone(c) &&
+        (!c.dueDate || c.dueDate >= todayStr),
+    )
+
     return {
-      recurringDone:  recurring.filter(c => isDone(c)).length,
+      recurringDone: recurring.filter(c => isDone(c)).length,
       recurringTotal: recurring.length,
-      personalDone:   checklists.filter(c => c.active && c.personId && isDone(c)).length,
-      personalTotal:  checklists.filter(c => c.active && c.personId).length,
-      highRisk:       checklists.filter(c => c.active && !isDone(c) && c.riskLevel === 'high').length,
-      totalTodo:      checklists.filter(c => c.active && !isDone(c)).length,
-      oneTimeTodo:    oneTimePending.length,
+      personalDone: checklists.filter(c => c.active && c.personId && isDone(c)).length,
+      personalTotal: checklists.filter(c => c.active && c.personId).length,
+      highRisk: checklists.filter(c => c.active && !isDone(c) && c.riskLevel === 'high').length,
+      totalTodo: checklists.filter(c => c.active && !isDone(c)).length,
+      oneTimeTodo: oneTimePending.length,
     }
   }, [checklists, isDone, todayStr])
 
-  // ── 필터 ─────────────────────────────────────────────────────────────
-  const filtered = useMemo(() => checklists.filter(c => {
-    if (!c.active) return false
-    if (activeFreq !== 'all' && c.frequency !== activeFreq) return false
-    if (activePerson === 'facility') { if (c.personId) return false }
-    else if (activePerson !== 'all') { if (c.personId !== activePerson) return false }
-    const done = isDone(c)
-    if (filterStatus === 'done' && !done) return false
-    if (filterStatus === 'todo' && done) return false
-    if (search) {
-      const q = search.toLowerCase()
-      if (!c.title.toLowerCase().includes(q)
-        && !c.assignee.toLowerCase().includes(q)
-        && !(c.personName?.toLowerCase().includes(q))) return false
-    }
-    return true
-  }), [checklists, activeFreq, activePerson, filterStatus, search, isDone])
+  const filtered = useMemo(() => {
+    return checklists.filter(c => {
+      if (!c.active) return false
 
-  // ── 정렬: 미완료 위험도 high 우선, 그 다음 D-day 임박 순 ─────────────
-  const sorted = useMemo(() => [...filtered].sort((a, b) => {
-    const da = isDone(a), db = isDone(b)
-    if (da !== db) return da ? 1 : -1                       // 미완료 먼저
-    if (!da) {
-      if (a.riskLevel === 'high' && b.riskLevel !== 'high') return -1
-      if (b.riskLevel === 'high' && a.riskLevel !== 'high') return 1
-    }
-    return 0
-  }), [filtered, isDone])
+      if (activeFreq !== 'all' && c.frequency !== activeFreq) return false
+
+      if (activePerson === 'facility') {
+        if (c.personId) return false
+      } else if (activePerson !== 'all') {
+        if (c.personId !== activePerson) return false
+      }
+
+      const done = isDone(c)
+
+      if (filterStatus === 'done' && !done) return false
+      if (filterStatus === 'todo' && done) return false
+
+      if (search) {
+        const q = search.toLowerCase()
+        const assignee = c.assignee ?? ''
+        const personName = c.personName ?? ''
+
+        if (
+          !c.title.toLowerCase().includes(q) &&
+          !assignee.toLowerCase().includes(q) &&
+          !personName.toLowerCase().includes(q)
+        ) {
+          return false
+        }
+      }
+
+      return true
+    })
+  }, [checklists, activeFreq, activePerson, filterStatus, search, isDone])
+
+  const sorted = useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      const da = isDone(a)
+      const db = isDone(b)
+
+      if (da !== db) return da ? 1 : -1
+
+      if (!da) {
+        if (a.riskLevel === 'high' && b.riskLevel !== 'high') return -1
+        if (b.riskLevel === 'high' && a.riskLevel !== 'high') return 1
+      }
+
+      return 0
+    })
+  }, [filtered, isDone])
 
   const handleToggle = async (id: string) => {
     setToggling(id)
-    try { await toggleComplete(id) } finally { setToggling(null) }
+
+    try {
+      await toggleComplete(id)
+    } finally {
+      setToggling(null)
+    }
   }
 
   const handleAssign = async (itemId: string, userId: string | null) => {
     setSavingAssign(true)
+
     try {
       await apiClient.patch(`/api/v1/eval/checklists/${itemId}/assign`, {
         assigned_user_id: userId,
@@ -175,100 +262,237 @@ export default function EvalChecklistPage() {
     }
   }
 
-  if (!loaded) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="text-center">
-        <div className="w-8 h-8 border-4 border-primary-orange border-t-transparent rounded-full animate-spin mx-auto mb-3"/>
-        <p className="text-sm text-gray-500">불러오는 중...</p>
+  if (!loaded) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-primary-orange border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-sm text-gray-500">불러오는 중...</p>
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   return (
     <div className="space-y-5">
-      {/* 헤더 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">평가 체크리스트</h1>
-          <p className="text-sm text-gray-500 mt-0.5">미완료 반복 업무는 주기 마감일까지 계속 표시됩니다</p>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {isAdmin ? '평가 체크리스트' : '내 체크리스트'}
+          </h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {isAdmin
+              ? '미완료 반복 업무는 주기 마감일까지 계속 표시됩니다'
+              : '나에게 배정된 체크리스트만 표시됩니다'}
+          </p>
         </div>
+
         <div className="flex gap-2">
-          <button onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-1.5 text-sm text-white bg-primary-orange rounded-lg px-3 py-1.5 hover:bg-primary-orange/90 font-semibold shadow-sm">
-            <Plus size={14}/> 항목 추가
-          </button>
-          <button onClick={() => loadAll()}
-            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50">
-            <RotateCcw size={14}/> 새로고침
+          {isAdmin && (
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center gap-1.5 text-sm text-white bg-primary-orange rounded-lg px-3 py-1.5 hover:bg-primary-orange/90 font-semibold shadow-sm"
+            >
+              <Plus size={14} /> 항목 추가
+            </button>
+          )}
+
+          <button
+            onClick={() => loadAll()}
+            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50"
+          >
+            <RotateCcw size={14} /> 새로고침
           </button>
         </div>
       </div>
 
-      {/* 요약 카드 */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <SummaryCard label="정기 업무"        value={`${stats.recurringDone}/${stats.recurringTotal}`} sub="현재 주기 완료"   color="orange"/>
-        <SummaryCard label="개인별 체크리스트" value={`${stats.personalDone}/${stats.personalTotal}`}  sub="수급자·직원 개인" color="green"/>
-        <SummaryCard label="위험도 높음"       value={`${stats.highRisk}건`}                          sub="즉시 조치 필요"   color="red"/>
-        <SummaryCard label="전체 미완료"       value={`${stats.totalTodo}건`}
-          sub={stats.oneTimeTodo > 0 ? `일회성 ${stats.oneTimeTodo}건 포함` : '모든 활성 항목'}       color="gray"/>
+        <SummaryCard
+          label="정기 업무"
+          value={`${stats.recurringDone}/${stats.recurringTotal}`}
+          sub="현재 주기 완료"
+          color="orange"
+        />
+        <SummaryCard
+          label="개인별 체크리스트"
+          value={`${stats.personalDone}/${stats.personalTotal}`}
+          sub="수급자·직원 개인"
+          color="green"
+        />
+        <SummaryCard
+          label="위험도 높음"
+          value={`${stats.highRisk}건`}
+          sub="즉시 조치 필요"
+          color="red"
+        />
+        <SummaryCard
+          label="전체 미완료"
+          value={`${stats.totalTodo}건`}
+          sub={stats.oneTimeTodo > 0 ? `일회성 ${stats.oneTimeTodo}건 포함` : '모든 활성 항목'}
+          color="gray"
+        />
       </div>
 
-      {/* 대상별 탭 */}
-      <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
-        <p className="text-xs font-semibold text-gray-400 mb-2 px-1">대상별 보기</p>
-        <div className="flex gap-1.5 overflow-x-auto pb-1">
-          <PersonTab active={activePerson==='all'}      onClick={() => setActivePerson('all')}      label="전체"/>
-          <PersonTab active={activePerson==='facility'} onClick={() => setActivePerson('facility')} label="시설 공통" color="orange"/>
-          {activeResidents.map(r => {
-            const cnt = personCounts[r.id]
-            return <PersonTab key={r.id} active={activePerson===r.id} onClick={() => setActivePerson(r.id)}
-              label={r.name} color="purple"
-              badge={cnt ? `${cnt.done}/${cnt.total}` : undefined}
-              allDone={cnt?.done===cnt?.total}/>
-          })}
-          {activeStaff.map(s => {
-            const cnt = personCounts[s.id]
-            return <PersonTab key={s.id} active={activePerson===s.id} onClick={() => setActivePerson(s.id)}
-              label={s.name} color="blue"
-              badge={cnt ? `${cnt.done}/${cnt.total}` : undefined}
-              allDone={cnt?.done===cnt?.total}/>
-          })}
+      {isAdmin && (
+        <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <p className="text-xs font-semibold text-gray-400 px-1 flex items-center gap-1">
+              <Filter size={12} />
+              대상별 보기
+            </p>
+
+            {activePerson !== 'all' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setActivePerson('all')
+                  setPersonSearch('')
+                }}
+                className="text-xs text-gray-400 hover:text-gray-600"
+              >
+                초기화
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-[240px_1fr] gap-2">
+            <select
+              value={activePerson}
+              onChange={e => setActivePerson(e.target.value)}
+              className="border border-gray-200 rounded-xl text-sm px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-primary-orange/40"
+            >
+              <option value="all">전체</option>
+              <option value="facility">시설 공통</option>
+
+              <optgroup label={`수급자 ${activeResidents.length}명`}>
+                {activeResidents.map(r => {
+                  const cnt = personCounts[r.id]
+
+                  return (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                      {cnt ? ` (${cnt.done}/${cnt.total})` : ''}
+                    </option>
+                  )
+                })}
+              </optgroup>
+
+              <optgroup label={`직원 ${activeStaff.length}명`}>
+                {activeStaff.map(s => {
+                  const cnt = personCounts[s.id]
+
+                  return (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                      {cnt ? ` (${cnt.done}/${cnt.total})` : ''}
+                    </option>
+                  )
+                })}
+              </optgroup>
+            </select>
+
+            <div className="relative">
+              <Search
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              />
+
+              <input
+                type="text"
+                value={personSearch}
+                onChange={e => setPersonSearch(e.target.value)}
+                placeholder="어르신/직원 이름 검색"
+                className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40"
+              />
+
+              {personSearch && (
+                <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-64 overflow-y-auto">
+                  {personOptions.length === 0 ? (
+                    <div className="px-3 py-2 text-sm text-gray-400">
+                      검색 결과가 없습니다.
+                    </div>
+                  ) : (
+                    personOptions.map(o => (
+                      <button
+                        key={`${o.type}-${o.id}`}
+                        type="button"
+                        onClick={() => {
+                          setActivePerson(o.id)
+                          setPersonSearch('')
+                        }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-orange-50 flex items-center justify-between"
+                      >
+                        <span>
+                          {o.type === 'resident' && '👵 '}
+                          {o.type === 'staff' && '👤 '}
+                          {o.type === 'facility' && '🏥 '}
+                          {o.label}
+                        </span>
+
+                        {personCounts[o.id] && (
+                          <span className="text-xs text-orange-600 font-semibold">
+                            {personCounts[o.id].done}/{personCounts[o.id].total}
+                          </span>
+                        )}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* 주기 탭 */}
       <div className="space-y-1.5">
         <div className="flex gap-1.5 overflow-x-auto pb-1">
-          <TabBtn active={activeFreq==='all'} onClick={() => setActiveFreq('all')}>전체</TabBtn>
+          <TabBtn active={activeFreq === 'all'} onClick={() => setActiveFreq('all')}>
+            전체
+          </TabBtn>
+
           {RECURRING.map(f => (
-            <TabBtn key={f} active={activeFreq===f} onClick={() => setActiveFreq(f)}>
+            <TabBtn key={f} active={activeFreq === f} onClick={() => setActiveFreq(f)}>
               {FREQUENCY_LABELS[f as any]}
             </TabBtn>
           ))}
         </div>
+
         <div className="flex gap-1.5 overflow-x-auto pb-1 items-center">
           <span className="text-xs text-gray-400 pl-1 flex-shrink-0">기타</span>
-          <TabBtn active={activeFreq===ONE_TIME} onClick={() => setActiveFreq(ONE_TIME)} amber>
+
+          <TabBtn active={activeFreq === ONE_TIME} onClick={() => setActiveFreq(ONE_TIME)} amber>
             일회성{stats.oneTimeTodo > 0 ? ` (${stats.oneTimeTodo})` : ''}
           </TabBtn>
+
           {EVENT_FREQS.map(f => (
-            <TabBtn key={f} active={activeFreq===f} onClick={() => setActiveFreq(f)} event>
+            <TabBtn key={f} active={activeFreq === f} onClick={() => setActiveFreq(f)} event>
               {FREQUENCY_LABELS[f as any]}
             </TabBtn>
           ))}
         </div>
       </div>
 
-      {/* 검색 & 필터 */}
       <div className="flex gap-2">
         <div className="relative flex-1">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
-          <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+          <Search
+            size={14}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+          />
+
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
             placeholder="항목명, 이름, 담당자..."
-            className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40"/>
+            className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40"
+          />
         </div>
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value as any)}
-          className="border border-gray-200 rounded-xl text-sm px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-orange/40 bg-white flex-shrink-0">
+
+        <select
+          value={filterStatus}
+          onChange={e => setFilterStatus(e.target.value as any)}
+          className="border border-gray-200 rounded-xl text-sm px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-orange/40 bg-white flex-shrink-0"
+        >
           <option value="all">전체 상태</option>
           <option value="todo">미완료</option>
           <option value="done">완료</option>
@@ -277,150 +501,211 @@ export default function EvalChecklistPage() {
 
       <p className="text-xs text-gray-400">{sorted.length}개 항목</p>
 
-      {/* 체크리스트 목록 */}
       {sorted.length === 0 ? (
         <div className="text-center py-16 text-gray-400 bg-white rounded-xl border border-gray-100">
-          <CheckCircle2 size={36} className="mx-auto mb-3 opacity-30"/>
-          <p className="text-sm">해당 조건의 항목이 없습니다.</p>
+          <CheckCircle2 size={36} className="mx-auto mb-3 opacity-30" />
+          <p className="text-sm">
+            {isAdmin ? '해당 조건의 항목이 없습니다.' : '나에게 배정된 항목이 없습니다.'}
+          </p>
         </div>
       ) : (
         <div className="space-y-2">
           {sorted.map(item => {
-            const domain       = domains.find(d => d.id === item.relatedDomainId)
-            const domainColors = domain ? (DOMAIN_COLORS[domain.color] ?? DOMAIN_COLORS.teal) : null
-            const done         = isDone(item)
-            const isOneTime    = item.frequency === ONE_TIME
+            const domain = domains.find(d => d.id === item.relatedDomainId)
+            const domainColors = domain
+              ? DOMAIN_COLORS[domain.color] ?? DOMAIN_COLORS.teal
+              : null
+            const done = isDone(item)
+            const isOneTime = item.frequency === ONE_TIME
 
-            // 주기 라벨 / D-day
             let periodLabel = ''
             let daysLeft: number | null = null
 
             if (isOneTime && item.dueDate) {
               periodLabel = `기한 ${item.dueDate}`
-              daysLeft = Math.max(0, Math.ceil(
-                (new Date(item.dueDate + 'T23:59:59').getTime()
-                  - new Date(todayStr + 'T00:00:00').getTime())
-                / 86400000
-              ))
+              daysLeft = Math.max(
+                0,
+                Math.ceil(
+                  (new Date(item.dueDate + 'T23:59:59').getTime() -
+                    new Date(todayStr + 'T00:00:00').getTime()) /
+                    86400000,
+                ),
+              )
             } else if (RECURRING.includes(item.frequency as any)) {
-              const pk  = getCurrentPeriodKey(item.frequency as any)
+              const pk = getCurrentPeriodKey(item.frequency as any)
               periodLabel = getPeriodLabel(item.frequency as any, pk)
               const end = getPeriodEnd(item.frequency as any)
-              daysLeft  = Math.max(0, Math.ceil(
-                (end.getTime() - new Date(todayStr + 'T00:00:00').getTime()) / 86400000
-              ))
+
+              daysLeft = Math.max(
+                0,
+                Math.ceil(
+                  (end.getTime() - new Date(todayStr + 'T00:00:00').getTime()) /
+                    86400000,
+                ),
+              )
             }
 
-            // 일회성 기한 초과 (미완료 + 기한 지남)
-            const isExpired = isOneTime && !!item.dueDate && item.dueDate < todayStr && !done
+            const isExpired =
+              isOneTime && !!item.dueDate && item.dueDate < todayStr && !done
 
             return (
-              <div key={item.id}
+              <div
+                key={item.id}
                 className={`bg-white rounded-xl border shadow-sm transition-all hover:shadow-md ${
-                  done         ? 'border-gray-100 opacity-70' :
-                  isExpired    ? 'border-red-200 bg-red-50/30' :
-                  item.riskLevel==='high' ? 'border-red-200' :
-                  item.personId ? 'border-purple-100' : 'border-gray-200'
-                }`}>
+                  done
+                    ? 'border-gray-100 opacity-70'
+                    : isExpired
+                      ? 'border-red-200 bg-red-50/30'
+                      : item.riskLevel === 'high'
+                        ? 'border-red-200'
+                        : item.personId
+                          ? 'border-purple-100'
+                          : 'border-gray-200'
+                }`}
+              >
                 <div className="flex items-start gap-3 p-4">
-                  {/* 체크 버튼 */}
                   <button
                     onClick={() => handleToggle(item.id)}
-                    disabled={toggling===item.id}
+                    disabled={toggling === item.id}
                     className={`mt-0.5 w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors disabled:opacity-50 ${
-                      done ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-primary-orange'
-                    }`}>
-                    {toggling===item.id
-                      ? <div className="w-2 h-2 border border-gray-400 border-t-transparent rounded-full animate-spin"/>
-                      : done && <div className="w-2 h-2 bg-white rounded-full"/>
-                    }
+                      done
+                        ? 'bg-green-500 border-green-500'
+                        : 'border-gray-300 hover:border-primary-orange'
+                    }`}
+                  >
+                    {toggling === item.id ? (
+                      <div className="w-2 h-2 border border-gray-400 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      done && <div className="w-2 h-2 bg-white rounded-full" />
+                    )}
                   </button>
 
-                  {/* 내용 */}
-                  <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setSelectedItem(item)}>
-                    {/* 뱃지 행 */}
+                  <div
+                    className="flex-1 min-w-0 cursor-pointer"
+                    onClick={() => setSelectedItem(item)}
+                  >
                     <div className="flex items-center gap-1.5 flex-wrap mb-1">
                       {item.personName && (
                         <span className="text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-0.5 bg-purple-100 text-purple-700">
-                          <User size={9}/>{item.personName}
+                          <User size={9} />
+                          {item.personName}
                         </span>
                       )}
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                        FREQUENCY_COLORS[item.frequency as any] ?? 'bg-gray-100 text-gray-600'
-                      }`}>
+
+                      <span
+                        className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                          FREQUENCY_COLORS[item.frequency as any] ??
+                          'bg-gray-100 text-gray-600'
+                        }`}
+                      >
                         {FREQUENCY_LABELS[item.frequency as any] ?? item.frequency}
                       </span>
+
                       {domain && domainColors && (
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${domainColors.bg} ${domainColors.text}`}>
+                        <span
+                          className={`text-xs font-semibold px-2 py-0.5 rounded-full ${domainColors.bg} ${domainColors.text}`}
+                        >
                           {domain.name}
                         </span>
                       )}
+
                       {!done && (
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${RISK_COLORS[item.riskLevel]}`}>
+                        <span
+                          className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${RISK_COLORS[item.riskLevel]}`}
+                        >
                           {RISK_LABELS[item.riskLevel]}
                         </span>
                       )}
-                      {done     && <span className="text-xs bg-green-100 text-green-700 font-semibold px-2 py-0.5 rounded-full">완료</span>}
-                      {isExpired && <span className="text-xs bg-red-100 text-red-600 font-bold px-2 py-0.5 rounded-full">기한 초과</span>}
+
+                      {done && (
+                        <span className="text-xs bg-green-100 text-green-700 font-semibold px-2 py-0.5 rounded-full">
+                          완료
+                        </span>
+                      )}
+
+                      {isExpired && (
+                        <span className="text-xs bg-red-100 text-red-600 font-bold px-2 py-0.5 rounded-full">
+                          기한 초과
+                        </span>
+                      )}
                     </div>
 
-                    {/* 제목 */}
-                    <p className={`text-sm font-semibold leading-snug ${done ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                    <p
+                      className={`text-sm font-semibold leading-snug ${
+                        done ? 'text-gray-400 line-through' : 'text-gray-800'
+                      }`}
+                    >
                       {item.title}
                     </p>
 
-                    {/* 하단 메타 */}
                     <div className="flex items-center gap-3 mt-1 flex-wrap">
                       {periodLabel && (
                         <span className="text-[11px] text-gray-400 flex items-center gap-0.5">
-                          <Clock size={9}/>{periodLabel}
+                          <Clock size={9} />
+                          {periodLabel}
                         </span>
                       )}
-                      {/* 담당자 표시 */}
+
                       {item.assignee && (
                         <span className="text-[11px] bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded-full font-medium">
                           👤 {item.assignee}
                         </span>
                       )}
-                      {/* 담당자 지정 버튼 - ADMIN만 */}
+
                       {isAdmin && (
                         <button
                           type="button"
-                          onClick={e => { e.stopPropagation(); setAssigningId(assigningId === item.id ? null : item.id) }}
+                          onClick={e => {
+                            e.stopPropagation()
+                            setAssigningId(assigningId === item.id ? null : item.id)
+                          }}
                           className="text-[11px] text-gray-400 hover:text-primary-orange border border-dashed border-gray-200 hover:border-primary-orange px-1.5 py-0.5 rounded-full transition-colors"
                         >
                           {item.assignee ? '담당자 변경' : '+ 담당자'}
                         </button>
                       )}
-                      {/* D-day: 미완료 + 기한 초과 아닐 때 */}
+
                       {daysLeft !== null && !done && !isExpired && (
-                        <span className={`text-[11px] font-bold ${
-                          daysLeft === 0 ? 'text-red-600' :
-                          daysLeft <= 3  ? 'text-red-500' :
-                          daysLeft <= 7  ? 'text-orange-500' : 'text-gray-400'
-                        }`}>
+                        <span
+                          className={`text-[11px] font-bold ${
+                            daysLeft === 0
+                              ? 'text-red-600'
+                              : daysLeft <= 3
+                                ? 'text-red-500'
+                                : daysLeft <= 7
+                                  ? 'text-orange-500'
+                                  : 'text-gray-400'
+                          }`}
+                        >
                           {daysLeft === 0 ? '오늘 마감' : `D-${daysLeft}`}
                         </span>
                       )}
                     </div>
                   </div>
 
-                  {/* 우측 */}
                   <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                    {item.riskLevel==='high' && !done && <AlertTriangle size={15} className="text-red-400"/>}
-                    <button
-                      onClick={e => { e.stopPropagation(); setEditItem(item) }}
-                      className="text-[10px] text-gray-400 hover:text-gray-600 px-1.5 py-0.5 rounded hover:bg-gray-100 transition-colors">
-                      수정
-                    </button>
+                    {item.riskLevel === 'high' && !done && (
+                      <AlertTriangle size={15} className="text-red-400" />
+                    )}
+
+                    {isAdmin && (
+                      <button
+                        onClick={e => {
+                          e.stopPropagation()
+                          setEditItem(item)
+                        }}
+                        className="text-[10px] text-gray-400 hover:text-gray-600 px-1.5 py-0.5 rounded hover:bg-gray-100 transition-colors"
+                      >
+                        수정
+                      </button>
+                    )}
                   </div>
                 </div>
 
-                {/* ── 담당자 인라인 선택 패널 ── */}
                 {isAdmin && assigningId === item.id && (
                   <AssignPanel
                     itemId={item.id}
-                    currentUserId={item.assigned_user_id ?? null}
+                    currentUserId={(item as any).assigned_user_id ?? null}
                     options={assigneeOptions}
                     saving={savingAssign}
                     onSave={handleAssign}
@@ -433,17 +718,40 @@ export default function EvalChecklistPage() {
         </div>
       )}
 
-      {selectedItem && <ChecklistDetailModal item={selectedItem} onClose={() => setSelectedItem(null)}/>}
-      {showAddModal  && <ChecklistFormModal onClose={() => setShowAddModal(false)}/>}
-      {editItem      && <ChecklistFormModal existing={editItem} onClose={() => setEditItem(null)}/>}
+      {selectedItem && (
+        <ChecklistDetailModal item={selectedItem} onClose={() => setSelectedItem(null)} />
+      )}
+
+      {showAddModal && isAdmin && (
+        <ChecklistFormModal onClose={() => setShowAddModal(false)} />
+      )}
+
+      {editItem && isAdmin && (
+        <ChecklistFormModal existing={editItem} onClose={() => setEditItem(null)} />
+      )}
     </div>
   )
 }
 
-// ── 서브 컴포넌트 ──────────────────────────────────────────────────────────
+function SummaryCard({
+  label,
+  value,
+  sub,
+  color,
+}: {
+  label: string
+  value: string
+  sub: string
+  color: string
+}) {
+  const bg =
+    {
+      orange: 'bg-orange-50',
+      green: 'bg-green-50',
+      red: 'bg-red-50',
+      gray: 'bg-gray-50',
+    }[color] ?? 'bg-gray-50'
 
-function SummaryCard({ label, value, sub, color }: { label:string; value:string; sub:string; color:string }) {
-  const bg = { orange:'bg-orange-50', green:'bg-green-50', red:'bg-red-50', gray:'bg-gray-50' }[color] ?? 'bg-gray-50'
   return (
     <div className={`${bg} rounded-xl p-4 border border-white shadow-sm`}>
       <p className="text-xs text-gray-500 mb-1">{label}</p>
@@ -453,59 +761,51 @@ function SummaryCard({ label, value, sub, color }: { label:string; value:string;
   )
 }
 
-function PersonTab({ active, onClick, label, color='gray', badge, allDone }: {
-  active:boolean; onClick:()=>void; label:string; color?:string; badge?:string; allDone?:boolean
+function TabBtn({
+  active,
+  onClick,
+  children,
+  event,
+  amber,
+}: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+  event?: boolean
+  amber?: boolean
 }) {
-  const base: Record<string,string> = {
-    gray:   'border-gray-200 text-gray-600 hover:bg-gray-50',
-    orange: 'border-orange-200 text-orange-700 hover:bg-orange-50',
-    purple: 'border-purple-200 text-purple-700 hover:bg-purple-50',
-    blue:   'border-blue-200 text-blue-700 hover:bg-blue-50',
-  }
-  const act: Record<string,string> = {
-    gray:   'bg-gray-700 border-gray-700 text-white',
-    orange: 'bg-primary-orange border-primary-orange text-white',
-    purple: 'bg-purple-600 border-purple-600 text-white',
-    blue:   'bg-blue-600 border-blue-600 text-white',
-  }
-  return (
-    <button onClick={onClick}
-      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap border transition-colors flex-shrink-0 bg-white ${
-        active ? act[color] : base[color]
-      }`}>
-      <User size={11}/>{label}
-      {badge && (
-        <span className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-          active ? 'bg-white/30 text-white' : allDone ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
-        }`}>
-          {badge}
-        </span>
-      )}
-    </button>
-  )
-}
+  const activeClass = amber
+    ? 'bg-amber-500 text-white shadow-sm'
+    : event
+      ? 'bg-teal-600 text-white shadow-sm'
+      : 'bg-primary-orange text-white shadow-sm'
 
-function TabBtn({ active, onClick, children, event, amber }: {
-  active:boolean; onClick:()=>void; children:React.ReactNode; event?:boolean; amber?:boolean
-}) {
-  const activeClass = amber ? 'bg-amber-500 text-white shadow-sm'
-    : event ? 'bg-teal-600 text-white shadow-sm'
-    : 'bg-primary-orange text-white shadow-sm'
-  const inactiveClass = amber ? 'bg-white text-amber-700 border border-amber-200 hover:bg-amber-50'
-    : event ? 'bg-white text-teal-700 border border-teal-200 hover:bg-teal-50'
-    : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+  const inactiveClass = amber
+    ? 'bg-white text-amber-700 border border-amber-200 hover:bg-amber-50'
+    : event
+      ? 'bg-white text-teal-700 border border-teal-200 hover:bg-teal-50'
+      : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+
   return (
-    <button onClick={onClick}
+    <button
+      onClick={onClick}
       className={`px-3 py-1.5 rounded-xl text-sm font-medium whitespace-nowrap flex-shrink-0 transition-colors ${
         active ? activeClass : inactiveClass
-      }`}>
+      }`}
+    >
       {children}
     </button>
   )
 }
 
-// ── 담당자 지정 패널 (제어 컴포넌트 — 저장 버튼으로 명시적 저장) ────────────
-function AssignPanel({ itemId, currentUserId, options, saving, onSave, onClose }: {
+function AssignPanel({
+  itemId,
+  currentUserId,
+  options,
+  saving,
+  onSave,
+  onClose,
+}: {
   itemId: string
   currentUserId: string | null
   options: Array<{ id: string; name: string; position?: string | null }>
@@ -521,6 +821,7 @@ function AssignPanel({ itemId, currentUserId, options, saving, onSave, onClose }
       onClick={e => e.stopPropagation()}
     >
       <p className="text-xs font-semibold text-gray-600 mb-2">담당자 지정</p>
+
       <div className="flex gap-2">
         <select
           className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-orange/40"
@@ -535,6 +836,7 @@ function AssignPanel({ itemId, currentUserId, options, saving, onSave, onClose }
             </option>
           ))}
         </select>
+
         <button
           type="button"
           disabled={saving}
@@ -543,6 +845,7 @@ function AssignPanel({ itemId, currentUserId, options, saving, onSave, onClose }
         >
           {saving ? '저장 중...' : '저장'}
         </button>
+
         <button
           type="button"
           onClick={onClose}
