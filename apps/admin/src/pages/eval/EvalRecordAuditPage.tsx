@@ -1205,13 +1205,18 @@ function RulesTab({ isAdmin }: { isAdmin: boolean }) {
 // ── 검수 결과 뷰 ──────────────────────────────────────────────────────────────
 function AuditResultView({ record }: { record: AuditRecord }) {
   const r = record.result
+  const llmSummary = r.llm_summary
+
   const [showAll, setShowAll] = useState(false)
 
   const issues = r.issues ?? []
+  const strengths = r.strengths ?? []
+
   const criticalIssues = issues.filter(i => i.severity === 'critical')
   const highIssues = issues.filter(i => i.severity === 'high')
   const mediumIssues = issues.filter(i => i.severity === 'medium')
   const lowIssues = issues.filter(i => i.severity === 'low')
+
   const otherIssues = [...mediumIssues, ...lowIssues]
   const visibleOther = showAll ? otherIssues : otherIssues.slice(0, 3)
 
@@ -1228,6 +1233,7 @@ function AuditResultView({ record }: { record: AuditRecord }) {
               <span className="text-xs font-normal opacity-70">점수</span>
               <span className="text-xl leading-tight">{r.score ?? '—'}</span>
             </div>
+
             <p className="text-[10px] font-bold mt-1 text-gray-500">
               {r.overall_grade}
             </p>
@@ -1243,20 +1249,39 @@ function AuditResultView({ record }: { record: AuditRecord }) {
               </span>
             </div>
 
-            <p className="text-sm text-gray-600 leading-relaxed">{r.summary}</p>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              {r.summary}
+            </p>
 
             <p className="text-xs text-gray-400 mt-2">
-              검수: {record.auditor} · {new Date(record.created_at).toLocaleString('ko-KR')}
+              검수: {record.auditor} ·{' '}
+              {new Date(record.created_at).toLocaleString('ko-KR')}
             </p>
           </div>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4 pt-4 border-t border-gray-50">
           {[
-            { label: '즉시조치', count: criticalIssues.length, cls: 'bg-purple-50 text-purple-700' },
-            { label: '중요', count: highIssues.length, cls: 'bg-red-50 text-red-600' },
-            { label: '보통', count: mediumIssues.length, cls: 'bg-orange-50 text-orange-600' },
-            { label: '경미', count: lowIssues.length, cls: 'bg-gray-50 text-gray-500' },
+            {
+              label: '즉시조치',
+              count: criticalIssues.length,
+              cls: 'bg-purple-50 text-purple-700',
+            },
+            {
+              label: '중요',
+              count: highIssues.length,
+              cls: 'bg-red-50 text-red-600',
+            },
+            {
+              label: '보통',
+              count: mediumIssues.length,
+              cls: 'bg-orange-50 text-orange-600',
+            },
+            {
+              label: '경미',
+              count: lowIssues.length,
+              cls: 'bg-gray-50 text-gray-500',
+            },
           ].map(s => (
             <div key={s.label} className={`text-center rounded-xl py-2.5 ${s.cls}`}>
               <p className="text-lg font-bold">{s.count}</p>
@@ -1265,7 +1290,7 @@ function AuditResultView({ record }: { record: AuditRecord }) {
           ))}
         </div>
 
-        {r.strengths?.length > 0 && (
+        {strengths.length > 0 && (
           <div className="mt-4 pt-4 border-t border-gray-50">
             <p className="text-xs font-semibold text-green-600 mb-2 flex items-center gap-1">
               <CheckCircle2 size={12} />
@@ -1273,7 +1298,7 @@ function AuditResultView({ record }: { record: AuditRecord }) {
             </p>
 
             <ul className="space-y-1">
-              {r.strengths.map((s, i) => (
+              {strengths.map((s, i) => (
                 <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
                   <span className="text-green-400 flex-shrink-0 mt-0.5">•</span>
                   {s}
@@ -1283,28 +1308,31 @@ function AuditResultView({ record }: { record: AuditRecord }) {
           </div>
         )}
 
-        {r.llm_summary?.admin_comment && (
+        {llmSummary?.admin_comment && (
           <div className="mt-4 pt-4 border-t border-gray-50">
             <p className="text-xs font-semibold text-blue-600 mb-1.5 flex items-center gap-1">
               <Sparkles size={12} />
               AI 분석
             </p>
+
             <p className="text-sm text-gray-600 leading-relaxed">
-              {r.llm_summary.admin_comment}
+              {llmSummary.admin_comment}
             </p>
           </div>
         )}
 
-        {r.llm_summary?.priority_actions?.length > 0 && (
+        {!!llmSummary?.priority_actions?.length && (
           <div className="mt-3">
             <p className="text-xs font-semibold text-red-600 mb-1.5">
               ⚡ 우선 조치
             </p>
 
             <ul className="space-y-1">
-              {r.llm_summary.priority_actions.map((s, i) => (
+              {llmSummary.priority_actions.map((s, i) => (
                 <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
-                  <span className="text-red-400 flex-shrink-0 mt-0.5">{i + 1}.</span>
+                  <span className="text-red-400 flex-shrink-0 mt-0.5">
+                    {i + 1}.
+                  </span>
                   {s}
                 </li>
               ))}
@@ -1312,7 +1340,7 @@ function AuditResultView({ record }: { record: AuditRecord }) {
           </div>
         )}
 
-        {r.llm_summary?.recording_tips?.length > 0 && (
+        {!!llmSummary?.recording_tips?.length && (
           <div className="mt-3">
             <p className="text-xs font-semibold text-green-600 mb-1.5 flex items-center gap-1">
               <Sparkles size={12} />
@@ -1320,7 +1348,7 @@ function AuditResultView({ record }: { record: AuditRecord }) {
             </p>
 
             <ul className="space-y-1">
-              {r.llm_summary.recording_tips.map((s, i) => (
+              {llmSummary.recording_tips.map((s, i) => (
                 <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
                   <span className="text-green-400 flex-shrink-0 mt-0.5">•</span>
                   {s}
@@ -1347,7 +1375,10 @@ function AuditResultView({ record }: { record: AuditRecord }) {
             </p>
 
             <div className="flex gap-3 text-xs text-gray-500">
-              <span className="text-green-600">✅ 매칭 {r.matched_residents}명</span>
+              <span className="text-green-600">
+                ✅ 매칭 {r.matched_residents ?? 0}명
+              </span>
+
               {(r.unmatched_residents ?? 0) > 0 && (
                 <span className="text-red-500">
                   ❌ 미매칭 {r.unmatched_residents}명
@@ -1356,14 +1387,19 @@ function AuditResultView({ record }: { record: AuditRecord }) {
             </div>
           </div>
 
-          <ResidentResultTable residents={r.resident_results ?? []} auditId={record.id} />
+          <ResidentResultTable
+            residents={r.resident_results ?? []}
+            auditId={record.id}
+          />
         </div>
       )}
 
       {issues.length === 0 && (
         <div className="bg-green-50 border border-green-100 rounded-2xl p-8 text-center">
           <CheckCircle2 size={36} className="mx-auto mb-2 text-green-500" />
-          <p className="font-semibold text-green-700 text-lg">Rule Engine 이슈 없음</p>
+          <p className="font-semibold text-green-700 text-lg">
+            Rule Engine 이슈 없음
+          </p>
           <p className="text-sm text-green-600 mt-1">
             모든 검수 기준을 통과했습니다
           </p>
@@ -1375,6 +1411,7 @@ function AuditResultView({ record }: { record: AuditRecord }) {
           <p className="text-xs font-bold text-purple-700 flex items-center gap-1 px-1">
             🚨 즉시 조치 — 허위기록 의심 ({criticalIssues.length}건)
           </p>
+
           {criticalIssues.map((issue, i) => (
             <IssueCard key={i} issue={issue} />
           ))}
@@ -1387,6 +1424,7 @@ function AuditResultView({ record }: { record: AuditRecord }) {
             <AlertTriangle size={12} />
             즉시 수정 필요 ({highIssues.length}건)
           </p>
+
           {highIssues.map((issue, i) => (
             <IssueCard key={i} issue={issue} />
           ))}
