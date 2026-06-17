@@ -26,6 +26,16 @@ from app.models.user import User
 from app.models.carefor import CareforResident, CareforLeaveRecord, StaffWorkSchedule
 from app.schemas.response import ApiResponse
 from app.services.carefor_import.rule_engine import run_rules, calculate_score, get_grade
+from app.services.record_audit.resident_block_splitter import (
+    split_by_resident, merge_resident_blocks,
+)
+from app.services.record_audit.engine import (
+    audit_daily_records,
+    calculate_score as calc_score_resident,
+    get_grade as get_grade_resident,
+)
+from app.services.record_audit.llm_summary import generate_summary
+from app.services.record_audit.carefor_fixed_row_parser import parse_carefor_xls
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -453,91 +463,252 @@ async def upload_and_audit(
     if len(content) > 5 * 1024 * 1024:
         raise HTTPException(400, "5MB 이하 파일만 허용합니다")
 
-    try:
-        table_text = _parse_file(content, filename)
-    except HTTPException: raise
-    except Exception as e:
-        raise HTTPException(400, f"파일 파싱 실패: {e}")
+    year = datetime.now(KST).year
 
-    total_rows = table_text.count('\n')
+    # ── STEP 1. DB 컨텍스트 수집 ─────────────────────────────────────────
+    residents_db = db.query(CareforResident).all()
+    residents_dict = {r.name: r for r in residents_db}  # 이름 → 객체
 
-    residents = db.query(CareforResident).all()
-    residents_list = [{"name": r.name, "birth_date": r.birth_date,
-                       "admission_date": r.admission_date, "discharge_date": r.discharge_date,
-                       "status": r.status} for r in residents]
+    leaves_all = db.query(CareforLeaveRecord).order_by(
+        CareforLeaveRecord.start_date.desc()
+    ).limit(500).all()
 
-    leaves = db.query(CareforLeaveRecord).order_by(CareforLeaveRecord.start_date.desc()).limit(200).all()
-    leaves_list = [{"resident_name": l.resident_name, "leave_type": l.leave_type,
-                    "start_date": l.start_date, "start_time": l.start_time,
-                    "end_date": l.end_date, "end_time": l.end_time} for l in leaves]
-
-    schedules = db.query(StaffWorkSchedule).order_by(StaffWorkSchedule.work_date).limit(1000).all()
-    schedules_list = [{"staff_name": s.staff_name, "work_date": s.work_date,
-                       "shift_label": s.shift_label, "start_time": s.start_time,
-                       "end_time": s.end_time, "is_working": s.is_working} for s in schedules]
+    schedules_all = db.query(StaffWorkSchedule).order_by(
+        StaffWorkSchedule.work_date
+    ).limit(2000).all()
+    schedules_list = [{
+        "staff_name": s.staff_name, "work_date": s.work_date,
+        "shift_label": s.shift_label, "start_time": s.start_time,
+        "end_time": s.end_time, "is_working": s.is_working,
+    } for s in schedules_all]
 
     rule_content = _get_active_rule_content(db)
 
-    # Claude 분석
-    claude_result = claude_analyze(table_text, filename, rule_content, residents_list, leaves_list, schedules_list)
-    if not claude_result:
-        claude_result = openai_analyze(table_text, filename, rule_content, residents_list, leaves_list, schedules_list)
+    # ── STEP 2. 수급자별 블록 분리 ────────────────────────────────────────
+    resident_results = []
+    all_issues       = []
+    debug_blocks     = []
+    total_rows       = 0
 
-    # Rule Engine 교차 검증
-    # .xls 파일은 전용 파서로 구조화 데이터 추출 → 더 정확한 작성자 파악
-    record_items = []
-    if filename.lower().endswith('.xls'):
+    if ext in ('xls', 'xlsx'):
+        # ── 고정 Row Map 파서 우선 ─────────────────────────────────────────
+        fixed_blocks = []
         try:
-            from app.services.audit.record_parser import parse_record_xls
-            record_items = parse_record_xls(content, datetime.now(KST).year)
-            logger.info(f"구조화 파서 결과: {len(record_items)}건")
+            fixed_blocks = parse_carefor_xls(content, filename, year)
         except Exception as e:
-            logger.warning(f"구조화 파서 실패: {e}")
+            logger.warning(f"고정 Row Map 파서 실패: {e}")
 
-    rule_issues = run_rules(table_text, residents_list, leaves_list, schedules_list, record_items)
+        if fixed_blocks:
+            # 수급자별로 그룹화 (이름+생년월일 키)
+            blocks_by_key: Dict[str, list] = {}
+            for b in fixed_blocks:
+                key = f"{b.resident_name}|{b.birth_date or ''}"
+                blocks_by_key.setdefault(key, []).append(b)
 
-    # 병합
-    all_issues, strengths = merge_results(claude_result, rule_issues)
+            for res_key, blist in blocks_by_key.items():
+                # 전체 records 합산
+                all_records = []
+                for b in blist:
+                    all_records.extend(b.records)
 
-    score = calculate_score(all_issues)
-    grade = get_grade(score)
+                resident_name = blist[0].resident_name or ""
+                birth_date    = blist[0].birth_date
+                care_grade    = blist[0].care_grade
 
-    sev_count = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+                # DB 매칭
+                matched_res = residents_dict.get(resident_name)
+                if not matched_res:
+                    for db_name, db_res in residents_dict.items():
+                        if db_name.replace(' ','') == resident_name.replace(' ',''):
+                            matched_res = db_res; break
+
+                match_status = "matched" if matched_res else "unmatched"
+
+                res_leaves = [
+                    {"resident_name": l.resident_name, "leave_type": l.leave_type,
+                     "start_date": l.start_date, "end_date": l.end_date}
+                    for l in leaves_all if l.resident_name == resident_name
+                ]
+
+                resident_dict = {
+                    "name":           matched_res.name           if matched_res else resident_name,
+                    "admission_date": matched_res.admission_date if matched_res else None,
+                    "discharge_date": matched_res.discharge_date if matched_res else None,
+                    "status":         matched_res.status          if matched_res else "active",
+                } if matched_res else None
+
+                # Rule Engine (DailyCareRecord 기반)
+                issues = audit_daily_records(all_records, resident_dict, res_leaves, schedules_list)
+                score  = calc_score_resident(issues)
+                grade  = get_grade_resident(score)
+                total_rows += len(all_records)
+
+                sev_count = {"critical":0,"high":0,"medium":0,"low":0}
+                for iss in issues:
+                    sev = iss.get("severity","low")
+                    if sev in sev_count: sev_count[sev] += 1
+
+                # 목욕 횟수
+                bathing_count = sum(
+                    1 for r in all_records
+                    if r.physical.get('bathing', {}).get('provided')
+                )
+
+                rr = {
+                    "resident_name":        resident_name,
+                    "birth_date":           birth_date,
+                    "care_grade":           care_grade,
+                    "resident_status":      all_records[0].condition.get('mobility') if all_records else None,
+                    "matched_resident_id":  str(matched_res.id) if matched_res else None,
+                    "match_status":         match_status,
+                    "score":                score,
+                    "grade":                grade,
+                    "total_rows":           len(all_records),
+                    "bathing_count":        bathing_count,
+                    "issue_summary":        sev_count,
+                    "issues":               issues[:50],
+                }
+                resident_results.append(rr)
+                all_issues.extend(issues)
+
+                for b in blist:
+                    debug_blocks.append({
+                        "resident_name": resident_name,
+                        "birth_date":    birth_date,
+                        "sheet":         b.sheet_name,
+                        "dates":         list(b.date_cols.values()),
+                        "match_status":  match_status,
+                        "date_columns":  b.debug_info.get("date_columns", []),
+                    })
+
+        else:
+            # 고정 Row Map 실패 → 기존 파서 fallback
+            logger.info("고정 Row Map 실패 → resident_block_splitter fallback")
+            try:
+                blocks_by_resident = split_by_resident(content, filename, year)
+            except Exception as e:
+                raise HTTPException(400, f"수급자 블록 분리 실패: {e}")
+
+            if not blocks_by_resident:
+                raise HTTPException(400,
+                    "수급자 이름/생년월일 영역을 찾지 못했습니다. 엑셀 양식을 확인하세요.")
+
+            for res_key, sheet_blocks in blocks_by_resident.items():
+                from app.services.record_audit.engine import audit_resident_block
+                merged       = merge_resident_blocks(sheet_blocks)
+                resident_name = merged.resident_name or ""
+                matched_res  = residents_dict.get(resident_name)
+                match_status = "matched" if matched_res else "unmatched"
+                res_leaves   = [{"resident_name": l.resident_name, "leave_type": l.leave_type,
+                                  "start_date": l.start_date, "end_date": l.end_date}
+                                 for l in leaves_all if l.resident_name == resident_name]
+                resident_dict = {"name": matched_res.name if matched_res else resident_name,
+                                 "admission_date": matched_res.admission_date if matched_res else None,
+                                 "discharge_date": matched_res.discharge_date if matched_res else None,
+                                 "status": matched_res.status if matched_res else "active"} if matched_res else None
+                issues = audit_resident_block(merged, resident_dict, res_leaves, schedules_list)
+                score  = calc_score_resident(issues)
+                grade  = get_grade_resident(score)
+                total_rows += len(merged.dates)
+                sev_count = {"critical":0,"high":0,"medium":0,"low":0}
+                for iss in issues:
+                    sev = iss.get("severity","low")
+                    if sev in sev_count: sev_count[sev] += 1
+                rr = {"resident_name": resident_name, "birth_date": merged.birth_date,
+                      "care_grade": merged.care_grade, "resident_status": merged.resident_status,
+                      "matched_resident_id": str(matched_res.id) if matched_res else None,
+                      "match_status": match_status, "score": score, "grade": grade,
+                      "total_rows": len(merged.dates), "bathing_count": len(merged.bathing_dates),
+                      "issue_summary": sev_count, "issues": issues[:50]}
+                resident_results.append(rr)
+                all_issues.extend(issues)
+
+    else:
+        # CSV/TXT — 기존 방식 (단일 텍스트)
+        try:
+            table_text = _parse_file(content, filename)
+        except Exception as e:
+            raise HTTPException(400, f"파일 파싱 실패: {e}")
+        total_rows = table_text.count('\n')
+
+        residents_list = [{"name":r.name,"birth_date":r.birth_date,
+                           "admission_date":r.admission_date,"discharge_date":r.discharge_date,
+                           "status":r.status} for r in residents_db]
+        leaves_list = [{"resident_name":l.resident_name,"leave_type":l.leave_type,
+                        "start_date":l.start_date,"end_date":l.end_date} for l in leaves_all]
+
+        claude_result = claude_analyze(table_text, filename, rule_content, residents_list, leaves_list, schedules_list)
+        if not claude_result:
+            claude_result = openai_analyze(table_text, filename, rule_content, residents_list, leaves_list, schedules_list)
+        rule_issues = run_rules(table_text, residents_list, leaves_list, schedules_list)
+        all_issues, _ = merge_results(claude_result, rule_issues)
+
+    # ── STEP 3. 전체 집계 ────────────────────────────────────────────────
+    overall_sev = {"critical":0,"high":0,"medium":0,"low":0}
     for iss in all_issues:
-        sev = iss.get("severity", "low")
-        if sev in sev_count: sev_count[sev] += 1
+        sev = iss.get("severity","low")
+        if sev in overall_sev: overall_sev[sev] += 1
 
-    summary = (claude_result.get("summary", "") if claude_result else "") or \
-              f"검수 점수 {score}점 ({grade}) — 중요 {sev_count['high']}건, 보통 {sev_count['medium']}건"
-    recording_tips = claude_result.get("recording_tips", []) if claude_result else []
+    overall_score = calculate_score(all_issues)
+    overall_grade = get_grade(overall_score)
 
-    return_issues = all_issues[:MAX_ISSUES_RETURN]
+    matched_count   = sum(1 for r in resident_results if r["match_status"]=="matched")
+    unmatched_count = sum(1 for r in resident_results if r["match_status"]=="unmatched")
+    ambiguous_count = sum(1 for r in resident_results if r["match_status"]=="ambiguous")
+
+    aggregate = {
+        "total_residents_detected": len(resident_results),
+        "matched_residents":        matched_count,
+        "unmatched_residents":      unmatched_count,
+        "ambiguous_residents":      ambiguous_count,
+        "total_rows":               total_rows,
+        "score":                    overall_score,
+        "grade":                    overall_grade,
+        "issue_summary":            overall_sev,
+        "resident_results":         resident_results,
+    }
+
+    # ── STEP 4. LLM 요약 ─────────────────────────────────────────────────
+    llm_summary = generate_summary(aggregate)
+
+    # ── STEP 5. 최종 응답 (프론트 호환) ──────────────────────────────────
+    return_issues = sorted(all_issues, key=lambda x: {"critical":0,"high":1,"medium":2,"low":3}.get(x.get("severity","low"),9))[:MAX_ISSUES_RETURN]
 
     seen: set = set()
     priority_actions: List[str] = []
     for iss in return_issues:
-        if iss.get("severity") in ("critical", "high"):
-            key = iss.get("description", "")[:40]
+        if iss.get("severity") in ("critical","high"):
+            key = iss.get("description","")[:40]
             if key and key not in seen:
                 seen.add(key)
                 priority_actions.append(iss["description"][:80])
             if len(priority_actions) >= 3: break
 
     result = {
-        "summary":           summary,
+        # 기존 호환 필드
+        "summary":           llm_summary.get("summary",""),
         "total_rows":        total_rows,
         "issues":            return_issues,
         "issue_total_count": len(all_issues),
-        "strengths":         strengths,
-        "overall_grade":     grade,
-        "score":             score,
-        "grade":             grade,
-        "issue_summary":     sev_count,
+        "strengths":         [],
+        "overall_grade":     overall_grade,
+        "score":             overall_score,
+        "grade":             overall_grade,
+        "issue_summary":     overall_sev,
+        # 신규 필드
+        "total_residents_detected": len(resident_results),
+        "matched_residents":        matched_count,
+        "unmatched_residents":      unmatched_count,
+        "resident_results":         resident_results,
         "llm_summary": {
-            "summary":          summary,
-            "admin_comment":    claude_result.get("summary", "") if claude_result else "",
-            "priority_actions": priority_actions,
-            "recording_tips":   recording_tips,
+            "summary":          llm_summary.get("summary",""),
+            "admin_comment":    llm_summary.get("admin_comment",""),
+            "priority_actions": priority_actions or llm_summary.get("priority_actions",[]),
+            "recording_tips":   llm_summary.get("recording_tips",[]),
+        },
+        "debug": {
+            "blocks": debug_blocks,
+            "unmatched": [b for b in debug_blocks if b["match_status"]=="unmatched"],
         },
     }
 
@@ -548,11 +719,10 @@ async def upload_and_audit(
         "result":     result,
         "created_at": datetime.now(KST).isoformat(),
         "context": {
-            "residents_count":  len(residents_list),
-            "leaves_count":     len(leaves_list),
-            "schedules_count":  len(schedules_list),
+            "residents_count":  len(residents_db),
+            "leaves_count":     len(leaves_all),
+            "schedules_count":  len(schedules_all),
             "rule_applied":     bool(rule_content),
-            "claude_used":      claude_result is not None,
         },
     }
     _HISTORY.insert(0, record)

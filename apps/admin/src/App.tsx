@@ -27,6 +27,7 @@ import EvalResidentsPage    from './pages/eval/EvalResidentsPage'
 import EvalStaffPage        from './pages/eval/EvalStaffPage'
 import EvalAIReviewPage     from './pages/eval/EvalAIReviewPage'
 import EvalRecordAuditPage  from './pages/eval/EvalRecordAuditPage'
+import EvalRecordAuditDetailPage from './pages/eval/EvalRecordAuditDetailPage'
 import EvalAlbumPage        from './pages/eval/EvalAlbumPage'
 import EvalUsersPage        from './pages/eval/EvalUsersPage'
 import FamilyLoginPage      from './pages/family/FamilyLoginPage'
@@ -120,6 +121,7 @@ function App() {
 
             {/* 모든 STAFF 접근 가능 — 제공기록지 검수 */}
             <Route path="eval/record-audit" element={<EvalRecordAuditPage />} />
+            <Route path="eval/record-audit/:auditId/resident/:residentName" element={<EvalRecordAuditDetailPage />} />
 
             {/* 사회복지사 + ADMIN — 수급자/직원 관리 */}
             <Route path="eval/residents" element={<SocialWorkerRoute><EvalResidentsPage /></SocialWorkerRoute>} />
