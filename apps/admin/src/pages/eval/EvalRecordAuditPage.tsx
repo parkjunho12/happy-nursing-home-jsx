@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuditStore } from '@/store/auditStore'
 import {
   FileSpreadsheet, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp,
-  Loader2, History, X, Printer, RefreshCw, ShieldCheck, Settings,
-  Users, CalendarOff, Trash2, Upload, Edit3, Save, Check, Sparkles, Clock,
+  Loader2, History, X, Printer, RefreshCw, Settings,
+  Users, CalendarOff, Trash2, Upload, Edit3, Save, Sparkles, Clock, Plus,
 } from 'lucide-react'
 import { apiClient } from '@/api/client'
 import { useAuthStore } from '@/store/auth'
@@ -18,6 +20,13 @@ interface LlmSummary {
   priority_actions: string[]
   recording_tips: string[]
 }
+interface ResidentResult {
+  resident_name: string; birth_date: string; care_grade: string
+  resident_status: string; match_status: string
+  score: number; grade: string; total_rows: number; bathing_count: number
+  issue_summary: { critical: number; high: number; medium: number; low: number }
+  issues: AuditIssue[]
+}
 interface AuditResult {
   summary: string; score: number; total_rows: number
   issues: AuditIssue[]; strengths: string[]
@@ -25,6 +34,10 @@ interface AuditResult {
   issue_summary?: { critical: number; high: number; medium: number; low: number }
   issue_total_count?: number
   llm_summary?: LlmSummary
+  total_residents_detected?: number
+  matched_residents?: number
+  unmatched_residents?: number
+  resident_results?: ResidentResult[]
 }
 interface AuditRecord {
   id: string; filename: string; auditor: string
@@ -113,15 +126,16 @@ export default function EvalRecordAuditPage() {
   const isAdmin = user?.role === 'ADMIN'
   const isSocial = user?.position === '사회복지사'
 
-  const [tab, setTab] = useState<
-    'audit' | 'residents' | 'leaves' | 'schedules' | 'rules'
-  >('audit')
+  // 검수 결과는 store에 보관 — 페이지 이동 후 복귀해도 유지됨
+  const { currentAudit, setCurrentAudit, history, setHistory, addToHistory } = useAuditStore()
+  const result    = currentAudit
+  const setResult = (r: AuditRecord | null) => setCurrentAudit(r)
+
+  const [tab, setTab] = useState<'audit'|'residents'|'leaves'|'schedules'|'rules'>('audit')
 
   // 검수 탭
   const [dragging,    setDragging]    = useState(false)
   const [uploading,   setUploading]   = useState(false)
-  const [result,      setResult]      = useState<AuditRecord | null>(null)
-  const [history,     setHistory]     = useState<AuditRecord[]>([])
   const [showHistory, setShowHistory] = useState(false)
   const [auditError,  setAuditError]  = useState<string | null>(null)
   const fileRef   = useRef<HTMLInputElement>(null)
@@ -131,7 +145,6 @@ export default function EvalRecordAuditPage() {
   const [residents,  setResidents]  = useState<Resident[]>([])
   const [leaves,     setLeaves]     = useState<LeaveRecord[]>([])
   const [schedules,  setSchedules]  = useState<WorkSchedule[]>([])
-  const [rule,       setRule]       = useState<{title:string;content:string}|null>(null)
   const [ctxMsg,      setCtxMsg]      = useState('')
   const [ctxWarnings, setCtxWarnings] = useState<string[]>([])
 
@@ -142,13 +155,11 @@ export default function EvalRecordAuditPage() {
 
   const loadAll = async () => {
     try {
-      const [ruleRes, resRes, leaveRes, schedRes] = await Promise.allSettled([
-        apiClient.get('/api/v1/eval/record-audit/rules'),
+      const [resRes, leaveRes, schedRes] = await Promise.allSettled([
         apiClient.get('/api/v1/eval/carefor/residents'),
         apiClient.get('/api/v1/eval/carefor/leave-records'),
         apiClient.get('/api/v1/eval/carefor/work-schedules'),
       ])
-      if (ruleRes.status === 'fulfilled')   setRule((ruleRes.value.data as any)?.data ?? null)
       if (resRes.status === 'fulfilled')    setResidents((resRes.value.data as any)?.data ?? [])
       if (leaveRes.status === 'fulfilled')  setLeaves((leaveRes.value.data as any)?.data ?? [])
       if (schedRes.status === 'fulfilled')  setSchedules((schedRes.value.data as any)?.data ?? [])
@@ -162,7 +173,9 @@ export default function EvalRecordAuditPage() {
       const res = await apiClient.post('/api/v1/eval/record-audit/upload', form, {
         headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000,
       })
-      setResult((res.data as any)?.data)
+      const auditData = (res.data as any)?.data
+      setResult(auditData)
+      if (auditData) addToHistory(auditData)
       const hRes = await apiClient.get('/api/v1/eval/record-audit/history')
       setHistory((hRes.data as any)?.data ?? [])
     } catch (e: any) {
@@ -231,7 +244,6 @@ export default function EvalRecordAuditPage() {
           {/* 컨텍스트 상태 */}
           <div className="flex flex-wrap gap-2">
             {[
-              { icon: <ShieldCheck size={12}/>, label:'검수 룰', active: !!rule, text: rule ? '적용됨' : '미설정' },
               { icon: <Users size={12}/>,       label:'수급자', active: residents.length > 0, text: residents.length > 0 ? `${residents.length}명 연계` : '없음' },
               { icon: <CalendarOff size={12}/>, label:'외박/외출', active: leaves.length > 0, text: leaves.length > 0 ? `${leaves.length}건 연계` : '없음' },
               { icon: <Clock size={12}/>, label:'근무표', active: schedules.length > 0, text: schedules.length > 0 ? `${schedules.length}건 연계` : '없음' },
@@ -468,84 +480,176 @@ export default function EvalRecordAuditPage() {
 
       {/* ── 검수 룰 탭 ── */}
       {tab === 'rules' && (
-        <RulesTab rule={rule} isAdmin={isAdmin} onRefresh={loadAll}/>
+        <RulesTab isAdmin={isAdmin}/>
       )}
     </div>
   )
 }
 
 // ── 검수 룰 탭 ───────────────────────────────────────────────────────────────
-function RulesTab({ rule, isAdmin, onRefresh }: {
-  rule: {title:string;content:string}|null; isAdmin: boolean; onRefresh: ()=>void
-}) {
-  const [editing, setEditing] = useState(false)
-  const [content, setContent] = useState(rule?.content ?? '')
-  const [title,   setTitle]   = useState(rule?.title ?? '')
-  const [saving,  setSaving]  = useState(false)
-  const [saved,   setSaved]   = useState(false)
+interface AuditRule {
+  id: number; title: string; content: string; is_active: boolean
+  created_at: string; updated_at: string
+}
 
-  useEffect(() => { setContent(rule?.content ?? ''); setTitle(rule?.title ?? '') }, [rule])
+function RulesTab({ isAdmin }: { isAdmin: boolean }) {
+  const [rules,   setRules]   = useState<AuditRule[]>([])
+  const [loading, setLoading] = useState(true)
+  const [adding,  setAdding]  = useState(false)
+  const [editId,  setEditId]  = useState<number|null>(null)
+
+  const [newTitle,   setNewTitle]   = useState('')
+  const [newContent, setNewContent] = useState('')
+  const [saving,     setSaving]     = useState(false)
+  const [msg,        setMsg]        = useState('')
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const res = await apiClient.get('/api/v1/eval/record-audit/rules')
+      setRules((res.data as any)?.data ?? [])
+    } finally { setLoading(false) }
+  }
+
+  useEffect(() => { load() }, [])
+
+  const toggle = async (id: number) => {
+    await apiClient.patch(`/api/v1/eval/record-audit/rules/${id}/toggle`)
+    load()
+  }
+
+  const del = async (id: number, title: string) => {
+    if (!confirm(`"${title}" 룰을 삭제하시겠습니까?`)) return
+    await apiClient.delete(`/api/v1/eval/record-audit/rules/${id}`)
+    load()
+  }
 
   const save = async () => {
-    setSaving(true)
+    if (!newTitle.trim() || !newContent.trim()) { setMsg('제목과 내용을 입력하세요'); return }
+    setSaving(true); setMsg('')
     try {
-      await apiClient.put('/api/v1/eval/record-audit/rules', { title, content })
-      setSaved(true); setEditing(false); onRefresh()
-      setTimeout(() => setSaved(false), 2000)
-    } catch {} finally { setSaving(false) }
+      if (editId !== null) {
+        await apiClient.patch(`/api/v1/eval/record-audit/rules/${editId}`, { title: newTitle, content: newContent })
+        setMsg('✅ 수정됨')
+      } else {
+        await apiClient.post('/api/v1/eval/record-audit/rules', { title: newTitle, content: newContent })
+        setMsg('✅ 추가됨')
+      }
+      setAdding(false); setEditId(null); setNewTitle(''); setNewContent('')
+      load()
+    } catch (e: any) {
+      setMsg(`❌ ${e?.response?.data?.detail ?? '오류'}`)
+    } finally { setSaving(false) }
+  }
+
+  const startEdit = (rule: AuditRule) => {
+    setEditId(rule.id); setNewTitle(rule.title); setNewContent(rule.content); setAdding(true)
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <p className="font-semibold text-gray-900 text-sm flex items-center gap-1.5">
-            <Settings size={15} className="text-orange-500"/> 검수 룰 (Rule Engine 기준)
+            <Settings size={15} className="text-orange-500"/> 검수 룰 관리
           </p>
           <p className="text-xs text-gray-400 mt-0.5">
-            DB에 저장된 기준값. Rule Engine과 Claude 모두 이 룰을 참고합니다.
+            활성화된 룰이 Claude에 전달됩니다. 첫 실행 시 기본 룰 3개가 자동 생성됩니다.
           </p>
         </div>
-        {isAdmin && (
-          <div className="flex gap-2">
-            {editing ? (
-              <>
-                <button onClick={() => setEditing(false)} className="text-xs text-gray-500 border border-gray-200 px-3 py-1.5 rounded-xl hover:bg-gray-50">취소</button>
-                <button onClick={save} disabled={saving}
-                  className="flex items-center gap-1.5 text-xs font-semibold bg-primary-orange text-white px-3 py-1.5 rounded-xl disabled:opacity-50">
-                  {saving ? <Loader2 size={12} className="animate-spin"/> : saved ? <Check size={12}/> : <Save size={12}/>}
-                  저장
-                </button>
-              </>
-            ) : (
-              <button onClick={() => setEditing(true)}
-                className="flex items-center gap-1.5 text-xs font-semibold border border-gray-200 text-gray-600 px-3 py-1.5 rounded-xl hover:bg-gray-50">
-                <Edit3 size={12}/> 수정
-              </button>
-            )}
-          </div>
+        {isAdmin && !adding && (
+          <button onClick={() => { setAdding(true); setEditId(null); setNewTitle(''); setNewContent('') }}
+            className="flex items-center gap-1.5 text-xs font-semibold bg-primary-orange text-white px-3 py-1.5 rounded-xl hover:bg-primary-orange/90">
+            <Plus size={12}/> 룰 추가
+          </button>
         )}
       </div>
-      {editing ? (
-        <div className="space-y-2">
-          <input value={title} onChange={e => setTitle(e.target.value)}
-            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40"
-            placeholder="룰 제목"/>
-          <textarea value={content} onChange={e => setContent(e.target.value)}
-            rows={20}
-            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary-orange/40 resize-none"/>
-          <p className="text-xs text-gray-400">{content.length.toLocaleString()}자</p>
+
+      {msg && (
+        <div className={`px-4 py-2.5 rounded-xl text-sm border ${msg.startsWith('✅') ? 'bg-green-50 border-green-100 text-green-700' : 'bg-red-50 border-red-100 text-red-700'}`}>
+          {msg}
+        </div>
+      )}
+
+      {/* 추가/수정 폼 */}
+      {adding && (
+        <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 space-y-3">
+          <p className="text-sm font-semibold text-orange-900">{editId ? '룰 수정' : '새 룰 추가'}</p>
+          <input value={newTitle} onChange={e => setNewTitle(e.target.value)}
+            placeholder="룰 제목 (예: 시설 자체 추가 기준)"
+            className="w-full border border-orange-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400/40"/>
+          <textarea
+            value={newContent}
+            onChange={e => setNewContent(e.target.value)}
+            rows={8}
+            placeholder={`[HIGH] 예시 룰
+- 매일 오전 10시 체온 측정 기록 필수
+- 식사량은 분수(2/3공기)로 기재
+
+[MEDIUM] 권고 사항
+- 목욕은 주 2회 기록 권장`}
+            className="w-full border border-orange-200 rounded-xl px-3 py-2.5 text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-orange-400/40 resize-none"/>
+          <div className="flex gap-2">
+            <button onClick={save} disabled={saving}
+              className="flex items-center gap-1.5 text-xs font-semibold bg-primary-orange text-white px-4 py-2 rounded-xl disabled:opacity-50">
+              {saving ? <Loader2 size={12} className="animate-spin"/> : <Save size={12}/>}
+              {editId ? '저장' : '추가'}
+            </button>
+            <button onClick={() => { setAdding(false); setEditId(null); setMsg('') }}
+              className="text-xs text-gray-500 border border-gray-200 px-4 py-2 rounded-xl hover:bg-gray-50">
+              취소
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 룰 목록 */}
+      {loading ? (
+        <div className="flex items-center justify-center py-8 text-gray-400">
+          <Loader2 size={16} className="animate-spin mr-2"/> 불러오는 중...
+        </div>
+      ) : rules.length === 0 ? (
+        <div className="bg-gray-50 rounded-xl py-8 text-center text-sm text-gray-400">
+          저장된 룰이 없습니다. 서버 시작 시 기본 룰이 자동 생성됩니다.
         </div>
       ) : (
-        <div className="bg-gray-50 rounded-xl p-4">
-          {rule ? (
-            <>
-              <p className="text-xs font-semibold text-gray-500 mb-2">{rule.title}</p>
-              <pre className="text-xs text-gray-700 whitespace-pre-wrap leading-relaxed font-mono">{rule.content}</pre>
-            </>
-          ) : (
-            <p className="text-sm text-gray-400 text-center py-4">저장된 룰이 없습니다. {isAdmin ? '수정 버튼으로 입력하세요.' : ''}</p>
-          )}
+        <div className="space-y-3">
+          {rules.map(rule => (
+            <div key={rule.id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-opacity ${rule.is_active ? 'border-gray-100' : 'border-gray-100 opacity-50'}`}>
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-50">
+                {/* 활성 토글 */}
+                {isAdmin && (
+                  <button onClick={() => toggle(rule.id)} title={rule.is_active ? '비활성화' : '활성화'}
+                    className={`flex-shrink-0 w-9 h-5 rounded-full transition-colors relative ${rule.is_active ? 'bg-green-500' : 'bg-gray-300'}`}>
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${rule.is_active ? 'left-4' : 'left-0.5'}`}/>
+                  </button>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-800 text-sm truncate">{rule.title}</p>
+                  <p className="text-xs text-gray-400">
+                    {rule.is_active ? '✅ 검수 시 적용됨' : '⏸ 비활성 (검수에서 제외)'}
+                  </p>
+                </div>
+                {isAdmin && (
+                  <div className="flex gap-1.5 flex-shrink-0">
+                    <button onClick={() => startEdit(rule)}
+                      className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50">
+                      <Edit3 size={12} className="text-gray-500"/>
+                    </button>
+                    <button onClick={() => del(rule.id, rule.title)}
+                      className="p-1.5 rounded-lg border border-red-100 hover:bg-red-50">
+                      <Trash2 size={12} className="text-red-400"/>
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="px-4 py-3 bg-gray-50/50">
+                <pre className="text-xs text-gray-600 whitespace-pre-wrap leading-relaxed font-mono max-h-32 overflow-y-auto">
+                  {rule.content}
+                </pre>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -654,6 +758,24 @@ function AuditResultView({ record }: { record: AuditRecord }) {
           </div>
         )}
       </div>
+
+      {r.total_residents_detected && r.total_residents_detected > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mt-2">
+          <div className="flex items-center justify-between mb-3">
+            <p className="font-semibold text-gray-800 text-sm flex items-center gap-1.5">
+              <Users size={14} className="text-blue-500"/>
+              수급자별 검수 결과 ({r.total_residents_detected}명)
+            </p>
+            <div className="flex gap-3 text-xs text-gray-500">
+              <span className="text-green-600">✅ 매칭 {r.matched_residents}명</span>
+              {(r.unmatched_residents ?? 0) > 0 && (
+                <span className="text-red-500">❌ 미매칭 {r.unmatched_residents}명</span>
+              )}
+            </div>
+          </div>
+          <ResidentResultTable residents={r.resident_results ?? []} auditId={record.id}/>
+        </div>
+      )}
 
       {r.issues.length === 0 && (
         <div className="bg-green-50 border border-green-100 rounded-2xl p-8 text-center">
@@ -866,6 +988,100 @@ function ScheduleTab({ schedules, isAdmin, onRefresh, onMsg }: {
             </table>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ── 수급자별 결과 테이블 ──────────────────────────────────────────────────────
+function ResidentResultTable({ residents, auditId }: { residents: ResidentResult[]; auditId: string }) {
+  const navigate = useNavigate()
+  const [search,    setSearch]    = useState('')
+  const [filter,    setFilter]    = useState<'all'|'issues'|'unmatched'|'high'>('all')
+
+  const filtered = residents.filter(r => {
+    const nameMatch = !search || r.resident_name.includes(search)
+    const filterMatch =
+      filter === 'all'       ? true :
+      filter === 'issues'    ? r.issues.length > 0 :
+      filter === 'unmatched' ? r.match_status === 'unmatched' :
+      filter === 'high'      ? (r.issue_summary.critical + r.issue_summary.high) > 0 : true
+    return nameMatch && filterMatch
+  })
+
+  return (
+    <div className="space-y-3">
+      {/* 검색/필터 */}
+      <div className="flex gap-2 flex-wrap">
+        <input value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="이름 검색"
+          className="border border-gray-200 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400/40 w-32"/>
+        {(['all','issues','high','unmatched'] as const).map(f => (
+          <button key={f} onClick={() => setFilter(f)}
+            className={`text-xs px-3 py-1.5 rounded-xl border transition-colors ${filter===f ? 'bg-blue-500 text-white border-blue-500' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+            {f==='all'?'전체':f==='issues'?'이슈 있음':f==='high'?'고위험':' 미매칭'}
+          </button>
+        ))}
+        <span className="text-xs text-gray-400 self-center">{filtered.length}명</span>
+      </div>
+
+      {/* 테이블 */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-gray-100 text-gray-400">
+              {['수급자명','생년월일','상태','등급','점수','즉시조치','중요','목욕','매칭','상세'].map(h => (
+                <th key={h} className="text-left py-2 px-2 font-semibold whitespace-nowrap">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {filtered.map((r, i) => {
+              const rowId = `${r.resident_name}-${i}`
+              const highCount = r.issue_summary.critical + r.issue_summary.high
+              return (
+                <>
+                  <tr key={rowId} className={`hover:bg-gray-50/50 ${highCount > 0 ? 'bg-red-50/20' : ''}`}>
+                    <td className="py-2 px-2 font-semibold text-gray-800">{r.resident_name}</td>
+                    <td className="py-2 px-2 text-gray-500">{r.birth_date || '-'}</td>
+                    <td className="py-2 px-2 text-gray-500 text-[10px]">{r.resident_status || '-'}</td>
+                    <td className="py-2 px-2">
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${GRADE_CLS[r.grade] ?? ''}`}>
+                        {r.grade}
+                      </span>
+                    </td>
+                    <td className="py-2 px-2 font-bold text-gray-700">{r.score}</td>
+                    <td className="py-2 px-2">
+                      {highCount > 0
+                        ? <span className="text-red-600 font-bold">{highCount}건</span>
+                        : <span className="text-green-500">✓</span>}
+                    </td>
+                    <td className="py-2 px-2 text-orange-600">{r.issue_summary.medium || '-'}</td>
+                    <td className="py-2 px-2">
+                      <span className={r.bathing_count >= 5 ? 'text-green-600' : 'text-red-500 font-bold'}>
+                        {r.bathing_count}회
+                      </span>
+                    </td>
+                    <td className="py-2 px-2">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+                        r.match_status === 'matched' ? 'bg-green-100 text-green-700' :
+                        r.match_status === 'unmatched' ? 'bg-red-100 text-red-700' :
+                        'bg-yellow-100 text-yellow-700'
+                      }`}>{r.match_status === 'matched' ? '매칭' : r.match_status === 'unmatched' ? '미매칭' : '동명이인'}</span>
+                    </td>
+                    <td className="py-2 px-2">
+                      <button
+                        onClick={() => navigate(`/eval/record-audit/${auditId}/resident/${encodeURIComponent(r.resident_name)}`)}
+                        className="text-blue-500 hover:text-blue-700 text-[10px] font-semibold underline-offset-2 hover:underline">
+                        상세 →
+                      </button>
+                    </td>
+                  </tr>
+                </>
+              )
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   )
