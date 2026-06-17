@@ -25,7 +25,13 @@ const LoginPage = () => {
     setError('')
     try {
       await login(email, password)
-      navigate('/')
+      // 로그인 직후 auth store에서 user 읽기
+      const { user } = useAuthStore.getState()
+      if (user?.role === 'STAFF' && user?.position === '요양보호사') {
+        navigate('/eval/albums', { replace: true })
+      } else {
+        navigate('/', { replace: true })
+      }
     } catch (err: any) {
       setError(err?.response?.data?.message || '로그인에 실패했습니다')
     }

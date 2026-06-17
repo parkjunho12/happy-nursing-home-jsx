@@ -5,7 +5,9 @@ import {
   Loader2, AlertCircle, RefreshCw,
 } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
+import { useAuthStore } from '@/store/auth'
 import { adminAlbumAPI } from '@/api/albumClient'
+import { canManageFamilyAccounts } from '@/utils/role'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 const PAGE_SIZE = 12
@@ -35,6 +37,8 @@ const mediaUrl = (url: string) =>
 // ── 메인 페이지 ───────────────────────────────────────────────────────────────
 export default function EvalAlbumPage() {
   const { residents, loaded, loadAll } = useLtcStore()
+  const { user } = useAuthStore()
+  const canManage = canManageFamilyAccounts(user)
 
   // 데이터
   const [albums,    setAlbums]    = useState<Album[]>([])
@@ -46,6 +50,11 @@ export default function EvalAlbumPage() {
   const [selMedia,  setSelMedia]  = useState<Media | null>(null)
   const [modal,     setModal]     = useState<ModalType>('none')
   const [tab,       setTab]       = useState<'albums' | 'guardians'>('albums')
+
+  // 요양보호사는 guardians 탭 접근 불가 — 강제로 albums로 돌려보냄
+  useEffect(() => {
+    if (!canManage && tab === 'guardians') setTab('albums')
+  }, [canManage, tab])
   const [uploading, setUploading] = useState(false)
   const [albumsLoading, setAlbumsLoading] = useState(false)
   const [albumsError,   setAlbumsError]   = useState('')
@@ -179,38 +188,46 @@ export default function EvalAlbumPage() {
   return (
     <div className="space-y-5">
       {/* 헤더 */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">보호자 앨범</h1>
-          <p className="text-sm text-gray-500 mt-0.5">수급자별 앨범을 관리하고 보호자에게 공개합니다</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">보호자 앨범 관리</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {canManage
+              ? '어르신 사진 공유와 보호자 계정을 함께 관리합니다.'
+              : '어르신 사진을 보호자님께 공유할 수 있습니다.'}
+          </p>
         </div>
         <div className="flex gap-2">
           {tab === 'albums' && (
             <button onClick={() => setModal('createAlbum')}
-              className="flex items-center gap-1.5 bg-primary-orange text-white text-sm font-semibold px-4 py-2 rounded-xl hover:bg-primary-orange/90 shadow-sm">
+              className="w-full sm:w-auto flex items-center justify-center gap-1.5 bg-primary-orange text-white text-sm font-semibold px-4 py-3 sm:py-2 rounded-xl hover:bg-primary-orange/90 shadow-sm">
               <Plus size={15}/> 앨범 만들기
             </button>
           )}
-          {tab === 'guardians' && (
+          {canManage && tab === 'guardians' && (
             <button onClick={() => setModal('createGuardian')}
-              className="flex items-center gap-1.5 bg-teal-600 text-white text-sm font-semibold px-4 py-2 rounded-xl hover:bg-teal-700 shadow-sm">
+              className="w-full sm:w-auto flex items-center justify-center gap-1.5 bg-teal-600 text-white text-sm font-semibold px-4 py-3 sm:py-2 rounded-xl hover:bg-teal-700 shadow-sm">
               <Plus size={15}/> 보호자 추가
             </button>
           )}
         </div>
       </div>
 
-      {/* 탭 */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
-        {(['albums','guardians'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-              tab===t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}>
-            {t==='albums' ? `앨범 관리 ${albums.length > 0 ? `(${albums.length})` : ''}` : '보호자 계정'}
-          </button>
-        ))}
-      </div>
+      {/* 탭 — 요양보호사는 앨범만, 그 외 2개 탭 */}
+      {canManage && (
+        <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+          {(['albums', 'guardians'] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}>
+              {t === 'albums'
+                ? `앨범 관리${albums.length > 0 ? ` (${albums.length})` : ''}`
+                : '보호자 계정'}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ── 앨범 탭 ── */}
       {tab === 'albums' && (
@@ -339,7 +356,7 @@ export default function EvalAlbumPage() {
           {/* 앨범 그리드 */}
           {!albumsLoading && !albumsError && pagedAlbums.length > 0 && (
             <>
-              <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {pagedAlbums.map(album => (
                   <AlbumCard
                     key={album.id}
@@ -366,8 +383,8 @@ export default function EvalAlbumPage() {
         </div>
       )}
 
-      {/* ── 보호자 탭 ── */}
-      {tab === 'guardians' && (
+      {/* ── 보호자 탭 — canManage인 경우만 렌더링 ── */}
+      {canManage && tab === 'guardians' && (
         <div className="space-y-3">
           {/* 보호자 검색 */}
           <div className="relative">
@@ -450,7 +467,7 @@ export default function EvalAlbumPage() {
         />
       )}
 
-      {modal === 'createGuardian' && (
+      {canManage && modal === 'createGuardian' && (
         <GuardianCreateModal
           residents={activeResidents}
           onClose={() => setModal('none')}
@@ -466,7 +483,7 @@ export default function EvalAlbumPage() {
         />
       )}
 
-      {editGuardian && (
+      {canManage && editGuardian && (
         <GuardianEditModal
           guardian={editGuardian}
           residents={activeResidents}
@@ -602,77 +619,312 @@ function MediaModal({ album, media, uploading, onUpload, onDeleteMedia, onViewMe
   fileRef: React.RefObject<HTMLInputElement>
   folderRef: React.RefObject<HTMLInputElement>
 }) {
+  const [selectMode, setSelectMode] = useState(false)
+  const [selected,   setSelected]   = useState<Set<string>>(new Set())
+  const [deleting,   setDeleting]   = useState(false)
+
+  const toggleSelect = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const deleteSelected = async () => {
+    if (!selected.size) return
+    if (!confirm(`선택한 ${selected.size}장을 삭제할까요?`)) return
+    setDeleting(true)
+    try {
+      await Promise.all([...selected].map(id => onDeleteMedia(id)))
+      setSelected(new Set())
+      setSelectMode(false)
+    } finally { setDeleting(false) }
+  }
+
+  const fmt = (s: string) => {
+    const d = new Date(s)
+    return `${d.getMonth()+1}/${d.getDate()}`
+  }
+
+  const photoCount = media.filter(m => m.media_type === 'photo').length
+  const videoCount = media.filter(m => m.media_type === 'video').length
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-4"
+    <div className="fixed inset-0 z-50 bg-black/70 flex flex-col"
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between px-5 py-4 border-b flex-shrink-0">
-          <div>
-            <h2 className="font-bold text-gray-900">{album.title}</h2>
-            <p className="text-xs text-gray-500">{album.resident_name} · {media.length}개</p>
+      <div className="bg-white flex flex-col h-full sm:h-auto sm:max-h-[95vh] sm:m-auto sm:w-full sm:max-w-2xl sm:rounded-3xl sm:shadow-2xl overflow-hidden">
+
+        {/* ── 헤더 ── */}
+        <div className="flex-shrink-0 bg-white border-b border-gray-100 px-4 pt-4 pb-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="font-bold text-gray-900 text-base leading-tight truncate">
+                {album.title}
+              </h2>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <span className="text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
+                  {album.resident_name}
+                </span>
+                {media.length > 0 && (
+                  <span className="text-xs text-gray-400">
+                    📸 {photoCount}장{videoCount > 0 ? ` · 🎬 ${videoCount}개` : ''}
+                  </span>
+                )}
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                  album.is_public ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                }`}>
+                  {album.is_public ? '공개중' : '비공개'}
+                </span>
+              </div>
+            </div>
+            <button onClick={onClose}
+              className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-xl hover:bg-gray-100 text-gray-500">
+              <X size={18}/>
+            </button>
           </div>
-          <div className="flex gap-2">
-            <button onClick={() => fileRef.current?.click()}
-              className="flex items-center gap-1.5 text-sm bg-primary-orange text-white px-3 py-1.5 rounded-xl font-semibold hover:bg-primary-orange/90">
-              <Upload size={13}/> 파일 추가
-            </button>
-            <button onClick={() => folderRef.current?.click()}
-              className="flex items-center gap-1.5 text-sm border border-gray-200 text-gray-600 px-3 py-1.5 rounded-xl hover:bg-gray-50">
-              <Folder size={13}/> 폴더
-            </button>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+
+          {/* 액션 바 */}
+          <div className="flex gap-2 mt-3">
+            {!selectMode ? (
+              <>
+                {/* 사진 업로드 — 모바일 메인 액션 */}
+                <button
+                  onClick={() => fileRef.current?.click()}
+                  className="flex-1 flex items-center justify-center gap-2 bg-primary-orange text-white py-3 rounded-2xl text-sm font-bold hover:bg-primary-orange/90 active:scale-95 transition-transform shadow-sm shadow-orange-200">
+                  <ImagePlus size={18}/> 사진 올리기
+                </button>
+                {/* 폴더 업로드 — 보조 */}
+                <button
+                  onClick={() => folderRef.current?.click()}
+                  className="flex items-center gap-1.5 px-3 py-3 border border-gray-200 rounded-2xl text-sm text-gray-600 hover:bg-gray-50">
+                  <Folder size={16}/>
+                  <span className="hidden sm:inline">폴더</span>
+                </button>
+                {/* 선택 삭제 모드 */}
+                {media.length > 0 && (
+                  <button
+                    onClick={() => setSelectMode(true)}
+                    className="flex items-center gap-1.5 px-3 py-3 border border-gray-200 rounded-2xl text-sm text-gray-600 hover:bg-gray-50">
+                    <Trash2 size={15}/>
+                    <span className="hidden sm:inline">선택삭제</span>
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={deleteSelected}
+                  disabled={selected.size === 0 || deleting}
+                  className="flex-1 flex items-center justify-center gap-2 bg-red-500 text-white py-3 rounded-2xl text-sm font-bold disabled:opacity-40 hover:bg-red-600">
+                  <Trash2 size={16}/>
+                  {deleting ? '삭제 중...' : selected.size > 0 ? `${selected.size}장 삭제` : '삭제할 사진 선택'}
+                </button>
+                <button
+                  onClick={() => { setSelectMode(false); setSelected(new Set()) }}
+                  className="px-4 py-3 border border-gray-200 rounded-2xl text-sm text-gray-600 hover:bg-gray-50">
+                  취소
+                </button>
+                {media.length > 0 && (
+                  <button
+                    onClick={() => setSelected(
+                      selected.size === media.length
+                        ? new Set()
+                        : new Set(media.map(m => m.id))
+                    )}
+                    className="px-3 py-3 border border-gray-200 rounded-2xl text-xs text-gray-600 hover:bg-gray-50">
+                    {selected.size === media.length ? '해제' : '전체'}
+                  </button>
+                )}
+              </>
+            )}
           </div>
         </div>
+
+        {/* 파일 인풋 */}
         <input ref={fileRef} type="file" multiple accept="image/*,video/*" className="hidden"
-          onChange={e => onUpload(e.target.files)}/>
+          onChange={e => { onUpload(e.target.files); e.target.value = '' }}/>
         <input ref={folderRef} type="file" multiple accept="image/*,video/*" className="hidden"
           {...{ webkitdirectory: '', directory: '' } as any}
-          onChange={e => onUpload(e.target.files)}/>
+          onChange={e => { onUpload(e.target.files); e.target.value = '' }}/>
 
-        <div className="flex-1 overflow-y-auto p-4">
+        {/* ── 콘텐츠 ── */}
+        <div className="flex-1 overflow-y-auto bg-gray-50">
+
+          {/* 업로드 진행 중 */}
           {uploading && (
-            <div className="flex items-center justify-center py-6 gap-2 text-primary-orange">
-              <Loader2 size={18} className="animate-spin"/>
-              <span className="text-sm">업로드 중...</span>
+            <div className="flex flex-col items-center justify-center py-8 gap-3 bg-orange-50 border-b border-orange-100">
+              <Loader2 size={28} className="animate-spin text-primary-orange"/>
+              <p className="text-sm font-semibold text-primary-orange">사진 올리는 중...</p>
+              <p className="text-xs text-orange-400">잠시만 기다려주세요</p>
             </div>
           )}
-          <div
-            onDragOver={e => e.preventDefault()}
-            onDrop={e => { e.preventDefault(); onUpload(e.dataTransfer.files) }}
-            onClick={() => fileRef.current?.click()}
-            className={`border-2 border-dashed border-gray-200 rounded-xl p-4 mb-4 text-center text-sm text-gray-400 hover:border-primary-orange hover:text-primary-orange transition-colors cursor-pointer ${media.length === 0 ? 'py-10' : 'py-3'}`}>
-            {media.length === 0
-              ? '여기에 사진/영상을 드래그하거나 클릭하세요'
-              : '+ 추가 업로드'}
-          </div>
+
+          {/* 빈 상태 — 드래그 영역 */}
+          {media.length === 0 && !uploading && (
+            <div
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => { e.preventDefault(); onUpload(e.dataTransfer.files) }}
+              onClick={() => fileRef.current?.click()}
+              className="flex flex-col items-center justify-center py-20 px-6 gap-4 cursor-pointer group">
+              <div className="w-20 h-20 bg-orange-100 rounded-3xl flex items-center justify-center group-hover:bg-orange-200 transition-colors">
+                <ImagePlus size={36} className="text-primary-orange"/>
+              </div>
+              <div className="text-center">
+                <p className="font-bold text-gray-700 text-lg">아직 사진이 없어요</p>
+                <p className="text-sm text-gray-400 mt-1">여기를 눌러 사진을 추가하거나<br/>위의 <b>사진 올리기</b> 버튼을 눌러주세요</p>
+              </div>
+            </div>
+          )}
+
+          {/* 사진 그리드 */}
           {media.length > 0 && (
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-              {media.map(m => (
-                <div key={m.id} className="relative group aspect-square bg-gray-100 rounded-xl overflow-hidden cursor-pointer"
-                  onClick={() => onViewMedia(m)}>
-                  {m.media_type === 'photo' ? (
-                    <img
-                      src={mediaUrl(m.thumbnail_url || m.file_url)}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                      decoding="async"
-                      alt=""/>
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gray-800">
-                      <Play size={24} className="text-white"/>
-                    </div>
-                  )}
-                  <button
-                    onClick={e => { e.stopPropagation(); onDeleteMedia(m.id) }}
-                    className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <X size={11}/>
-                  </button>
+            <div className="p-3">
+              {/* 드래그 업로드 존 (소형) */}
+              {!selectMode && (
+                <div
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={e => { e.preventDefault(); onUpload(e.dataTransfer.files) }}
+                  onClick={() => fileRef.current?.click()}
+                  className="flex items-center gap-2 mb-3 p-3 border border-dashed border-gray-300 rounded-2xl text-sm text-gray-400 hover:border-primary-orange hover:text-primary-orange transition-colors cursor-pointer">
+                  <Upload size={14}/> 여기에 사진을 드래그하거나 눌러서 추가
                 </div>
-              ))}
+              )}
+
+              {/* 날짜별 그룹 */}
+              <MediaGrid
+                media={media}
+                selectMode={selectMode}
+                selected={selected}
+                onToggle={toggleSelect}
+                onView={onViewMedia}
+                onDelete={onDeleteMedia}
+                fmt={fmt}
+              />
             </div>
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── 미디어 그리드 (날짜별 그룹화) ───────────────────────────────────────────
+function MediaGrid({ media, selectMode, selected, onToggle, onView, onDelete, fmt }: {
+  media: Media[]
+  selectMode: boolean
+  selected: Set<string>
+  onToggle: (id: string) => void
+  onView: (m: Media) => void
+  onDelete: (id: string) => void
+  fmt: (s: string) => string
+}) {
+  // 날짜별 그룹화
+  const groups = media.reduce<Record<string, Media[]>>((acc, m) => {
+    const day = m.created_at.slice(0, 10)
+    if (!acc[day]) acc[day] = []
+    acc[day].push(m)
+    return acc
+  }, {})
+
+  const sortedDays = Object.keys(groups).sort((a, b) => b.localeCompare(a))
+
+  const formatDay = (s: string) => {
+    const d = new Date(s)
+    const weekday = ['일','월','화','수','목','금','토'][d.getDay()]
+    return `${d.getMonth()+1}월 ${d.getDate()}일 (${weekday})`
+  }
+
+  return (
+    <div className="space-y-5">
+      {sortedDays.map(day => (
+        <div key={day}>
+          <p className="text-xs font-semibold text-gray-400 mb-2 px-1 flex items-center gap-2">
+            <span className="bg-gray-200 rounded-full px-2.5 py-0.5">{formatDay(day)}</span>
+            <span className="text-gray-300">{groups[day].length}장</span>
+          </p>
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
+            {groups[day].map(m => (
+              <MediaTile key={m.id} m={m}
+                selectMode={selectMode}
+                isSelected={selected.has(m.id)}
+                onToggle={() => onToggle(m.id)}
+                onView={() => onView(m)}
+                onDelete={() => onDelete(m.id)}
+                fmt={fmt}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── 미디어 타일 ──────────────────────────────────────────────────────────────
+function MediaTile({ m, selectMode, isSelected, onToggle, onView, onDelete, fmt }: {
+  m: Media; selectMode: boolean; isSelected: boolean
+  onToggle: () => void; onView: () => void; onDelete: () => void
+  fmt: (s: string) => string
+}) {
+  const url = m.thumbnail_url || m.file_url
+
+  const handleClick = () => {
+    if (selectMode) onToggle()
+    else onView()
+  }
+
+  return (
+    <div
+      onClick={handleClick}
+      className={`relative aspect-square rounded-2xl overflow-hidden cursor-pointer transition-all ${
+        isSelected ? 'ring-3 ring-primary-orange scale-95' : 'hover:opacity-90'
+      }`}>
+      {/* 이미지 / 영상 */}
+      {m.media_type === 'photo' ? (
+        <img src={mediaUrl(url)} alt=""
+          className="w-full h-full object-cover"
+          loading="lazy" decoding="async"/>
+      ) : (
+        <div className="w-full h-full bg-gray-900 flex items-center justify-center">
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+              <Play size={18} className="text-white ml-0.5"/>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 선택 체크 */}
+      {selectMode && (
+        <div className={`absolute top-2 left-2 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
+          isSelected
+            ? 'bg-primary-orange border-primary-orange'
+            : 'bg-white/80 border-gray-300'
+        }`}>
+          {isSelected && (
+            <svg className="w-3.5 h-3.5 text-white" viewBox="0 0 12 12" fill="none">
+              <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          )}
+        </div>
+      )}
+
+      {/* 날짜 (선택 모드 아닐 때) */}
+      {!selectMode && (
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-2 py-1.5">
+          <p className="text-[10px] text-white/90">{fmt(m.created_at)}</p>
+        </div>
+      )}
+
+      {/* 삭제 버튼 — 일반 모드, 모바일 친화적으로 항상 표시 */}
+      {!selectMode && (
+        <button
+          onClick={e => { e.stopPropagation(); if (confirm('이 사진을 삭제할까요?')) onDelete() }}
+          className="absolute top-1.5 right-1.5 w-7 h-7 bg-black/50 hover:bg-red-500 text-white rounded-full flex items-center justify-center transition-colors sm:opacity-0 sm:group-hover:opacity-100">
+          <X size={12}/>
+        </button>
+      )}
     </div>
   )
 }
@@ -683,65 +935,245 @@ function AlbumCreateModal({ residents, defaultResidentId, onClose, onCreated }: 
   defaultResidentId?: string
   onClose: ()=>void; onCreated: ()=>void
 }) {
-  const [form, setForm] = useState({
-    title: '', resident_id: defaultResidentId ?? '',
-    description: '', is_public: true,
-  })
-  const [saving, setSaving] = useState(false)
+  const [title,      setTitle]      = useState('')
+  const [desc,       setDesc]       = useState('')
+  const [isPublic,   setIsPublic]   = useState(true)
+  const [selIds,     setSelIds]     = useState<string[]>(
+    defaultResidentId ? [defaultResidentId] : []
+  )
+  const [search,     setSearch]     = useState('')
+  const [saving,     setSaving]     = useState(false)
+  const [error,      setError]      = useState('')
+
   const ic = "w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40"
 
+  const filtered = residents.filter(r =>
+    !search || r.name.includes(search)
+  )
+
+  const toggle = (id: string) =>
+    setSelIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
+
+  const selectAll = () => setSelIds(filtered.map(r => r.id))
+  const clearAll  = () => setSelIds([])
+
   const submit = async () => {
-    if (!form.title || !form.resident_id) return
-    setSaving(true)
+    if (!title.trim())      { setError('앨범 제목을 입력하세요'); return }
+    if (selIds.length === 0) { setError('수급자를 1명 이상 선택하세요'); return }
+    setSaving(true); setError('')
     try {
       const fd = new FormData()
-      Object.entries(form).forEach(([k,v]) => fd.append(k, String(v)))
+      fd.append('title',        title.trim())
+      fd.append('description',  desc.trim())
+      fd.append('is_public',    String(isPublic))
+      fd.append('resident_ids', JSON.stringify(selIds))
       await adminAlbumAPI.createAlbum(fd)
       onCreated()
+    } catch (e: any) {
+      setError(e?.response?.data?.detail ?? '앨범 생성 중 오류가 발생했습니다')
     } finally { setSaving(false) }
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
-      onClick={e => e.target===e.currentTarget && onClose()}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-bold text-gray-900 text-lg">새 앨범 만들기</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg max-h-[92vh] flex flex-col">
+        {/* 헤더 */}
+        <div className="flex items-center justify-between px-5 py-4 border-b flex-shrink-0">
+          <div>
+            <h2 className="font-bold text-gray-900 text-lg">새 앨범 만들기</h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              여러 어르신을 선택하면 각각 앨범이 생성됩니다
+            </p>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 text-gray-400">
+            <X size={18}/>
+          </button>
         </div>
-        <div className="space-y-3">
-          <div>
-            <label className="text-xs font-semibold text-gray-600 mb-1 block">수급자 *</label>
-            <select className={ic} value={form.resident_id}
-              onChange={e => setForm({...form, resident_id: e.target.value})}>
-              <option value="">수급자 선택</option>
-              {residents.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-            </select>
+
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-5 space-y-4">
+            {/* 앨범 제목 */}
+            <div>
+              <label className="text-xs font-semibold text-gray-600 mb-1.5 block">
+                앨범 제목 <span className="text-red-400">*</span>
+              </label>
+              <input className={ic} value={title} autoFocus
+                onChange={e => setTitle(e.target.value)}
+                placeholder="예: 2026년 봄 나들이"/>
+            </div>
+
+            {/* 수급자 선택 */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold text-gray-600">
+                  수급자 선택 <span className="text-red-400">*</span>
+                  {selIds.length > 0 && (
+                    <span className="ml-1.5 bg-primary-orange text-white text-[10px] px-1.5 py-0.5 rounded-full">
+                      {selIds.length}명 선택
+                    </span>
+                  )}
+                </label>
+                <div className="flex gap-2">
+                  <button onClick={selectAll}
+                    className="text-[11px] text-primary-orange hover:underline font-semibold">
+                    전체선택
+                  </button>
+                  <button onClick={clearAll}
+                    className="text-[11px] text-gray-400 hover:underline">
+                    초기화
+                  </button>
+                </div>
+              </div>
+
+              {/* 검색 */}
+              <div className="relative mb-2">
+                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
+                <input value={search} onChange={e => setSearch(e.target.value)}
+                  placeholder="수급자 이름 검색"
+                  className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-orange/40"/>
+                {search && (
+                  <button onClick={() => setSearch('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+                    <X size={12}/>
+                  </button>
+                )}
+              </div>
+
+              {/* 수급자 목록 */}
+              <div className="border border-gray-200 rounded-2xl overflow-hidden max-h-52 overflow-y-auto">
+                {filtered.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-6">검색 결과 없음</p>
+                ) : (
+                  <div className="divide-y divide-gray-50">
+                    {filtered.map(r => {
+                      const selected = selIds.includes(r.id)
+                      return (
+                        <button key={r.id} onClick={() => toggle(r.id)}
+                          className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                            selected ? 'bg-orange-50' : 'hover:bg-gray-50'
+                          }`}>
+                          {/* 체크박스 */}
+                          <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                            selected
+                              ? 'bg-primary-orange border-primary-orange'
+                              : 'border-gray-300'
+                          }`}>
+                            {selected && (
+                              <svg className="w-3 h-3 text-white" viewBox="0 0 12 12" fill="none">
+                                <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            )}
+                          </div>
+                          {/* 아바타 */}
+                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                            r.gender === 'female' ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'
+                          }`}>
+                            {r.name[0]}
+                          </div>
+                          <span className={`text-sm font-medium ${selected ? 'text-primary-orange' : 'text-gray-700'}`}>
+                            {r.name}
+                          </span>
+                          {selected && (
+                            <span className="ml-auto text-[10px] text-primary-orange font-semibold">✓</span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* 선택된 수급자 태그 */}
+              {selIds.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {selIds.map(id => {
+                    const r = residents.find(r => r.id === id)
+                    if (!r) return null
+                    return (
+                      <span key={id}
+                        className="flex items-center gap-1 text-xs bg-orange-100 text-primary-orange px-2.5 py-1 rounded-full font-medium">
+                        {r.name}
+                        <button onClick={() => toggle(id)} className="hover:text-red-500">
+                          <X size={10}/>
+                        </button>
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* 설명 */}
+            <div>
+              <label className="text-xs font-semibold text-gray-600 mb-1.5 block">설명</label>
+              <textarea className={ic} rows={2} value={desc}
+                onChange={e => setDesc(e.target.value)}
+                placeholder="앨범에 대한 설명을 입력하세요"/>
+            </div>
+
+            {/* 공개 여부 */}
+            <label className="flex items-center gap-3 cursor-pointer p-3 rounded-xl hover:bg-gray-50 border border-gray-100">
+              <input type="checkbox" checked={isPublic}
+                onChange={e => setIsPublic(e.target.checked)}
+                className="w-4 h-4 accent-orange-500"/>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-700">보호자에게 공개</p>
+                <p className="text-xs text-gray-400">
+                  {isPublic ? '보호자 앱에서 이 앨범을 볼 수 있습니다' : '보호자에게 숨겨집니다'}
+                </p>
+              </div>
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                isPublic ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+              }`}>{isPublic ? '공개' : '비공개'}</span>
+            </label>
+
+            {/* 미리보기 */}
+            {selIds.length > 1 && title && (
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
+                <p className="text-xs font-semibold text-blue-700 mb-1">📋 생성 예시</p>
+                <div className="space-y-0.5">
+                  {selIds.slice(0, 3).map(id => {
+                    const r = residents.find(r => r.id === id)
+                    return r ? (
+                      <p key={id} className="text-xs text-blue-600">
+                        · {r.name} — "{title}"
+                      </p>
+                    ) : null
+                  })}
+                  {selIds.length > 3 && (
+                    <p className="text-xs text-blue-400">... 외 {selIds.length - 3}명</p>
+                  )}
+                </div>
+                <p className="text-xs text-blue-500 mt-1.5">
+                  총 {selIds.length}개 앨범이 생성됩니다
+                </p>
+              </div>
+            )}
+
+            {error && (
+              <div className="bg-red-50 border border-red-100 rounded-xl px-3 py-2.5 text-xs text-red-600 flex items-center gap-2">
+                <AlertCircle size={13}/> {error}
+              </div>
+            )}
           </div>
-          <div>
-            <label className="text-xs font-semibold text-gray-600 mb-1 block">앨범 제목 *</label>
-            <input className={ic} value={form.title}
-              onChange={e => setForm({...form, title: e.target.value})} placeholder="예: 2026년 봄 나들이"/>
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-gray-600 mb-1 block">설명</label>
-            <textarea className={ic} rows={2} value={form.description}
-              onChange={e => setForm({...form, description: e.target.value})}/>
-          </div>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={form.is_public}
-              onChange={e => setForm({...form, is_public: e.target.checked})}
-              className="w-4 h-4 accent-orange-500"/>
-            <span className="text-sm text-gray-700">보호자에게 공개</span>
-          </label>
         </div>
-        <div className="flex gap-3 pt-1">
-          <button onClick={submit} disabled={saving || !form.title || !form.resident_id}
-            className="flex-1 bg-primary-orange text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-primary-orange/90 disabled:opacity-50">
-            {saving ? '만드는 중...' : '앨범 만들기'}
+
+        {/* 하단 버튼 */}
+        <div className="flex gap-3 px-5 py-4 border-t flex-shrink-0">
+          <button onClick={submit}
+            disabled={saving || !title.trim() || selIds.length === 0}
+            className="flex-1 bg-primary-orange text-white py-3 rounded-xl text-sm font-semibold hover:bg-primary-orange/90 disabled:opacity-50 transition-colors">
+            {saving
+              ? '생성 중...'
+              : selIds.length > 1
+                ? `앨범 ${selIds.length}개 만들기`
+                : '앨범 만들기'}
           </button>
           <button onClick={onClose}
-            className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-xl text-sm hover:bg-gray-50">취소</button>
+            className="px-5 border border-gray-200 text-gray-700 py-3 rounded-xl text-sm hover:bg-gray-50">
+            취소
+          </button>
         </div>
       </div>
     </div>

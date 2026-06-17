@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useAuditStore } from '@/store/auditStore'
 import {
   FileSpreadsheet, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp,
-  Loader2, History, X, Printer, RefreshCw, Settings,
-  Users, CalendarOff, Trash2, Upload, Edit3, Save, Sparkles, Clock, Plus,
+  Loader2, History, X, Printer, RefreshCw, ShieldCheck, Settings,
+  Users, CalendarOff, Trash2, Upload, Edit3, Save, Check, Sparkles, Clock, Plus,
 } from 'lucide-react'
 import { apiClient } from '@/api/client'
 import { useAuthStore } from '@/store/auth'
@@ -131,7 +131,14 @@ export default function EvalRecordAuditPage() {
   const result    = currentAudit
   const setResult = (r: AuditRecord | null) => setCurrentAudit(r)
 
-  const [tab, setTab] = useState<'audit'|'residents'|'leaves'|'schedules'|'rules'>('audit')
+  type TabType =
+  | 'audit'
+  | 'residents'
+  | 'leaves'
+  | 'rules'
+  | 'schedules'
+
+const [tab, setTab] = useState<TabType>('audit')
 
   // 검수 탭
   const [dragging,    setDragging]    = useState(false)
@@ -480,7 +487,7 @@ export default function EvalRecordAuditPage() {
 
       {/* ── 검수 룰 탭 ── */}
       {tab === 'rules' && (
-        <RulesTab isAdmin={isAdmin}/>
+        <RulesTab isAdmin={isAdmin} onRefresh={loadAll}/>
       )}
     </div>
   )
@@ -492,7 +499,7 @@ interface AuditRule {
   created_at: string; updated_at: string
 }
 
-function RulesTab({ isAdmin }: { isAdmin: boolean }) {
+function RulesTab({ isAdmin, onRefresh }: { isAdmin: boolean; onRefresh: ()=>void }) {
   const [rules,   setRules]   = useState<AuditRule[]>([])
   const [loading, setLoading] = useState(true)
   const [adding,  setAdding]  = useState(false)
@@ -513,7 +520,7 @@ function RulesTab({ isAdmin }: { isAdmin: boolean }) {
 
   useEffect(() => { load() }, [])
 
-  const toggle = async (id: number) => {
+  const toggle = async (id: number, cur: boolean) => {
     await apiClient.patch(`/api/v1/eval/record-audit/rules/${id}/toggle`)
     load()
   }
@@ -578,16 +585,8 @@ function RulesTab({ isAdmin }: { isAdmin: boolean }) {
           <input value={newTitle} onChange={e => setNewTitle(e.target.value)}
             placeholder="룰 제목 (예: 시설 자체 추가 기준)"
             className="w-full border border-orange-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400/40"/>
-          <textarea
-            value={newContent}
-            onChange={e => setNewContent(e.target.value)}
-            rows={8}
-            placeholder={`[HIGH] 예시 룰
-- 매일 오전 10시 체온 측정 기록 필수
-- 식사량은 분수(2/3공기)로 기재
-
-[MEDIUM] 권고 사항
-- 목욕은 주 2회 기록 권장`}
+          <textarea value={newContent} onChange={e => setNewContent(e.target.value)}
+            rows={8} placeholder={`[HIGH] 예시 룰\n- 매일 오전 10시 체온 측정 기록 필수\n- 식사량은 분수(2/3공기)로 기재\n\n[MEDIUM] 권고 사항\n- 목욕은 주 2회 기록 권장`}
             className="w-full border border-orange-200 rounded-xl px-3 py-2.5 text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-orange-400/40 resize-none"/>
           <div className="flex gap-2">
             <button onClick={save} disabled={saving}
@@ -619,7 +618,7 @@ function RulesTab({ isAdmin }: { isAdmin: boolean }) {
               <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-50">
                 {/* 활성 토글 */}
                 {isAdmin && (
-                  <button onClick={() => toggle(rule.id)} title={rule.is_active ? '비활성화' : '활성화'}
+                  <button onClick={() => toggle(rule.id, rule.is_active)} title={rule.is_active ? '비활성화' : '활성화'}
                     className={`flex-shrink-0 w-9 h-5 rounded-full transition-colors relative ${rule.is_active ? 'bg-green-500' : 'bg-gray-300'}`}>
                     <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${rule.is_active ? 'left-4' : 'left-0.5'}`}/>
                   </button>
@@ -998,6 +997,7 @@ function ResidentResultTable({ residents, auditId }: { residents: ResidentResult
   const navigate = useNavigate()
   const [search,    setSearch]    = useState('')
   const [filter,    setFilter]    = useState<'all'|'issues'|'unmatched'|'high'>('all')
+  const [expandedId, setExpandedId] = useState<string|null>(null)
 
   const filtered = residents.filter(r => {
     const nameMatch = !search || r.resident_name.includes(search)
@@ -1038,6 +1038,7 @@ function ResidentResultTable({ residents, auditId }: { residents: ResidentResult
           <tbody className="divide-y divide-gray-50">
             {filtered.map((r, i) => {
               const rowId = `${r.resident_name}-${i}`
+              const isOpen = expandedId === rowId
               const highCount = r.issue_summary.critical + r.issue_summary.high
               return (
                 <>
@@ -1077,6 +1078,30 @@ function ResidentResultTable({ residents, auditId }: { residents: ResidentResult
                       </button>
                     </td>
                   </tr>
+                  {isOpen && (
+                    <tr key={`${rowId}-detail`}>
+                      <td colSpan={10} className="pb-3 px-2">
+                        <div className="space-y-1.5 mt-1">
+                          {r.issues.slice(0, 10).map((iss, ii) => (
+                            <div key={ii} className={`rounded-xl border px-3 py-2 text-xs ${SEV[iss.severity] ?? SEV.low}`}>
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${SEV[iss.severity]}`}>
+                                  {SEV_LABEL[iss.severity]}
+                                </span>
+                                <span className="font-semibold opacity-60">{iss.type}</span>
+                                <span className="opacity-50">{iss.location}</span>
+                              </div>
+                              <p className="font-semibold">{iss.description}</p>
+                              {iss.suggestion && <p className="opacity-70 mt-0.5">{iss.suggestion}</p>}
+                            </div>
+                          ))}
+                          {r.issues.length > 10 && (
+                            <p className="text-xs text-center text-gray-400">외 {r.issues.length - 10}건</p>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                 </>
               )
             })}
