@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './store/auth'
 import { useLtcStore } from './store/ltc'
@@ -46,6 +46,24 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 // ADMIN 전용 route guard — STAFF가 직접 URL 접근 시 /eval/checklist 로 redirect
+function RoleRedirect({ children }: { children: React.ReactNode }) {
+  const { user, isAuthenticated } = useAuthStore()
+  const location = useLocation()
+
+  if (!isAuthenticated) return <>{children}</>
+
+  const isCaregiverOnly = user?.role === 'STAFF' && user?.position === '요양보호사'
+  const isAllowed =
+    location.pathname === '/eval/albums' ||
+    location.pathname.startsWith('/eval/albums/')
+
+  if (isCaregiverOnly && !isAllowed) {
+    return <Navigate to="/eval/albums" replace />
+  }
+
+  return <>{children}</>
+}
+
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
@@ -92,7 +110,9 @@ function App() {
             path="/"
             element={
               <ProtectedRoute>
-                <Layout />
+                <RoleRedirect>
+                  <Layout />
+                </RoleRedirect>
               </ProtectedRoute>
             }
           >

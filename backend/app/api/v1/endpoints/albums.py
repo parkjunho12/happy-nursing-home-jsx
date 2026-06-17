@@ -16,6 +16,7 @@ from jose import jwt, JWTError
 
 from app.core.database import get_db
 from app.core.security import get_current_user
+from app.models.user import User
 from app.models.album import GuardianAccount, ResidentGuardian, Album, AlbumMedia
 from app.models.eval import LtcResident
 from app.schemas.response import ApiResponse
@@ -112,8 +113,18 @@ def _media_dict(m: AlbumMedia) -> dict:
 # 관리자 API
 # ══════════════════════════════════════════════════════════════════════════════
 
+
+def _require_can_manage_guardians(current_user: User):
+    """ADMIN 또는 사회복지사만 보호자 계정 관리 가능"""
+    if current_user.role == 'ADMIN':
+        return
+    if getattr(current_user, 'position', None) == '사회복지사':
+        return
+    raise HTTPException(403, "보호자 계정 관리 권한이 없습니다. ADMIN 또는 사회복지사만 접근 가능합니다.")
+
 @admin_router.get("/guardians")
-def list_guardians(db: Session = Depends(get_db), _=Depends(get_current_user)):
+def list_guardians(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    _require_can_manage_guardians(current_user)
     guardians = db.query(GuardianAccount).order_by(GuardianAccount.created_at.desc()).all()
     result = []
     for g in guardians:
@@ -159,7 +170,8 @@ def create_guardian(
 
 
 @admin_router.delete("/guardians/{guardian_id}")
-def delete_guardian(guardian_id: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+def delete_guardian(guardian_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    _require_can_manage_guardians(current_user)
     g = db.query(GuardianAccount).filter(GuardianAccount.id == guardian_id).first()
     if not g: raise HTTPException(404, "보호자를 찾을 수 없습니다")
     db.query(ResidentGuardian).filter(ResidentGuardian.guardian_id == guardian_id).delete()
@@ -248,18 +260,36 @@ def list_albums(
 @admin_router.post("/albums")
 def create_album(
     title: str = Form(...),
-    resident_id: str = Form(...),
+    resident_ids: str = Form(...),   # JSON 배열 문자열 "[id1, id2]" 또는 단일 ID
     description: Optional[str] = Form(None),
     is_public: bool = Form(True),
     db: Session = Depends(get_db),
     _=Depends(get_current_user),
 ):
-    a = Album(
-        id=str(uuid.uuid4()), title=title,
-        resident_id=resident_id, description=description, is_public=is_public,
-    )
-    db.add(a); db.commit(); db.refresh(a)
-    return ApiResponse(success=True, data={"id": a.id, "title": a.title})
+    import json as _json
+    # resident_ids 파싱 — 단일 ID 또는 JSON 배열 모두 허용
+    try:
+        ids = _json.loads(resident_ids)
+        if isinstance(ids, str):
+            ids = [ids]
+    except Exception:
+        ids = [resident_ids]
+
+    ids = [i for i in ids if i and str(i).strip()]
+    if not ids:
+        raise HTTPException(400, "수급자를 1명 이상 선택하세요")
+
+    created = []
+    for rid in ids:
+        a = Album(
+            id=str(uuid.uuid4()), title=title,
+            resident_id=rid, description=description, is_public=is_public,
+        )
+        db.add(a)
+        created.append({"id": a.id, "title": a.title, "resident_id": rid})
+
+    db.commit()
+    return ApiResponse(success=True, data={"created": created, "count": len(created)})
 
 
 @admin_router.patch("/albums/{album_id}")
