@@ -2,8 +2,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import {
   ArrowLeft, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp,
-  User, Calendar, Activity, Heart, Brain, Dumbbell, ShieldCheck,
-  Clock, Thermometer, Utensils, Bath,
+  User, Calendar, Activity, ShieldCheck,
+  Clock, Thermometer, Bath,
 } from 'lucide-react'
 import { apiClient } from '@/api/client'
 import { useAuditStore } from '@/store/auditStore'
@@ -125,8 +125,6 @@ export default function EvalRecordAuditDetailPage() {
     if (!issuesByType[i.type]) issuesByType[i.type] = []
     issuesByType[i.type].push(i)
   })
-
-  const critCount = resident.issue_summary.critical + resident.issue_summary.high
 
   return (
     <div className="space-y-5">
