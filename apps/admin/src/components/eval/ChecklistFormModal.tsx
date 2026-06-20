@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { AlertCircle } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
+import { useAuthStore } from '@/store/auth'
+import { apiClient } from '@/api/client'
 import type { ChecklistItem } from '@/utils/period'
 import { RECURRING, EVENT_FREQS, FREQUENCY_LABELS, FREQUENCY_COLORS } from '@/utils/period'
 import { todayKST } from '@/utils/period'
@@ -31,7 +33,28 @@ interface Props {
 
 export default function ChecklistFormModal({ existing, onClose }: Props) {
   const { addChecklist, updateChecklist, domains, categories, indicators, residents, staffList } = useLtcStore()
+  const { user } = useAuthStore()
   const isEdit = !!existing
+
+  // 담당자(계정) 후보 목록 + 선택값 (기본값: 본인)
+  const [assigneeOptions, setAssigneeOptions] = useState<
+    Array<{ id: string; name: string; position?: string | null }>
+  >([])
+  // 신규 생성 시: 관리자는 '지정 안 함'(기존 동작 유지), 직원은 본인이 기본값
+  const isAdmin = user?.role === 'ADMIN'
+  const [assignedUserId, setAssignedUserId] = useState<string>(
+    (existing as any)?.assigned_user_id ?? (isAdmin ? '' : (user?.id ?? '')),
+  )
+
+  useEffect(() => {
+    apiClient
+      .get('/api/v1/users/assignee-options')
+      .then(res => {
+        const data = Array.isArray(res.data) ? res.data : (res.data as any)?.data ?? []
+        setAssigneeOptions(data)
+      })
+      .catch(err => console.error('assignee-options 로드 실패:', err))
+  }, [])
 
   const [form, setForm] = useState({
     title:              existing?.title              ?? '',
@@ -98,6 +121,7 @@ export default function ChecklistFormModal({ existing, onClose }: Props) {
         relatedCategoryId:  form.relatedCategoryId,
         relatedDomainId:    form.relatedDomainId,
         assignee:           form.assignee,
+        assigned_user_id:   assignedUserId || null,
         evidenceRequired:   form.evidenceRequired,
         storageLocation:    form.storageLocation,
         howTo:              form.howTo,
@@ -263,11 +287,25 @@ export default function ChecklistFormModal({ existing, onClose }: Props) {
           {/* 담당자 / 대상자 */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1.5">담당자</label>
-              <input className={ic} value={form.assignee}
-                onChange={e => setForm({ ...form, assignee: e.target.value })}
-                placeholder="예: 사회복지사"
-              />
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">담당자 지정</label>
+              <select
+                className={ic}
+                value={assignedUserId}
+                onChange={e => {
+                  const id = e.target.value
+                  setAssignedUserId(id)
+                  const picked = assigneeOptions.find(o => o.id === id)
+                  setForm({ ...form, assignee: picked ? picked.name : '' })
+                }}
+              >
+                <option value="">지정 안 함</option>
+                {assigneeOptions.map(o => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}{o.position ? ` (${o.position})` : ''}{user && o.id === user.id ? ' · 나' : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-gray-400 mt-1">지정된 담당자 계정에만 이 항목이 보입니다.</p>
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1.5">대상 (개인별)</label>

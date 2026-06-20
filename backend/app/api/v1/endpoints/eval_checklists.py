@@ -116,7 +116,7 @@ def get_checklist(item_id: str, db: Session = Depends(get_db), _: User = Depends
 def create_checklist(
     payload: ChecklistItemCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     item = ChecklistItem(
         title=payload.title, description=payload.description,
@@ -132,6 +132,25 @@ def create_checklist(
         person_type=payload.person_type, template_id=payload.template_id,
         active=True, completed=False,
     )
+
+    # 담당자 지정 처리
+    # - payload.assigned_user_id 가 오면 그 계정으로 지정
+    # - 없고 STAFF 가 만든 항목이면 본인에게 자동 배정(본인 목록에 바로 보임)
+    # - ADMIN 이 미지정으로 만들면 미배정 상태(이후 담당자 지정 가능)
+    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    assigned_id = (payload.assigned_user_id or "").strip() or None
+    if not assigned_id and role != "ADMIN":
+        assigned_id = current_user.id
+
+    if assigned_id:
+        assignee_user = db.query(User).filter(User.id == assigned_id).first()
+        if not assignee_user:
+            raise HTTPException(404, f"담당자 계정을 찾을 수 없습니다: {assigned_id}")
+        item.assigned_user_id = assigned_id
+        # 담당자 표기(assignee)가 비어 있으면 계정 이름으로 채움
+        if not (item.assignee or "").strip():
+            item.assignee = assignee_user.name
+
     db.add(item)
     db.flush()  # id 확보
 
