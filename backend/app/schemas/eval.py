@@ -110,6 +110,7 @@ class ChecklistItemCreate(BaseModel):
     person_type:          Optional[str] = "facility"
     template_id:          Optional[str] = None
     due_date:             Optional[str] = None
+    assigned_user_id:     Optional[str] = None   # 담당자 계정(조회/소유). 미지정 시 STAFF는 본인 자동 배정
 
 
 class ChecklistItemUpdate(BaseModel):
@@ -120,6 +121,7 @@ class ChecklistItemUpdate(BaseModel):
     related_category_id:  Optional[str] = None
     related_domain_id:    Optional[str] = None
     assignee:             Optional[str] = None
+    assigned_user_id:     Optional[str] = None
     evidence_required:    Optional[str] = None
     storage_location:     Optional[str] = None
     how_to:               Optional[str] = None

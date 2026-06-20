@@ -49,6 +49,23 @@ def _occ_to_dict(occ: ChecklistOccurrence) -> dict:
     }
 
 
+def _restrict_to_user(q, db: Session, current_user: User):
+    """
+    STAFF는 본인에게 배정된(assigned_user_id) 체크리스트의 occurrence만 조회.
+    ADMIN은 전체 조회.
+    """
+    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    if role != "ADMIN":
+        q = q.filter(
+            ChecklistOccurrence.checklist_item_id.in_(
+                db.query(ChecklistItem.id).filter(
+                    ChecklistItem.assigned_user_id == current_user.id
+                )
+            )
+        )
+    return q
+
+
 # ── 동기화 ────────────────────────────────────────────────────────────────
 
 @router.post("/sync", response_model=ApiResponse)
@@ -91,17 +108,9 @@ def list_occurrences(
         .order_by(ChecklistOccurrence.due_date, ChecklistOccurrence.period_key)
     )
 
-    # STAFF: 본인 assigned_user_id 항목의 occurrence만
-    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
-    if role == "STAFF":
-        from sqlalchemy import text
-        q = q.filter(
-            ChecklistOccurrence.checklist_item_id.in_(
-                db.query(ChecklistItem.id).filter(
-                    text("assigned_user_id = :uid")
-                ).params(uid=current_user.id)
-            )
-        )
+    # STAFF: 본인 assigned_user_id 항목의 occurrence만 (ADMIN은 전체)
+    q = _restrict_to_user(q, db, current_user)
+
     if checklist_item_id:
         q = q.filter(ChecklistOccurrence.checklist_item_id == checklist_item_id)
     if period_key:
@@ -124,12 +133,13 @@ def list_occurrences(
 @router.get("/today", response_model=ApiResponse)
 def get_today_occurrences(
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """
     오늘 해야 할 모든 occurrence.
     - 오늘 due_date인 pending/overdue
     - 과거 미완료(overdue) 전체 포함
+    STAFF는 본인에게 배정된 항목만, ADMIN은 전체.
     """
     today_str = date.today().isoformat()
     q = (
@@ -140,6 +150,7 @@ def get_today_occurrences(
         .filter(ChecklistOccurrence.due_date <= today_str)   # 오늘 포함 과거 미완료 전부
         .order_by(ChecklistOccurrence.due_date)
     )
+    q = _restrict_to_user(q, db, current_user)
     return ApiResponse(success=True, data=[_occ_to_dict(o) for o in q.all()])
 
 
@@ -148,9 +159,10 @@ def get_calendar_occurrences(
     year:  int = Query(...),
     month: int = Query(...),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    """월별 캘린더용 — 해당 월에 due_date 또는 scheduled_date를 가진 occurrence"""
+    """월별 캘린더용 — 해당 월에 due_date 또는 scheduled_date를 가진 occurrence.
+    STAFF는 본인에게 배정된 항목만, ADMIN은 전체."""
     from calendar import monthrange
     _, last_day = monthrange(year, month)
     start = date(year, month, 1)
@@ -168,6 +180,7 @@ def get_calendar_occurrences(
         .filter(ChecklistOccurrence.scheduled_date <= end.isoformat())  # 아직 안 끝난 것
         .order_by(ChecklistOccurrence.due_date)
     )
+    q = _restrict_to_user(q, db, current_user)
     occs = q.all()
 
     # 날짜별 그룹핑

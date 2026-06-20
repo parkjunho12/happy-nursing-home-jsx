@@ -288,14 +288,12 @@ export default function EvalChecklistPage() {
         </div>
 
         <div className="flex gap-2">
-          {isAdmin && (
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-1.5 text-sm text-white bg-primary-orange rounded-lg px-3 py-1.5 hover:bg-primary-orange/90 font-semibold shadow-sm"
-            >
-              <Plus size={14} /> 항목 추가
-            </button>
-          )}
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-1.5 text-sm text-white bg-primary-orange rounded-lg px-3 py-1.5 hover:bg-primary-orange/90 font-semibold shadow-sm"
+          >
+            <Plus size={14} /> 항목 추가
+          </button>
 
           <button
             onClick={() => loadAll()}
@@ -722,7 +720,7 @@ export default function EvalChecklistPage() {
         <ChecklistDetailModal item={selectedItem} onClose={() => setSelectedItem(null)} />
       )}
 
-      {showAddModal && isAdmin && (
+      {showAddModal && (
         <ChecklistFormModal onClose={() => setShowAddModal(false)} />
       )}
 
