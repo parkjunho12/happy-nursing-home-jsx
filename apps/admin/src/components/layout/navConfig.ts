@@ -34,6 +34,7 @@ export function getNavConfig(
 ): NavConfig {
   const isAdmin = user?.role === 'ADMIN'
   const isSocialWorker = user?.position === '사회복지사'
+  const isManager = user?.position === '대표' || user?.position === '이사'
   const isCaregiverOnly =
     user?.role === 'STAFF' && user?.position === '요양보호사'
 
@@ -125,7 +126,7 @@ export function getNavConfig(
         : []),
       { to: '/eval/record-audit', icon: FileSearch, label: '제공기록지 검수' },
       { to: '/eval/record-guide', icon: BookOpen, label: '검수 기준' },
-      ...(isSocialWorker
+      ...(isSocialWorker || isManager
         ? [{ to: '/eval/blog-ai-writer', icon: PenLine, label: '블로그 AI 작성' }]
         : []),
       { to: '/eval/albums', icon: ImageIcon, label: '보호자 앨범' },

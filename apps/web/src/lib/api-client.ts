@@ -7,6 +7,24 @@ export const API_BASE_URL =
   (process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, '') as string) ||
   'https://api.xn--p80bu1t60gba47bg6abm347gsla.com'
 
+/**
+ * 실제 사용할 API 베이스.
+ * - 로컬/사설 IP(localhost·127.0.0.1·10.0.2.2·192.168.* 등)에서 열렸으면
+ *   같은 호스트의 8000 포트를 사용 → 에뮬레이터(10.0.2.2)·PC 브라우저 모두 자동 대응.
+ * - 그 외(운영 도메인)는 위 API_BASE_URL 사용.
+ */
+export function resolveApiBase(): string {
+  if (typeof window !== 'undefined') {
+    const h = window.location.hostname
+    const isLocal =
+      h === 'localhost' || h === '127.0.0.1' || h === '10.0.2.2' ||
+      /^192\.168\./.test(h) || /^10\./.test(h) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(h)
+    if (isLocal) return `http://${h}:8000`
+  }
+  return API_BASE_URL
+}
+
 /** ===== Types ===== */
 export interface ContactFormData {
   name: string

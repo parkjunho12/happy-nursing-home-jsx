@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { API_BASE_URL } from '@/lib/api-client'
+import { resolveApiBase } from '@/lib/api-client'
 
 type Album = {
   id: string; title: string; description: string
@@ -12,7 +12,7 @@ type Album = {
 }
 
 async function fetchAlbums(token: string): Promise<Album[]> {
-  const res = await fetch(`${API_BASE_URL}/api/v1/family/albums`, {
+  const res = await fetch(`${resolveApiBase()}/api/v1/family/albums`, {
     headers: { Authorization: `Bearer ${token}` },
     cache: 'no-store',
   })
@@ -23,7 +23,7 @@ async function fetchAlbums(token: string): Promise<Album[]> {
 
 function mediaUrl(url: string | null) {
   if (!url) return null
-  return url.startsWith('http') ? url : `${API_BASE_URL}${url}`
+  return url.startsWith('http') ? url : `${resolveApiBase()}${url}`
 }
 
 function formatDate(s: string) {
@@ -58,6 +58,44 @@ export default function FamilyAlbumsPage() {
 
   useEffect(() => { load() }, [load])
 
+  // 앱(WebView)일 때 FCM 토큰을 서버에 등록 (브릿지가 있을 때만)
+  const registerPush = useCallback(async () => {
+    const native = (window as any).HappyCareNative
+    if (!native || typeof native.getFcmToken !== 'function') return
+    const token = native.getFcmToken()
+    const jwt = localStorage.getItem('family_token')
+    if (!token || !jwt) return
+    try {
+      await fetch(`${resolveApiBase()}/api/v1/family/push/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
+        body: JSON.stringify({ token, platform: native.getPlatform?.() ?? 'android' }),
+      })
+    } catch { /* 등록 실패는 조용히 무시 */ }
+  }, [])
+
+  useEffect(() => {
+    registerPush()
+    const t = setTimeout(registerPush, 2000)   // 토큰 준비 지연 대비 1회 재시도
+    return () => clearTimeout(t)
+  }, [registerPush])
+
+  // 안드로이드 앱(WebView) 안에서 실행 중이면 FCM 토큰을 백엔드에 등록
+  useEffect(() => {
+    const bridge = (window as any).NativeBridge
+    const token = typeof window !== 'undefined' ? localStorage.getItem('family_token') : null
+    if (!bridge?.getFcmToken || !token) return
+    try {
+      const fcm: string = bridge.getFcmToken()
+      if (!fcm) return
+      fetch(`${resolveApiBase()}/api/v1/family/push/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ token: fcm, platform: 'android' }),
+      }).catch(() => {})
+    } catch { /* 앱 밖이면 무시 */ }
+  }, [])
+
   const logout = () => {
     localStorage.removeItem('family_token')
     localStorage.removeItem('family_guardian')
@@ -86,7 +124,7 @@ export default function FamilyAlbumsPage() {
         </div>
       </header>
 
-      <main className="max-w-lg mx-auto px-5 py-6 space-y-5 pb-20">
+      <main className="max-w-lg mx-auto px-5 py-6 space-y-5 pb-10">
         {/* 가족 안내 배너 */}
         {residents.length > 0 && (
           <div className="bg-gradient-to-r from-orange-500 to-amber-500 rounded-2xl px-5 py-4 text-white shadow-lg shadow-orange-200">
@@ -162,16 +200,6 @@ export default function FamilyAlbumsPage() {
           </div>
         )}
       </main>
-
-      {/* 홈 링크 */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 py-3 px-5">
-        <a
-          href="/"
-          className="flex items-center justify-center gap-2 text-sm text-gray-500 hover:text-orange-500 transition-colors"
-        >
-          <span>🏥</span> 행복한요양원 홈페이지 바로가기
-        </a>
-      </div>
     </div>
   )
 }

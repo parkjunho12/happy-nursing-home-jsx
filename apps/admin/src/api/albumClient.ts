@@ -51,6 +51,9 @@ export const adminAlbumAPI = {
 
   deleteMedia: (albumId: string, mediaId: string) =>
     apiClient.delete(`${BASE}/admin/albums/${albumId}/media/${mediaId}`).then(unwrap<any>),
+
+  notify: (albumId: string) =>
+    apiClient.post(`${BASE}/admin/albums/${albumId}/notify`).then(unwrap<any>),
 }
 
 // ── 보호자 ────────────────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   Plus, Trash2, Upload, X, Eye, EyeOff, ImagePlus,
   Users, Folder, Play, Image, Search, ChevronDown,
-  Loader2, AlertCircle, RefreshCw, Edit2,
+  Loader2, AlertCircle, RefreshCw, Edit2, Bell,
 } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
 import { useAuthStore } from '@/store/auth'
@@ -134,6 +134,18 @@ export default function EvalAlbumPage() {
     form.append('is_public', String(!album.is_public))
     await adminAlbumAPI.updateAlbum(album.id, form)
     fetchAlbums()
+  }
+
+  const notifyAlbum = async (album: Album) => {
+    if (!confirm(`'${album.title}' 앨범을 보호자에게 알림 보낼까요?`)) return
+    try {
+      const r: any = await adminAlbumAPI.notify(album.id)
+      if (r?.message) alert(r.message)
+      else if ((r?.tokens ?? 0) === 0) alert('알림을 받을 보호자 기기가 없습니다. (앱 설치/로그인 필요)')
+      else alert(`보호자 ${r.guardians}명에게 발송 — 성공 ${r.sent}건${r.failed ? `, 실패 ${r.failed}건` : ''}`)
+    } catch (e: any) {
+      alert(e?.response?.data?.detail ?? '알림 발송에 실패했습니다')
+    }
   }
 
   const deleteAlbum = async (id: string) => {
@@ -393,6 +405,7 @@ export default function EvalAlbumPage() {
                     onEdit={() => setEditAlbum(album)}
                     onToggle={() => togglePublic(album)}
                     onDelete={() => deleteAlbum(album.id)}
+                    onNotify={() => notifyAlbum(album)}
                   />
                 ))}
               </div>
@@ -556,8 +569,8 @@ export default function EvalAlbumPage() {
 }
 
 // ── 앨범 카드 ──────────────────────────────────────────────────────────────────
-function AlbumCard({ album, onOpen, onEdit, onToggle, onDelete }: {
-  album: Album; onOpen: ()=>void; onEdit: ()=>void; onToggle: ()=>void; onDelete: ()=>void
+function AlbumCard({ album, onOpen, onEdit, onToggle, onDelete, onNotify }: {
+  album: Album; onOpen: ()=>void; onEdit: ()=>void; onToggle: ()=>void; onDelete: ()=>void; onNotify: ()=>void
 }) {
   const fmt = (s: string) => {
     const d = new Date(s)
@@ -616,6 +629,10 @@ function AlbumCard({ album, onOpen, onEdit, onToggle, onDelete }: {
           <button onClick={onOpen}
             className="flex-1 text-xs py-1.5 rounded-lg bg-orange-50 text-primary-orange font-semibold hover:bg-orange-100 transition-colors">
             사진 관리
+          </button>
+          <button onClick={onNotify}
+            className="p-1.5 rounded-lg border border-gray-200 hover:bg-teal-50 transition-colors" title="보호자에게 알림 보내기">
+            <Bell size={13} className="text-teal-600" />
           </button>
           <button onClick={onEdit}
             className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors" title="앨범 수정">

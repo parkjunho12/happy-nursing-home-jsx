@@ -78,7 +78,14 @@ def _index_summaries(photo_summaries):
 def _is_allowed(user: User) -> bool:
     role = user.role.value if hasattr(user.role, "value") else str(user.role)
     pos = getattr(user, "position", None)
-    return role == "ADMIN" or pos == "사회복지사"
+    return role == "ADMIN" or pos in ("사회복지사", "대표", "이사")
+
+
+def _can_see_all(user: User) -> bool:
+    """이력 전체 열람 권한 — ADMIN, 대표, 이사"""
+    role = user.role.value if hasattr(user.role, "value") else str(user.role)
+    pos = getattr(user, "position", None)
+    return role == "ADMIN" or pos in ("대표", "이사")
 
 
 class BlogResult(BaseModel):
@@ -343,19 +350,19 @@ def list_logs(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """사용 이력 — 관리자는 전체, 사회복지사는 본인 것만."""
+    """사용 이력 — ADMIN·대표·이사는 전체, 사회복지사는 본인 것만."""
     if not _is_allowed(current_user):
-        raise HTTPException(403, "관리자 또는 사회복지사만 조회할 수 있습니다")
-    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+        raise HTTPException(403, "권한이 없습니다")
+    see_all = _can_see_all(current_user)
 
     q = db.query(BlogAiLog)
-    if role != "ADMIN":
+    if not see_all:
         q = q.filter(BlogAiLog.user_id == current_user.id)
     logs = q.order_by(desc(BlogAiLog.created_at)).limit(max(1, min(limit, 500))).all()
 
-    # 계정별 사용 횟수 집계 (관리자만 전체)
+    # 계정별 사용 횟수 집계 (ADMIN·대표·이사는 전체, 그 외 본인)
     usage_q = db.query(BlogAiLog)
-    if role != "ADMIN":
+    if not see_all:
         usage_q = usage_q.filter(BlogAiLog.user_id == current_user.id)
     usage_map: dict = {}
     for l in usage_q.all():

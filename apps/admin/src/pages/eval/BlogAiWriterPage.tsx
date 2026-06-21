@@ -97,6 +97,7 @@ function ensureFaceApi(): Promise<any> {
 export default function BlogAiWriterPage() {
   const { user } = useAuthStore()
   const isAdmin = user?.role === 'ADMIN'
+  const canSeeAll = isAdmin || user?.position === '대표' || user?.position === '이사'
   const [view, setView] = useState<'write' | 'history'>('write')
   const [step, setStep] = useState(0)
   const [photos, setPhotos] = useState<Photo[]>([])
@@ -212,7 +213,7 @@ export default function BlogAiWriterPage() {
       </div>
 
       {view === 'history' ? (
-        <BlogHistory canSeeAll={isAdmin} />
+        <BlogHistory canSeeAll={canSeeAll} />
       ) : (
       <>
 

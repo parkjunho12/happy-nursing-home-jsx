@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { API_BASE_URL } from '@/lib/api-client'
+import { resolveApiBase } from '@/lib/api-client'
 
 async function familyLogin(phone: string, password: string) {
   const form = new FormData()
   form.append('phone', phone)
   form.append('password', password)
-  const res = await fetch(`${API_BASE_URL}/api/v1/family/login`, {
+  const res = await fetch(`${resolveApiBase()}/api/v1/family/login`, {
     method: 'POST',
     body: form,
   })
@@ -158,10 +158,7 @@ export default function FamilyLoginPage() {
 
       {/* 하단 */}
       <div className="text-center py-6">
-        <a href="/" className="text-xs text-gray-400 hover:text-orange-500 transition-colors">
-          ← 행복한요양원 홈페이지
-        </a>
-        <p className="text-xs text-gray-300 mt-2">© 행복한요양원</p>
+        <p className="text-xs text-gray-300">© 행복한요양원</p>
       </div>
     </div>
   )

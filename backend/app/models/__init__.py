@@ -68,3 +68,5 @@ __all__ = [
 from app.models.carefor import CareforResident, CareforLeaveRecord, StaffWorkSchedule
 
 from app.models.blog_ai import BlogAiLog
+
+from app.models.push import FamilyPushToken

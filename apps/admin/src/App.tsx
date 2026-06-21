@@ -82,6 +82,15 @@ function SocialWorkerRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+// 블로그 AI 작성 — ADMIN · 사회복지사 · 대표 · 이사 접근 가능
+function BlogWriterRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, user } = useAuthStore()
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  const ok = user?.role === 'ADMIN' || ['사회복지사', '대표', '이사'].includes(user?.position ?? '')
+  if (!ok) return <Navigate to="/eval/checklist" replace />
+  return <>{children}</>
+}
+
 function LtcLoader() {
   const { isAuthenticated, user } = useAuthStore()
   const loadAll         = useLtcStore(s => s.loadAll)
@@ -147,7 +156,7 @@ function App() {
             <Route path="eval/record-audit/:auditId/resident/:residentName" element={<EvalRecordAuditDetailPage />} />
 
             {/* 사회복지사 + ADMIN — 수급자/직원 관리 */}
-            <Route path="eval/blog-ai-writer" element={<SocialWorkerRoute><BlogAiWriterPage /></SocialWorkerRoute>} />
+            <Route path="eval/blog-ai-writer" element={<BlogWriterRoute><BlogAiWriterPage /></BlogWriterRoute>} />
             <Route path="eval/residents" element={<SocialWorkerRoute><EvalResidentsPage /></SocialWorkerRoute>} />
             <Route path="eval/staff"     element={<SocialWorkerRoute><EvalStaffPage /></SocialWorkerRoute>} />
 
