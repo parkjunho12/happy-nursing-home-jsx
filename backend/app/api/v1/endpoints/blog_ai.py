@@ -62,6 +62,19 @@ STYLE_REFERENCE = """[블로그 문체 예시 — 톤과 신뢰감만 참고하�
 매주 어르신들의 일상을 블로그에 기록한다는 점을 자연스럽게 녹인다. 과장·압박 없이
 '직접 보고 식사도 해보고 결정하셔도 된다'는 편안한 권유로 마무리한다."""
 
+def _marker_rule(n: int) -> str:
+    return (
+        f"\n[사진 배치 규칙] 업로드된 사진은 총 {n}장이며 순서대로 모두 사용한다. "
+        f"본문 중간중간 사진이 들어갈 자리에 정확히 '[사진 1]', '[사진 2]' … '[사진 {n}]' 형식의 "
+        "표시를 한 줄로 넣어, 어디에 어떤 사진을 넣을지 알 수 있게 한다. "
+        "각 표시는 그 사진 내용과 어울리는 단락 사이에 배치하고, 같은 번호를 중복하거나 빠뜨리지 않는다."
+    )
+
+
+def _index_summaries(photo_summaries):
+    return [f"사진 {i + 1}: {x}" for i, x in enumerate(photo_summaries)]
+
+
 def _is_allowed(user: User) -> bool:
     role = user.role.value if hasattr(user.role, "value") else str(user.role)
     pos = getattr(user, "position", None)
@@ -120,7 +133,7 @@ def _draft_with_gpt(ctx: dict, photo_summaries: List[str]) -> dict:
         "참여어르신수": ctx.get("participant_count"),
         "장소": ctx.get("location"),
         "글분위기": tone,
-        "사진요약": photo_summaries,
+        "사진요약": _index_summaries(photo_summaries),
     }
     system = (
         "너는 한국 노인요양원 '행복한요양원 녹양역점'의 네이버 블로그 글을 원장의 목소리로 쓰는 작가다. "
@@ -131,7 +144,9 @@ def _draft_with_gpt(ctx: dict, photo_summaries: List[str]) -> dict:
         "사진/활동 내용에 맞게 새로 쓰고, 시설 강점·위치·연락처는 글 흐름에 어울릴 때만 자연스럽게 한 번 언급한다.\n"
         + PRIVACY_RULES +
         "\n반드시 아래 JSON만 반환한다(마크다운 금지):\n"
-        '{"titles": ["제목5개"], "body": "본문(네이버 블로그 스타일, 문단 구분)", '
+        + _marker_rule(len(photo_summaries)) +
+        '\n반드시 아래 JSON만 반환한다(마크다운 금지):\n'
+        '{"titles": ["제목5개"], "body": "본문(네이버 블로그 스타일, 문단 구분, [사진 N] 표시 포함)", '
         '"hashtags": ["#해시태그8~12개"], "guardian_summary": "보호자 안내용 2~3문장 요약"}'
     )
     resp = client.chat.completions.create(
@@ -158,7 +173,7 @@ def _write_with_claude(ctx: dict, photo_summaries: List[str], tone: str) -> dict
         "참여어르신수": ctx.get("participant_count"),
         "장소": ctx.get("location"),
         "글분위기": tone,
-        "사진분석요약": photo_summaries,
+        "사진분석요약": _index_summaries(photo_summaries),
     }
     system = (
         "너는 '행복한요양원 녹양역점' 원장의 목소리로 네이버 블로그 글을 쓰는 한국어 작가다. "
@@ -169,7 +184,7 @@ def _write_with_claude(ctx: dict, photo_summaries: List[str], tone: str) -> dict
         "글은 최대한 길고 풍부하게(공백 제외 2000자 이상 권장, 도입–활동 묘사–시설/케어 강점–식사–마무리 권유 등 여러 소제목과 문단) 작성한다. "
         "단, 거짓 사실을 지어내지 말고 사진 요약과 제공된 정보 범위 안에서 자연스럽게 확장하며, "
         "시설 강점·위치·연락처는 글 흐름에 어울릴 때 자연스럽게 녹인다.\n"
-        + PRIVACY_RULES +
+        + PRIVACY_RULES + _marker_rule(len(photo_summaries)) +
         "\n반드시 아래 JSON만 반환한다(마크다운/설명 금지):\n"
         '{"titles": ["제목5개"], "body": "긴 본문(소제목과 문단 구분)", '
         '"hashtags": ["#해시태그8~15개"], "guardian_summary": "보호자 안내용 2~3문장 요약"}'

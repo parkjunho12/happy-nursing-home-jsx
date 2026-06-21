@@ -110,6 +110,7 @@ export default function BlogAiWriterPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<BlogResult | null>(null)
+  const [maskedPreviews, setMaskedPreviews] = useState<{ idx: number; url: string }[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
 
   // ── 사진 추가 ──
@@ -142,11 +143,16 @@ export default function BlogAiWriterPage() {
     setLoading(true); setError(''); setResult(null)
     try {
       const fd = new FormData()
+      const previews: { idx: number; url: string }[] = []
+      let n = 0
       for (const p of photos) {
         const blob = await composeMaskedBlob(p)
         fd.append('images', blob, `photo_${p.id}.jpg`)
         fd.append('captions', p.caption || '')
+        n += 1
+        previews.push({ idx: n, url: URL.createObjectURL(blob) })
       }
+      setMaskedPreviews(previews)
       fd.append('title_keyword', form.title_keyword)
       fd.append('activity_date', form.activity_date)
       fd.append('program_name', form.program_name)
@@ -360,7 +366,7 @@ export default function BlogAiWriterPage() {
 
       {/* ── Step 5: 결과 ── */}
       {step === 4 && result && (
-        <ResultView result={result} tone={form.tone}
+        <ResultView result={result} tone={form.tone} previews={maskedPreviews}
           onRegenerate={() => { setStep(3); setResult(null) }}
           onChangeTone={(tone) => { setForm(f => ({ ...f, tone })); setStep(3); setResult(null) }}
           onDownloadImages={downloadMasked} />
@@ -510,8 +516,8 @@ function FaceMaskEditor({ photo, onChange }: { photo: Photo; onChange: (e: Emoji
 }
 
 // ── 결과 뷰 ──────────────────────────────────────────────────────────────────
-function ResultView({ result, tone, onRegenerate, onChangeTone, onDownloadImages }: {
-  result: BlogResult; tone: string
+function ResultView({ result, tone, previews, onRegenerate, onChangeTone, onDownloadImages }: {
+  result: BlogResult; tone: string; previews: { idx: number; url: string }[]
   onRegenerate: () => void; onChangeTone: (t: string) => void; onDownloadImages: () => void
 }) {
   const [copied, setCopied] = useState('')
@@ -557,9 +563,29 @@ function ResultView({ result, tone, onRegenerate, onChangeTone, onDownloadImages
         </div>
       </Card>
 
-      {/* 본문 */}
+      {/* 본문 — [사진 N] 위치에 실제 가림 사진 표시 */}
       <Card title="블로그 본문" onCopy={() => copy('body', result.body)} copied={copied === 'body'}>
-        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{result.body}</p>
+        <p className="text-[11px] text-gray-400 mb-2">아래 사진 자리( [사진 N] )에 업로드한 사진을 넣으세요. 복사하면 표시도 함께 복사됩니다.</p>
+        <div className="text-sm text-gray-700 leading-relaxed">
+          {result.body.split(/(\[\s*사진\s*\d+\s*\])/g).map((part, i) => {
+            const m = part.match(/^\[\s*사진\s*(\d+)\s*\]$/)
+            if (m) {
+              const n = Number(m[1]); const pv = previews.find(p => p.idx === n)
+              return (
+                <div key={i} className="my-3 flex items-center gap-3 bg-orange-50/70 border border-orange-100 rounded-xl p-2.5">
+                  {pv
+                    ? <img src={pv.url} className="w-20 h-20 object-cover rounded-lg flex-shrink-0" alt={`사진 ${n}`} />
+                    : <div className="w-20 h-20 rounded-lg bg-orange-100 flex items-center justify-center text-orange-400 flex-shrink-0"><ImageIcon size={20} /></div>}
+                  <div>
+                    <p className="text-xs font-semibold text-orange-700">📷 사진 {n} 위치</p>
+                    <p className="text-[11px] text-gray-500">여기에 사진 {n}을(를) 넣으세요</p>
+                  </div>
+                </div>
+              )
+            }
+            return <span key={i} className="whitespace-pre-wrap">{part}</span>
+          })}
+        </div>
       </Card>
 
       {/* 해시태그 */}
