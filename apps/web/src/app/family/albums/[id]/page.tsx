@@ -38,6 +38,17 @@ function downloadUrl(mediaId: string): string {
   return `${resolveApiBase()}/api/v1/family/download/${mediaId}?token=${encodeURIComponent(token)}`
 }
 
+function downloadAllZip(albumId: string) {
+  const token = localStorage.getItem('family_token') ?? ''
+  const url = `${resolveApiBase()}/api/v1/family/albums/${albumId}/download-zip?token=${encodeURIComponent(token)}`
+  const a = document.createElement('a')
+  a.href = url
+  a.target = '_blank'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+}
+
 function triggerDownload(mediaId: string, fileName: string) {
   const a = document.createElement('a')
   a.href = downloadUrl(mediaId)
@@ -116,9 +127,7 @@ export default function FamilyAlbumDetailPage() {
           {/* 전체 다운로드 */}
           {album.media.length > 0 && (
             <button
-              onClick={() => album.media.forEach((m, i) => {
-                setTimeout(() => triggerDownload(m.id, m.file_name || `photo_${i+1}`), i * 400)
-              })}
+              onClick={() => downloadAllZip(album.id)}
               className="flex items-center gap-1.5 text-xs font-semibold text-orange-600 bg-orange-50 border border-orange-200 px-3 py-2 rounded-xl hover:bg-orange-100 transition-colors flex-shrink-0"
             >
               ⬇ 전체 저장

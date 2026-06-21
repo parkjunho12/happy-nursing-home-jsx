@@ -8,7 +8,7 @@ from typing import List, Optional
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
@@ -533,6 +533,62 @@ def family_download_all_info(
     return ApiResponse(success=True, data=[{
         "id": m.id, "file_name": m.file_name, "media_type": m.media_type,
     } for m in media])
+
+
+@family_router.get("/albums/{album_id}/download-zip")
+def family_download_zip(
+    album_id: str,
+    token: str,           # query param — <a href="...?token=JWT"> 로 단일 다운로드
+    db: Session = Depends(get_db),
+):
+    """앨범 전체 사진/영상을 ZIP 한 파일로 묶어 내려준다. (전체 저장)"""
+    import io, zipfile, re
+    from urllib.parse import quote
+
+    gid = _verify_guardian_token(token)
+    g = db.query(GuardianAccount).filter(
+        GuardianAccount.id == gid, GuardianAccount.is_active == True
+    ).first()
+    if not g:
+        raise HTTPException(401, "인증 실패")
+
+    a = db.query(Album).filter(Album.id == album_id, Album.is_public == True).first()
+    if not a:
+        raise HTTPException(404, "앨범을 찾을 수 없습니다")
+    _check_guardian_access(db, gid, a.resident_id)
+
+    if not r2.is_configured():
+        raise HTTPException(503, "스토리지가 설정되지 않았습니다")
+
+    media = db.query(AlbumMedia).filter(AlbumMedia.album_id == album_id)\
+              .order_by(AlbumMedia.sort_order, AlbumMedia.created_at).all()
+    if not media:
+        raise HTTPException(404, "사진이 없습니다")
+
+    buf = io.BytesIO()
+    added = 0
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for idx, m in enumerate(media, 1):
+            data = r2.fetch_bytes(m.file_url)
+            if not data:
+                continue
+            name = m.file_name or ""
+            if "." not in name:
+                ext = m.file_url.rsplit(".", 1)[-1] if "." in m.file_url else ("mp4" if m.media_type == "video" else "jpg")
+                name = (name or "media") + "." + ext
+            zf.writestr(f"{idx:02d}_{name}", data)
+            added += 1
+
+    if added == 0:
+        raise HTTPException(502, "다운로드할 파일을 가져오지 못했습니다")
+
+    buf.seek(0)
+    title = re.sub(r"[^\w가-힣 ._-]", "", a.title or "album").strip() or "album"
+    disposition = "attachment; filename=\"album.zip\"; filename*=UTF-8''" + quote(title) + ".zip"
+    return StreamingResponse(
+        buf, media_type="application/zip",
+        headers={"Content-Disposition": disposition},
+    )
 
 
 

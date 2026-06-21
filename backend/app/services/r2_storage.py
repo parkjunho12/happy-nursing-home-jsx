@@ -217,6 +217,24 @@ class R2Storage:
         except ClientError as e:
             raise HTTPException(500, f"다운로드 URL 생성 실패: {e}")
 
+    def _key_from_url(self, file_url: str):
+        if file_url.startswith("r2://"):
+            return file_url.split("/", 3)[-1]
+        if _public_url() and file_url.startswith(_public_url()):
+            return file_url[len(_public_url()):].lstrip("/")
+        return None
+
+    def fetch_bytes(self, file_url: str):
+        """R2에서 파일 바이트를 직접 읽는다 (ZIP 묶기용). 실패 시 None."""
+        key = self._key_from_url(file_url)
+        if not key:
+            return None
+        try:
+            obj = _get_client().get_object(Bucket=_bucket(), Key=key)
+            return obj["Body"].read()
+        except Exception:
+            return None
+
     def is_configured(self) -> bool:
         """R2 환경변수가 설정되어 있는지 확인"""
         return _settings.R2_CONFIGURED

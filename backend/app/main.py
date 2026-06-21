@@ -63,19 +63,33 @@ app.add_middleware(
 )
 
 # Trusted Host (보안)
+# CORS_ORIGINS 에 적은 오리진들의 호스트를 자동으로 신뢰 호스트에 포함 (로컬/사설 IP 편의)
+from urllib.parse import urlparse as _urlparse
+_cors_hosts = []
+for _o in settings.CORS_ORIGINS_LIST:
+    try:
+        _h = _urlparse(_o).hostname
+        if _h:
+            _cors_hosts.append(_h)
+    except Exception:
+        pass
+
+_allowed_hosts = list(dict.fromkeys([
+    "api.xn--p80bu1t60gba47bg6abm347gsla.com",
+    "localhost",
+    "127.0.0.1",
+    "admin.xn--p80bu1t60gba47bg6abm347gsla.com",  # admin
+    "www.xn--p80bu1t60gba47bg6abm347gsla.com",  # web(있으면)
+    "backend",          # ✅ 도커 내부에서 Host가 이렇게 잡히는 경우 대비
+    "happy_backend",    # ✅ 컨테이너 이름
+    "10.0.2.2",         # ✅ 안드로이드 에뮬레이터에서 보는 PC localhost
+    "0.0.0.0",
+    *_cors_hosts,       # ✅ CORS_ORIGINS 에 적은 호스트(예: 192.168.x.x) 자동 허용
+]))
+
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=[
-        "api.xn--p80bu1t60gba47bg6abm347gsla.com",
-        "localhost",
-        "127.0.0.1",
-        "admin.xn--p80bu1t60gba47bg6abm347gsla.com",  # admin
-        "www.xn--p80bu1t60gba47bg6abm347gsla.com",  # web(있으면)
-        "backend",          # ✅ 도커 내부에서 Host가 이렇게 잡히는 경우 대비
-        "happy_backend",    # ✅ 컨테이너 이름
-        "10.0.2.2",         # ✅ 안드로이드 에뮬레이터에서 보는 PC localhost
-        "0.0.0.0",
-    ]
+    allowed_hosts=_allowed_hosts,
 )
 
 # API 라우터 등록
