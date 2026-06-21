@@ -526,7 +526,8 @@ async def upload_and_audit(
 
                 res_leaves = [
                     {"resident_name": l.resident_name, "leave_type": l.leave_type,
-                     "start_date": l.start_date, "end_date": l.end_date}
+                     "start_date": l.start_date, "end_date": l.end_date,
+                     "start_time": l.start_time, "end_time": l.end_time}
                     for l in leaves_all if l.resident_name == resident_name
                 ]
 
@@ -600,7 +601,8 @@ async def upload_and_audit(
                 matched_res  = residents_dict.get(resident_name)
                 match_status = "matched" if matched_res else "unmatched"
                 res_leaves   = [{"resident_name": l.resident_name, "leave_type": l.leave_type,
-                                  "start_date": l.start_date, "end_date": l.end_date}
+                                  "start_date": l.start_date, "end_date": l.end_date,
+                                  "start_time": l.start_time, "end_time": l.end_time}
                                  for l in leaves_all if l.resident_name == resident_name]
                 resident_dict = {"name": matched_res.name if matched_res else resident_name,
                                  "admission_date": matched_res.admission_date if matched_res else None,
