@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str = ""
     SENDGRID_API_KEY: str = ""
 
+    # ── 푸시(FCM) ──
+    FCM_CREDENTIALS_FILE: str = ""   # Firebase 서비스계정 JSON 경로
+    FCM_PROJECT_ID: str = ""
+
     MAIL_FROM: str = ""
     MAIL_REPLY_TO: str = ""
     MAIL_ADMIN_TO: str = ""  # comma separated

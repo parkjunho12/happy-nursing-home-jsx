@@ -3,7 +3,7 @@
 - 관리자: /api/v1/admin/albums
 - 보호자: /api/v1/family
 """
-import os, uuid
+import os, uuid, logging
 from typing import List, Optional
 from datetime import datetime, timedelta, timezone
 
@@ -18,12 +18,17 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
 from app.models.album import GuardianAccount, ResidentGuardian, Album, AlbumMedia
+from app.models.push import FamilyPushToken
+from app.services.fcm import send_to_tokens
+from pydantic import BaseModel
 from app.models.eval import LtcResident
 from app.schemas.response import ApiResponse
 from app.services.r2_storage import r2
 
 # ── 상수 ──────────────────────────────────────────────────────────────────────
 from app.core.config import settings as _settings
+
+logger = logging.getLogger(__name__)
 SECRET_KEY   = _settings.SECRET_KEY
 ALGORITHM    = "HS256"
 TOKEN_EXPIRE = 60 * 24 * 30   # 30일 (분 단위)
@@ -367,6 +372,15 @@ def upload_media(
         saved.append({"id": m.id, "url": file_url, "thumb": thumb_url, "type": media_type})
 
     db.commit()
+
+    # 사진이 추가되고 앨범이 공개 상태면 보호자에게 자동 푸시 (실패해도 업로드는 성공)
+    if saved and a.is_public:
+        try:
+            n = len(saved)
+            _notify_album_guardians(db, a, f"'{a.title}' 앨범에 새 사진 {n}장이 올라왔어요")
+        except Exception as e:
+            logger.warning(f"앨범 업로드 푸시 실패: {e}")
+
     return ApiResponse(success=True, data=saved)
 
 
@@ -519,3 +533,100 @@ def family_download_all_info(
     return ApiResponse(success=True, data=[{
         "id": m.id, "file_name": m.file_name, "media_type": m.media_type,
     } for m in media])
+
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 푸시 알림 (FCM)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class PushRegisterBody(BaseModel):
+    token: str
+    platform: Optional[str] = "android"
+
+
+@family_router.post("/push/register")
+def register_push_token(
+    body: PushRegisterBody,
+    db: Session = Depends(get_db),
+    gid: str = Depends(get_guardian_id),
+):
+    """보호자 앱이 FCM 토큰을 등록 (로그인된 보호자 계정에 연결)."""
+    token = (body.token or "").strip()
+    if not token:
+        raise HTTPException(400, "token이 필요합니다")
+    existing = db.query(FamilyPushToken).filter(FamilyPushToken.token == token).first()
+    if existing:
+        existing.guardian_id = gid
+        existing.platform = body.platform or "android"
+    else:
+        db.add(FamilyPushToken(
+            id=str(uuid.uuid4()), guardian_id=gid,
+            token=token, platform=body.platform or "android",
+        ))
+    db.commit()
+    return ApiResponse(success=True, data={"registered": True})
+
+
+@family_router.post("/push/unregister")
+def unregister_push_token(
+    body: PushRegisterBody,
+    db: Session = Depends(get_db),
+    gid: str = Depends(get_guardian_id),
+):
+    token = (body.token or "").strip()
+    if token:
+        db.query(FamilyPushToken).filter(
+            FamilyPushToken.token == token,
+            FamilyPushToken.guardian_id == gid,
+        ).delete(synchronize_session=False)
+        db.commit()
+    return ApiResponse(success=True, data={"unregistered": True})
+
+
+def _notify_album_guardians(db: Session, album: Album, body_text: str) -> dict:
+    """앨범 수급자의 보호자들에게 푸시 발송. (무효 토큰은 정리)"""
+    links = db.query(ResidentGuardian).filter(
+        ResidentGuardian.resident_id == album.resident_id
+    ).all()
+    guardian_ids = [l.guardian_id for l in links]
+    if not guardian_ids:
+        return {"guardians": 0, "tokens": 0, "sent": 0, "failed": 0}
+
+    try:
+        token_rows = db.query(FamilyPushToken).filter(
+            FamilyPushToken.guardian_id.in_(guardian_ids)
+        ).all()
+        tokens = [t.token for t in token_rows]
+
+        sent, failed, invalid = send_to_tokens(
+            tokens, "행복한요양원 보호자앨범", body_text,
+            data={"type": "album", "album_id": album.id},
+        )
+        if invalid:
+            db.query(FamilyPushToken).filter(
+                FamilyPushToken.token.in_(invalid)
+            ).delete(synchronize_session=False)
+            db.commit()
+    except Exception as e:
+        # family_push_tokens 테이블 미생성(마이그레이션 누락) 등 → 푸시만 건너뜀
+        logger.warning(f"푸시 토큰 조회/발송 생략: {e}")
+        db.rollback()
+        return {"guardians": len(guardian_ids), "tokens": 0, "sent": 0, "failed": 0,
+                "push_skipped": True}
+    return {"guardians": len(guardian_ids), "tokens": len(tokens), "sent": sent, "failed": failed}
+
+
+@admin_router.post("/albums/{album_id}/notify")
+def notify_album(
+    album_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """해당 앨범 수급자의 보호자들에게 '새 앨범 도착' 푸시 발송 (관리자 수동)."""
+    _require_can_manage_guardians(current_user)
+    album = _get_album_or_404(db, album_id)
+    result = _notify_album_guardians(db, album, f"새 앨범이 도착했어요: {album.title}")
+    if result["guardians"] == 0:
+        result["message"] = "연결된 보호자가 없습니다"
+    return ApiResponse(success=True, data=result)

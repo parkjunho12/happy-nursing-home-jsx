@@ -54,6 +54,8 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS_LIST,
+    # 로컬/사설 IP(localhost·127.0.0.1·10.0.2.2·192.168.* 등)는 포트 무관 허용 (개발 편의)
+    allow_origin_regex=r"^http://(localhost|127\.0\.0\.1|10\.0\.2\.2|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -71,6 +73,8 @@ app.add_middleware(
         "www.xn--p80bu1t60gba47bg6abm347gsla.com",  # web(있으면)
         "backend",          # ✅ 도커 내부에서 Host가 이렇게 잡히는 경우 대비
         "happy_backend",    # ✅ 컨테이너 이름
+        "10.0.2.2",         # ✅ 안드로이드 에뮬레이터에서 보는 PC localhost
+        "0.0.0.0",
     ]
 )
 

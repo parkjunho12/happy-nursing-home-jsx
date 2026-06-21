@@ -1,13 +1,13 @@
 // src/app/layout.tsx
 import type { Metadata } from 'next'
 import { Noto_Sans_KR, Nanum_Myeongjo } from 'next/font/google'
-import Script from 'next/script'
 import { OrganizationSchema } from '../components/seo/StructuredData'
 import './globals.css'
 import { DEFAULT_METADATA, SITE_INFO } from '@/lib/constants'
 import GTM from '@/components/analytics/GTM'
 import dynamic from 'next/dynamic'
 import NaverWcs from '@/components/analytics/NaverWcs'
+import SmartLogScript from '@/components/analytics/SmartLogScript'
 import PageTracker from '@/components/analytics/PageViewTracker'
 import localFont from 'next/font/local'
 
@@ -206,18 +206,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* 네이버 애널리틱스 */}
         <NaverWcs/>
 
-        {/* Smartlog 메인 스크립트 */}
-        <Script id="smartlog-init" strategy="afterInteractive">
-          {`
-            var hpt_info = {'_account':'UHPT-38356', '_server':'a31'};
-          `}
-        </Script>
-        <Script
-          id="smartlog-loader"
-          src="//cdn.smlog.co.kr/core/smart.js"
-          strategy="afterInteractive"
-          charSet="utf-8"
-        />
+        {/* Smartlog (부정클릭 방지) — 보호자 앨범(/family)에서는 미로드 */}
+        <SmartLogScript />
 
       </body>
     </html>

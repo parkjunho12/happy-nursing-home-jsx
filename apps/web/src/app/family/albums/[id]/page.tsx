@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Image from 'next/image'
-import { API_BASE_URL } from '@/lib/api-client'
+import { resolveApiBase } from '@/lib/api-client'
 
 type Media = {
   id: string; media_type: string; file_url: string
@@ -15,7 +15,7 @@ type Album = {
 }
 
 async function fetchAlbum(id: string, token: string): Promise<Album> {
-  const res = await fetch(`${API_BASE_URL}/api/v1/family/albums/${id}`, {
+  const res = await fetch(`${resolveApiBase()}/api/v1/family/albums/${id}`, {
     headers: { Authorization: `Bearer ${token}` },
     cache: 'no-store',
   })
@@ -25,7 +25,7 @@ async function fetchAlbum(id: string, token: string): Promise<Album> {
 }
 
 function mediaUrl(url: string) {
-  return url.startsWith('http') ? url : `${API_BASE_URL}${url}`
+  return url.startsWith('http') ? url : `${resolveApiBase()}${url}`
 }
 
 /**
@@ -35,7 +35,7 @@ function mediaUrl(url: string) {
  */
 function downloadUrl(mediaId: string): string {
   const token = localStorage.getItem('family_token') ?? ''
-  return `${API_BASE_URL}/api/v1/family/download/${mediaId}?token=${encodeURIComponent(token)}`
+  return `${resolveApiBase()}/api/v1/family/download/${mediaId}?token=${encodeURIComponent(token)}`
 }
 
 function triggerDownload(mediaId: string, fileName: string) {

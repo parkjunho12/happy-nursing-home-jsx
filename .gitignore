@@ -142,3 +142,7 @@ Thumbs.db
 
 # Turbo
 .turbo
+
+happy-nursing-home-cc2eb-firebase-adminsdk-fbsvc-cd44eb511f.jsonbackend/*firebase-adminsdk*.json
+backend/*firebase-adminsdk*.json
+backend/secrets/
