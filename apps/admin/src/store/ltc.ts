@@ -12,6 +12,7 @@ import {
   generateResidentDischargeChecklists,
   generateStaffHireChecklists,
 } from '@/lib/checklistTemplates'
+import { normalizeFrequency } from '@/utils/period'
 
 // ── 타입 ────────────────────────────────────────────────────────────────
 
@@ -91,7 +92,7 @@ function mapOcc(raw: any): ChecklistOccurrence {
     id:              raw.id,
     checklistItemId: raw.checklist_item_id,
     periodKey:       raw.period_key,
-    frequency:       raw.frequency,
+    frequency:       normalizeFrequency(raw.frequency),
     scheduledDate:   raw.scheduled_date,
     dueDate:         raw.due_date,
     status:          raw.status,
@@ -106,7 +107,7 @@ function mapOcc(raw: any): ChecklistOccurrence {
 function mapCL(raw: any): ChecklistItem {
   return {
     id: raw.id, title: raw.title, description: raw.description ?? '',
-    frequency: raw.frequency,
+    frequency: normalizeFrequency(raw.frequency),
     relatedIndicatorId: raw.related_indicator_id ?? '',
     relatedCategoryId:  raw.related_category_id  ?? '',
     relatedDomainId:    raw.related_domain_id    ?? '',

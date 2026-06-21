@@ -8,6 +8,20 @@ export type Frequency =
 export const RECURRING: Frequency[] = ['daily','weekly','monthly','quarterly','half-yearly','yearly']
 export const EVENT_FREQS: Frequency[] = ['on_admission','on_discharge','on_hire']
 
+// 저장된 frequency 값의 표기 흔들림(언더스코어/하이픈 등)을 표준값으로 정규화한다.
+// 예: 'half_yearly' → 'half-yearly' (이게 안 되면 반기별 필터/라벨에 안 걸림)
+const FREQUENCY_ALIASES: Record<string, Frequency> = {
+  half_yearly: 'half-yearly',
+  halfyearly: 'half-yearly',
+  semiannual: 'half-yearly',
+  semi_annual: 'half-yearly',
+}
+export function normalizeFrequency(freq: string | null | undefined): string {
+  if (!freq) return freq ?? ''
+  const key = String(freq).trim()
+  return FREQUENCY_ALIASES[key] ?? FREQUENCY_ALIASES[key.toLowerCase()] ?? key
+}
+
 export const FREQUENCY_LABELS: Record<string, string> = {
   daily: '일일', weekly: '주별', monthly: '월별', quarterly: '분기별',
   'half-yearly': '반기별', yearly: '연별',
