@@ -2,7 +2,7 @@ import {
   LayoutDashboard, UserCog, MessageSquare, FileText,
   Star, Settings, ClipboardList, CalendarDays,
   UserRound, ShieldCheck, Sparkles, FileSearch,
-  Image as ImageIcon, Users, BookOpen,
+  Image as ImageIcon, Users, BookOpen, PenLine,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -87,6 +87,7 @@ export function getNavConfig(
         { to: '/eval/users', icon: Users, label: '직원 계정 관리' },
         { to: '/eval/record-audit', icon: FileSearch, label: '제공기록지 검수' },
         { to: '/eval/record-guide', icon: BookOpen, label: '검수 기준' },
+        { to: '/eval/blog-ai-writer', icon: PenLine, label: '블로그 AI 작성' },
         { to: '/eval/albums', icon: ImageIcon, label: '보호자 앨범' },
         { to: '/eval/ai-review', icon: Sparkles, label: 'AI 체크리스트 검토' },
       ],
@@ -124,6 +125,9 @@ export function getNavConfig(
         : []),
       { to: '/eval/record-audit', icon: FileSearch, label: '제공기록지 검수' },
       { to: '/eval/record-guide', icon: BookOpen, label: '검수 기준' },
+      ...(isSocialWorker
+        ? [{ to: '/eval/blog-ai-writer', icon: PenLine, label: '블로그 AI 작성' }]
+        : []),
       { to: '/eval/albums', icon: ImageIcon, label: '보호자 앨범' },
     ],
   }

@@ -5,6 +5,7 @@ from app.api.v1.endpoints.eval_occurrences import router as eval_occ_router
 from app.api.v1.endpoints.eval_record_audit import router as eval_record_audit_router
 
 from app.api.v1.endpoints.eval_carefor import router as eval_carefor_router
+from app.api.v1.endpoints.blog_ai import router as blog_ai_router
 from app.api.v1.endpoints.albums import admin_router as album_admin_router, family_router as album_family_router
 api_router = APIRouter()
 
@@ -89,3 +90,4 @@ api_router.include_router(album_family_router, prefix="/family", tags=["family-a
 
 api_router.include_router(eval_record_audit_router, prefix="/eval/record-audit", tags=["eval-record-audit"])
 api_router.include_router(eval_carefor_router, prefix="/eval/carefor", tags=["eval-carefor"])
+api_router.include_router(blog_ai_router, prefix="/blog-ai", tags=["blog-ai"])

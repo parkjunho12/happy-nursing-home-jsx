@@ -30,6 +30,7 @@ import EvalRecordAuditPage  from './pages/eval/EvalRecordAuditPage'
 import EvalRecordAuditDetailPage from './pages/eval/EvalRecordAuditDetailPage'
 import EvalAlbumPage        from './pages/eval/EvalAlbumPage'
 import EvalRecordGuidePage from './pages/eval/EvalRecordGuidePage'
+import BlogAiWriterPage from './pages/eval/BlogAiWriterPage'
 import EvalUsersPage        from './pages/eval/EvalUsersPage'
 import FamilyLoginPage      from './pages/family/FamilyLoginPage'
 import FamilyAlbumsPage     from './pages/family/FamilyAlbumsPage'
@@ -146,6 +147,7 @@ function App() {
             <Route path="eval/record-audit/:auditId/resident/:residentName" element={<EvalRecordAuditDetailPage />} />
 
             {/* 사회복지사 + ADMIN — 수급자/직원 관리 */}
+            <Route path="eval/blog-ai-writer" element={<SocialWorkerRoute><BlogAiWriterPage /></SocialWorkerRoute>} />
             <Route path="eval/residents" element={<SocialWorkerRoute><EvalResidentsPage /></SocialWorkerRoute>} />
             <Route path="eval/staff"     element={<SocialWorkerRoute><EvalStaffPage /></SocialWorkerRoute>} />
 
