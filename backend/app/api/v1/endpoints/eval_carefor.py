@@ -14,7 +14,7 @@ from app.core.security import get_current_user, get_current_admin_user
 from app.models.user import User
 from app.models.carefor import CareforResident, CareforLeaveRecord, StaffWorkSchedule
 from app.schemas.response import ApiResponse
-from app.services.carefor_import.parser import parse_file
+from app.services.carefor_import.parser import parse_file, parse_leave_file, parse_5row_file
 from app.services.carefor_import.schedule_parser import parse_schedule
 from app.services.carefor_import.normalizer import normalize_resident, normalize_leave
 from app.services.carefor_import.importer import upsert_residents, upsert_leave_records
@@ -85,40 +85,31 @@ async def upload_residents(
     if len(content) > MAX_FILE:
         raise HTTPException(400, "5MB 이하 파일만 허용합니다")
 
-    # 1. 파싱
+    # 1. 파싱 — 수급자 목록도 5행 헤더, 6행부터 데이터 (OpenAI 없이 결정적 파싱)
     try:
-        raw_rows = parse_file(content, filename)
+        rows = parse_5row_file(content, filename)
     except Exception as e:
         raise HTTPException(400, f"파일 파싱 실패: {e}")
 
-    if not raw_rows:
-        raise HTTPException(400, "데이터가 없거나 읽을 수 없는 파일입니다")
+    if not rows:
+        raise HTTPException(400, "데이터가 없거나 5행 헤더를 찾지 못했습니다")
 
-    # 2. PII 마스킹
-    masked_rows = [_mask_row(r) for r in raw_rows]
+    # 2. 헤더명 기준 매핑 (등급외 포함, 합계/공백행은 파서에서 제외)
+    records = []
+    warnings: list = []
+    for i, row in enumerate(rows):
+        try:
+            norm = normalize_resident(row)
+            if norm:   # 이름 있는 행만 (등급 무관하게 포함)
+                records.append(norm)
+        except Exception as e:
+            warnings.append(f"행 {i + 1}: {str(e)[:80]}")
 
-    # 3. OpenAI 정규화 시도
-    openai_rows, warnings, openai_used = _try_openai_residents(masked_rows)
-
-    # 4. Fallback: rule-based normalizer
-    if not openai_rows:
-        logger.info("rule-based normalizer 사용")
-        records = []
-        for i, row in enumerate(masked_rows):
-            try:
-                norm = normalize_resident(row)
-                if norm:
-                    records.append(norm)
-            except Exception as e:
-                warnings.append(f"행 {i+1}: {str(e)[:80]}")
-    else:
-        records = openai_rows
-
-    # 5. DB 저장
+    # 3. DB 저장
     result = upsert_residents(db, records)
     result["warnings"]     = warnings + result.get("errors", [])
-    result["openai_used"]  = openai_used
-    result["normalizer"]   = "openai" if openai_used else "rule-based"
+    result["openai_used"]  = False
+    result["normalizer"]   = "rule-based(5행 헤더)"
 
     return ApiResponse(success=True, data=result)
 
@@ -168,39 +159,31 @@ async def upload_leave_records(
     if len(content) > MAX_FILE:
         raise HTTPException(400, "5MB 이하 파일만 허용합니다")
 
-    # 1. 파싱
+    # 1. 파싱 — 외박/외출 엑셀은 5행 헤더, 6행부터 데이터 (OpenAI 없이 결정적 파싱)
     try:
-        raw_rows = parse_file(content, filename)
+        rows = parse_leave_file(content, filename)
     except Exception as e:
         raise HTTPException(400, f"파일 파싱 실패: {e}")
 
-    if not raw_rows:
-        raise HTTPException(400, "데이터가 없거나 읽을 수 없는 파일입니다")
+    if not rows:
+        raise HTTPException(400, "데이터가 없거나 5행 헤더를 찾지 못했습니다")
 
-    # 2. PII 마스킹
-    masked_rows = [_mask_row(r) for r in raw_rows]
+    # 2. 헤더명 기준 컬럼 매핑 (rule-based, 합계행 '* 전체'는 파서에서 제외됨)
+    records = []
+    warnings: list = []
+    for i, row in enumerate(rows):
+        try:
+            norm = normalize_leave(row)
+            if norm and (norm.get("start_date") or norm.get("end_date")):   # 날짜 전무한 잔여행만 제외
+                records.append(norm)
+        except Exception as e:
+            warnings.append(f"행 {i + 1}: {str(e)[:80]}")
 
-    # 3. OpenAI 정규화 시도
-    openai_rows, warnings, openai_used = _try_openai_leaves(masked_rows)
-
-    # 4. Fallback: rule-based normalizer
-    if not openai_rows:
-        records = []
-        for i, row in enumerate(masked_rows):
-            try:
-                norm = normalize_leave(row)
-                if norm:
-                    records.append(norm)
-            except Exception as e:
-                warnings.append(f"행 {i+1}: {str(e)[:80]}")
-    else:
-        records = openai_rows
-
-    # 5. DB 저장
+    # 3. DB 저장
     result = upsert_leave_records(db, records)
     result["warnings"]    = warnings + result.get("errors", [])
-    result["openai_used"] = openai_used
-    result["normalizer"]  = "openai" if openai_used else "rule-based"
+    result["openai_used"] = False
+    result["normalizer"]  = "rule-based(5행 헤더)"
 
     return ApiResponse(success=True, data=result)
 

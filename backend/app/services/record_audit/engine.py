@@ -113,6 +113,24 @@ def audit_daily_records(
         if not adm or (_parse_date(r.service_date) or date.min) >= adm
     ]
 
+    # 외박(밤샘) 날짜는 요약 판정에서도 제외 (검수 대상 아님)
+    def _is_overnight_date(d):
+        return bool(d) and any(sd <= d <= ed for sd, ed in overnight_periods)
+    present_records = [
+        r for r in valid_records
+        if not _is_overnight_date(_parse_date(r.service_date))
+    ]
+
+    # 식사/산책/배변 요약 판정용
+    meal_missing_days = []   # [(date_short, [끼니명...])]
+    _mobility = None
+    for _r in records:
+        _mm = _r.condition.get('mobility') if isinstance(_r.condition, dict) else None
+        if _mm:
+            _mobility = _mm
+            break
+    is_bedridden = _mobility in ('와상', '준와상')
+
     for rec in records:
         date_str   = rec.service_date
         rec_date   = _parse_date(date_str)
@@ -169,6 +187,24 @@ def audit_daily_records(
                         "location": f"{loc_prefix} ({o['ltype']} {tspan})".rstrip(),
                         "description": f"{o['ltype']} 시간({tspan})에 해당하는 {meal_name} 식사가 '제공됨'으로 기록되어 있습니다.",
                         "suggestion": "외출 시간과 식사 제공 기록이 상충합니다. 실제 제공 여부를 확인하세요."})
+
+        # ── 식사 미기록 누적 (외출 겹치는 끼니는 정상, 시간없는 외출일은 보류) ──
+        _day_outings = [o for o in outings if o['sd'] <= rec_date <= o['ed']]
+        _skip_meal = any((o['st_min'] is None or o['et_min'] is None) for o in _day_outings)
+        if not _skip_meal:
+            _missing = []
+            for meal_name, meal_min, meal_key in MEAL_TIMES:
+                mv = rec.physical.get(meal_key) or {}
+                if mv.get('meal_type') or mv.get('intake_amount'):
+                    continue
+                _in_outing = any(
+                    min(o['st_min'], o['et_min']) <= meal_min <= max(o['st_min'], o['et_min'])
+                    for o in _day_outings
+                )
+                if not _in_outing:
+                    _missing.append(meal_name)
+            if _missing:
+                meal_missing_days.append((date_short, _missing))
 
         # ── 혈압/체온 미기재 ────────────────────────────────────────────────
         vital = rec.nursing.get('vital_sign', {})
@@ -232,12 +268,80 @@ def audit_daily_records(
                     "description": "기저귀 사용 수급자인데 화장실이용/기저귀교환 기록이 없습니다.",
                     "suggestion": "기저귀 교환 횟수와 대변/소변 횟수를 기록하세요."})
 
-    # ── 목욕 월 5회 미만 (입소일 이후 20일 이상인 경우만 판단) ──────────────
-    if len(valid_records) >= 20 and len(bathing_dates) < 5:
+    # ── 목욕 월 5회 미만 (외박일 제외, 20일 이상인 경우만 판단) ──────────────
+    _bath = sum(1 for r in present_records if (r.physical.get('bathing') or {}).get('provided'))
+    if len(present_records) >= 20 and _bath < 5:
         issues.append({"type":"목욕횟수부족","severity":"medium",
-            "location": f"{records[0].resident_name or ''} / 월 {len(bathing_dates)}회",
-            "description": f"이번 달 목욕 제공 횟수가 {len(bathing_dates)}회로 권고 기준(월 5회) 미달입니다.",
+            "location": f"{records[0].resident_name or ''} / 월 {_bath}회",
+            "description": f"이번 달 목욕 제공 횟수가 {_bath}회로 권고 기준(월 5회) 미달입니다.",
             "suggestion": "목욕 제공 횟수를 월 5회 이상으로 늘리세요."})
+
+    # ── 식사 미기록 (요약: 항목당 1건) ────────────────────────────────────
+    if meal_missing_days:
+        _sample = ', '.join(f"{d}({'·'.join(m)})" for d, m in meal_missing_days[:5])
+        _more = f" 외 {len(meal_missing_days) - 5}일" if len(meal_missing_days) > 5 else ""
+        issues.append({"type":"식사기록누락","severity":"medium",
+            "location": f"{records[0].resident_name or ''} / {len(meal_missing_days)}일",
+            "description": f"식사 기록이 누락된 날이 {len(meal_missing_days)}일 있습니다: {_sample}{_more}.",
+            "suggestion": "제공한 식사 종류와 섭취량을 빠짐없이 기록하세요. (외박·외출 시간대는 제외됨)"})
+
+    # ── 산책 빈도 (일반: 일 1회 / 와상: 주 1회) ─────────────────────────────
+    if len(present_records) >= 7:
+        walking_days = sum(
+            1 for r in present_records
+            if (r.physical.get('walking_support') or {}).get('walking') is True
+        )
+        active_days = len(present_records)
+        if is_bedridden:
+            weeks = max(1, (active_days + 6) // 7)
+            if walking_days < weeks:
+                issues.append({"type":"산책부족","severity":"medium",
+                    "location": f"{records[0].resident_name or ''} / 산책 {walking_days}회",
+                    "description": f"와상 어르신 산책(외출) 기록이 {walking_days}회로 주 1회 기준(약 {weeks}회)에 미달합니다.",
+                    "suggestion": "와상 어르신도 주 1회 이상 산책·외출 동행을 기록하세요."})
+        elif walking_days < active_days:
+            issues.append({"type":"산책부족","severity":"low",
+                "location": f"{records[0].resident_name or ''} / 산책 {walking_days}/{active_days}일",
+                "description": f"산책(외출) 기록이 {active_days}일 중 {walking_days}일로 일 1회 권장에 미달합니다.",
+                "suggestion": "일반 어르신은 매일 1회 이상 산책을 기록하세요."})
+
+    # ── 배변 장기 누락 (기저귀 대상 또는 와상/준와상만 — 오탐 방지) ─────────
+    _diaper_target = is_bedridden or any(
+        (r.equipment.get('diaper') if isinstance(r.equipment, dict) else False) for r in records
+    )
+    if _diaper_target:
+        _seq = sorted(
+            [r for r in valid_records if _parse_date(r.service_date)],
+            key=lambda r: _parse_date(r.service_date),
+        )
+        _streak = 0
+        _s_start = None
+        _s_prev = None
+        _runs = []
+        for r in _seq:
+            rd = _parse_date(r.service_date)
+            if any(sd <= rd <= ed for sd, ed in overnight_periods):
+                if _streak >= 4:
+                    _runs.append((_s_start, _s_prev, _streak))
+                _streak = 0; _s_start = None; _s_prev = None
+                continue
+            _bowel = (r.physical.get('diaper_toilet') or {}).get('bowel_count')
+            if not _bowel:   # None 또는 0
+                if _streak == 0:
+                    _s_start = rd
+                _streak += 1
+                _s_prev = rd
+            else:
+                if _streak >= 4:
+                    _runs.append((_s_start, _s_prev, _streak))
+                _streak = 0; _s_start = None; _s_prev = None
+        if _streak >= 4:
+            _runs.append((_s_start, _s_prev, _streak))
+        for (_sd, _ed, _n) in _runs:
+            issues.append({"type":"배변장기누락","severity":"medium",
+                "location": f"{records[0].resident_name or ''} / {_sd}~{_ed}",
+                "description": f"배변 기록이 {_n}일 연속 0회 또는 미기록입니다 ({_sd}~{_ed}).",
+                "suggestion": "외박·입원 여부를 확인하고 배변 상태·조치사항을 기록하세요."})
 
     return sorted(issues, key=lambda x: SEV_ORDER.get(x.get('severity','low'), 9))
 

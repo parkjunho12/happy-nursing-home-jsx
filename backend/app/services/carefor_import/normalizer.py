@@ -29,10 +29,11 @@ LEAVE_COL_MAP = {
     "start_date":    ["외출일","외박일","시작일","출발일","start_date","외출시작일","시작"],
     "start_time":    ["출발시간","시작시간","start_time","외출시간"],
     "end_date":      ["귀원일","복귀일","종료일","return_date","end_date","외출종료일","종료"],
-    "end_time":      ["귀원시간","복귀시간","end_time","귀원"],
+    "end_time":      ["귀원시간","복귀시간","return_time","end_time"],
     "reason":        ["사유","이유","reason"],
     "guardian_name": ["보호자","보호자명","guardian"],
     "memo":          ["비고","메모","memo","특이사항"],
+    "leave_days":    ["외박일수","외출일수","일수","박수","days"],
 }
 
 
@@ -63,9 +64,9 @@ def _normalize_date(val: Any) -> Optional[str]:
     if not s or s in ('None', 'nan', ''):
         return None
 
-    # 이미 YYYY-MM-DD
-    if re.match(r'^\d{4}-\d{2}-\d{2}$', s):
-        return s
+    # YYYY-MM-DD (뒤에 시간이 붙어 있어도 앞 10자리 사용)
+    if re.match(r'^\d{4}-\d{2}-\d{2}', s):
+        return s[:10]
 
     # YYYY.MM.DD / YYYY/MM/DD
     m = re.match(r'^(\d{4})[./](\d{1,2})[./](\d{1,2})$', s)
@@ -95,6 +96,11 @@ def _normalize_date(val: Any) -> Optional[str]:
         except ValueError:
             pass
 
+    # 문자열 어딘가에 박힌 날짜 추출 (예: '외박중 퇴소(2026.06.07 14:50)')
+    m = re.search(r'(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})', s)
+    if m:
+        return f"{m.group(1)}-{m.group(2).zfill(2)}-{m.group(3).zfill(2)}"
+
     return None
 
 
@@ -102,11 +108,11 @@ def _normalize_time(val: Any) -> Optional[str]:
     if val is None:
         return None
     s = str(val).strip()
-    # HH:MM 또는 HH:MM:SS
+    # 맨 앞이 HH:MM 형식일 때만 시간으로 인정 (날짜·텍스트 섞인 셀은 무시)
     m = re.match(r'^(\d{1,2}):(\d{2})', s)
     if m:
         return f"{m.group(1).zfill(2)}:{m.group(2)}"
-    return s if s else None
+    return None
 
 
 def _mask_pii(raw: Dict[str, Any]) -> Dict[str, Any]:
@@ -149,12 +155,13 @@ def normalize_resident(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         if re.match(r'\d{6}[-–]\d{7}', rrn_val):
             birth = _extract_birth_from_rrn(rrn_val)
 
-    status_raw = _find_col(row, RESIDENT_COL_MAP["status"]) or "active"
-    # 상태 정규화
-    if any(w in status_raw for w in ['퇴소','퇴원','종료','inactive']):
-        status = "inactive"
-    elif any(w in status_raw for w in ['사망','death']):
+    discharge_date = _normalize_date(_find_col(row, RESIDENT_COL_MAP["discharge_date"]))
+    status_raw = _find_col(row, RESIDENT_COL_MAP["status"]) or ""
+    # 상태 정규화 — 퇴소일이 있으면 퇴소(inactive) 처리 (규칙 6: discharged=true)
+    if any(w in status_raw for w in ['사망', 'death']):
         status = "deceased"
+    elif discharge_date or any(w in status_raw for w in ['퇴소', '퇴원', '종료', 'inactive']):
+        status = "inactive"
     else:
         status = "active"
 
@@ -163,9 +170,9 @@ def normalize_resident(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "name":           name,
         "birth_date":     _normalize_date(birth),
         "gender":         _find_col(row, RESIDENT_COL_MAP["gender"]),
-        "care_grade":     _find_col(row, RESIDENT_COL_MAP["care_grade"]),
+        "care_grade":     _find_col(row, RESIDENT_COL_MAP["care_grade"]),  # '등급외'도 그대로 보존
         "admission_date": _normalize_date(_find_col(row, RESIDENT_COL_MAP["admission_date"])),
-        "discharge_date": _normalize_date(_find_col(row, RESIDENT_COL_MAP["discharge_date"])),
+        "discharge_date": discharge_date,
         "room_name":      _find_col(row, RESIDENT_COL_MAP["room_name"]),
         "status":         status,
         "raw_data":       _mask_pii(row),  # 개인정보 마스킹 후 저장
@@ -188,13 +195,33 @@ def normalize_leave(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     else:
         leave_type = leave_type_raw or "외출"
 
+    start_date = _normalize_date(_find_col(row, LEAVE_COL_MAP["start_date"]))
+    end_date   = _normalize_date(_find_col(row, LEAVE_COL_MAP["end_date"]))
+
+    # 외박일수로 한쪽 날짜 보완 (예: '외박중 퇴소' → 시작일 비고 종료일+일수만 있을 때)
+    days = None
+    days_raw = _find_col(row, LEAVE_COL_MAP["leave_days"])
+    if days_raw:
+        dm = re.search(r'(\d+)', str(days_raw))
+        if dm:
+            days = int(dm.group(1))
+    if days:
+        from datetime import date as _date, timedelta as _td
+        try:
+            if start_date and not end_date:
+                end_date = (_date.fromisoformat(start_date) + _td(days=days)).isoformat()
+            elif end_date and not start_date:
+                start_date = (_date.fromisoformat(end_date) - _td(days=days)).isoformat()
+        except Exception:
+            pass
+
     return {
         "resident_name": name,
         "resident_code": _find_col(row, LEAVE_COL_MAP["resident_code"]),
         "leave_type":    leave_type,
-        "start_date":    _normalize_date(_find_col(row, LEAVE_COL_MAP["start_date"])),
+        "start_date":    start_date,
         "start_time":    _normalize_time(_find_col(row, LEAVE_COL_MAP["start_time"])),
-        "end_date":      _normalize_date(_find_col(row, LEAVE_COL_MAP["end_date"])),
+        "end_date":      end_date,
         "end_time":      _normalize_time(_find_col(row, LEAVE_COL_MAP["end_time"])),
         "reason":        _find_col(row, LEAVE_COL_MAP["reason"]),
         "guardian_name": _find_col(row, LEAVE_COL_MAP["guardian_name"]),

@@ -5,6 +5,7 @@ import {
   FileSpreadsheet, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp,
   Loader2, History, X, Printer, RefreshCw, Settings,
   Users, CalendarOff, Trash2, Upload, Edit3, Save, Sparkles, Clock, Plus,
+  Zap, XCircle, AlertOctagon,
 } from 'lucide-react'
 import { apiClient } from '@/api/client'
 import { useAuthStore } from '@/store/auth'
@@ -1323,8 +1324,8 @@ function AuditResultView({ record }: { record: AuditRecord }) {
 
         {!!llmSummary?.priority_actions?.length && (
           <div className="mt-3">
-            <p className="text-xs font-semibold text-red-600 mb-1.5">
-              ⚡ 우선 조치
+            <p className="text-xs font-semibold text-red-600 mb-1.5 flex items-center gap-1">
+              <Zap size={12} /> 우선 조치
             </p>
 
             <ul className="space-y-1">
@@ -1359,9 +1360,9 @@ function AuditResultView({ record }: { record: AuditRecord }) {
         )}
 
         {r.issue_total_count && r.issue_total_count > issues.length && (
-          <div className="mt-3 bg-yellow-50 border border-yellow-100 rounded-xl px-3 py-2 text-xs text-yellow-700">
-            ⚠️ 전체 이슈 {r.issue_total_count.toLocaleString()}건 중 상위{' '}
-            {issues.length}건만 표시됩니다.
+          <div className="mt-3 bg-yellow-50 border border-yellow-100 rounded-xl px-3 py-2 text-xs text-yellow-700 flex items-start gap-1.5">
+            <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" />
+            <span>전체 이슈 {r.issue_total_count.toLocaleString()}건 중 상위 {issues.length}건만 표시됩니다.</span>
           </div>
         )}
       </div>
@@ -1375,13 +1376,13 @@ function AuditResultView({ record }: { record: AuditRecord }) {
             </p>
 
             <div className="flex gap-3 text-xs text-gray-500">
-              <span className="text-green-600">
-                ✅ 매칭 {r.matched_residents ?? 0}명
+              <span className="text-green-600 flex items-center gap-1">
+                <CheckCircle2 size={12} /> 매칭 {r.matched_residents ?? 0}명
               </span>
 
               {(r.unmatched_residents ?? 0) > 0 && (
-                <span className="text-red-500">
-                  ❌ 미매칭 {r.unmatched_residents}명
+                <span className="text-red-500 flex items-center gap-1">
+                  <XCircle size={12} /> 미매칭 {r.unmatched_residents}명
                 </span>
               )}
             </div>
@@ -1409,7 +1410,7 @@ function AuditResultView({ record }: { record: AuditRecord }) {
       {criticalIssues.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs font-bold text-purple-700 flex items-center gap-1 px-1">
-            🚨 즉시 조치 — 허위기록 의심 ({criticalIssues.length}건)
+            <AlertOctagon size={12} /> 즉시 조치 — 허위기록 의심 ({criticalIssues.length}건)
           </p>
 
           {criticalIssues.map((issue, i) => (
