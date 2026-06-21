@@ -20,6 +20,22 @@ from app.services.occurrence import (
 router = APIRouter()
 
 
+# frequency 표기 흔들림 정규화 (예: 'half_yearly' → 'half-yearly')
+_FREQ_ALIASES = {
+    "half_yearly": "half-yearly",
+    "halfyearly": "half-yearly",
+    "semiannual": "half-yearly",
+    "semi_annual": "half-yearly",
+}
+
+
+def _normalize_freq(freq):
+    if not freq:
+        return freq
+    key = str(freq).strip()
+    return _FREQ_ALIASES.get(key, _FREQ_ALIASES.get(key.lower(), key))
+
+
 # ── 응답 변환 헬퍼 ────────────────────────────────────────────────────────
 
 def _cl_to_out(item: ChecklistItem) -> dict:
@@ -120,7 +136,7 @@ def create_checklist(
 ):
     item = ChecklistItem(
         title=payload.title, description=payload.description,
-        frequency=payload.frequency,
+        frequency=_normalize_freq(payload.frequency),
         related_indicator_id=payload.related_indicator_id or None,
         related_category_id=payload.related_category_id or None,
         related_domain_id=payload.related_domain_id or None,
@@ -173,7 +189,7 @@ def create_checklists_bulk(
     for payload in items:
         item = ChecklistItem(
             title=payload.title, description=payload.description,
-            frequency=payload.frequency,
+            frequency=_normalize_freq(payload.frequency),
             related_indicator_id=payload.related_indicator_id or None,
             related_category_id=payload.related_category_id or None,
             related_domain_id=payload.related_domain_id or None,
@@ -210,7 +226,10 @@ def update_checklist(
     item = _query_with_history(db).filter(ChecklistItem.id == item_id).first()
     if not item:
         raise HTTPException(404, "Not found")
-    for field, val in payload.model_dump(exclude_none=True).items():
+    updates = payload.model_dump(exclude_none=True)
+    if "frequency" in updates:
+        updates["frequency"] = _normalize_freq(updates["frequency"])
+    for field, val in updates.items():
         setattr(item, field, val)
     db.commit()
     item = _query_with_history(db).filter(ChecklistItem.id == item_id).first()
