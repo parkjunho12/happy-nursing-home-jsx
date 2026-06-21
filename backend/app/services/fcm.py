@@ -41,6 +41,7 @@ def send_to_tokens(
     title: str,
     body: str,
     data: Optional[dict] = None,
+    image: Optional[str] = None,
 ) -> Tuple[int, int, List[str]]:
     """
     여러 기기에 푸시 발송.
@@ -61,7 +62,7 @@ def send_to_tokens(
         batch = tokens[i:i + 500]
         message = messaging.MulticastMessage(
             tokens=batch,
-            notification=messaging.Notification(title=title, body=body),
+            notification=messaging.Notification(title=title, body=body, image=image),
             data=safe_data,
             android=messaging.AndroidConfig(priority="high"),
         )

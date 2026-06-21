@@ -12,7 +12,25 @@ import type {
   ApiResponse,
 } from '@/types'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+/**
+ * API 베이스 결정:
+ * - 로컬/사설 IP(localhost·127.0.0.1·10.0.2.2·192.168.* 등)에서 열렸으면
+ *   같은 호스트의 8000 포트 사용 → 에뮬레이터·실기기·PC 브라우저 모두 자동 대응.
+ * - 그 외(운영)는 VITE_API_BASE_URL 또는 운영 기본값.
+ */
+function resolveApiBase(): string {
+  if (typeof window !== 'undefined') {
+    const h = window.location.hostname
+    const isLocal =
+      h === 'localhost' || h === '127.0.0.1' || h === '10.0.2.2' ||
+      /^192\.168\./.test(h) || /^10\./.test(h) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(h)
+    if (isLocal) return `http://${h}:8000`
+  }
+  return import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+}
+
+const API_BASE_URL = resolveApiBase()
 const API_PREFIX = '/api/v1'
 
 // --------------------
