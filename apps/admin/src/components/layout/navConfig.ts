@@ -49,6 +49,13 @@ export function getNavConfig(
       showDashboard: false,
       main: [],
       eval: [
+        {
+          to: '/eval/checklist',
+          icon: ClipboardList,
+          label: '체크리스트',
+          badge: todayTodo > 0 ? `${todayTodo}` : undefined,
+        },
+        { to: '/eval/calendar', icon: CalendarDays, label: '체크 캘린더' },
         { to: '/eval/albums', icon: ImageIcon, label: '보호자 앨범 관리' },
       ],
     }

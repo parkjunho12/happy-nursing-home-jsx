@@ -372,15 +372,7 @@ def upload_media(
         saved.append({"id": m.id, "url": file_url, "thumb": thumb_url, "type": media_type})
 
     db.commit()
-
-    # 사진이 추가되고 앨범이 공개 상태면 보호자에게 자동 푸시 (실패해도 업로드는 성공)
-    if saved and a.is_public:
-        try:
-            n = len(saved)
-            _notify_album_guardians(db, a, f"'{a.title}' 앨범에 새 사진 {n}장이 올라왔어요")
-        except Exception as e:
-            logger.warning(f"앨범 업로드 푸시 실패: {e}")
-
+    # ※ 푸시는 자동 발송하지 않음. 관리자 화면의 '알림 보내기' 버튼으로 수동 발송.
     return ApiResponse(success=True, data=saved)
 
 
@@ -640,14 +632,23 @@ def unregister_push_token(
     return ApiResponse(success=True, data={"unregistered": True})
 
 
-def _notify_album_guardians(db: Session, album: Album, body_text: str) -> dict:
-    """앨범 수급자의 보호자들에게 푸시 발송. (무효 토큰은 정리)"""
+def _notify_album_guardians(db: Session, album: Album) -> dict:
+    """앨범 수급자의 보호자들에게 '새 사진' 푸시 발송. (무효 토큰은 정리)"""
     links = db.query(ResidentGuardian).filter(
         ResidentGuardian.resident_id == album.resident_id
     ).all()
     guardian_ids = [l.guardian_id for l in links]
     if not guardian_ids:
         return {"guardians": 0, "tokens": 0, "sent": 0, "failed": 0}
+
+    # 보낼 미디어 수 (안내문에 사용)
+    media_count = db.query(AlbumMedia).filter(AlbumMedia.album_id == album.id).count()
+    title = "📸 새 사진이 도착했어요"
+    if media_count > 0:
+        body = f"‘{album.title}’ 앨범에 사진 {media_count}장이 준비됐어요 💛 지금 우리 가족 일상을 확인해보세요"
+    else:
+        body = f"‘{album.title}’ 앨범을 확인해보세요 💛"
+    cover = album.cover_url if (album.cover_url and album.cover_url.startswith("http")) else None
 
     try:
         token_rows = db.query(FamilyPushToken).filter(
@@ -656,8 +657,9 @@ def _notify_album_guardians(db: Session, album: Album, body_text: str) -> dict:
         tokens = [t.token for t in token_rows]
 
         sent, failed, invalid = send_to_tokens(
-            tokens, "행복한요양원 보호자앨범", body_text,
-            data={"type": "album", "album_id": album.id},
+            tokens, title, body,
+            data={"type": "album", "album_id": album.id, "album_title": album.title},
+            image=cover,
         )
         if invalid:
             db.query(FamilyPushToken).filter(
@@ -682,7 +684,7 @@ def notify_album(
     """해당 앨범 수급자의 보호자들에게 '새 앨범 도착' 푸시 발송 (관리자 수동)."""
     _require_can_manage_guardians(current_user)
     album = _get_album_or_404(db, album_id)
-    result = _notify_album_guardians(db, album, f"새 앨범이 도착했어요: {album.title}")
+    result = _notify_album_guardians(db, album)
     if result["guardians"] == 0:
         result["message"] = "연결된 보호자가 없습니다"
     return ApiResponse(success=True, data=result)

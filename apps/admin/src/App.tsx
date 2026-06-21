@@ -55,8 +55,13 @@ function RoleRedirect({ children }: { children: React.ReactNode }) {
   if (!isAuthenticated) return <>{children}</>
 
   const isCaregiverOnly = user?.role === 'STAFF' && user?.position === '요양보호사'
+  const caregiverAllowed = [
+    '/eval/albums',
+    '/eval/checklist',
+    '/eval/calendar',
+  ]
   const isAllowed =
-    location.pathname === '/eval/albums' ||
+    caregiverAllowed.includes(location.pathname) ||
     location.pathname.startsWith('/eval/albums/')
 
   if (isCaregiverOnly && !isAllowed) {

@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/auth'
 import { Lock, Mail, AlertCircle, ArrowRight } from 'lucide-react'
 
 const LoginPage = () => {
   const navigate = useNavigate()
-  const { login, isLoading } = useAuthStore()
+  const { login, isLoading, isAuthenticated, user: authedUser } = useAuthStore()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -19,6 +19,17 @@ const LoginPage = () => {
     }),
     []
   )
+
+  // 이미 로그인된 상태(앱 재실행 등)면 로그인 화면을 건너뛴다
+  useEffect(() => {
+    if (isAuthenticated) {
+      if (authedUser?.role === 'STAFF' && authedUser?.position === '요양보호사') {
+        navigate('/eval/albums', { replace: true })
+      } else {
+        navigate('/', { replace: true })
+      }
+    }
+  }, [isAuthenticated])   // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
