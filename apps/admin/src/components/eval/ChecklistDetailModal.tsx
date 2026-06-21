@@ -6,6 +6,7 @@ import ChecklistFormModal from '@/components/eval/ChecklistFormModal'
 import {
   FREQUENCY_LABELS, RISK_LABELS, RISK_COLORS,
   getCurrentPeriodKey, isPeriodCompleted, getPeriodLabel,
+  cfgFromItem,
   RECURRING,
 } from '@/utils/period'
 
@@ -23,10 +24,11 @@ export default function ChecklistDetailModal({ item, onClose }: Props) {
   const [saving, setSaving] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
 
+  const recurCfg = cfgFromItem(item)
   const isRecurring = RECURRING.includes(item.frequency as any)
-  const currentPeriodKey   = isRecurring ? getCurrentPeriodKey(item.frequency as any) : ''
+  const currentPeriodKey   = isRecurring ? getCurrentPeriodKey(item.frequency as any, recurCfg) : ''
   const isCurrentDone      = isRecurring ? isPeriodCompleted(item, currentPeriodKey) : item.completed
-  const currentPeriodLabel = isRecurring ? getPeriodLabel(item.frequency as any, currentPeriodKey) : ''
+  const currentPeriodLabel = isRecurring ? getPeriodLabel(item.frequency as any, currentPeriodKey, recurCfg) : ''
   const currentRecord      = isRecurring ? item.completionHistory.find(r => r.periodKey === currentPeriodKey) : null
 
   const handleToggle = async () => {
@@ -155,7 +157,7 @@ export default function ChecklistDetailModal({ item, onClose }: Props) {
                   {[...item.completionHistory].reverse().map(rec => (
                     <div key={rec.periodKey} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-1.5">
                       <span className="text-xs text-gray-600 font-medium">
-                        {getPeriodLabel(item.frequency as any, rec.periodKey)}
+                        {getPeriodLabel(item.frequency as any, rec.periodKey, recurCfg)}
                       </span>
                       <span className="text-xs text-gray-400">{rec.completedDate}</span>
                     </div>

@@ -146,6 +146,10 @@ def create_checklist(
         memo=payload.memo, attachment_name=payload.attachment_name,
         person_id=payload.person_id, person_name=payload.person_name,
         person_type=payload.person_type, template_id=payload.template_id,
+        recur_weekday=payload.recur_weekday,
+        recur_week_of_month=payload.recur_week_of_month,
+        recur_day=payload.recur_day,
+        recur_due_day=payload.recur_due_day,
         active=True, completed=False,
     )
 
@@ -199,6 +203,10 @@ def create_checklists_bulk(
             memo=payload.memo, attachment_name=payload.attachment_name,
             person_id=payload.person_id, person_name=payload.person_name,
             person_type=payload.person_type, template_id=payload.template_id,
+            recur_weekday=payload.recur_weekday,
+            recur_week_of_month=payload.recur_week_of_month,
+            recur_day=payload.recur_day,
+            recur_due_day=payload.recur_due_day,
             active=True, completed=False,
         )
         db.add(item)
@@ -300,7 +308,7 @@ def toggle_complete(
     """
     from app.services.occurrence import (
         today_kst, get_period_key as _gpk, EVENT_FREQS as _EV,
-        ONE_TIME_FREQ,
+        ONE_TIME_FREQ, cfg_from_item,
     )
 
     item = _query_with_history(db).filter(ChecklistItem.id == item_id).first()
@@ -311,7 +319,7 @@ def toggle_complete(
     today_str  = today.isoformat()
     is_event   = item.frequency in _EV
     is_one_time = item.frequency == ONE_TIME_FREQ
-    period_key = today_str if is_event else _gpk(item.frequency, today)
+    period_key = today_str if is_event else _gpk(item.frequency, today, cfg_from_item(item))
 
     if is_event or is_one_time:
         # ── 이벤트성 / 일회성: boolean 토글 ─────────────────────────────

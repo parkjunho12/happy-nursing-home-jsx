@@ -33,6 +33,10 @@ export interface ChecklistItem {
   relatedDomainId: string
   assignee: string
   assigned_user_id?: string | null
+  recurWeekday?: number | null
+  recurWeekOfMonth?: number | null
+  recurDay?: number | null
+  recurDueDay?: number | null
   evidenceRequired: string
   storageLocation: string
   howTo: string
@@ -113,6 +117,10 @@ function mapCL(raw: any): ChecklistItem {
     relatedDomainId:    raw.related_domain_id    ?? '',
     assignee:        raw.assignee        ?? '',
     assigned_user_id: raw.assigned_user_id ?? null,
+    recurWeekday:     raw.recur_weekday        ?? null,
+    recurWeekOfMonth: raw.recur_week_of_month  ?? null,
+    recurDay:         raw.recur_day            ?? null,
+    recurDueDay:      raw.recur_due_day        ?? null,
     evidenceRequired:raw.evidence_required ?? '',
     storageLocation: raw.storage_location  ?? '',
     howTo:           raw.how_to           ?? '',
@@ -162,6 +170,10 @@ function clPayload(item: Omit<ChecklistItem,'id'|'createdAt'|'completionHistory'
     related_indicator_id:item.relatedIndicatorId, related_category_id:item.relatedCategoryId,
     related_domain_id:item.relatedDomainId, assignee:item.assignee,
     assigned_user_id:(item as any).assigned_user_id ?? null,
+    recur_weekday:(item as any).recurWeekday ?? null,
+    recur_week_of_month:(item as any).recurWeekOfMonth ?? null,
+    recur_day:(item as any).recurDay ?? null,
+    recur_due_day:(item as any).recurDueDay ?? null,
     evidence_required:item.evidenceRequired, storage_location:item.storageLocation,
     how_to:item.howTo, eval_note:item.evalNote, risk_level:item.riskLevel,
     memo:item.memo, attachment_name:item.attachmentName,
@@ -289,6 +301,10 @@ export const useLtcStore = create<LtcState>((set, get) => ({
     if (u.relatedIndicatorId !== undefined) p.related_indicator_id = u.relatedIndicatorId
     if (u.assignee !== undefined)         p.assignee          = u.assignee
     if ((u as any).assigned_user_id !== undefined) p.assigned_user_id = (u as any).assigned_user_id || null
+    if ((u as any).recurWeekday !== undefined)     p.recur_weekday       = (u as any).recurWeekday
+    if ((u as any).recurWeekOfMonth !== undefined) p.recur_week_of_month = (u as any).recurWeekOfMonth
+    if ((u as any).recurDay !== undefined)         p.recur_day           = (u as any).recurDay
+    if ((u as any).recurDueDay !== undefined)      p.recur_due_day       = (u as any).recurDueDay
     if (u.evidenceRequired !== undefined) p.evidence_required = u.evidenceRequired
     if (u.storageLocation !== undefined)  p.storage_location  = u.storageLocation
     if (u.howTo !== undefined)            p.how_to            = u.howTo

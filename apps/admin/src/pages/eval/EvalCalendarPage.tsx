@@ -1,13 +1,13 @@
 import { useState, useMemo, useEffect } from 'react'
 import {
   ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2,
-  RotateCcw, UserPlus, UserMinus, LogIn, LogOut, Users,
+  RotateCcw, UserPlus, UserMinus, LogIn, LogOut, Users, Clock,
 } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
 import type { ChecklistOccurrence } from '@/store/ltc'
 import ChecklistDetailModal from '@/components/eval/ChecklistDetailModal'
 import type { ChecklistItem } from '@/utils/period'
-import { RECURRING, EVENT_FREQS, FREQUENCY_LABELS, FREQUENCY_COLORS, getPeriodEnd, getCurrentPeriodKey, shouldShowOnDate, isPeriodCompleted, getPeriodKey, todayKST, todayDateKST, daysFromToday } from '@/utils/period'
+import { EVENT_FREQS, FREQUENCY_LABELS, FREQUENCY_COLORS, shouldShowOnDate, isPeriodCompleted, getPeriodKey, todayKST, todayDateKST, daysFromToday } from '@/utils/period'
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   eachDayOfInterval, isSameMonth, isSameDay, isToday, addMonths, subMonths,
@@ -34,6 +34,7 @@ export default function EvalCalendarPage() {
   const [selectedDay, setSelectedDay] = useState<Date | null>(todayDateKST())
   const [toggling, setToggling] = useState<string | null>(null)
   const [viewTab, setViewTab] = useState<ViewTab>('all')
+  const [urgentFilter, setUrgentFilter] = useState<'todo' | 'overdue' | 'done'>('todo')
 
   useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
 
@@ -110,45 +111,66 @@ export default function EvalCalendarPage() {
     return map
   }, [checklists, days, hasOccurrences])
 
-  // ── 주기별 현황 (상단 요약) ─────────────────────────────────────────
-  const periodSummary = useMemo(() => {
+  // ── 상단 요약 (지남 / 오늘 할 일 / 이번 주 마감) ──────────────────────
+  const summary = useMemo(() => {
     const today = todayKST()
-    return RECURRING.map(freq => {
-      if (hasOccurrences) {
-        // 현재 진행 중인 주기: scheduledDate <= 오늘 <= dueDate
-        // 같은 아이템 중 dueDate 가장 큰(최신 주기) occurrence만 사용
-        const candidateMap = new Map<string, ChecklistOccurrence>()
-        occurrences
-          .filter(o =>
-            o.frequency === freq &&
-            o.scheduledDate <= today &&
-            o.dueDate >= today &&
-            itemMap.get(o.checklistItemId)?.active
-          )
-          .forEach(o => {
-            const existing = candidateMap.get(o.checklistItemId)
-            if (!existing || o.dueDate > existing.dueDate)
-              candidateMap.set(o.checklistItemId, o)
-          })
-        let total = 0, done = 0
-        candidateMap.forEach(o => {
-          total++
-          if (o.status === 'completed') done++
-        })
-        const end = getPeriodEnd(freq as any)
-        const daysLeft = Math.max(0, daysFromToday(end.toISOString().split('T')[0]))
-        return { freq, total, done, daysLeft }
+    const weekEnd = format(endOfWeek(todayDateKST(), { weekStartsOn: 0 }), 'yyyy-MM-dd')
+    const overdue = new Set<string>(), todayTodo = new Set<string>(), weekDue = new Set<string>()
+    if (hasOccurrences) {
+      occurrences.forEach(o => {
+        const item = itemMap.get(o.checklistItemId)
+        if (!item?.active || o.status === 'completed') return
+        if (o.status === 'overdue' || o.dueDate < today) overdue.add(o.checklistItemId)
+        if (o.scheduledDate <= today && o.dueDate >= today) todayTodo.add(o.checklistItemId)
+        if (o.dueDate >= today && o.dueDate <= weekEnd) weekDue.add(o.checklistItemId)
+      })
+    }
+    return { overdue: overdue.size, todayTodo: todayTodo.size, weekDue: weekDue.size }
+  }, [occurrences, itemMap, hasOccurrences])
+
+  // ── 마감 임박순 목록 (항목별 가장 임박한 occurrence) ────────────────
+  const upcoming = useMemo(() => {
+    if (!hasOccurrences) return [] as { occ: ChecklistOccurrence; item: ChecklistItem | undefined; daysLeft: number }[]
+    const byItem = new Map<string, ChecklistOccurrence>()
+    occurrences.forEach(o => {
+      const item = itemMap.get(o.checklistItemId)
+      if (!item?.active) return
+      if (urgentFilter === 'todo'    && o.status === 'completed') return
+      if (urgentFilter === 'overdue' && o.status !== 'overdue')   return
+      if (urgentFilter === 'done'    && o.status !== 'completed') return
+      const cur = byItem.get(o.checklistItemId)
+      if (!cur) { byItem.set(o.checklistItemId, o); return }
+      if (urgentFilter === 'done') {
+        // 완료: 가장 최근 완료
+        if ((o.completedDate || o.dueDate) > (cur.completedDate || cur.dueDate)) byItem.set(o.checklistItemId, o)
       } else {
-        // fallback
-        const items = checklists.filter(c => c.active && c.frequency === freq)
-        const key = getCurrentPeriodKey(freq as any)
-        const done = items.filter(c => isPeriodCompleted(c, key)).length
-        const end = getPeriodEnd(freq as any)
-        const daysLeft = Math.max(0, daysFromToday(end.toISOString().split('T')[0]))
-        return { freq, total: items.length, done, daysLeft }
+        // 미완료/지남: 가장 임박(=가장 이른 마감)
+        if (o.dueDate < cur.dueDate) byItem.set(o.checklistItemId, o)
       }
-    }).filter(s => s.total > 0)
-  }, [occurrences, checklists, itemMap, hasOccurrences])
+    })
+    const rows = [...byItem.values()].map(o => ({
+      occ: o,
+      item: itemMap.get(o.checklistItemId),
+      daysLeft: daysFromToday(o.dueDate),
+    }))
+    rows.sort((a, b) =>
+      urgentFilter === 'done'
+        ? (b.occ.completedDate || b.occ.dueDate).localeCompare(a.occ.completedDate || a.occ.dueDate)
+        : a.occ.dueDate.localeCompare(b.occ.dueDate),   // 오름차순 = 임박/지난 순
+    )
+    return rows
+  }, [occurrences, itemMap, hasOccurrences, urgentFilter])
+
+  const urgentCounts = useMemo(() => {
+    const todoSet = new Set<string>(), overdueSet = new Set<string>(), doneSet = new Set<string>()
+    if (hasOccurrences) occurrences.forEach(o => {
+      const item = itemMap.get(o.checklistItemId)
+      if (!item?.active) return
+      if (o.status === 'completed') doneSet.add(o.checklistItemId)
+      else { todoSet.add(o.checklistItemId); if (o.status === 'overdue') overdueSet.add(o.checklistItemId) }
+    })
+    return { todo: todoSet.size, overdue: overdueSet.size, done: doneSet.size }
+  }, [occurrences, itemMap, hasOccurrences])
 
   // ── 날짜별 인물 이벤트 ──────────────────────────────────────────────
   const personEventsByDay = useMemo(() => {
@@ -241,31 +263,29 @@ export default function EvalCalendarPage() {
         </button>
       </div>
 
-      {/* 주기별 현황 */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-        <p className="text-xs font-semibold text-gray-500 mb-3">현재 주기 완료 현황</p>
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
-          {periodSummary.map(s => {
-            const rate    = s.total ? Math.round(s.done / s.total * 100) : 0
-            const allDone = s.done === s.total
-            const urgent  = !allDone && s.daysLeft <= 3
-            return (
-              <div key={s.freq} className={`rounded-xl p-3 border ${allDone?'bg-green-50 border-green-100':urgent?'bg-red-50 border-red-100':'bg-gray-50 border-gray-100'}`}>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${FREQUENCY_COLORS[s.freq as any]}`}>{FREQUENCY_LABELS[s.freq as any]}</span>
-                  <div className="flex items-center gap-1">
-                    {urgent && <span className="text-[10px] font-bold text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full">D-{s.daysLeft}</span>}
-                    <span className={`text-sm font-bold ${allDone?'text-green-600':urgent?'text-red-600':'text-orange-600'}`}>{s.done}/{s.total}</span>
-                  </div>
-                </div>
-                <div className="w-full h-1.5 bg-white rounded-full overflow-hidden">
-                  <div className={`h-1.5 rounded-full ${allDone?'bg-green-500':urgent?'bg-red-400':'bg-primary-orange'}`} style={{ width:`${rate}%` }}/>
-                </div>
-              </div>
-            )
-          })}
+      {/* 상단 요약 스트립 */}
+      {hasOccurrences && (
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+          <button
+            onClick={() => setUrgentFilter('overdue')}
+            className={`text-left rounded-xl p-3 sm:p-4 border transition-colors ${
+              summary.overdue > 0 ? 'bg-red-50 border-red-100 hover:bg-red-100' : 'bg-gray-50 border-gray-100 hover:bg-gray-100'
+            }`}>
+            <p className={`text-[11px] sm:text-xs font-medium ${summary.overdue > 0 ? 'text-red-500' : 'text-gray-500'}`}>기한 지남</p>
+            <p className={`text-xl sm:text-2xl font-bold ${summary.overdue > 0 ? 'text-red-600' : 'text-gray-400'}`}>{summary.overdue}</p>
+          </button>
+          <button
+            onClick={() => setUrgentFilter('todo')}
+            className="text-left rounded-xl p-3 sm:p-4 border bg-orange-50 border-orange-100 hover:bg-orange-100 transition-colors">
+            <p className="text-[11px] sm:text-xs font-medium text-orange-500">오늘 할 일</p>
+            <p className="text-xl sm:text-2xl font-bold text-orange-600">{summary.todayTodo}</p>
+          </button>
+          <div className="rounded-xl p-3 sm:p-4 border bg-gray-50 border-gray-100">
+            <p className="text-[11px] sm:text-xs font-medium text-gray-500">이번 주 마감</p>
+            <p className="text-xl sm:text-2xl font-bold text-gray-700">{summary.weekDue}</p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 이번 달 인물 이벤트 배너 */}
       {monthPersonEvents.length > 0 && (
@@ -294,6 +314,8 @@ export default function EvalCalendarPage() {
         </div>
       )}
 
+      {/* 달력 + 마감 임박순 (2단) */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1.7fr_1fr] gap-4 items-start">
       {/* 캘린더 그리드 */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3.5 border-b">
@@ -311,6 +333,13 @@ export default function EvalCalendarPage() {
           <button onClick={() => setCurrentDate(addMonths(currentDate, 1))} className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50"><ChevronRight size={15}/></button>
         </div>
 
+        <div className="flex items-center gap-3 px-4 py-1.5 border-b bg-gray-50/50 flex-wrap">
+          <span className="flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-full bg-red-400 inline-block"/>지남</span>
+          <span className="flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-full bg-orange-400 inline-block"/>할 일</span>
+          <span className="flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-full bg-green-400 inline-block"/>완료</span>
+          <span className="flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-full bg-purple-400 inline-block"/>개인 이벤트</span>
+        </div>
+
         <div className="grid grid-cols-7 border-b bg-gray-50">
           {['일','월','화','수','목','금','토'].map((d,i) => (
             <div key={d} className={`py-2 text-center text-xs font-semibold ${i===0?'text-red-400':i===6?'text-blue-400':'text-gray-500'}`}>{d}</div>
@@ -325,7 +354,7 @@ export default function EvalCalendarPage() {
             const personEvs  = personEventsByDay.get(key) ?? []
 
             // occurrence 기반 or 구 방식
-            let todoCount = 0, doneCount = 0, eventTodo = 0, hasUrgent = false
+            let todoCount = 0, doneCount = 0, eventTodo = 0, hasUrgent = false, hasOverdue = false
             if (hasOccurrences) {
               const all = occsByDay.get(key) ?? []
               const recurring = all.filter(e => !['on_admission','on_discharge','on_hire'].includes(e.occ.frequency))
@@ -334,6 +363,7 @@ export default function EvalCalendarPage() {
               todoCount  = recurring.filter(e => e.occ.status !== 'completed').length
               eventTodo  = events.filter(e => e.occ.status !== 'completed').length
               hasUrgent  = all.some(e => e.occ.status !== 'completed' && e.item?.riskLevel === 'high')
+              hasOverdue = all.some(e => e.occ.status === 'overdue')
             } else {
               const all = legacyByDay.get(key) ?? []
               doneCount = all.filter(e => !e.isEvent && e.done).length
@@ -352,17 +382,25 @@ export default function EvalCalendarPage() {
                 <div className={`text-sm font-semibold w-6 h-6 flex items-center justify-center rounded-full mb-0.5 mx-auto ${
                   isToday(day)?'bg-primary-orange text-white':idx%7===0?'text-red-400':idx%7===6?'text-blue-400':'text-gray-700'
                 }`}>{format(day, 'd')}</div>
-                {isCurrent && (
-                  <div className="space-y-0.5">
+                {isCurrent && (todoCount > 0 || doneCount > 0 || eventTodo > 0 || personEvs.length > 0) && (
+                  <div className="flex flex-col items-center gap-0.5">
                     {todoCount > 0 && (
-                      <div className={`text-[9px] rounded px-1 py-0.5 font-semibold truncate flex items-center gap-0.5 ${hasUrgent?'bg-red-100 text-red-700':'bg-orange-100 text-orange-700'}`}>
-                        {hasUrgent && <AlertTriangle size={7}/>}✓{todoCount}
-                      </div>
+                      <span className={`text-[10px] leading-none font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 ${
+                        (hasUrgent || hasOverdue) ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'
+                      }`}>
+                        {(hasUrgent || hasOverdue) && <AlertTriangle size={8}/>}{todoCount}
+                      </span>
                     )}
-                    {doneCount > 0 && <div className="text-[9px] bg-green-100 text-green-700 rounded px-1 py-0.5 font-semibold">✔{doneCount}</div>}
-                    {eventTodo > 0 && <div className="text-[9px] bg-purple-100 text-purple-700 rounded px-1 py-0.5 font-semibold">!{eventTodo}</div>}
+                    {doneCount > 0 && (
+                      <span className="text-[10px] leading-none font-bold px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 flex items-center gap-0.5">
+                        <CheckCircle2 size={8}/>{doneCount}
+                      </span>
+                    )}
+                    {eventTodo > 0 && (
+                      <span className="text-[10px] leading-none font-bold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700">{eventTodo}</span>
+                    )}
                     {personEvs.length > 0 && (
-                      <div className="flex flex-wrap gap-0.5 mt-0.5">
+                      <div className="flex flex-wrap gap-0.5 justify-center mt-0.5">
                         {personEvs.slice(0,3).map((ev,i) => <span key={i} className={`w-1.5 h-1.5 rounded-full ${PERSON_EVENT_META[ev.type].dot} inline-block`}/>)}
                         {personEvs.length > 3 && <span className="text-[8px] text-gray-400">+{personEvs.length-3}</span>}
                       </div>
@@ -373,6 +411,44 @@ export default function EvalCalendarPage() {
             )
           })}
         </div>
+      </div>
+
+      {/* 마감 임박순 목록 */}
+      {hasOccurrences && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-3.5 border-b flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <Clock size={15} className="text-primary-orange" />
+              <h2 className="text-sm font-bold text-gray-900">마감 임박순</h2>
+              <span className="text-xs text-gray-400">{upcoming.length}건</span>
+            </div>
+            <div className="flex gap-1">
+              {([
+                ['todo',    '미완료',    urgentCounts.todo],
+                ['overdue', '기한 지남', urgentCounts.overdue],
+                ['done',    '완료',      urgentCounts.done],
+              ] as ['todo'|'overdue'|'done', string, number][]).map(([f, label, cnt]) => (
+                <button key={f} onClick={() => setUrgentFilter(f)}
+                  className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${
+                    urgentFilter===f ? 'bg-primary-orange text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}>
+                  {label} <span className={urgentFilter===f ? 'text-white/80' : 'text-gray-400'}>{cnt}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          {upcoming.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-10">해당 항목이 없습니다.</p>
+          ) : (
+            <div className="p-3 space-y-1.5 max-h-[420px] overflow-y-auto">
+              {upcoming.map(({ occ, item, daysLeft }) => (
+                <UpcomingRow key={occ.id} occ={occ} item={item} daysLeft={daysLeft} toggling={toggling}
+                  onToggle={() => handleToggleOcc(occ)} onDetail={() => item && setSelectedItem(item)} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       </div>
 
       {/* 선택한 날 상세 */}
@@ -496,17 +572,6 @@ export default function EvalCalendarPage() {
         </div>
       )}
 
-      {/* 범례 */}
-      <div className="flex gap-3 flex-wrap text-xs text-gray-400 pb-2">
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-orange-100 inline-block"/>반복 미완료</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-green-100 inline-block"/>완료</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-purple-100 inline-block"/>이벤트 미완료 (누적)</span>
-        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-teal-500 inline-block"/>입소</span>
-        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-gray-400 inline-block"/>퇴소</span>
-        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-indigo-500 inline-block"/>입사</span>
-        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-orange-400 inline-block"/>퇴사</span>
-      </div>
-
       {selectedItem && <ChecklistDetailModal item={selectedItem} onClose={() => setSelectedItem(null)}/>}
     </div>
   )
@@ -594,6 +659,63 @@ function LegacyRow({ item, done, toggling, onToggle, onDetail }: {
       </div>
       {!done && item.riskLevel==='high' && <AlertTriangle size={13} className="text-red-400 flex-shrink-0"/>}
       {done && <CheckCircle2 size={13} className="text-green-500 flex-shrink-0"/>}
+    </div>
+  )
+}
+
+
+function UpcomingRow({ occ, item, daysLeft, toggling, onToggle, onDetail }: {
+  occ: ChecklistOccurrence
+  item: ChecklistItem | undefined
+  daysLeft: number
+  toggling: string | null
+  onToggle: () => void
+  onDetail: () => void
+}) {
+  const done      = occ.status === 'completed'
+  const isOverdue = occ.status === 'overdue'
+
+  // D-day 배지
+  let badge: { text: string; cls: string } | null = null
+  if (done) {
+    badge = { text: occ.completedDate ? `${occ.completedDate} 완료` : '완료', cls: 'bg-green-100 text-green-700' }
+  } else if (isOverdue || daysLeft < 0) {
+    const over = Math.max(1, -daysLeft)
+    badge = { text: `${over}일 지남`, cls: over >= 14 ? 'bg-red-100 text-red-600' : over >= 7 ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-500' }
+  } else if (daysLeft === 0) {
+    badge = { text: '오늘 마감', cls: 'bg-red-100 text-red-600' }
+  } else {
+    badge = { text: `D-${daysLeft}`, cls: daysLeft <= 3 ? 'bg-orange-100 text-orange-600' : daysLeft <= 7 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500' }
+  }
+
+  return (
+    <div className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${
+      done ? 'bg-green-50 border-green-100' :
+      item?.riskLevel === 'high' ? 'bg-red-50 border-red-100 hover:bg-red-100' :
+      isOverdue ? 'bg-orange-50 border-orange-100 hover:bg-orange-100' :
+      'bg-gray-50 border-gray-100 hover:bg-gray-100'
+    }`}>
+      <button onClick={e => { e.stopPropagation(); onToggle() }} disabled={toggling===occ.id}
+        className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center disabled:opacity-50 ${
+          done ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-primary-orange'
+        }`}>
+        {done && <div className="w-2 h-2 bg-white rounded-full"/>}
+      </button>
+      <div className="flex-1 min-w-0 cursor-pointer" onClick={onDetail}>
+        <p className={`text-sm font-semibold truncate ${done ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+          {item?.title ?? '(삭제된 항목)'}
+        </p>
+        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${FREQUENCY_COLORS[occ.frequency as any] ?? 'bg-gray-100 text-gray-600'}`}>
+            {FREQUENCY_LABELS[occ.frequency as any] ?? occ.frequency}
+          </span>
+          <span className="text-[10px] text-gray-400">기한 {occ.dueDate}</span>
+          {item?.personName && <span className="text-[10px] font-semibold text-purple-600">👤 {item.personName}</span>}
+          {item?.assignee && !item.personName && <span className="text-[10px] text-gray-400">{item.assignee}</span>}
+        </div>
+      </div>
+      {badge && <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${badge.cls}`}>{badge.text}</span>}
+      {!done && item?.riskLevel === 'high' && <AlertTriangle size={13} className="text-red-400 flex-shrink-0"/>}
     </div>
   )
 }

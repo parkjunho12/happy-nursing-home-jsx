@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   Plus, Trash2, Upload, X, Eye, EyeOff, ImagePlus,
   Users, Folder, Play, Image, Search, ChevronDown,
-  Loader2, AlertCircle, RefreshCw,
+  Loader2, AlertCircle, RefreshCw, Edit2,
 } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
 import { useAuthStore } from '@/store/auth'
@@ -185,6 +185,14 @@ export default function EvalAlbumPage() {
     )
   }, [guardians, guardianSearch])
 
+  const overview = useMemo(() => ({
+    total: albums.length,
+    publicCount: albums.filter(a => a.is_public).length,
+    privateCount: albums.filter(a => !a.is_public).length,
+    photos: albums.reduce((sum, a) => sum + (a.media_count || 0), 0),
+    guardians: guardians.length,
+  }), [albums, guardians])
+
   return (
     <div className="space-y-5">
       {/* 헤더 */}
@@ -232,6 +240,26 @@ export default function EvalAlbumPage() {
       {/* ── 앨범 탭 ── */}
       {tab === 'albums' && (
         <div className="space-y-4">
+          {/* 요약 스트립 */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+            <div className="rounded-xl p-3 sm:p-4 border bg-gray-50 border-gray-100">
+              <p className="text-[11px] sm:text-xs font-medium text-gray-500">전체 앨범</p>
+              <p className="text-xl sm:text-2xl font-bold text-gray-900">{overview.total}</p>
+            </div>
+            <div className="rounded-xl p-3 sm:p-4 border bg-green-50 border-green-100">
+              <p className="text-[11px] sm:text-xs font-medium text-green-600">공개 중</p>
+              <p className="text-xl sm:text-2xl font-bold text-green-700">{overview.publicCount}</p>
+            </div>
+            <div className="rounded-xl p-3 sm:p-4 border bg-gray-50 border-gray-100">
+              <p className="text-[11px] sm:text-xs font-medium text-gray-500">전체 사진</p>
+              <p className="text-xl sm:text-2xl font-bold text-gray-900">{overview.photos}</p>
+            </div>
+            <div className="rounded-xl p-3 sm:p-4 border bg-gray-50 border-gray-100">
+              <p className="text-[11px] sm:text-xs font-medium text-gray-500">{canManage ? '보호자' : '비공개'}</p>
+              <p className="text-xl sm:text-2xl font-bold text-gray-900">{canManage ? overview.guardians : overview.privateCount}</p>
+            </div>
+          </div>
+
           {/* 검색 바 */}
           <div className="flex gap-2 flex-wrap">
             {/* 수급자 선택 드롭다운 */}
@@ -438,7 +466,7 @@ export default function EvalAlbumPage() {
                     <button
                       onClick={() => setEditGuardian(g)}
                       className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors flex-shrink-0">
-                      <svg className="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      <Edit2 size={14} className="text-gray-400" />
                     </button>
                     <button
                       onClick={async () => {
@@ -591,7 +619,7 @@ function AlbumCard({ album, onOpen, onEdit, onToggle, onDelete }: {
           </button>
           <button onClick={onEdit}
             className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors" title="앨범 수정">
-            <svg className="w-3.5 h-3.5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            <Edit2 size={14} className="text-gray-500" />
           </button>
           <button onClick={onToggle}
             className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors" title={album.is_public ? '비공개로 변경' : '공개로 변경'}>
