@@ -6,8 +6,6 @@ import {
   User,
   RotateCcw,
   Plus,
-  Clock,
-  Filter,
 } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
 import { useAuthStore } from '@/store/auth'
@@ -18,16 +16,22 @@ import type { ChecklistItem } from '@/utils/period'
 import {
   FREQUENCY_LABELS,
   FREQUENCY_COLORS,
-  RISK_COLORS,
-  RISK_LABELS,
-  DOMAIN_COLORS,
   RECURRING,
   EVENT_FREQS,
   getCurrentPeriodKey,
-  getPeriodLabel,
   getPeriodEnd,
+  cfgFromItem,
   todayKST,
 } from '@/utils/period'
+
+type Deco = { item: ChecklistItem; done: boolean; daysLeft: number | null; dueStr: string | null }
+
+const SECTION_DEFS: { key: 'overdue' | 'week' | 'upcoming' | 'done'; label: string; cls: string }[] = [
+  { key: 'overdue',  label: '기한 지남', cls: 'text-red-600' },
+  { key: 'week',     label: '이번 주',   cls: 'text-orange-600' },
+  { key: 'upcoming', label: '예정',      cls: 'text-gray-500' },
+  { key: 'done',     label: '완료',      cls: 'text-green-600' },
+]
 
 const ONE_TIME = 'one_time'
 
@@ -43,13 +47,14 @@ function checkDone(item: ChecklistItem, _todayStr: string): boolean {
 
   if (EVENT_FREQS.includes(freq as any)) return item.completed
 
+  const cfg = cfgFromItem(item)
   if (item.occurrences?.length > 0) {
-    const pk = getCurrentPeriodKey(freq as any)
+    const pk = getCurrentPeriodKey(freq as any, cfg)
     const occ = item.occurrences.find(o => o.periodKey === pk)
     if (occ) return occ.status === 'completed'
   }
 
-  const pk = getCurrentPeriodKey(freq as any)
+  const pk = getCurrentPeriodKey(freq as any, cfg)
   return item.completionHistory.some(r => r.periodKey === pk)
 }
 
@@ -58,7 +63,6 @@ export default function EvalChecklistPage() {
     checklists,
     residents,
     staffList,
-    domains,
     loaded,
     loadAll,
     toggleComplete,
@@ -76,7 +80,6 @@ export default function EvalChecklistPage() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [activeFreq, setActiveFreq] = useState<string>('all')
   const [activePerson, setActivePerson] = useState('all')
-  const [personSearch, setPersonSearch] = useState('')
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'done' | 'todo'>('all')
   const [toggling, setToggling] = useState<string | null>(null)
@@ -121,6 +124,23 @@ export default function EvalChecklistPage() {
     [todayStr],
   )
 
+  const deadlineOf = useCallback((item: ChecklistItem): Deco => {
+    const done = checkDone(item, todayStr)
+    let daysLeft: number | null = null
+    let dueStr: string | null = null
+    if (item.frequency === ONE_TIME) {
+      if (item.dueDate) {
+        dueStr = item.dueDate
+        daysLeft = Math.ceil((new Date(item.dueDate + 'T23:59:59').getTime() - new Date(todayStr + 'T00:00:00').getTime()) / 86400000)
+      }
+    } else if (RECURRING.includes(item.frequency as any)) {
+      const end = getPeriodEnd(item.frequency as any, new Date(), cfgFromItem(item))
+      dueStr = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`
+      daysLeft = Math.ceil((end.getTime() - new Date(todayStr + 'T00:00:00').getTime()) / 86400000)
+    }
+    return { item, done, daysLeft, dueStr }
+  }, [todayStr])
+
   const activeResidents = residents.filter(r => r.status === 'active')
   const activeStaff = staffList.filter(s => s.status === 'active')
 
@@ -139,51 +159,18 @@ export default function EvalChecklistPage() {
     return map
   }, [checklists, isDone])
 
-  const personOptions = useMemo(() => {
-    const options = [
-      { id: 'all', label: '전체', type: 'all' },
-      { id: 'facility', label: '시설 공통', type: 'facility' },
-      ...activeResidents.map(r => ({
-        id: r.id,
-        label: r.name,
-        type: 'resident',
-      })),
-      ...activeStaff.map(s => ({
-        id: s.id,
-        label: s.name,
-        type: 'staff',
-      })),
-    ]
 
-    if (!personSearch.trim()) return options
-
-    const q = personSearch.trim().toLowerCase()
-    return options.filter(o => o.label.toLowerCase().includes(q))
-  }, [activeResidents, activeStaff, personSearch])
-
-  const stats = useMemo(() => {
-    const recurring = checklists.filter(
-      c => c.active && RECURRING.includes(c.frequency as any),
-    )
-
-    const oneTimePending = checklists.filter(
-      c =>
-        c.active &&
-        c.frequency === ONE_TIME &&
-        !isDone(c) &&
-        (!c.dueDate || c.dueDate >= todayStr),
-    )
-
-    return {
-      recurringDone: recurring.filter(c => isDone(c)).length,
-      recurringTotal: recurring.length,
-      personalDone: checklists.filter(c => c.active && c.personId && isDone(c)).length,
-      personalTotal: checklists.filter(c => c.active && c.personId).length,
-      highRisk: checklists.filter(c => c.active && !isDone(c) && c.riskLevel === 'high').length,
-      totalTodo: checklists.filter(c => c.active && !isDone(c)).length,
-      oneTimeTodo: oneTimePending.length,
-    }
-  }, [checklists, isDone, todayStr])
+  const metrics = useMemo(() => {
+    let overdue = 0, weekTodo = 0, done = 0, total = 0
+    checklists.filter(c => c.active).forEach(c => {
+      total++
+      const d = deadlineOf(c)
+      if (d.done) { done++; return }
+      if (d.daysLeft != null && d.daysLeft < 0) overdue++
+      else if (d.daysLeft != null && d.daysLeft <= 7) weekTodo++
+    })
+    return { overdue, weekTodo, done, total }
+  }, [checklists, deadlineOf])
 
   const filtered = useMemo(() => {
     return checklists.filter(c => {
@@ -236,6 +223,21 @@ export default function EvalChecklistPage() {
     })
   }, [filtered, isDone])
 
+  const groups = useMemo(() => {
+    const g: Record<'overdue' | 'week' | 'upcoming' | 'done', Deco[]> = { overdue: [], week: [], upcoming: [], done: [] }
+    sorted.forEach(item => {
+      const d = deadlineOf(item)
+      const key = d.done ? 'done'
+        : d.daysLeft == null ? 'upcoming'
+        : d.daysLeft < 0 ? 'overdue'
+        : d.daysLeft <= 7 ? 'week'
+        : 'upcoming'
+      g[key].push(d)
+    })
+    ;(['overdue', 'week', 'upcoming'] as const).forEach(k => g[k].sort((a, b) => (a.daysLeft ?? 9999) - (b.daysLeft ?? 9999)))
+    return g
+  }, [sorted, deadlineOf])
+
   const handleToggle = async (id: string) => {
     setToggling(id)
 
@@ -260,6 +262,58 @@ export default function EvalChecklistPage() {
     } finally {
       setSavingAssign(false)
     }
+  }
+
+  const badgeFor = (done: boolean, daysLeft: number | null) => {
+    if (done) return { text: '완료', cls: 'bg-green-100 text-green-700' }
+    if (daysLeft == null) return { text: '미완료', cls: 'bg-gray-100 text-gray-500' }
+    if (daysLeft < 0) { const o = -daysLeft; return { text: `${o}일 지남`, cls: o >= 14 ? 'bg-red-100 text-red-700' : o >= 7 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600' } }
+    if (daysLeft === 0) return { text: '오늘 마감', cls: 'bg-red-100 text-red-700' }
+    return { text: `D-${daysLeft}`, cls: daysLeft <= 3 ? 'bg-orange-100 text-orange-700' : daysLeft <= 7 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500' }
+  }
+
+  const renderRow = (d: Deco) => {
+    const { item, done, daysLeft, dueStr } = d
+    const b = badgeFor(done, daysLeft)
+    const highRisk = item.riskLevel === 'high' && !done
+    return (
+      <div key={item.id} className={`bg-white rounded-lg border transition-colors hover:bg-gray-50/40 ${done ? 'border-gray-100 opacity-70' : highRisk ? 'border-gray-200 border-l-[3px] border-l-red-400' : 'border-gray-200'}`}>
+        <div className="flex items-center gap-3 p-3">
+          <button onClick={() => handleToggle(item.id)} disabled={toggling === item.id}
+            className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center disabled:opacity-50 ${done ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-primary-orange'}`}>
+            {toggling === item.id ? <div className="w-2 h-2 border border-gray-400 border-t-transparent rounded-full animate-spin" /> : done && <div className="w-2 h-2 bg-white rounded-full" />}
+          </button>
+          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setSelectedItem(item)}>
+            <p className={`text-sm font-semibold leading-snug truncate ${done ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+              {highRisk && <AlertTriangle size={12} className="inline text-red-400 mr-1 align-[-2px]" />}
+              {item.title}
+            </p>
+            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${FREQUENCY_COLORS[item.frequency as any] ?? 'bg-gray-100 text-gray-600'}`}>{FREQUENCY_LABELS[item.frequency as any] ?? item.frequency}</span>
+              {item.personName ? (
+                <span className="text-[10px] font-semibold text-purple-600 flex items-center gap-0.5"><User size={9} />{item.personName}</span>
+              ) : item.assignee ? (
+                <span className="text-[10px] text-gray-400">{item.assignee}</span>
+              ) : null}
+              {dueStr && !done && <span className="text-[10px] text-gray-400">기한 {dueStr}</span>}
+              {isAdmin && (
+                <button type="button" onClick={e => { e.stopPropagation(); setAssigningId(assigningId === item.id ? null : item.id) }}
+                  className="text-[10px] text-gray-400 hover:text-primary-orange border border-dashed border-gray-200 hover:border-primary-orange px-1.5 py-0.5 rounded-full">
+                  {item.assignee ? '담당자 변경' : '+ 담당자'}
+                </button>
+              )}
+            </div>
+          </div>
+          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${b.cls}`}>{b.text}</span>
+          {isAdmin && (
+            <button onClick={e => { e.stopPropagation(); setEditItem(item) }} className="text-[10px] text-gray-400 hover:text-gray-600 px-1.5 py-0.5 rounded hover:bg-gray-100 flex-shrink-0">수정</button>
+          )}
+        </div>
+        {isAdmin && assigningId === item.id && (
+          <AssignPanel itemId={item.id} currentUserId={(item as any).assigned_user_id ?? null} options={assigneeOptions} saving={savingAssign} onSave={handleAssign} onClose={() => setAssigningId(null)} />
+        )}
+      </div>
+    )
   }
 
   if (!loaded) {
@@ -304,415 +358,84 @@ export default function EvalChecklistPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <SummaryCard
-          label="정기 업무"
-          value={`${stats.recurringDone}/${stats.recurringTotal}`}
-          sub="현재 주기 완료"
-          color="orange"
-        />
-        <SummaryCard
-          label="개인별 체크리스트"
-          value={`${stats.personalDone}/${stats.personalTotal}`}
-          sub="수급자·직원 개인"
-          color="green"
-        />
-        <SummaryCard
-          label="위험도 높음"
-          value={`${stats.highRisk}건`}
-          sub="즉시 조치 필요"
-          color="red"
-        />
-        <SummaryCard
-          label="전체 미완료"
-          value={`${stats.totalTodo}건`}
-          sub={stats.oneTimeTodo > 0 ? `일회성 ${stats.oneTimeTodo}건 포함` : '모든 활성 항목'}
-          color="gray"
-        />
-      </div>
-
-      {isAdmin && (
-        <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
-          <div className="flex items-center justify-between gap-3 mb-2">
-            <p className="text-xs font-semibold text-gray-400 px-1 flex items-center gap-1">
-              <Filter size={12} />
-              대상별 보기
-            </p>
-
-            {activePerson !== 'all' && (
-              <button
-                type="button"
-                onClick={() => {
-                  setActivePerson('all')
-                  setPersonSearch('')
-                }}
-                className="text-xs text-gray-400 hover:text-gray-600"
-              >
-                초기화
-              </button>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-[240px_1fr] gap-2">
-            <select
-              value={activePerson}
-              onChange={e => setActivePerson(e.target.value)}
-              className="border border-gray-200 rounded-xl text-sm px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-primary-orange/40"
-            >
-              <option value="all">전체</option>
-              <option value="facility">시설 공통</option>
-
-              <optgroup label={`수급자 ${activeResidents.length}명`}>
-                {activeResidents.map(r => {
-                  const cnt = personCounts[r.id]
-
-                  return (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                      {cnt ? ` (${cnt.done}/${cnt.total})` : ''}
-                    </option>
-                  )
-                })}
-              </optgroup>
-
-              <optgroup label={`직원 ${activeStaff.length}명`}>
-                {activeStaff.map(s => {
-                  const cnt = personCounts[s.id]
-
-                  return (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                      {cnt ? ` (${cnt.done}/${cnt.total})` : ''}
-                    </option>
-                  )
-                })}
-              </optgroup>
-            </select>
-
-            <div className="relative">
-              <Search
-                size={14}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-              />
-
-              <input
-                type="text"
-                value={personSearch}
-                onChange={e => setPersonSearch(e.target.value)}
-                placeholder="어르신/직원 이름 검색"
-                className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40"
-              />
-
-              {personSearch && (
-                <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-64 overflow-y-auto">
-                  {personOptions.length === 0 ? (
-                    <div className="px-3 py-2 text-sm text-gray-400">
-                      검색 결과가 없습니다.
-                    </div>
-                  ) : (
-                    personOptions.map(o => (
-                      <button
-                        key={`${o.type}-${o.id}`}
-                        type="button"
-                        onClick={() => {
-                          setActivePerson(o.id)
-                          setPersonSearch('')
-                        }}
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-orange-50 flex items-center justify-between"
-                      >
-                        <span>
-                          {o.type === 'resident' && '👵 '}
-                          {o.type === 'staff' && '👤 '}
-                          {o.type === 'facility' && '🏥 '}
-                          {o.label}
-                        </span>
-
-                        {personCounts[o.id] && (
-                          <span className="text-xs text-orange-600 font-semibold">
-                            {personCounts[o.id].done}/{personCounts[o.id].total}
-                          </span>
-                        )}
-                      </button>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-1.5">
-        <div className="flex gap-1.5 overflow-x-auto pb-1">
-          <TabBtn active={activeFreq === 'all'} onClick={() => setActiveFreq('all')}>
-            전체
-          </TabBtn>
-
-          {RECURRING.map(f => (
-            <TabBtn key={f} active={activeFreq === f} onClick={() => setActiveFreq(f)}>
-              {FREQUENCY_LABELS[f as any]}
-            </TabBtn>
-          ))}
-        </div>
-
-        <div className="flex gap-1.5 overflow-x-auto pb-1 items-center">
-          <span className="text-xs text-gray-400 pl-1 flex-shrink-0">기타</span>
-
-          <TabBtn active={activeFreq === ONE_TIME} onClick={() => setActiveFreq(ONE_TIME)} amber>
-            일회성{stats.oneTimeTodo > 0 ? ` (${stats.oneTimeTodo})` : ''}
-          </TabBtn>
-
-          {EVENT_FREQS.map(f => (
-            <TabBtn key={f} active={activeFreq === f} onClick={() => setActiveFreq(f)} event>
-              {FREQUENCY_LABELS[f as any]}
-            </TabBtn>
-          ))}
+      {/* 요약 스트립 */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <button onClick={() => setFilterStatus('todo')}
+          className={`text-left rounded-xl p-3 sm:p-4 border transition-colors ${metrics.overdue > 0 ? 'bg-red-50 border-red-100 hover:bg-red-100' : 'bg-gray-50 border-gray-100'}`}>
+          <p className={`text-[11px] sm:text-xs font-medium ${metrics.overdue > 0 ? 'text-red-500' : 'text-gray-500'}`}>기한 지남</p>
+          <p className={`text-xl sm:text-2xl font-bold ${metrics.overdue > 0 ? 'text-red-600' : 'text-gray-400'}`}>{metrics.overdue}</p>
+        </button>
+        <button onClick={() => setFilterStatus('todo')}
+          className="text-left rounded-xl p-3 sm:p-4 border bg-orange-50 border-orange-100 hover:bg-orange-100 transition-colors">
+          <p className="text-[11px] sm:text-xs font-medium text-orange-500">이번 주 할 일</p>
+          <p className="text-xl sm:text-2xl font-bold text-orange-600">{metrics.weekTodo}</p>
+        </button>
+        <div className="rounded-xl p-3 sm:p-4 border bg-gray-50 border-gray-100">
+          <p className="text-[11px] sm:text-xs font-medium text-gray-500">완료율</p>
+          <p className="text-xl sm:text-2xl font-bold text-green-600">{metrics.done}<span className="text-sm text-gray-400">/{metrics.total}</span></p>
         </div>
       </div>
 
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search
-            size={14}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-          />
-
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="항목명, 이름, 담당자..."
-            className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40"
-          />
+      {/* 필터 바 */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[160px]">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="항목·이름·담당자 검색"
+            className="w-full pl-9 pr-4 h-9 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40" />
         </div>
 
-        <select
-          value={filterStatus}
-          onChange={e => setFilterStatus(e.target.value as any)}
-          className="border border-gray-200 rounded-xl text-sm px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-orange/40 bg-white flex-shrink-0"
-        >
-          <option value="all">전체 상태</option>
-          <option value="todo">미완료</option>
-          <option value="done">완료</option>
+        <select value={activeFreq} onChange={e => setActiveFreq(e.target.value)}
+          className="h-9 border border-gray-200 rounded-xl text-sm px-3 bg-white focus:outline-none focus:ring-2 focus:ring-primary-orange/40">
+          <option value="all">주기: 전체</option>
+          <optgroup label="정기 반복">
+            {RECURRING.map(f => <option key={f} value={f}>{FREQUENCY_LABELS[f as any]}</option>)}
+          </optgroup>
+          <optgroup label="기타">
+            <option value={ONE_TIME}>{FREQUENCY_LABELS[ONE_TIME as any]}</option>
+            {EVENT_FREQS.map(f => <option key={f} value={f}>{FREQUENCY_LABELS[f as any]}</option>)}
+          </optgroup>
         </select>
+
+        {isAdmin && (
+          <select value={activePerson} onChange={e => setActivePerson(e.target.value)}
+            className="h-9 border border-gray-200 rounded-xl text-sm px-3 bg-white focus:outline-none focus:ring-2 focus:ring-primary-orange/40">
+            <option value="all">대상: 전체</option>
+            <option value="facility">시설 공통</option>
+            <optgroup label={`수급자 ${activeResidents.length}명`}>
+              {activeResidents.map(r => { const c = personCounts[r.id]; return <option key={r.id} value={r.id}>{r.name}{c ? ` (${c.done}/${c.total})` : ''}</option> })}
+            </optgroup>
+            <optgroup label={`직원 ${activeStaff.length}명`}>
+              {activeStaff.map(st => { const c = personCounts[st.id]; return <option key={st.id} value={st.id}>{st.name}{c ? ` (${c.done}/${c.total})` : ''}</option> })}
+            </optgroup>
+          </select>
+        )}
+
+        <div className="flex border border-gray-200 rounded-xl overflow-hidden h-9">
+          {([['todo', '미완료'], ['done', '완료'], ['all', '전체']] as ['todo' | 'done' | 'all', string][]).map(([v, label]) => (
+            <button key={v} onClick={() => setFilterStatus(v)}
+              className={`text-sm px-3 transition-colors ${filterStatus === v ? 'bg-primary-orange text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <p className="text-xs text-gray-400">{sorted.length}개 항목</p>
-
+      {/* 목록 (긴급도별 그룹) */}
       {sorted.length === 0 ? (
         <div className="text-center py-16 text-gray-400 bg-white rounded-xl border border-gray-100">
           <CheckCircle2 size={36} className="mx-auto mb-3 opacity-30" />
-          <p className="text-sm">
-            {isAdmin ? '해당 조건의 항목이 없습니다.' : '나에게 배정된 항목이 없습니다.'}
-          </p>
+          <p className="text-sm">{isAdmin ? '해당 조건의 항목이 없습니다.' : '나에게 배정된 항목이 없습니다.'}</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {sorted.map(item => {
-            const domain = domains.find(d => d.id === item.relatedDomainId)
-            const domainColors = domain
-              ? DOMAIN_COLORS[domain.color] ?? DOMAIN_COLORS.teal
-              : null
-            const done = isDone(item)
-            const isOneTime = item.frequency === ONE_TIME
-
-            let periodLabel = ''
-            let daysLeft: number | null = null
-
-            if (isOneTime && item.dueDate) {
-              periodLabel = `기한 ${item.dueDate}`
-              daysLeft = Math.max(
-                0,
-                Math.ceil(
-                  (new Date(item.dueDate + 'T23:59:59').getTime() -
-                    new Date(todayStr + 'T00:00:00').getTime()) /
-                    86400000,
-                ),
-              )
-            } else if (RECURRING.includes(item.frequency as any)) {
-              const pk = getCurrentPeriodKey(item.frequency as any)
-              periodLabel = getPeriodLabel(item.frequency as any, pk)
-              const end = getPeriodEnd(item.frequency as any)
-
-              daysLeft = Math.max(
-                0,
-                Math.ceil(
-                  (end.getTime() - new Date(todayStr + 'T00:00:00').getTime()) /
-                    86400000,
-                ),
-              )
-            }
-
-            const isExpired =
-              isOneTime && !!item.dueDate && item.dueDate < todayStr && !done
-
-            return (
-              <div
-                key={item.id}
-                className={`bg-white rounded-xl border shadow-sm transition-all hover:shadow-md ${
-                  done
-                    ? 'border-gray-100 opacity-70'
-                    : isExpired
-                      ? 'border-red-200 bg-red-50/30'
-                      : item.riskLevel === 'high'
-                        ? 'border-red-200'
-                        : item.personId
-                          ? 'border-purple-100'
-                          : 'border-gray-200'
-                }`}
-              >
-                <div className="flex items-start gap-3 p-4">
-                  <button
-                    onClick={() => handleToggle(item.id)}
-                    disabled={toggling === item.id}
-                    className={`mt-0.5 w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors disabled:opacity-50 ${
-                      done
-                        ? 'bg-green-500 border-green-500'
-                        : 'border-gray-300 hover:border-primary-orange'
-                    }`}
-                  >
-                    {toggling === item.id ? (
-                      <div className="w-2 h-2 border border-gray-400 border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      done && <div className="w-2 h-2 bg-white rounded-full" />
-                    )}
-                  </button>
-
-                  <div
-                    className="flex-1 min-w-0 cursor-pointer"
-                    onClick={() => setSelectedItem(item)}
-                  >
-                    <div className="flex items-center gap-1.5 flex-wrap mb-1">
-                      {item.personName && (
-                        <span className="text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-0.5 bg-purple-100 text-purple-700">
-                          <User size={9} />
-                          {item.personName}
-                        </span>
-                      )}
-
-                      <span
-                        className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                          FREQUENCY_COLORS[item.frequency as any] ??
-                          'bg-gray-100 text-gray-600'
-                        }`}
-                      >
-                        {FREQUENCY_LABELS[item.frequency as any] ?? item.frequency}
-                      </span>
-
-                      {domain && domainColors && (
-                        <span
-                          className={`text-xs font-semibold px-2 py-0.5 rounded-full ${domainColors.bg} ${domainColors.text}`}
-                        >
-                          {domain.name}
-                        </span>
-                      )}
-
-                      {!done && (
-                        <span
-                          className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${RISK_COLORS[item.riskLevel]}`}
-                        >
-                          {RISK_LABELS[item.riskLevel]}
-                        </span>
-                      )}
-
-                      {done && (
-                        <span className="text-xs bg-green-100 text-green-700 font-semibold px-2 py-0.5 rounded-full">
-                          완료
-                        </span>
-                      )}
-
-                      {isExpired && (
-                        <span className="text-xs bg-red-100 text-red-600 font-bold px-2 py-0.5 rounded-full">
-                          기한 초과
-                        </span>
-                      )}
-                    </div>
-
-                    <p
-                      className={`text-sm font-semibold leading-snug ${
-                        done ? 'text-gray-400 line-through' : 'text-gray-800'
-                      }`}
-                    >
-                      {item.title}
-                    </p>
-
-                    <div className="flex items-center gap-3 mt-1 flex-wrap">
-                      {periodLabel && (
-                        <span className="text-[11px] text-gray-400 flex items-center gap-0.5">
-                          <Clock size={9} />
-                          {periodLabel}
-                        </span>
-                      )}
-
-                      {item.assignee && (
-                        <span className="text-[11px] bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded-full font-medium">
-                          👤 {item.assignee}
-                        </span>
-                      )}
-
-                      {isAdmin && (
-                        <button
-                          type="button"
-                          onClick={e => {
-                            e.stopPropagation()
-                            setAssigningId(assigningId === item.id ? null : item.id)
-                          }}
-                          className="text-[11px] text-gray-400 hover:text-primary-orange border border-dashed border-gray-200 hover:border-primary-orange px-1.5 py-0.5 rounded-full transition-colors"
-                        >
-                          {item.assignee ? '담당자 변경' : '+ 담당자'}
-                        </button>
-                      )}
-
-                      {daysLeft !== null && !done && !isExpired && (
-                        <span
-                          className={`text-[11px] font-bold ${
-                            daysLeft === 0
-                              ? 'text-red-600'
-                              : daysLeft <= 3
-                                ? 'text-red-500'
-                                : daysLeft <= 7
-                                  ? 'text-orange-500'
-                                  : 'text-gray-400'
-                          }`}
-                        >
-                          {daysLeft === 0 ? '오늘 마감' : `D-${daysLeft}`}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                    {item.riskLevel === 'high' && !done && (
-                      <AlertTriangle size={15} className="text-red-400" />
-                    )}
-
-                    {isAdmin && (
-                      <button
-                        onClick={e => {
-                          e.stopPropagation()
-                          setEditItem(item)
-                        }}
-                        className="text-[10px] text-gray-400 hover:text-gray-600 px-1.5 py-0.5 rounded hover:bg-gray-100 transition-colors"
-                      >
-                        수정
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {isAdmin && assigningId === item.id && (
-                  <AssignPanel
-                    itemId={item.id}
-                    currentUserId={(item as any).assigned_user_id ?? null}
-                    options={assigneeOptions}
-                    saving={savingAssign}
-                    onSave={handleAssign}
-                    onClose={() => setAssigningId(null)}
-                  />
-                )}
+        <div className="space-y-4">
+          {SECTION_DEFS.map(sec => groups[sec.key].length > 0 && (
+            <div key={sec.key}>
+              <p className={`text-xs font-semibold mb-1.5 px-0.5 ${sec.cls}`}>{sec.label} · {groups[sec.key].length}</p>
+              <div className="space-y-1.5">
+                {groups[sec.key].map(renderRow)}
               </div>
-            )
-          })}
+            </div>
+          ))}
         </div>
       )}
 
@@ -728,71 +451,6 @@ export default function EvalChecklistPage() {
         <ChecklistFormModal existing={editItem} onClose={() => setEditItem(null)} />
       )}
     </div>
-  )
-}
-
-function SummaryCard({
-  label,
-  value,
-  sub,
-  color,
-}: {
-  label: string
-  value: string
-  sub: string
-  color: string
-}) {
-  const bg =
-    {
-      orange: 'bg-orange-50',
-      green: 'bg-green-50',
-      red: 'bg-red-50',
-      gray: 'bg-gray-50',
-    }[color] ?? 'bg-gray-50'
-
-  return (
-    <div className={`${bg} rounded-xl p-4 border border-white shadow-sm`}>
-      <p className="text-xs text-gray-500 mb-1">{label}</p>
-      <p className="text-xl font-bold text-gray-900">{value}</p>
-      <p className="text-xs text-gray-400 mt-0.5">{sub}</p>
-    </div>
-  )
-}
-
-function TabBtn({
-  active,
-  onClick,
-  children,
-  event,
-  amber,
-}: {
-  active: boolean
-  onClick: () => void
-  children: React.ReactNode
-  event?: boolean
-  amber?: boolean
-}) {
-  const activeClass = amber
-    ? 'bg-amber-500 text-white shadow-sm'
-    : event
-      ? 'bg-teal-600 text-white shadow-sm'
-      : 'bg-primary-orange text-white shadow-sm'
-
-  const inactiveClass = amber
-    ? 'bg-white text-amber-700 border border-amber-200 hover:bg-amber-50'
-    : event
-      ? 'bg-white text-teal-700 border border-teal-200 hover:bg-teal-50'
-      : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-
-  return (
-    <button
-      onClick={onClick}
-      className={`px-3 py-1.5 rounded-xl text-sm font-medium whitespace-nowrap flex-shrink-0 transition-colors ${
-        active ? activeClass : inactiveClass
-      }`}
-    >
-      {children}
-    </button>
   )
 }
 

@@ -28,7 +28,8 @@ from sqlalchemy import text
 from app.models.eval import ChecklistItem, ChecklistOccurrence
 
 # ── 상수 ──────────────────────────────────────────────────────────────────
-RECURRING_FREQS = {'daily', 'weekly', 'monthly', 'quarterly', 'half-yearly', 'yearly'}
+RECURRING_FREQS = {'daily', 'weekly', 'monthly', 'quarterly', 'half-yearly', 'yearly',
+                   'weekly_dow', 'monthly_day', 'monthly_nth_dow'}
 EVENT_FREQS     = {'on_admission', 'on_discharge', 'on_hire'}
 ONE_TIME_FREQ   = 'one_time'
 
@@ -60,7 +61,61 @@ def to_kst_date(dt: datetime) -> date:
 # 주기 계산 유틸
 # ══════════════════════════════════════════════════════════════════════════════
 
-def get_period_key(freq: str, d: date) -> str:
+def cfg_from_item(item) -> dict:
+    """ChecklistItem에서 반복 세부 설정을 dict로 추출 (컬럼 없을 수 있어 안전 처리)"""
+    return {
+        'weekday':       getattr(item, 'recur_weekday', None),
+        'week_of_month': getattr(item, 'recur_week_of_month', None),
+        'day':           getattr(item, 'recur_day', None),
+        'due_day':       getattr(item, 'recur_due_day', None),
+    }
+
+
+def _clamp_day(year: int, month: int, day: int) -> date:
+    """day가 해당 월 말일을 넘으면 말일로 보정"""
+    if month == 12:
+        last = 31
+    else:
+        last = (date(year, month + 1, 1) - timedelta(days=1)).day
+    return date(year, month, max(1, min(day, last)))
+
+
+def _week_start_sunday(d: date) -> date:
+    """d가 속한 주의 일요일 (일~토 기준)"""
+    return d - timedelta(days=d.isoweekday() % 7)
+
+
+def _nth_weekday_of_month(year: int, month: int, weekday: int, n: int) -> date:
+    """
+    그 달의 n번째 weekday(0=일..6=토) 날짜.
+    n>=5(또는 해당 주가 없으면) 마지막 weekday 반환.
+    """
+    weekday = weekday % 7
+    first = date(year, month, 1)
+    first_dow = first.isoweekday() % 7  # 0=일
+    offset = (weekday - first_dow) % 7
+    day = 1 + offset + (max(1, n) - 1) * 7
+    # 월 말일 초과 시 마지막 발생일로
+    if month == 12:
+        last_day = 31
+    else:
+        last_day = (date(year, month + 1, 1) - timedelta(days=1)).day
+    while day > last_day:
+        day -= 7
+    return date(year, month, day)
+
+
+def get_period_key(freq: str, d: date, cfg: Optional[dict] = None) -> str:
+    cfg = cfg or {}
+    if freq == 'weekly_dow':
+        # 매주 특정 요일 → 그 주의 해당 요일 날짜를 key로 (주마다 유일)
+        wd = cfg.get('weekday')
+        wd = 0 if wd is None else int(wd)
+        target = _week_start_sunday(d) + timedelta(days=wd % 7)
+        return target.isoformat()
+    if freq in ('monthly_day', 'monthly_nth_dow'):
+        # 매월 1개 → 월 단위 key
+        return f"{d.year}-{d.month:02d}"
     if freq == 'daily':
         return d.isoformat()
     if freq == 'weekly':
@@ -86,8 +141,32 @@ def get_period_key(freq: str, d: date) -> str:
     return d.isoformat()   # 이벤트성
 
 
-def get_period_bounds(freq: str, d: date) -> Tuple[date, date]:
+def get_period_bounds(freq: str, d: date, cfg: Optional[dict] = None) -> Tuple[date, date]:
     """주기의 (시작일, 마감일) 반환"""
+    cfg = cfg or {}
+
+    if freq == 'weekly_dow':
+        wd = cfg.get('weekday')
+        wd = 0 if wd is None else int(wd)
+        target = _week_start_sunday(d) + timedelta(days=wd % 7)
+        return target, target   # 지정 요일 당일
+
+    if freq == 'monthly_day':
+        start_day = cfg.get('day') or 1
+        due_day   = cfg.get('due_day') or start_day
+        start = _clamp_day(d.year, d.month, int(start_day))
+        due   = _clamp_day(d.year, d.month, int(due_day))
+        if due < start:
+            due = start
+        return start, due
+
+    if freq == 'monthly_nth_dow':
+        wd = cfg.get('weekday')
+        wd = 1 if wd is None else int(wd)   # 기본 월요일 방어값
+        n  = cfg.get('week_of_month') or 1
+        target = _nth_weekday_of_month(d.year, d.month, wd, int(n))
+        return target, target
+
     if freq == 'daily':
         return d, d
 
@@ -123,12 +202,35 @@ def get_period_bounds(freq: str, d: date) -> Tuple[date, date]:
     return d, d   # 이벤트성
 
 
-def _period_start_dates(freq: str, from_date: date, to_date: date) -> List[date]:
+def _period_start_dates(freq: str, from_date: date, to_date: date, cfg: Optional[dict] = None) -> List[date]:
     """
     from_date ~ to_date 사이에 해당하는 모든 주기 시작일 목록 반환.
     각 주기마다 occurrence 1개를 만들기 위한 대표 날짜.
     """
+    cfg = cfg or {}
     starts: List[date] = []
+
+    if freq == 'weekly_dow':
+        wd = cfg.get('weekday')
+        wd = 0 if wd is None else int(wd)
+        cur = _week_start_sunday(from_date)
+        while cur <= to_date:
+            target = cur + timedelta(days=wd % 7)
+            if from_date <= target <= to_date:
+                starts.append(target)
+            cur += timedelta(weeks=1)
+        return starts
+
+    if freq in ('monthly_day', 'monthly_nth_dow'):
+        # 매월 1개 — 대표 날짜는 각 달 1일 (key/bounds는 cfg로 계산)
+        cur = date(from_date.year, from_date.month, 1)
+        while cur <= to_date:
+            starts.append(cur)
+            if cur.month == 12:
+                cur = date(cur.year + 1, 1, 1)
+            else:
+                cur = date(cur.year, cur.month + 1, 1)
+        return starts
 
     if freq == 'daily':
         # 일일: 날짜 하나하나
@@ -211,8 +313,9 @@ def get_or_create_occurrence(
     if target_date is None:
         target_date = today_kst()
 
-    period_key = get_period_key(item.frequency, target_date)
-    scheduled, due = get_period_bounds(item.frequency, target_date)
+    cfg = cfg_from_item(item)
+    period_key = get_period_key(item.frequency, target_date, cfg)
+    scheduled, due = get_period_bounds(item.frequency, target_date, cfg)
 
     occ = db.query(ChecklistOccurrence).filter(
         ChecklistOccurrence.checklist_item_id == item.id,
@@ -309,7 +412,7 @@ def backfill_occurrences(
             # 없으면 생성일 기준으로 1개만 생성
             created_date = to_kst_date(item.created_at) if item.created_at else today
             period_key = get_period_key(freq, created_date)
-            scheduled, due = get_period_bounds(freq, created_date)
+            scheduled, due = get_period_bounds(freq, created_date)  # 이벤트성: cfg 불필요
             new_occs.append(ChecklistOccurrence(
                 id=str(uuid.uuid4()),
                 checklist_item_id=item.id,
@@ -335,13 +438,14 @@ def backfill_occurrences(
             from_date = created_date
 
         # 각 주기 시작일 목록 순회
-        for period_start in _period_start_dates(freq, from_date, today):
-            period_key = get_period_key(freq, period_start)
+        cfg = cfg_from_item(item)
+        for period_start in _period_start_dates(freq, from_date, today, cfg):
+            period_key = get_period_key(freq, period_start, cfg)
 
             if period_key in item_existing:
                 continue   # 이미 있음
 
-            scheduled, due = get_period_bounds(freq, period_start)
+            scheduled, due = get_period_bounds(freq, period_start, cfg)
             status = 'overdue' if due < today else 'pending'
 
             new_occs.append(ChecklistOccurrence(

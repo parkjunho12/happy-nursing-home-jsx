@@ -119,7 +119,7 @@ export default function FamilyAlbumsPage() {
             <p className="text-sm text-gray-400 mt-2">곧 소중한 순간들이 올라올 거예요 🌻</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-4">
             <p className="text-sm text-gray-500 font-medium">앨범 {albums.length}개</p>
             {albums.map(album => {
               const cover = mediaUrl(album.cover_url)
@@ -127,45 +127,34 @@ export default function FamilyAlbumsPage() {
                 <button
                   key={album.id}
                   onClick={() => router.push(`/family/albums/${album.id}`)}
-                  className="w-full bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden active:scale-[0.98] transition-all hover:shadow-md text-left group"
+                  className="w-full bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden active:scale-[0.99] transition-all hover:shadow-md text-left"
                 >
-                  <div className="flex gap-4 p-4">
-                    {/* 썸네일 */}
-                    <div className="relative w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 bg-gradient-to-br from-orange-100 to-amber-100">
-                      {cover ? (
-                        <Image
-                          src={cover}
-                          alt={album.title}
-                          fill
-                          className="object-cover"
-                          loading="lazy"
-                          unoptimized
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-2xl">📷</div>
-                      )}
-                    </div>
+                  {/* 큰 표지 사진 */}
+                  <div className="relative w-full aspect-[16/10] bg-gradient-to-br from-orange-100 to-amber-100">
+                    {cover ? (
+                      <Image
+                        src={cover}
+                        alt={album.title}
+                        fill
+                        className="object-cover"
+                        loading="lazy"
+                        unoptimized
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-5xl">📷</div>
+                    )}
+                    <span className="absolute bottom-2.5 right-2.5 text-xs font-semibold text-white bg-black/45 px-2.5 py-1 rounded-full">
+                      📸 {album.media_count}장
+                    </span>
+                  </div>
 
-                    {/* 정보 */}
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-gray-900 text-base group-hover:text-orange-600 transition-colors truncate">
-                        {album.title}
-                      </p>
-                      {album.description && (
-                        <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{album.description}</p>
-                      )}
-                      <div className="flex items-center gap-2 mt-2 flex-wrap">
-                        <span className="text-xs font-semibold text-orange-600 bg-orange-50 px-2.5 py-1 rounded-full">
-                          📸 {album.media_count}장
-                        </span>
-                        <span className="text-xs text-gray-400">{formatDate(album.created_at)}</span>
-                      </div>
-                    </div>
-
-                    {/* 화살표 */}
-                    <div className="self-center text-gray-300 group-hover:text-orange-400 transition-colors text-lg flex-shrink-0">
-                      →
-                    </div>
+                  {/* 정보 */}
+                  <div className="px-4 py-3">
+                    <p className="font-bold text-gray-900 text-lg truncate">{album.title}</p>
+                    {album.description && (
+                      <p className="text-sm text-gray-400 mt-0.5 line-clamp-1">{album.description}</p>
+                    )}
+                    <p className="text-xs text-gray-400 mt-1">{formatDate(album.created_at)}</p>
                   </div>
                 </button>
               )

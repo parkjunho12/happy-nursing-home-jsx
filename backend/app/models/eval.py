@@ -15,6 +15,9 @@ class FrequencyEnum(str, enum.Enum):
     quarterly = "quarterly"
     half_yearly = "half-yearly"
     yearly = "yearly"
+    weekly_dow = "weekly_dow"            # 매주 특정 요일
+    monthly_day = "monthly_day"          # 매월 생성일 + 기한일
+    monthly_nth_dow = "monthly_nth_dow"  # 매월 N째 주 특정 요일
     on_admission = "on_admission"
     on_discharge = "on_discharge"
     on_hire = "on_hire"
@@ -140,6 +143,12 @@ class ChecklistItem(Base):
 
     assignee         = Column(String(100), default="")
     assigned_user_id = Column(String, nullable=True, index=True)  # users.id FK
+
+    # 반복 주기 세부 설정 (해당 frequency에서만 사용, 그 외엔 None)
+    recur_weekday       = Column(Integer, nullable=True)  # 0=일..6=토 (weekly_dow / monthly_nth_dow)
+    recur_week_of_month = Column(Integer, nullable=True)  # 1~5 (5=마지막 주) (monthly_nth_dow)
+    recur_day           = Column(Integer, nullable=True)  # 1~31 생성일 (monthly_day)
+    recur_due_day       = Column(Integer, nullable=True)  # 1~31 기한일 (monthly_day)
     evidence_required = Column(Text, default="")
     storage_location = Column(String(200), default="")
     how_to = Column(Text, default="")

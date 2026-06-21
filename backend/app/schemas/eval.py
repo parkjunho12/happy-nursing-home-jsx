@@ -82,6 +82,10 @@ class ChecklistItemOut(BaseModel):
     person_type:          Optional[str] = None
     template_id:          Optional[str] = None
     due_date:             Optional[str] = None   # one_time 기한
+    recur_weekday:        Optional[int] = None
+    recur_week_of_month:  Optional[int] = None
+    recur_day:            Optional[int] = None
+    recur_due_day:        Optional[int] = None
     created_at:           datetime
     # 완료 이력 (기존 CompletionRecord 기반 — 하위 호환)
     completion_history:   List[CompletionRecordOut] = []
@@ -111,6 +115,10 @@ class ChecklistItemCreate(BaseModel):
     template_id:          Optional[str] = None
     due_date:             Optional[str] = None
     assigned_user_id:     Optional[str] = None   # 담당자 계정(조회/소유). 미지정 시 STAFF는 본인 자동 배정
+    recur_weekday:        Optional[int] = None
+    recur_week_of_month:  Optional[int] = None
+    recur_day:            Optional[int] = None
+    recur_due_day:        Optional[int] = None
 
 
 class ChecklistItemUpdate(BaseModel):
@@ -122,6 +130,10 @@ class ChecklistItemUpdate(BaseModel):
     related_domain_id:    Optional[str] = None
     assignee:             Optional[str] = None
     assigned_user_id:     Optional[str] = None
+    recur_weekday:        Optional[int] = None
+    recur_week_of_month:  Optional[int] = None
+    recur_day:            Optional[int] = None
+    recur_due_day:        Optional[int] = None
     evidence_required:    Optional[str] = None
     storage_location:     Optional[str] = None
     how_to:               Optional[str] = None

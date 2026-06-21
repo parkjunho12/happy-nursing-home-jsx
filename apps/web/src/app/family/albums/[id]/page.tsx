@@ -153,9 +153,9 @@ export default function FamilyAlbumDetailPage() {
         ) : (
           <div>
             <p className="text-sm font-semibold text-gray-700 mb-3">전체 {album.media.length}개</p>
-            <div className="grid grid-cols-3 gap-1">
+            <div className="grid grid-cols-2 gap-2">
               {album.media.map((m, idx) => (
-                <div key={m.id} className="relative aspect-square bg-gray-100 rounded-lg overflow-hidden group">
+                <div key={m.id} className="relative aspect-square bg-gray-100 rounded-xl overflow-hidden">
                   <button onClick={() => setViewer({ media: m, idx })} className="absolute inset-0 w-full h-full">
                     {m.media_type === 'photo' ? (
                       <Image
@@ -176,8 +176,9 @@ export default function FamilyAlbumDetailPage() {
                   {/* 다운로드 버튼 */}
                   <button
                     onClick={e => { e.stopPropagation(); triggerDownload(m.id, m.file_name || `photo_${idx + 1}`) }}
-                    className="absolute top-1 right-1 w-7 h-7 bg-black/60 hover:bg-black/80 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs"
-                    title="다운로드"
+                    className="absolute top-2 right-2 w-9 h-9 bg-black/55 hover:bg-black/75 active:bg-black/85 text-white rounded-xl flex items-center justify-center text-base shadow-sm transition-colors"
+                    title="저장"
+                    aria-label="사진 저장"
                   >
                     ⬇
                   </button>

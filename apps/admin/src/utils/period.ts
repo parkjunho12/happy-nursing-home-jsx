@@ -2,10 +2,11 @@
 
 export type Frequency =
   | 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'half-yearly' | 'yearly'
+  | 'weekly_dow' | 'monthly_day' | 'monthly_nth_dow'
   | 'on_admission' | 'on_discharge' | 'on_hire'
   | 'one_time'
 
-export const RECURRING: Frequency[] = ['daily','weekly','monthly','quarterly','half-yearly','yearly']
+export const RECURRING: Frequency[] = ['daily','weekly','weekly_dow','monthly','monthly_day','monthly_nth_dow','quarterly','half-yearly','yearly']
 export const EVENT_FREQS: Frequency[] = ['on_admission','on_discharge','on_hire']
 
 // 저장된 frequency 값의 표기 흔들림(언더스코어/하이픈 등)을 표준값으로 정규화한다.
@@ -25,6 +26,7 @@ export function normalizeFrequency(freq: string | null | undefined): string {
 export const FREQUENCY_LABELS: Record<string, string> = {
   daily: '일일', weekly: '주별', monthly: '월별', quarterly: '분기별',
   'half-yearly': '반기별', yearly: '연별',
+  weekly_dow: '매주 요일', monthly_day: '매월 지정일', monthly_nth_dow: '매월 N째주',
   on_admission: '입소 시', on_discharge: '퇴소 시', on_hire: '입사 시',
   one_time: '일회성',
 }
@@ -36,6 +38,9 @@ export const FREQUENCY_COLORS: Record<string, string> = {
   quarterly:    'bg-orange-100 text-orange-800',
   'half-yearly':'bg-pink-100 text-pink-800',
   yearly:       'bg-red-100 text-red-800',
+  weekly_dow:   'bg-green-100 text-green-800',
+  monthly_day:  'bg-purple-100 text-purple-800',
+  monthly_nth_dow: 'bg-purple-100 text-purple-800',
   on_admission: 'bg-teal-100 text-teal-800',
   on_discharge: 'bg-gray-200 text-gray-700',
   on_hire:      'bg-indigo-100 text-indigo-800',
@@ -56,10 +61,58 @@ export const DOMAIN_COLORS: Record<string, { bg: string; text: string }> = {
   orange: { bg: 'bg-orange-50', text: 'text-orange-700' },
 }
 
-export function getPeriodKey(freq: Frequency, date: Date): string {
+export interface RecurCfg {
+  weekday?: number | null         // 0=일..6=토
+  weekOfMonth?: number | null     // 1..5 (5=마지막주)
+  day?: number | null             // 1..31 생성일
+  dueDay?: number | null          // 1..31 기한일
+}
+
+// ChecklistItem(또는 raw)에서 반복 설정 추출
+export function cfgFromItem(item: any): RecurCfg {
+  if (!item) return {}
+  return {
+    weekday:     item.recurWeekday     ?? item.recur_weekday      ?? null,
+    weekOfMonth: item.recurWeekOfMonth ?? item.recur_week_of_month ?? null,
+    day:         item.recurDay         ?? item.recur_day          ?? null,
+    dueDay:      item.recurDueDay      ?? item.recur_due_day      ?? null,
+  }
+}
+
+function fmtLocal(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function clampDay(y: number, mZeroBased: number, day: number): Date {
+  const last = new Date(y, mZeroBased + 1, 0).getDate()
+  return new Date(y, mZeroBased, Math.max(1, Math.min(day, last)))
+}
+
+// 그 달의 n번째 weekday(0=일..6=토). 해당 주 없으면 마지막 발생일.
+export function nthWeekdayOfMonth(y: number, mZeroBased: number, weekday: number, n: number): Date {
+  const wd = ((weekday % 7) + 7) % 7
+  const first = new Date(y, mZeroBased, 1)
+  const firstDow = first.getDay()
+  const offset = (wd - firstDow + 7) % 7
+  let day = 1 + offset + (Math.max(1, n) - 1) * 7
+  const lastDay = new Date(y, mZeroBased + 1, 0).getDate()
+  while (day > lastDay) day -= 7
+  return new Date(y, mZeroBased, day)
+}
+
+export function getPeriodKey(freq: Frequency, date: Date, cfg: RecurCfg = {}): string {
   const y = date.getFullYear()
   const m = date.getMonth()
   switch (freq) {
+    case 'weekly_dow': {
+      const wd = cfg.weekday == null ? 0 : cfg.weekday
+      const sunday = new Date(date); sunday.setDate(date.getDate() - date.getDay()); sunday.setHours(0,0,0,0)
+      const target = new Date(sunday); target.setDate(sunday.getDate() + (((wd % 7) + 7) % 7))
+      return fmtLocal(target)
+    }
+    case 'monthly_day':
+    case 'monthly_nth_dow':
+      return `${y}-${String(m + 1).padStart(2, '0')}`
     case 'daily':       return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(date)
     case 'weekly': {
       // 일요일 시작 기준 (일~토), 백엔드와 동일
@@ -81,12 +134,14 @@ export function getPeriodKey(freq: Frequency, date: Date): string {
   }
 }
 
-export function getCurrentPeriodKey(freq: Frequency): string {
-  return getPeriodKey(freq, todayDateKST())
+export function getCurrentPeriodKey(freq: Frequency, cfg: RecurCfg = {}): string {
+  return getPeriodKey(freq, todayDateKST(), cfg)
 }
 
-export function getPeriodLabel(freq: Frequency, key: string): string {
+export function getPeriodLabel(freq: Frequency, key: string, _cfg: RecurCfg = {}): string {
   if (freq === 'daily')       return key
+  if (freq === 'weekly_dow')  return key
+  if (freq === 'monthly_day' || freq === 'monthly_nth_dow') { const [y,m] = key.split('-'); return `${y}년 ${Number(m)}월` }
   if (freq === 'weekly')      return key.replace('-W', '년 ') + '주차'
   if (freq === 'monthly')     { const [y,m] = key.split('-'); return `${y}년 ${Number(m)}월` }
   if (freq === 'quarterly')   return key.replace('-Q', '년 ') + '분기'
@@ -95,10 +150,25 @@ export function getPeriodLabel(freq: Frequency, key: string): string {
   return key
 }
 
-export function getPeriodEnd(freq: Frequency, date: Date = new Date()): Date {
+export function getPeriodEnd(freq: Frequency, date: Date = new Date(), cfg: RecurCfg = {}): Date {
   const y = date.getFullYear()
   const m = date.getMonth()
   switch (freq) {
+    case 'weekly_dow': {
+      const wd = cfg.weekday == null ? 0 : cfg.weekday
+      const sunday = new Date(date); sunday.setDate(date.getDate() - date.getDay())
+      const target = new Date(sunday); target.setDate(sunday.getDate() + (((wd % 7) + 7) % 7))
+      return target
+    }
+    case 'monthly_day': {
+      const dueDay = cfg.dueDay ?? cfg.day ?? 1
+      return clampDay(y, m, dueDay)
+    }
+    case 'monthly_nth_dow': {
+      const wd = cfg.weekday == null ? 1 : cfg.weekday
+      const n  = cfg.weekOfMonth ?? 1
+      return nthWeekdayOfMonth(y, m, wd, n)
+    }
     case 'daily':       return new Date(y, m, date.getDate())
     case 'weekly': {
       const s = getWeekStart(date)
@@ -166,6 +236,10 @@ export interface ChecklistItem {
   personName?: string
   personType?: string
   templateId?: string
+  recurWeekday?: number | null
+  recurWeekOfMonth?: number | null
+  recurDay?: number | null
+  recurDueDay?: number | null
   createdAt: string
 }
 
@@ -213,20 +287,35 @@ export function shouldShowOnDate(item: ChecklistItem, date: Date): boolean {
   }
 
   // ── 반복 주기성 (기존 로직) ───────────────────────────────────
-  const periodKey = getPeriodKey(item.frequency as Frequency, date)
+  const cfg = cfgFromItem(item)
+  const periodKey = getPeriodKey(item.frequency as Frequency, date, cfg)
   const done = item.completionHistory.some(r => r.periodKey === periodKey)
   if (done) {
     const rec = item.completionHistory.find(r => r.periodKey === periodKey)!
     return rec.completedDate === new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(date)
   }
-  return isDateInActivePeriod(item.frequency as Frequency, date)
+  return isDateInActivePeriod(item.frequency as Frequency, date, cfg)
 }
 
-function isDateInActivePeriod(freq: Frequency, date: Date): boolean {
+function isDateInActivePeriod(freq: Frequency, date: Date, cfg: RecurCfg = {}): boolean {
   const today = todayDateKST()
   const d = new Date(date); d.setHours(0, 0, 0, 0)
   if (d > today) return false
   switch (freq) {
+    case 'weekly_dow': {
+      const end = getPeriodEnd('weekly_dow', date, cfg)
+      const s2 = new Date(end); s2.setHours(0,0,0,0)
+      return d.getTime() === s2.getTime()
+    }
+    case 'monthly_day': {
+      if (d.getMonth() !== date.getMonth() || d.getFullYear() !== date.getFullYear()) return false
+      const startDay = cfg.day ?? 1
+      return d.getDate() >= startDay
+    }
+    case 'monthly_nth_dow': {
+      const target = getPeriodEnd('monthly_nth_dow', date, cfg); target.setHours(0,0,0,0)
+      return d.getTime() === target.getTime()
+    }
     case 'daily':       return true
     case 'weekly': {
       const s = getWeekStart(date); const e = new Date(s); e.setDate(e.getDate() + 6)

@@ -19,6 +19,7 @@ from app.schemas.response import ApiResponse
 from app.services.occurrence import (
     get_or_create_occurrence,
     backfill_occurrences,
+    cfg_from_item,
     mark_overdue,
     complete_occurrence,
     uncomplete_occurrence,
@@ -296,7 +297,7 @@ def _sync_item_completed(db: Session, item_id: str):
     else:
         # 반복: 현재 주기 occurrence 기준
         today = date.today()
-        current_key = get_period_key(item.frequency, today)
+        current_key = get_period_key(item.frequency, today, cfg_from_item(item))
         occ = db.query(ChecklistOccurrence).filter(
             ChecklistOccurrence.checklist_item_id == item_id,
             ChecklistOccurrence.period_key == current_key,

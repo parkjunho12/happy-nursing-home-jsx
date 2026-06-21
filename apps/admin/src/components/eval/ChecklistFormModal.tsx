@@ -9,6 +9,12 @@ import { todayKST } from '@/utils/period'
 
 const ic = "w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40"
 
+const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']  // index 0=일..6=토
+const WEEK_OF_MONTH = [
+  { v: 1, label: '첫째 주' }, { v: 2, label: '둘째 주' }, { v: 3, label: '셋째 주' },
+  { v: 4, label: '넷째 주' }, { v: 5, label: '마지막 주' },
+]
+
 // 주기 그룹 정의
 const FREQ_GROUPS = [
   {
@@ -72,12 +78,19 @@ export default function ChecklistFormModal({ existing, onClose }: Props) {
     riskLevel:          (existing?.riskLevel ?? 'medium') as 'low' | 'medium' | 'high',
     personId:           existing?.personId           ?? '',
     personType:         (existing?.personType        ?? 'facility') as string,
+    recurWeekday:       (existing?.recurWeekday     ?? 0) as number,
+    recurWeekOfMonth:   (existing?.recurWeekOfMonth ?? 1) as number,
+    recurDay:           (existing?.recurDay         ?? 1) as number,
+    recurDueDay:        (existing?.recurDueDay      ?? 25) as number,
   })
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState('')
 
   const isOneTime  = form.frequency === 'one_time'
   const isEvent    = EVENT_FREQS.includes(form.frequency as any)
+  const isWeeklyDow     = form.frequency === 'weekly_dow'
+  const isMonthlyDay    = form.frequency === 'monthly_day'
+  const isMonthlyNthDow = form.frequency === 'monthly_nth_dow'
 
   const filteredCategories = categories.filter(c => !form.relatedDomainId || c.domainId === form.relatedDomainId)
   const filteredIndicators = indicators.filter(i => !form.relatedCategoryId || i.categoryId === form.relatedCategoryId)
@@ -130,6 +143,10 @@ export default function ChecklistFormModal({ existing, onClose }: Props) {
         personId:           form.personId || undefined,
         personName:         form.personId ? personName : undefined,
         personType:         form.personId ? form.personType : 'facility',
+        recurWeekday:       (isWeeklyDow || isMonthlyNthDow) ? Number(form.recurWeekday) : null,
+        recurWeekOfMonth:   isMonthlyNthDow ? Number(form.recurWeekOfMonth) : null,
+        recurDay:           isMonthlyDay ? Number(form.recurDay) : null,
+        recurDueDay:        isMonthlyDay ? Number(form.recurDueDay) : null,
       }
 
       if (isEdit && existing) {
@@ -258,6 +275,75 @@ export default function ChecklistFormModal({ existing, onClose }: Props) {
             {isEvent && (
               <div className="bg-blue-50 border border-blue-100 rounded-xl px-3.5 py-2.5 text-xs text-blue-700">
                 ℹ️ 이벤트 주기는 입소·퇴소·입사 시 자동 생성됩니다. 직접 추가가 필요한 경우에만 선택하세요.
+              </div>
+            )}
+
+            {/* 매주 특정 요일 */}
+            {isWeeklyDow && (
+              <div className="bg-green-50 border border-green-200 rounded-xl p-3.5 space-y-2">
+                <label className="block text-xs font-semibold text-gray-600">반복 요일 *</label>
+                <div className="flex gap-1.5 flex-wrap">
+                  {WEEKDAYS.map((w, i) => (
+                    <button key={i} type="button"
+                      onClick={() => setForm({ ...form, recurWeekday: i })}
+                      className={`w-9 h-9 rounded-lg text-sm font-semibold transition-colors ${
+                        form.recurWeekday === i ? 'bg-green-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-green-100'
+                      }`}>
+                      {w}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-green-700">매주 {WEEKDAYS[form.recurWeekday]}요일에 생성·완료하는 항목입니다.</p>
+              </div>
+            )}
+
+            {/* 매월 생성일 + 기한일 */}
+            {isMonthlyDay && (
+              <div className="bg-purple-50 border border-purple-200 rounded-xl p-3.5 grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">생성일 (매월) *</label>
+                  <select className={ic} value={form.recurDay}
+                    onChange={e => setForm({ ...form, recurDay: Number(e.target.value) })}>
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
+                      <option key={d} value={d}>{d}일</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">기한일 (매월) *</label>
+                  <select className={ic} value={form.recurDueDay}
+                    onChange={e => setForm({ ...form, recurDueDay: Number(e.target.value) })}>
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
+                      <option key={d} value={d}>{d}일</option>
+                    ))}
+                  </select>
+                </div>
+                <p className="col-span-2 text-[11px] text-purple-700">
+                  매월 {form.recurDay}일에 생성되어 {form.recurDueDay}일까지가 기한입니다.
+                </p>
+              </div>
+            )}
+
+            {/* 매월 N째 주 특정 요일 */}
+            {isMonthlyNthDow && (
+              <div className="bg-purple-50 border border-purple-200 rounded-xl p-3.5 grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">몇째 주 *</label>
+                  <select className={ic} value={form.recurWeekOfMonth}
+                    onChange={e => setForm({ ...form, recurWeekOfMonth: Number(e.target.value) })}>
+                    {WEEK_OF_MONTH.map(w => <option key={w.v} value={w.v}>{w.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">요일 *</label>
+                  <select className={ic} value={form.recurWeekday}
+                    onChange={e => setForm({ ...form, recurWeekday: Number(e.target.value) })}>
+                    {WEEKDAYS.map((w, i) => <option key={i} value={i}>{w}요일</option>)}
+                  </select>
+                </div>
+                <p className="col-span-2 text-[11px] text-purple-700">
+                  매월 {WEEK_OF_MONTH.find(w => w.v === form.recurWeekOfMonth)?.label} {WEEKDAYS[form.recurWeekday]}요일에 생성됩니다.
+                </p>
               </div>
             )}
           </div>
