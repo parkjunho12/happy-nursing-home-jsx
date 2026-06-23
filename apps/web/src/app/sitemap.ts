@@ -27,6 +27,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   // 정보/소개 페이지 (실제 존재하는 라우트만 포함)
   const infoPages = [
+    '/location',
     '/services',
     '/pricing',
     '/reviews',

@@ -203,7 +203,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     { name: '녹양역요양원', path: '/nogyang-station-nursing-home' },
     { name: '입소비용', path: '/pricing' },
     { name: '입소후기', path: '/reviews' },
-    { name: '상담·오시는 길', path: '/contact' },
+    { name: '상담신청', path: '/contact' },
+    { name: '오시는 길', path: '/location' },
   ]
   const siteNavJsonLd = {
     '@context': 'https://schema.org',
