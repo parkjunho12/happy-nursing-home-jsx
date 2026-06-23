@@ -87,7 +87,7 @@ import {
     {
       id: 'location',
       label: '오시는 길',
-      href: '/location',
+      href: '/contact',
     },
   ]
   
@@ -255,7 +255,7 @@ import {
   export const DEFAULT_METADATA = {
     title: '양주 행복한요양원 녹양역점 | 양주 요양원, 의정부시 요양원',
     description: '경기도 양주시와 의정부시 사이에 위치한 13년 전통의 행복한요양원 녹양역점. 전문 간호사 24시간 상주, 개별 맞춤 케어, 지자체 A등급 인증. 가족처럼 따뜻하게, 전문가처럼 안전하게.',
-    keywords: '노원구요양원, 강동구요양원, 강북구요양원, 성북구요양원, 요양원, 경기도요양원, 양주시요양원, 노인요양시설, 전문요양원, 장기요양, 노인요양, 의정부요양원, 양주요양원, 행복한요양원, 행복한요양원 녹양역점, 녹양역요양원',
+    keywords: '양주요양원, 의정부요양원, 녹양역요양원, 양주 요양원 추천, 의정부 요양원 추천, 양주시요양원, 경기북부 요양원, 노인요양시설, 전문요양원, 장기요양, 노인요양, 행복한요양원 녹양역점, 행복한요양원',
     ogImage: '/og-image.jpg',
     naverSiteVerification: '0681d688b8f58007d39fc3e823d6ea4eaf6a947a',
     googleSiteVerification: 'VInI3tQKpj10YeNKWxqsV61dh89JmJtrdbYh9KrLr2U'

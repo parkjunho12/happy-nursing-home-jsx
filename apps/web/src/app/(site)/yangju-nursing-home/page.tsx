@@ -33,6 +33,9 @@ export const metadata: Metadata = {
     '거동불편 요양원',
     '행복한요양원 녹양역점',
   ],
+  alternates: {
+    canonical: 'https://www.행복한요양원녹양역.com/yangju-nursing-home',
+  },
   openGraph: {
     title: '양주요양원 찾으신다면 | 행복한요양원 녹양역점',
     description:
