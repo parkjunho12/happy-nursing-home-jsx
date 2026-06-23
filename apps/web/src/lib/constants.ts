@@ -87,7 +87,7 @@ import {
     {
       id: 'location',
       label: '오시는 길',
-      href: '/contact',
+      href: '/location',
     },
   ]
   
