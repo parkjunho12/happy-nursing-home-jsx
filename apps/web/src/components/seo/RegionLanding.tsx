@@ -116,30 +116,46 @@ const facilityFeatures = [
 
 const facilityPhotos = [
   {
-    src: '/assets/images/introduce-1.png',
-    alt: '행복한요양원 녹양역점에서 어르신들이 함께 식사하며 대화하는 생활 공간',
-    title: '밝고 편안한 생활 분위기',
+    src: '/assets/images/album/album-band-exercise.jpg',
+    alt: '어르신들이 색색의 밴드를 들어올리며 체조 프로그램에 참여하는 모습',
+    title: '활기찬 신체 프로그램',
     description:
-      '어르신들이 일상 속에서 편안하게 지내실 수 있는 분위기를 가장 중요하게 생각합니다.',
+      '색색의 밴드로 함께하는 체조처럼, 무리하지 않으면서 즐겁게 몸을 움직이는 시간을 마련합니다.',
   },
   {
-    src: '/assets/images/introduce-2.png',
-    alt: '어르신들이 무리하지 않는 운동 프로그램에 참여하는 모습',
-    title: '활동과 보행을 고려한 프로그램',
+    src: '/assets/images/album/album-harness-rail.jpg',
+    alt: '하네스 레일을 활용해 어르신이 안전하게 보행 재활을 하는 모습',
+    title: '하네스 레일 보행 재활',
     description:
-      '하네스 레일 보행 공간과 함께 무리하지 않는 생활 프로그램을 준비합니다.',
+      '천장 레일과 하네스를 활용해 거동이 불편한 어르신도 안전하게 보행을 연습할 수 있습니다.',
   },
   {
-    src: '/assets/images/introduce-3.png',
-    alt: '케어 선생님과 어르신이 함께 웃으며 시간을 보내는 모습',
-    title: '따뜻한 케어 관계',
-    description: '시설의 분위기는 결국 사람에게서 만들어진다고 생각합니다.',
+    src: '/assets/images/album/album-cognition-1to1.jpg',
+    alt: '요양보호사가 어르신과 손을 맞잡고 인지 활동을 함께하는 모습',
+    title: '1:1 인지·정서 케어',
+    description:
+      '손을 맞잡고 함께하는 인지 활동으로 정서적 안정과 교류의 시간을 드립니다.',
   },
   {
-    src: '/assets/images/introduce-4.png',
-    alt: '어르신들이 원예 등 여가 활동을 즐기는 모습',
-    title: '정서적 안정과 여가 시간',
-    description: '생활의 안정감과 소소한 즐거움을 함께 드릴 수 있도록 준비합니다.',
+    src: '/assets/images/album/album-block-program.jpg',
+    alt: '어르신들이 한글 블록 교구로 인지 프로그램에 참여하는 모습',
+    title: '인지 자극 프로그램',
+    description:
+      '한글 블록 같은 교구 활동으로 기억력과 인지 기능 유지를 돕습니다.',
+  },
+  {
+    src: '/assets/images/album/album-meal-care.jpg',
+    alt: '요양보호사가 어르신들께 식사를 차려드리는 모습',
+    title: '정성스러운 식사',
+    description:
+      '어르신의 건강 상태와 기호를 살펴 균형 잡힌 식사를 정성껏 준비합니다.',
+  },
+  {
+    src: '/assets/images/album/album-ring-toss.jpg',
+    alt: '어르신들이 고리 던지기 여가 활동을 즐기는 모습',
+    title: '함께 즐기는 여가',
+    description:
+      '고리 던지기 같은 가벼운 놀이로 웃음과 활력을 더하는 여가 시간을 보냅니다.',
   },
 ]
 

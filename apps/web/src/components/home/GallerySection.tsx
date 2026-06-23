@@ -363,6 +363,57 @@ const galleryImages: GalleryImage[] = [
     description: '처음 방문하시는 보호자님을 따뜻하게 맞이합니다',
     alt: '행복한요양원 로비 안내 공간',
   },
+  // ===== 보호자 앨범 실사 (실제 활동 사진) =====
+  {
+    id: 801,
+    src: '/assets/images/album/album-band-exercise.jpg',
+    category: '프로그램',
+    title: '밴드 체조 시간',
+    description: '색색의 밴드로 함께하는 활기찬 신체 활동',
+    alt: '어르신들이 색색의 밴드를 들어올리며 체조 프로그램에 참여하는 모습',
+    featured: true,
+  },
+  {
+    id: 802,
+    src: '/assets/images/album/album-block-program.jpg',
+    category: '프로그램',
+    title: '한글 블록 활동',
+    description: '인지 기능을 돕는 한글 블록 프로그램',
+    alt: '어르신들이 한글 블록 교구로 인지 프로그램에 참여하는 모습',
+  },
+  {
+    id: 803,
+    src: '/assets/images/album/album-cognition-1to1.jpg',
+    category: '프로그램',
+    title: '1:1 인지·정서 케어',
+    description: '손을 맞잡고 함께하는 따뜻한 인지 활동',
+    alt: '요양보호사가 어르신과 손을 맞잡고 인지 활동을 함께하는 모습',
+  },
+  {
+    id: 804,
+    src: '/assets/images/album/album-ring-toss.jpg',
+    category: '프로그램',
+    title: '고리 던지기 놀이',
+    description: '즐겁게 참여하는 여가 활동',
+    alt: '어르신들이 고리 던지기 여가 활동을 즐기는 모습',
+  },
+  {
+    id: 805,
+    src: '/assets/images/album/album-meal-care.jpg',
+    category: '식사/위생',
+    title: '정성스러운 식사',
+    description: '어르신 한 분 한 분 살피는 식사 시간',
+    alt: '요양보호사가 어르신들께 식사를 차려드리는 모습',
+  },
+  {
+    id: 806,
+    src: '/assets/images/album/album-harness-rail.jpg',
+    category: '재활 공간',
+    title: '하네스 레일 보행 재활',
+    description: '안전하게 보행을 연습하는 재활 공간',
+    alt: '하네스 레일을 활용해 어르신이 안전하게 보행 재활을 하는 모습',
+    featured: true,
+  },
 ]
 
 export function GallerySection() {
