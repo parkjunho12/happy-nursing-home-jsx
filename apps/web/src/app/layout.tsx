@@ -183,6 +183,40 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   
   }
 
+  const SITE_URL = 'https://www.행복한요양원녹양역.com'
+
+  // 사이트 정체성 — 네이버/구글이 사이트명을 정확히 인식하도록
+  const webSiteJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    '@id': `${SITE_URL}#website`,
+    name: '행복한요양원 녹양역점',
+    alternateName: ['양주 행복한요양원 녹양역점', '녹양역요양원', '양주요양원'],
+    url: SITE_URL,
+    inLanguage: 'ko-KR',
+  }
+
+  // 메인 내비게이션 — 네이버 사이트링크(서브 링크) 노출을 돕는 구조화 데이터
+  const siteNavItems = [
+    { name: '양주요양원', path: '/yangju-nursing-home' },
+    { name: '의정부요양원', path: '/uijeongbu-nursing-home' },
+    { name: '녹양역요양원', path: '/nogyang-station-nursing-home' },
+    { name: '입소비용', path: '/pricing' },
+    { name: '입소후기', path: '/reviews' },
+    { name: '상담·오시는 길', path: '/contact' },
+  ]
+  const siteNavJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: '행복한요양원 녹양역점 주요 메뉴',
+    itemListElement: siteNavItems.map((item, i) => ({
+      '@type': 'SiteNavigationElement',
+      position: i + 1,
+      name: item.name,
+      url: `${SITE_URL}${item.path}`,
+    })),
+  }
+
   return (
     <html lang="ko" className="scroll-smooth">
       <head>
@@ -193,6 +227,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(webSiteJsonLd) }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(siteNavJsonLd) }}
         />
         <OrganizationSchema />
       </head>
