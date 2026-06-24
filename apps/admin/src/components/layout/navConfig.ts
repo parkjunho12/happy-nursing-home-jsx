@@ -2,7 +2,7 @@ import {
   LayoutDashboard, UserCog, MessageSquare, FileText,
   Star, Settings, ClipboardList, CalendarDays,
   UserRound, ShieldCheck, Sparkles, FileSearch,
-  Image as ImageIcon, Users, BookOpen, PenLine,
+  Image as ImageIcon, Users, BookOpen, PenLine, Megaphone,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -70,6 +70,7 @@ export function getNavConfig(
         { to: '/reviews', icon: Star, label: '후기 관리' },
         { to: '/analytics/page-views', icon: LayoutDashboard, label: '페이지뷰 통계' },
         { to: '/analytics/suspicious-ips', icon: ShieldCheck, label: '의심 IP 통계' },
+        { to: '/naver-ads', icon: Megaphone, label: '네이버 광고 관리' },
         { to: '/settings', icon: Settings, label: '설정' },
       ],
       eval: [
