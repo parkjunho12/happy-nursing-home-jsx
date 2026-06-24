@@ -61,6 +61,7 @@ class NaverAdsClient:
         self._cache: Dict[str, Any] = {}
         self._cache_ttl = 120.0  # 초
         self._max_workers = 8
+        self._time_offset_ms = 0   # 네이버 서버와의 시계 오차 보정값
 
     # ------------------------------------------------------------------ #
     @property
@@ -87,7 +88,7 @@ class NaverAdsClient:
         return base64.b64encode(digest).decode("utf-8")
 
     def _headers(self, method: str, uri: str) -> Dict[str, str]:
-        timestamp = str(int(time.time() * 1000))
+        timestamp = str(int(time.time() * 1000) + self._time_offset_ms)
         signature = self.generate_signature(method, uri, timestamp)
         return {
             "Content-Type": "application/json; charset=UTF-8",
@@ -116,6 +117,7 @@ class NaverAdsClient:
         backoff = 0.5
         attempt = 0
         resp = None
+        ts_synced = False
         while True:
             attempt += 1
             headers = self._headers(method, uri)  # 매 시도마다 timestamp/서명 갱신
@@ -125,6 +127,20 @@ class NaverAdsClient:
             except httpx.HTTPError as exc:
                 logger.warning("naver_ads request transport error: %s", type(exc).__name__)
                 raise NaverAdsError("네이버 광고 서버에 연결하지 못했습니다.")
+
+            # 시계 오차(Invalid Timestamp)로 인한 403 → 네이버 Date 헤더로 오프셋 보정 후 1회 재시도
+            if resp.status_code == 403 and not ts_synced:
+                date_hdr = resp.headers.get("Date")
+                if date_hdr:
+                    try:
+                        from email.utils import parsedate_to_datetime
+                        naver_ms = int(parsedate_to_datetime(date_hdr).timestamp() * 1000)
+                        self._time_offset_ms = naver_ms - int(time.time() * 1000)
+                        ts_synced = True
+                        logger.warning("naver_ads clock skew corrected: offset=%dms", self._time_offset_ms)
+                        continue
+                    except Exception:
+                        pass
 
             if resp.status_code in (429, 503) and attempt <= max_retries:
                 retry_after = resp.headers.get("Retry-After")
