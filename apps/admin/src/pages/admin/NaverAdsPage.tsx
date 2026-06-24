@@ -41,23 +41,27 @@ const actionStyle: Record<string, string> = {
 }
 const actionLabel: Record<string, string> = { increase: '인상', decrease: '인하', hold: '유지' }
 
+// 페이지 이탈(키워드 상세 진입) 후 복귀 시 직전 데이터를 유지하기 위한 모듈 캐시
+let pageCache: any = null
+
 export default function NaverAdsPage() {
+  const cache = pageCache
   const navigate = useNavigate()
-  const [period, setPeriod] = useState<Period>('7d')
-  const [customStart, setCustomStart] = useState('')
-  const [customEnd, setCustomEnd] = useState('')
+  const [period, setPeriod] = useState<Period>(cache?.period ?? '7d')
+  const [customStart, setCustomStart] = useState<string>(cache?.customStart ?? '')
+  const [customEnd, setCustomEnd] = useState<string>(cache?.customEnd ?? '')
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [adgroups, setAdgroups] = useState<AdGroup[]>([])
-  const [campaignId, setCampaignId] = useState('')
-  const [adgroupId, setAdgroupId] = useState('')
-  const [search, setSearch] = useState('')
+  const [campaignId, setCampaignId] = useState<string>(cache?.campaignId ?? '')
+  const [adgroupId, setAdgroupId] = useState<string>(cache?.adgroupId ?? '')
+  const [search, setSearch] = useState<string>(cache?.search ?? '')
 
-  const [perf, setPerf] = useState<PerformanceData | null>(null)
-  const [suggestions, setSuggestions] = useState<Record<string, BidSuggestion>>({})
-  const [aiSummary, setAiSummary] = useState<AiSummary | null>(null)
-  const [engine, setEngine] = useState<string>('')
-  const [daypartText, setDaypartText] = useState('')
-  const [dayparting, setDayparting] = useState<DaypartingPlan | null>(null)
+  const [perf, setPerf] = useState<PerformanceData | null>(cache?.perf ?? null)
+  const [suggestions, setSuggestions] = useState<Record<string, BidSuggestion>>(cache?.suggestions ?? {})
+  const [aiSummary, setAiSummary] = useState<AiSummary | null>(cache?.aiSummary ?? null)
+  const [engine, setEngine] = useState<string>(cache?.engine ?? '')
+  const [daypartText, setDaypartText] = useState<string>(cache?.daypartText ?? '')
+  const [dayparting, setDayparting] = useState<DaypartingPlan | null>(cache?.dayparting ?? null)
   const [daypartLoading, setDaypartLoading] = useState(false)
   const [applyDayparting, setApplyDayparting] = useState(false)
   const [cfg, setCfg] = useState<DaypartingConfig | null>(null)
@@ -65,7 +69,7 @@ export default function NaverAdsPage() {
   const [schedDryRun, setSchedDryRun] = useState(true)
   const [schedMinBid, setSchedMinBid] = useState(70)
   const [schedSaving, setSchedSaving] = useState(false)
-  const [selected, setSelected] = useState<Record<string, boolean>>({})
+  const [selected, setSelected] = useState<Record<string, boolean>>(cache?.selected ?? {})
 
   const [loading, setLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
@@ -73,7 +77,7 @@ export default function NaverAdsPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [applyResult, setApplyResult] = useState<ApplyResult | null>(null)
   const [error, setError] = useState('')
-  const [convCheck, setConvCheck] = useState<any | null>(null)
+  const [convCheck, setConvCheck] = useState<any | null>(cache?.convCheck ?? null)
   const [convChecking, setConvChecking] = useState(false)
 
   const { start, end } = useMemo(() => rangeFor(period, customStart, customEnd), [period, customStart, customEnd])
@@ -96,7 +100,7 @@ export default function NaverAdsPage() {
     naverAdsAPI.adgroups(campaignId).then(r => {
       setAdgroups(r.adgroups)
       // 초기 진입 1회: 첫 번째 광고그룹만 보여주도록 자동 선택 (조회 범위 최소화)
-      if (!didInitAdgroupRef.current && r.adgroups.length > 0) {
+      if (!didInitAdgroupRef.current && !adgroupId && r.adgroups.length > 0) {
         setAdgroupId(r.adgroups[0].adgroup_id)
         didInitAdgroupRef.current = true
       }
@@ -120,7 +124,8 @@ export default function NaverAdsPage() {
     } finally { setLoading(false) }
   }
 
-  useEffect(() => { loadPerformance() /* eslint-disable-next-line */ }, [start, end, campaignId, adgroupId])
+  // 성과/stats 조회는 자동으로 하지 않고 '조회' 버튼을 눌렀을 때만 실행한다.
+  // (필터 변경/진입 시 자동 API 호출 없음 → 불필요한 대량 호출·429 방지)
 
   const checkConversions = async () => {
     setConvChecking(true); setError('')
@@ -215,7 +220,7 @@ export default function NaverAdsPage() {
   )
 
   // ── 정렬 ──
-  const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' }>({ key: 'cost', dir: 'desc' })
+  const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' }>(cache?.sort ?? { key: 'cost', dir: 'desc' })
   const sortValue = (r: typeof rows[number], key: string): number | string => {
     const s = suggestions[r.keyword_id]
     switch (key) {
@@ -248,6 +253,14 @@ export default function NaverAdsPage() {
   }, [rows, suggestions, sort])
   const onSort = (key: string) =>
     setSort(p => (p.key === key ? { key, dir: p.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'desc' }))
+
+  // 현재 상태를 모듈 캐시에 저장 → 키워드 상세 갔다 뒤로 와도 데이터 유지
+  useEffect(() => {
+    pageCache = {
+      period, customStart, customEnd, campaignId, adgroupId, search,
+      perf, suggestions, aiSummary, engine, dayparting, daypartText, convCheck, selected, sort,
+    }
+  })
 
   // ── 전체 선택 ──
   const selectableIds = useMemo(
@@ -336,7 +349,7 @@ export default function NaverAdsPage() {
           </select>
           <input value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key==='Enter' && loadPerformance()} placeholder="키워드 검색" className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm" />
           <button onClick={loadPerformance} className="px-3 py-1.5 rounded-lg text-sm font-semibold border border-gray-200 hover:bg-gray-50">조회</button>
-          {!campaignId && <span className="text-xs text-amber-600">전체 캠페인 조회는 느릴 수 있어요. 캠페인을 선택하면 빠릅니다.</span>}
+          {!campaignId && <span className="text-xs text-amber-600">전체 캠페인은 자동 조회하지 않습니다(과부하 방지). ‘조회’를 누르면 전체를 불러옵니다.</span>}
         </div>
       </div>
 

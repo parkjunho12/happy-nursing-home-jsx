@@ -60,7 +60,7 @@ class NaverAdsClient:
         # 마스터 데이터(캠페인/광고그룹/키워드) 단기 캐시 — 반복 조회 속도 개선
         self._cache: Dict[str, Any] = {}
         self._cache_ttl = 120.0  # 초
-        self._max_workers = 8
+        self._max_workers = 4
         self._time_offset_ms = 0   # 네이버 서버와의 시계 오차 보정값
 
     # ------------------------------------------------------------------ #
@@ -286,21 +286,27 @@ class NaverAdsClient:
         time_range = _json.dumps({"since": start_date, "until": end_date})
         fields_json = _json.dumps(fields)
 
-        # URL too long 방지: id 를 청크로 나누고, 청크들을 병렬 호출해 로딩 단축
-        CHUNK = 50
+        # URL too long 방지 + 레이트리밋 방지:
+        #  - 청크를 크게(80개) 잡아 요청 수를 줄이고,
+        #  - 동시 대량 발사 대신 '순차 + 짧은 페이싱'으로 호출한다(429 폭주 방지).
+        CHUNK = 80
         chunks = [ids[i:i + CHUNK] for i in range(0, len(ids), CHUNK)]
 
-        def _fetch(chunk):
-            params = {"ids": chunk, "fields": fields_json, "timeRange": time_range}
-            data = self.request("GET", "/stats", params=params)
-            if isinstance(data, dict):
-                return data.get("data", []) or []
-            return data or []
-
         merged: List[Dict[str, Any]] = []
-        for part in self._parallel(_fetch, chunks):
+        for idx, chunk in enumerate(chunks):
+            params = {"ids": chunk, "fields": fields_json, "timeRange": time_range}
+            try:
+                data = self.request("GET", "/stats", params=params)
+            except NaverAdsError:
+                continue  # 일부 청크 실패는 건너뜀(재시도는 request 내부에서 제한적으로)
+            if isinstance(data, dict):
+                part = data.get("data", []) or []
+            else:
+                part = data or []
             if part:
                 merged.extend(part)
+            if idx + 1 < len(chunks):
+                time.sleep(0.12)  # 청크 간 간격으로 레이트리밋 완화
         return merged
 
     # ------------------------------------------------------------------ #
