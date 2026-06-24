@@ -51,6 +51,15 @@ class Settings(BaseSettings):
     
     # Environment
     ENVIRONMENT: str = "production"
+
+    # ── 네이버 검색광고 API ──
+    # ⚠️ API/Secret Key는 절대 프론트로 노출하지 않는다. 백엔드에서만 사용.
+    NAVER_ADS_BASE_URL: str = "https://api.searchad.naver.com"
+    NAVER_ADS_API_KEY: str = ""
+    NAVER_ADS_SECRET_KEY: str = ""
+    NAVER_ADS_CUSTOMER_ID: str = ""
+    # 일일 최대 변경 키워드 수 (0 = 무제한)
+    NAVER_ADS_DAILY_MAX_KEYWORD_CHANGES: int = 0
     
     # Upload
     UPLOAD_DIR: str = "/app/uploads"

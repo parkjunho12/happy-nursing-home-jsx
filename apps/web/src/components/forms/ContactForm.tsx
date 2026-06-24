@@ -2,6 +2,7 @@
 
 import React, { useMemo, useRef, useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
+import { trackLead } from '@/lib/analytics/naver'
 import { zodResolver } from '@hookform/resolvers/zod'
 
 import type { ContactFormData } from '@/types'
@@ -142,6 +143,7 @@ export default function ContactForm() {
 
       if (response?.success) {
         trackFormSubmit('Contact Form', true)
+        trackLead()   // 네이버 검색광고 전환(상담 신청 완료)
         setShowSuccessModal(true)
         reset()
       } else {

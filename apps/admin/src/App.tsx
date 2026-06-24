@@ -32,6 +32,8 @@ import EvalAlbumPage        from './pages/eval/EvalAlbumPage'
 import EvalRecordGuidePage from './pages/eval/EvalRecordGuidePage'
 import BlogAiWriterPage from './pages/eval/BlogAiWriterPage'
 import EvalUsersPage        from './pages/eval/EvalUsersPage'
+import NaverAdsPage         from './pages/admin/NaverAdsPage'
+import NaverAdsKeywordDetailPage from './pages/admin/NaverAdsKeywordDetailPage'
 import FamilyLoginPage      from './pages/family/FamilyLoginPage'
 import FamilyAlbumsPage     from './pages/family/FamilyAlbumsPage'
 import FamilyAlbumDetailPage from './pages/family/FamilyAlbumDetailPage'
@@ -149,6 +151,8 @@ function App() {
             <Route path="analytics/page-views"     element={<AdminRoute><PageViewStats /></AdminRoute>} />
             <Route path="analytics/suspicious-ips" element={<AdminRoute><SuspiciousIPPage /></AdminRoute>} />
             <Route path="settings"                 element={<AdminRoute><SettingsPage /></AdminRoute>} />
+            <Route path="naver-ads"                element={<AdminRoute><NaverAdsPage /></AdminRoute>} />
+            <Route path="naver-ads/keyword/:keywordId" element={<AdminRoute><NaverAdsKeywordDetailPage /></AdminRoute>} />
 
             {/* 평가 관리 — 공통 (role 필터는 백엔드에서) */}
             <Route path="eval/checklist" element={<EvalChecklistPage />} />

@@ -9,6 +9,7 @@ import dynamic from 'next/dynamic'
 import NaverWcs from '@/components/analytics/NaverWcs'
 import SmartLogScript from '@/components/analytics/SmartLogScript'
 import PageTracker from '@/components/analytics/PageViewTracker'
+import ConversionTracker from '@/components/analytics/ConversionTracker'
 import localFont from 'next/font/local'
 
 
@@ -243,6 +244,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${notoSansKr.variable} ${nanumMyeongjo.variable} ${pretendard.variable} ${maruburi.variable} font-sans antialiased`}>
         <GTM />
         <PageTracker />
+        <ConversionTracker />
         {children}
         <ChatButton />
 

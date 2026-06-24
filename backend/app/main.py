@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
+import asyncio
 import logging
 import os
 from app.core.config import settings
@@ -31,14 +32,48 @@ else:
     )
 logger = logging.getLogger(__name__)
 
+
+async def _dayparting_scheduler_loop():
+    """매시 정각마다 시간대 자동 입찰 조정을 1회 실행한다(상시 가동 서버용)."""
+    from app.core.database import SessionLocal
+    from app.services.naver_ads_scheduler import run_hourly
+    import datetime as _dt
+    while True:
+        try:
+            now = _dt.datetime.now()
+            # 다음 정각까지 대기
+            secs = 3600 - (now.minute * 60 + now.second)
+            await asyncio.sleep(max(30, secs))
+            db = SessionLocal()
+            try:
+                # 동기 작업(DB+네이버 API)은 스레드풀에서 실행
+                await asyncio.to_thread(run_hourly, db)
+            finally:
+                db.close()
+        except asyncio.CancelledError:
+            break
+        except Exception as e:  # 루프는 절대 죽지 않도록
+            logger.warning("dayparting scheduler tick error: %s", type(e).__name__)
+            await asyncio.sleep(60)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     logger.info("🚀 Starting Nursing Home Operations Backend")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
     logger.info(f"CORS Origins: {settings.CORS_ORIGINS_LIST}")
+
+    # 시간대 자동 입찰 스케줄러 시작
+    _scheduler_task = asyncio.create_task(_dayparting_scheduler_loop())
+    logger.info("⏰ Dayparting bid scheduler started")
+
     yield
     # Shutdown
+    _scheduler_task.cancel()
+    try:
+        await _scheduler_task
+    except Exception:
+        pass
     logger.info("🛑 Shutting down...")
 
 app = FastAPI(
