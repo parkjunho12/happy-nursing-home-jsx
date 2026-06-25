@@ -73,3 +73,12 @@ from app.models.push import FamilyPushToken
 
 # Naver Ads
 from app.models.naver_ads import NaverAdBidChangeLog, NaverAdsDaypartingConfig, NaverAdKeywordSchedule
+
+# Volunteer
+from app.models.volunteer import VolunteerApplication
+
+# Marketing CTA tracking
+from app.models.marketing import MarketingCtaEvent
+
+# Recruitment (채용)
+from app.models.recruitment import RecruitmentPost, RecruitmentApplication

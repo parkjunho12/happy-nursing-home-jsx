@@ -3,6 +3,7 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { trackLead } from '@/lib/analytics/naver'
+import { trackCtaEvent } from '@/lib/analytics/naverAdTracking'
 import { zodResolver } from '@hookform/resolvers/zod'
 
 import type { ContactFormData } from '@/types'
@@ -144,6 +145,7 @@ export default function ContactForm() {
       if (response?.success) {
         trackFormSubmit('Contact Form', true)
         trackLead()   // 네이버 검색광고 전환(상담 신청 완료)
+        trackCtaEvent('consultation_submit', { componentName: 'ContactForm', sectionName: 'ContactSection', buttonLabel: '상담 신청하기', destination: '/contact' })
         setShowSuccessModal(true)
         reset()
       } else {

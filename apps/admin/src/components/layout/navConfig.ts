@@ -2,7 +2,7 @@ import {
   LayoutDashboard, UserCog, MessageSquare, FileText,
   Star, Settings, ClipboardList, CalendarDays,
   UserRound, ShieldCheck, Sparkles, FileSearch,
-  Image as ImageIcon, Users, BookOpen, PenLine, Megaphone,
+  Image as ImageIcon, Users, BookOpen, PenLine, Megaphone, HeartHandshake, Briefcase,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -71,6 +71,8 @@ export function getNavConfig(
         { to: '/analytics/page-views', icon: LayoutDashboard, label: '페이지뷰 통계' },
         { to: '/analytics/suspicious-ips', icon: ShieldCheck, label: '의심 IP 통계' },
         { to: '/naver-ads', icon: Megaphone, label: '네이버 광고 관리' },
+        { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
+        { to: '/recruitment', icon: Briefcase, label: '채용 관리' },
         { to: '/settings', icon: Settings, label: '설정' },
       ],
       eval: [
@@ -107,6 +109,12 @@ export function getNavConfig(
     showDashboard: true,
     main: [
       { to: '/contacts', icon: MessageSquare, label: '상담 관리' },
+      ...(isSocialWorker
+        ? [
+            { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
+            { to: '/recruitment', icon: Briefcase, label: '채용 관리' },
+          ]
+        : []),
     ],
     eval: [
       {

@@ -139,6 +139,16 @@ export interface ApplyResult {
 export interface Campaign { campaign_id: string; name: string; campaign_type?: string; status?: string }
 export interface AdGroup { adgroup_id: string; campaign_id?: string; name: string; status?: string }
 
+export interface CtaDashboard {
+  channel_summary?: { naver_ad: number; organic: number; total: number }
+  kpi: { total: number; phone_click: number; consultation_click: number; consultation_submit: number; kakao_click: number }
+  by_page: Array<{ page_path: string; page_title?: string | null; phone_click: number; consultation_click: number; consultation_submit: number; kakao_click: number; total: number }>
+  by_component: Array<{ component_name: string; section_name: string; button_label: string; event_type: string; count: number; ratio: number }>
+  by_keyword: Array<{ keyword: string; page_path: string; keyword_text?: string | null; media?: string | null; match_type?: string | null; rank_best?: number | null; phone_click: number; consultation_click: number; consultation_submit: number; kakao_click: number; total: number }>
+  filters: { pages: string[]; components: string[]; campaigns: string[]; keywords: string[] }
+  event_types: string[]
+}
+
 export const naverAdsAPI = {
   campaigns: () =>
     apiClient.get(`${BASE}/campaigns`).then(unwrap<{ configured: boolean; campaigns: Campaign[] }>),
@@ -213,6 +223,24 @@ export const naverAdsAPI = {
     suggestions?: BidSuggestion[]
     use_llm?: boolean
   }) => apiClient.post(`${BASE}/ai-summary`, body).then(unwrap<AiSummary>),
+
+  ctaEvents: (params: { start_date?: string; end_date?: string; page?: string; event_type?: string; campaign?: string; keyword?: string; component?: string; source?: string }) =>
+    apiClient.get(`${BASE}/cta-events`, { params }).then(unwrap<CtaDashboard>),
+
+  sendTestCtaEvent: (event_type: string) =>
+    apiClient.post('/api/v1/public/marketing/cta-event', {
+      event_type,
+      page_path: '/test-page',
+      page_title: '테스트 페이지',
+      component_name: 'TestButton',
+      section_name: 'AdminTest',
+      button_label: '관리자 테스트',
+      destination: event_type === 'kakao_click' ? 'kakao' : event_type === 'phone_click' ? 'tel:0318568090' : '/contact',
+      utm_source: 'naver', utm_medium: 'cpc', utm_campaign: 'admin_test', utm_term: '테스트키워드', utm_content: 'admin_test',
+      naver_query: '도봉구요양원', naver_keyword: '도봉구요양원', naver_rank: '4', naver_media: '27758', naver_match_type: '1', naver_campaign_type: '1',
+      naver_adgroup_id: 'grp-test', naver_keyword_id: 'nkw-test', naver_ad_id: 'nad-test',
+      session_id: 'admin-test', device_type: 'desktop',
+    }).then((r: any) => r.data),
 
   changeLogs: (limit = 50) =>
     apiClient.get(`${BASE}/change-logs`, { params: { limit } }).then(unwrap<any[]>),

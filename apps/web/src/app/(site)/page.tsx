@@ -127,6 +127,15 @@ export default function HomePage() {
               </Link>
             ))}
           </div>
+
+          {/* 서울 북부 보호자 배너 */}
+          <Link href="/seoul-northern-nursing-home" className="group mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 rounded-2xl bg-gradient-to-r from-primary-orange to-amber-500 text-white px-6 py-5 shadow-lg shadow-orange-200/60 hover:shadow-xl transition-all">
+            <div>
+              <p className="font-bold text-lg">서울 도봉·노원·강북·중랑·성북·강동에서 오시나요?</p>
+              <p className="text-white/90 text-sm mt-0.5">서울과 가까운 녹양역 인근 + 보호자 앨범으로, 멀어도 어르신 일상을 매주 확인하세요.</p>
+            </div>
+            <span className="inline-flex items-center gap-1 font-bold whitespace-nowrap">서울 북부 안내 보기 <span aria-hidden="true">→</span></span>
+          </Link>
         </div>
       </section>
 

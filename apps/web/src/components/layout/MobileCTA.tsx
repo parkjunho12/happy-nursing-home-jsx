@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { SITE_INFO } from '@/lib/constants'
 import { Phone, MessageCircle, MessageSquare } from 'lucide-react'
 import { trackPhoneClick, trackSocialClick } from '@/lib/api-client'
+import { trackCtaEvent } from '@/lib/analytics/naverAdTracking'
 
 export default function MobileCTA() {
   return (
@@ -13,7 +14,7 @@ export default function MobileCTA() {
         {/* Phone Button */}
         <a
           href={`tel:${SITE_INFO.phone}`}
-          onClick={() => trackPhoneClick('Mobile CTA')}
+          onClick={() => { trackPhoneClick('Mobile CTA'); trackCtaEvent('phone_click', { componentName: 'FloatingCTA', sectionName: 'StickyBottom', buttonLabel: '전화', destination: `tel:${SITE_INFO.phone}` }) }}
           className="flex-1 flex items-center justify-center gap-2 px-4 py-3.5 bg-gradient-to-r from-primary-orange to-accent-lightOrange text-white font-semibold rounded-xl shadow-md active:scale-95 transition-transform"
         >
           <Phone className="w-5 h-5" />
@@ -25,7 +26,7 @@ export default function MobileCTA() {
           href={`https://open.kakao.com/o/svXNViii`}
           target="_blank"
           rel="noopener noreferrer"
-          onClick={() => trackSocialClick('KakaoTalk', 'Mobile CTA')}
+          onClick={() => { trackSocialClick('KakaoTalk', 'Mobile CTA'); trackCtaEvent('kakao_click', { componentName: 'FloatingCTA', sectionName: 'StickyBottom', buttonLabel: '카톡', destination: 'kakao' }) }}
           className="flex-1 flex items-center justify-center gap-2 px-4 py-3.5 bg-white border-2 border-primary-brown text-primary-brown font-semibold rounded-xl active:scale-95 transition-transform"
         >
           <MessageCircle className="w-5 h-5" />
@@ -35,6 +36,7 @@ export default function MobileCTA() {
         {/* Inquiry Button */}
         <Link
           href="/contact"
+          onClick={() => trackCtaEvent('consultation_click', { componentName: 'FloatingCTA', sectionName: 'StickyBottom', buttonLabel: '상담', destination: '/contact' })}
           className="flex-1 flex items-center justify-center gap-2 px-4 py-3.5 bg-primary-green text-white font-semibold rounded-xl active:scale-95 transition-transform"
         >
           <MessageSquare className="w-5 h-5" />
