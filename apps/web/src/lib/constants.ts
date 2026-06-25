@@ -28,7 +28,7 @@ import {
     },
     social: {
       facebook: 'https://www.facebook.com/profile.php?id=61580800010457',
-      instagram: 'https://instagram.com/happynursinghome',
+      instagram: 'https://www.instagram.com/happybh8090?igsh=aG1tY2hlajJjZmhv&utm_source=qr',
       blog: 'https://blog.naver.com/happy-n-y',
       youtube: 'https://www.youtube.com/channel/UCr5NVnuu8ROSXjAuY1uVM-Q',
     },
@@ -235,6 +235,7 @@ import {
       { label: '서비스', href: '/services' },
       { label: '입소비용', href: '/pricing' },
       { label: '후기', href: '/reviews' },
+      { label: '자원봉사', href: '/volunteer' },
     ],
     contact: [
       { label: SITE_INFO.phone, href: `tel:${SITE_INFO.phone}` },

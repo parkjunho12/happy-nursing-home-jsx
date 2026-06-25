@@ -18,6 +18,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
     '/uijeongbu-nursing-home',
     '/nogyang-station-nursing-home',
     '/nursing-home-near-uijeongbu-yangju',
+    '/seoul-northern-nursing-home',
+    '/dobong-nursing-home',
+    '/nowon-nursing-home',
+    '/gangbuk-nursing-home',
+    '/jungnang-nursing-home',
+    '/seongbuk-nursing-home',
+    '/gangdong-nursing-home',
   ].map((path) => ({
     url: `${BASE_URL}${path}`,
     lastModified: now,
@@ -28,6 +35,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   // 정보/소개 페이지 (실제 존재하는 라우트만 포함)
   const infoPages = [
     '/location',
+    '/volunteer',
     '/services',
     '/pricing',
     '/reviews',

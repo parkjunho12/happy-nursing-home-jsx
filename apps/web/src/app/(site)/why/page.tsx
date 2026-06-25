@@ -32,7 +32,7 @@ type FeatureCard = {
 const summaryCards: FeatureCard[] = [
   {
     icon: Building2,
-    title: '신설 시설의 쾌적함',
+    title: '쾌적한 생활 환경',
     description: '같은 본인부담금 안에서도 더 깨끗하고 현대적인 생활환경을 제공합니다.',
     color: 'blue',
   },
@@ -305,7 +305,7 @@ export default function WhyChooseUsPage() {
       <section className="border-y border-slate-100 bg-white">
         <div className="mx-auto grid max-w-7xl items-center gap-12 px-4 py-20 sm:px-6 lg:grid-cols-2 lg:px-8">
           <div>
-            <SectionBadge icon={BedDouble} label="신설 시설의 쾌적함" tone="blue" />
+            <SectionBadge icon={BedDouble} label="쾌적한 생활 환경" tone="blue" />
 
             <h2 className="mt-6 text-3xl font-bold leading-tight tracking-tight text-slate-950 sm:text-4xl">
               같은 비용이라면,
@@ -315,14 +315,14 @@ export default function WhyChooseUsPage() {
 
             <p className="mt-6 text-lg leading-8 text-slate-600">
               같은 본인부담금이라도 실제 생활하시는 공간의 쾌적함은 큰 차이를 만듭니다.
-              신설 요양원은 시설의 노후감이 적고, 전반적인 공간 경험에서 보다 깔끔하고
-              안정적인 인상을 드릴 수 있습니다.
+              어르신 생활 공간을 요양원 용도에 맞게 정돈해, 전반적인 공간 경험에서
+              깔끔하고 안정적인 인상을 드립니다.
             </p>
 
             <ul className="mt-8 space-y-5">
               <Bullet
                 tone="blue"
-                title="신설 시설의 깔끔한 생활 공간"
+                title="깔끔하게 관리되는 생활 공간"
                 description="처음 입소하셨을 때 느껴지는 첫 인상과 생활 만족도에 영향을 주는 중요한 요소입니다."
               />
               <Bullet
@@ -341,9 +341,9 @@ export default function WhyChooseUsPage() {
           <div className="space-y-5">
             <ImageFrame
               src="/images/why-01-facility.jpg"
-              alt="행복한요양원 녹양역점의 쾌적한 신설 시설 이미지"
+              alt="행복한요양원 녹양역점의 쾌적한 생활 공간 이미지"
               label="시설 비교 사진"
-              caption="신설 시설의 밝고 정돈된 생활환경을 보여주는 대표 이미지"
+              caption="밝고 정돈된 생활환경을 보여주는 대표 이미지"
               priority
             />
             <div className="rounded-[28px] border border-blue-100 bg-blue-50/70 p-6">
@@ -383,8 +383,7 @@ export default function WhyChooseUsPage() {
             </h2>
 
             <p className="mt-6 text-lg leading-8 text-slate-600">
-              신설 요양원의 초기 운영 단계는 어르신 한 분 한 분께 더 집중하기 좋은
-              환경을 만들 수 있다는 장점이 있습니다. 보호자분들이 체감하시는 것은 결국
+              어르신 한 분 한 분께 더 집중하는 운영을 지향합니다. 작은 변화도 놓치지 않으려 합니다. 보호자분들이 체감하시는 것은 결국
               얼마나 세심하게 살피고 빠르게 반응하느냐입니다.
             </p>
 
@@ -416,20 +415,17 @@ export default function WhyChooseUsPage() {
       <section className="border-y border-slate-100 bg-white">
         <div className="mx-auto grid max-w-7xl items-center gap-12 px-4 py-20 sm:px-6 lg:grid-cols-2 lg:px-8">
           <div>
-            <SectionBadge icon={Award} label="13년 경력과 A등급 운영진" tone="purple" />
+            <SectionBadge icon={Award} label="A등급 자매시설 운영 노하우" tone="purple" />
 
             <h2 className="mt-6 text-3xl font-bold leading-tight tracking-tight text-slate-950 sm:text-4xl">
-              시설은 새롭지만,
-              <br />
               운영의 기준은
               <br />
               이미 검증되었습니다.
             </h2>
 
             <p className="mt-6 text-lg leading-8 text-slate-600">
-              신설 요양원이라고 해서 운영까지 처음인 것은 아닙니다. 행복한요양원
-              녹양역점은 13년 경력의 운영진과 기존 A등급 시설 운영 경험을 바탕으로
-              현장의 안정성과 체계성을 함께 갖추고자 합니다.
+              행복한요양원 녹양역점은 8년간 장기요양 A등급을 유지해 온 자매시설의 운영
+              노하우를 이어받아, 현장의 안정성과 체계성을 갖추고자 합니다.
             </p>
 
             <div className="mt-8 grid gap-4 sm:grid-cols-2">

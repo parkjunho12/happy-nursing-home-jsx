@@ -435,3 +435,147 @@ def contact_to_dict(contact) -> Dict[str, Any]:
         "inquiry_type": getattr(contact, "inquiry_type", ""),
         "message": getattr(contact, "message", ""),
     }
+
+
+# =========================================================================
+# 공통 관리자 알림 (자원봉사 / 채용지원 등 — 상담 메일 인프라 재사용)
+# =========================================================================
+def render_admin_kv_notify(
+    *,
+    heading: str,
+    intro: str,
+    fields: List[tuple],          # [(label, value), ...]
+    blocks: Optional[List[tuple]] = None,  # [(title, multiline_text), ...]
+    footer_note: str = "",
+) -> Dict[str, str]:
+    """라벨-값 형태의 단순 업무 알림 메일(HTML+TEXT)을 생성한다."""
+    rows_html = "".join(
+        f'<p style="margin:6px 0 0"><b>{_escape(str(k))}</b>: {_escape(str(v if v not in (None, "") else "-"))}</p>'
+        for k, v in fields
+    )
+    blocks_html = ""
+    for title, body in (blocks or []):
+        if not body:
+            continue
+        blocks_html += (
+            f'<h3 style="margin:16px 0 8px;font-size:15px">{_escape(str(title))}</h3>'
+            f'<div style="white-space:pre-wrap;padding:12px;border:1px solid #e5e7eb;border-radius:10px;background:#ffffff">{_escape(str(body))}</div>'
+        )
+
+    html = f"""
+    <!doctype html>
+    <html>
+    <body style="margin:0;padding:0;font-family:Arial,sans-serif;line-height:1.55;color:#111827">
+      <div style="max-width:640px;margin:0 auto;padding:20px">
+        <h2 style="margin:0 0 12px;font-size:18px;font-weight:700">{_escape(heading)}</h2>
+        <p style="margin:0 0 14px;color:#374151;font-size:13px">{_escape(intro)}</p>
+        <div style="padding:12px;border:1px solid #e5e7eb;border-radius:10px;background:#fafafa">
+          {rows_html}
+        </div>
+        {blocks_html}
+        {f'<p style="margin:14px 0 0;font-size:13px;color:#6b7280">{_escape(footer_note)}</p>' if footer_note else ''}
+        <hr style="border:none;border-top:1px solid #e5e7eb;margin:18px 0">
+        <p style="margin:0;color:#6b7280;font-size:12px">행복한요양원 녹양역점 · 업무 알림 메일</p>
+      </div>
+    </body>
+    </html>
+    """.strip()
+
+    text_lines = [heading, intro, ""]
+    for k, v in fields:
+        text_lines.append(f"- {k}: {v if v not in (None, '') else '-'}")
+    for title, body in (blocks or []):
+        if not body:
+            continue
+        text_lines += ["", f"[{title}]", str(body)]
+    if footer_note:
+        text_lines += ["", footer_note]
+    text_lines += ["", "행복한요양원 녹양역점 · 업무 알림 메일"]
+
+    return {"html": html, "text": "\n".join(text_lines)}
+
+
+# ---- 자원봉사 신청 알림 ----
+def volunteer_to_dict(v) -> Dict[str, Any]:
+    return {
+        "id": getattr(v, "id", None),
+        "name": getattr(v, "name", ""),
+        "phone": getattr(v, "phone", ""),
+        "birth_or_age": getattr(v, "birth_or_age", ""),
+        "preferred_activity": getattr(v, "preferred_activity", ""),
+        "preferred_day": getattr(v, "preferred_day", ""),
+        "preferred_time": getattr(v, "preferred_time", ""),
+        "experience": getattr(v, "experience", ""),
+        "memo": getattr(v, "memo", ""),
+    }
+
+
+async def notify_admins_new_volunteer(volunteer: Dict[str, Any]) -> None:
+    to = _admin_recipients()
+    if not to:
+        logger.warning("[email] MAIL_ADMIN_TO empty; skip volunteer notify")
+        return
+    name = volunteer.get("name", "")
+    rendered = render_admin_kv_notify(
+        heading="자원봉사 신청 접수",
+        intro="홈페이지를 통해 새 자원봉사 신청이 접수되었습니다.",
+        fields=[
+            ("이름", name),
+            ("연락처", volunteer.get("phone", "")),
+            ("생년월일/나이", volunteer.get("birth_or_age", "")),
+            ("희망 활동", volunteer.get("preferred_activity", "")),
+            ("희망 요일", volunteer.get("preferred_day", "")),
+            ("희망 시간", volunteer.get("preferred_time", "")),
+        ],
+        blocks=[("봉사 경험", volunteer.get("experience", "")), ("메모", volunteer.get("memo", ""))],
+    )
+    await send_email(
+        to=to,
+        subject=f"[자원봉사 신청] {name}",
+        html=rendered["html"],
+        text=rendered.get("text"),
+        meta={"type": "volunteer_notify", "volunteer_id": volunteer.get("id")},
+    )
+
+
+# ---- 채용 지원 알림 ----
+def recruitment_application_to_dict(a) -> Dict[str, Any]:
+    return {
+        "id": getattr(a, "id", None),
+        "category": getattr(a, "category", ""),
+        "name": getattr(a, "name", ""),
+        "birth": getattr(a, "birth", ""),
+        "phone": getattr(a, "phone", ""),
+        "email": getattr(a, "email", ""),
+        "experience": getattr(a, "experience", ""),
+        "introduction": getattr(a, "introduction", ""),
+    }
+
+
+async def notify_admins_new_recruitment(application: Dict[str, Any]) -> None:
+    to = _admin_recipients()
+    if not to:
+        logger.warning("[email] MAIL_ADMIN_TO empty; skip recruitment notify")
+        return
+    name = application.get("name", "")
+    category = application.get("category") or "채용"
+    rendered = render_admin_kv_notify(
+        heading="채용 지원 접수",
+        intro="홈페이지 채용 페이지를 통해 새 지원서가 접수되었습니다.",
+        fields=[
+            ("지원 분야", category),
+            ("이름", name),
+            ("생년월일", application.get("birth", "")),
+            ("연락처", application.get("phone", "")),
+            ("이메일", application.get("email", "")),
+        ],
+        blocks=[("경력", application.get("experience", "")), ("자기소개", application.get("introduction", ""))],
+        footer_note="※ 이력서(PDF/DOCX)는 지원자가 별도 이메일로 전송합니다. 지원자 이메일로 회신해 안내해 주세요.",
+    )
+    await send_email(
+        to=to,
+        subject=f"[채용지원] {category} - {name}",
+        html=rendered["html"],
+        text=rendered.get("text"),
+        meta={"type": "recruitment_notify", "application_id": application.get("id")},
+    )
