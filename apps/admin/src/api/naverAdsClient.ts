@@ -140,7 +140,7 @@ export interface Campaign { campaign_id: string; name: string; campaign_type?: s
 export interface AdGroup { adgroup_id: string; campaign_id?: string; name: string; status?: string }
 
 export interface CtaDashboard {
-  channel_summary?: { naver_ad: number; organic: number; total: number }
+  channel_summary?: { naver_ad: number; naver_ad_pc?: number; naver_ad_mobile?: number; naver_ad_etc?: number; organic: number; total: number }
   kpi: { total: number; phone_click: number; consultation_click: number; consultation_submit: number; kakao_click: number }
   by_page: Array<{ page_path: string; page_title?: string | null; phone_click: number; consultation_click: number; consultation_submit: number; kakao_click: number; total: number }>
   by_component: Array<{ component_name: string; section_name: string; button_label: string; event_type: string; count: number; ratio: number }>
@@ -224,7 +224,7 @@ export const naverAdsAPI = {
     use_llm?: boolean
   }) => apiClient.post(`${BASE}/ai-summary`, body).then(unwrap<AiSummary>),
 
-  ctaEvents: (params: { start_date?: string; end_date?: string; page?: string; event_type?: string; campaign?: string; keyword?: string; component?: string; source?: string }) =>
+  ctaEvents: (params: { start_date?: string; end_date?: string; page?: string; event_type?: string; campaign?: string; keyword?: string; component?: string; source?: string; platform?: string }) =>
     apiClient.get(`${BASE}/cta-events`, { params }).then(unwrap<CtaDashboard>),
 
   sendTestCtaEvent: (event_type: string) =>

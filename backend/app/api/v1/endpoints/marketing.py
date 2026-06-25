@@ -41,7 +41,23 @@ def _is_ad_event(r) -> bool:
     return bool(
         src == "naver"
         or r.naver_query or r.naver_campaign_id or r.naver_keyword_id or r.naver_ad_id
+        or getattr(r, "naver_napm", None)
     )
+
+
+def _ad_platform(r) -> Optional[str]:
+    """광고 유입 플랫폼 추정(파라미터 체계 기반).
+    - 'mobile' : NaPm 트래커(모바일 검색광고)
+    - 'pc'     : n_query/n_* 파워링크 사이트링크 파라미터(PC)
+    - None     : 구분 불가(예: utm_source=naver 만 있는 경우)
+    """
+    if getattr(r, "naver_napm", None):
+        return "mobile"
+    if r.naver_query or r.naver_keyword_id or r.naver_adgroup_id or r.naver_ad_id or r.naver_campaign_id:
+        return "pc"
+    return None
+
+
 KST = timezone(timedelta(hours=9))
 
 # ── 간단 in-memory rate limit (IP해시 기준) ──
@@ -108,6 +124,9 @@ class CtaEventBody(BaseModel):
     naver_media: Optional[str] = None
     naver_match_type: Optional[str] = None
     naver_campaign_type: Optional[str] = None
+    naver_napm: Optional[str] = None
+    naver_napm_ci: Optional[str] = None
+    naver_napm_tr: Optional[str] = None
     session_id: Optional[str] = None
     device_type: Optional[str] = None
 
@@ -153,6 +172,9 @@ def collect_cta_event(body: CtaEventBody, request: Request, db: Session = Depend
         naver_media=_clip(body.naver_media, 40),
         naver_match_type=_clip(body.naver_match_type, 20),
         naver_campaign_type=_clip(body.naver_campaign_type, 20),
+        naver_napm=_clip(body.naver_napm, 300),
+        naver_napm_ci=_clip(body.naver_napm_ci, 80),
+        naver_napm_tr=_clip(body.naver_napm_tr, 20),
         session_id=_clip(body.session_id, 80),
         device_type=_clip(body.device_type, 20) or _device_type(ua),
         user_agent=_clip(ua, 400),
@@ -181,6 +203,7 @@ def cta_events_dashboard(
     keyword: Optional[str] = Query(None),
     component: Optional[str] = Query(None),
     source: str = Query('ad'),  # 'ad'(광고유입만) | 'organic'(비광고) | 'all'(전체)
+    platform: str = Query(''),  # ''(전체) | 'pc' | 'mobile'
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user),
 ):
@@ -211,9 +234,18 @@ def cta_events_dashboard(
         kw = keyword.strip()
         rows = [r for r in rows if (r.utm_term == kw or r.naver_query == kw)]
 
-    # 채널 분포(검증용): source 필터 적용 전, 현재 기간/필터 조건 기준
-    ad_cnt = sum(1 for r in rows if _is_ad_event(r))
-    channel_summary = {"naver_ad": ad_cnt, "organic": len(rows) - ad_cnt, "total": len(rows)}
+    # 채널 분포(검증용): source/platform 필터 적용 전, 현재 기간/필터 조건 기준
+    ad_rows = [r for r in rows if _is_ad_event(r)]
+    pc_cnt = sum(1 for r in ad_rows if _ad_platform(r) == "pc")
+    mobile_cnt = sum(1 for r in ad_rows if _ad_platform(r) == "mobile")
+    channel_summary = {
+        "naver_ad": len(ad_rows),
+        "naver_ad_pc": pc_cnt,
+        "naver_ad_mobile": mobile_cnt,
+        "naver_ad_etc": len(ad_rows) - pc_cnt - mobile_cnt,
+        "organic": len(rows) - len(ad_rows),
+        "total": len(rows),
+    }
 
     # 유입 채널 필터 (기본: 광고 유입만)
     if source == 'ad':
@@ -221,6 +253,10 @@ def cta_events_dashboard(
     elif source == 'organic':
         rows = [r for r in rows if not _is_ad_event(r)]
     # source == 'all' → 전체
+
+    # 광고 플랫폼 필터 (PC/모바일)
+    if platform in ('pc', 'mobile'):
+        rows = [r for r in rows if _ad_platform(r) == platform]
 
     kpi = {"total": 0, "phone_click": 0, "consultation_click": 0, "consultation_submit": 0, "kakao_click": 0}
     by_page: Dict[str, Dict[str, Any]] = {}
@@ -292,6 +328,7 @@ def cta_events_dashboard(
     # 전체 대비 광고/비광고 분포(현재 기간·필터 조건 무시한 단순 참고치는 아니고, source 미적용 분포)
     return ApiResponse(success=True, data={
         "source": source,
+        "platform": platform,
         "channel_summary": channel_summary,
         "kpi": kpi,
         "by_page": sorted(by_page.values(), key=lambda x: x["total"], reverse=True),

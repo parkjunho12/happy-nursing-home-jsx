@@ -144,6 +144,7 @@ export default function CtaTrackingPanel() {
   const [keyword, setKeyword] = useState('')
   const [component, setComponent] = useState('')
   const [source, setSource] = useState<'ad' | 'all' | 'organic'>('ad')
+  const [platform, setPlatform] = useState<'' | 'pc' | 'mobile'>('')
   const [data, setData] = useState<CtaDashboard | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -152,8 +153,8 @@ export default function CtaTrackingPanel() {
     ...range(period),
     page: page || undefined, event_type: eventType || undefined,
     campaign: campaign || undefined, keyword: keyword || undefined, component: component || undefined,
-    source,
-  }), [period, page, eventType, campaign, keyword, component, source])
+    source, platform: platform || undefined,
+  }), [period, page, eventType, campaign, keyword, component, source, platform])
 
   const load = async () => {
     setLoading(true); setError('')
@@ -161,7 +162,7 @@ export default function CtaTrackingPanel() {
     catch (e: any) { setError(e?.message ?? '불러오지 못했습니다.') }
     finally { setLoading(false) }
   }
-  useEffect(() => { load() /* eslint-disable-next-line */ }, [period, page, eventType, campaign, keyword, component, source])
+  useEffect(() => { load() /* eslint-disable-next-line */ }, [period, page, eventType, campaign, keyword, component, source, platform])
 
   const test = async (et: string) => {
     try { await naverAdsAPI.sendTestCtaEvent(et); setTimeout(load, 400) }
@@ -187,7 +188,12 @@ export default function CtaTrackingPanel() {
       {data?.channel_summary && (
         <div className="mb-4 text-sm text-gray-600">
           현재 기간 분포 ·{' '}
-          <b className="text-blue-600">네이버 광고 {data.channel_summary.naver_ad.toLocaleString()}건</b>{' / '}
+          <b className="text-blue-600">네이버 광고 {data.channel_summary.naver_ad.toLocaleString()}건</b>
+          {' ('}
+          <span className="text-gray-700">PC {(data.channel_summary.naver_ad_pc ?? 0).toLocaleString()}</span>{' · '}
+          <span className="text-gray-700">모바일 {(data.channel_summary.naver_ad_mobile ?? 0).toLocaleString()}</span>
+          {(data.channel_summary.naver_ad_etc ?? 0) > 0 ? <>{' · '}<span className="text-gray-400">기타 {(data.channel_summary.naver_ad_etc ?? 0).toLocaleString()}</span></> : null}
+          {') / '}
           <b className="text-gray-700">비광고 {data.channel_summary.organic.toLocaleString()}건</b>{' / '}
           전체 {data.channel_summary.total.toLocaleString()}건
         </div>
@@ -206,6 +212,13 @@ export default function CtaTrackingPanel() {
           <button key={sv} onClick={() => setSource(sv)}
             className={`px-3 py-1.5 rounded-lg text-sm font-semibold border ${source === sv ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
             {sv === 'ad' ? '광고 유입만' : sv === 'all' ? '전체' : '비광고'}
+          </button>
+        ))}
+        <span className="mx-1 h-5 w-px bg-gray-200" />
+        {([['', '전체기기'], ['pc', 'PC'], ['mobile', '모바일']] as const).map(([pv, label]) => (
+          <button key={pv} onClick={() => setPlatform(pv)}
+            className={`px-3 py-1.5 rounded-lg text-sm font-semibold border ${platform === pv ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
+            {label}
           </button>
         ))}
         <select value={page} onChange={e => setPage(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm">
