@@ -33,6 +33,9 @@ export interface AdInfo {
   naver_media?: string | null
   naver_match_type?: string | null
   naver_campaign_type?: string | null
+  naver_napm?: string | null
+  naver_napm_ci?: string | null
+  naver_napm_tr?: string | null
 }
 
 function uuid(): string {
@@ -48,12 +51,23 @@ function parseAdParams(search: string): AdInfo | null {
   const utm_medium = p.get('utm_medium')
   const n_media = p.get('n_media')
   const n_query = p.get('n_query')
+  const napmRaw = p.get('NaPm') || p.get('napm')  // 네이버 유료클릭 트래커
   const isAd =
     (utm_source && utm_source.toLowerCase() === 'naver') ||
     (utm_medium && utm_medium.toLowerCase() === 'cpc') ||
     (n_media && n_media.toLowerCase() === 'naver') ||
-    !!n_query
+    !!n_query ||
+    !!napmRaw
   if (!isAd) return null
+
+  // NaPm 내부 파싱: "ct=..|ci=..|tr=sa|hk=..|nacn=.."
+  const napm: Record<string, string> = {}
+  if (napmRaw) {
+    for (const pair of napmRaw.split('|')) {
+      const i = pair.indexOf('=')
+      if (i > 0) napm[pair.slice(0, i)] = pair.slice(i + 1)
+    }
+  }
   return {
     utm_source,
     utm_medium,
@@ -70,6 +84,9 @@ function parseAdParams(search: string): AdInfo | null {
     naver_media: n_media,
     naver_match_type: p.get('n_match'),
     naver_campaign_type: p.get('n_campaign_type'),
+    naver_napm: napmRaw,
+    naver_napm_ci: napm['ci'] || null,
+    naver_napm_tr: napm['tr'] || null,
   }
 }
 
