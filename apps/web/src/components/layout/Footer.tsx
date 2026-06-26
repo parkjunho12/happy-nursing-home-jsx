@@ -119,6 +119,11 @@ export default function Footer() {
                 {SITE_INFO.email}
               </a>
             </p>
+            <p className="mb-3">
+              <Link href="/privacy" className="font-bold text-white hover:text-primary-orange transition-colors">
+                개인정보처리방침
+              </Link>
+            </p>
             <p className="text-white/60">
               © {currentYear} {SITE_INFO.name}. All rights reserved.
             </p>
