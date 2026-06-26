@@ -36,6 +36,7 @@ import NaverAdsPage         from './pages/admin/NaverAdsPage'
 import NaverAdsKeywordDetailPage from './pages/admin/NaverAdsKeywordDetailPage'
 import VolunteersPage from './pages/admin/VolunteersPage'
 import RecruitmentPage from './pages/admin/RecruitmentPage'
+import EnteralPage from './pages/admin/EnteralPage'
 import FamilyLoginPage      from './pages/family/FamilyLoginPage'
 import FamilyAlbumsPage     from './pages/family/FamilyAlbumsPage'
 import FamilyAlbumDetailPage from './pages/family/FamilyAlbumDetailPage'
@@ -88,6 +89,15 @@ function SocialWorkerRoute({ children }: { children: React.ReactNode }) {
   if (!isAuthenticated) return <Navigate to="/login" replace />
   if (user?.role !== 'ADMIN' && user?.position !== '사회복지사')
     return <Navigate to="/eval/checklist" replace />
+  return <>{children}</>
+}
+
+// 경관식 재고 — ADMIN · 사회복지사 · 간호조무사 · 이사 · 대표 · 시설장
+function CareInventoryRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, user } = useAuthStore()
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  const ok = user?.role === 'ADMIN' || ['사회복지사', '간호조무사', '이사', '대표', '시설장'].includes(user?.position ?? '')
+  if (!ok) return <Navigate to="/eval/checklist" replace />
   return <>{children}</>
 }
 
@@ -157,6 +167,7 @@ function App() {
             <Route path="naver-ads/keyword/:keywordId" element={<AdminRoute><NaverAdsKeywordDetailPage /></AdminRoute>} />
             <Route path="volunteers"               element={<SocialWorkerRoute><VolunteersPage /></SocialWorkerRoute>} />
             <Route path="recruitment"              element={<SocialWorkerRoute><RecruitmentPage /></SocialWorkerRoute>} />
+            <Route path="enteral"                  element={<CareInventoryRoute><EnteralPage /></CareInventoryRoute>} />
 
             {/* 평가 관리 — 공통 (role 필터는 백엔드에서) */}
             <Route path="eval/checklist" element={<EvalChecklistPage />} />

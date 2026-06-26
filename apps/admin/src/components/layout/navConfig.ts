@@ -2,7 +2,7 @@ import {
   LayoutDashboard, UserCog, MessageSquare, FileText,
   Star, Settings, ClipboardList, CalendarDays,
   UserRound, ShieldCheck, Sparkles, FileSearch,
-  Image as ImageIcon, Users, BookOpen, PenLine, Megaphone, HeartHandshake, Briefcase,
+  Image as ImageIcon, Users, BookOpen, PenLine, Megaphone, HeartHandshake, Briefcase, Soup,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -73,6 +73,7 @@ export function getNavConfig(
         { to: '/naver-ads', icon: Megaphone, label: '네이버 광고 관리' },
         { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
         { to: '/recruitment', icon: Briefcase, label: '채용 관리' },
+        { to: '/enteral', icon: Soup, label: '경관식 관리' },
         { to: '/settings', icon: Settings, label: '설정' },
       ],
       eval: [
@@ -105,6 +106,7 @@ export function getNavConfig(
     }
   }
 
+  const canEnteral = ['사회복지사', '간호조무사', '이사', '대표', '시설장'].includes(user?.position ?? '')
   return {
     showDashboard: true,
     main: [
@@ -114,6 +116,9 @@ export function getNavConfig(
             { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
             { to: '/recruitment', icon: Briefcase, label: '채용 관리' },
           ]
+        : []),
+      ...(canEnteral
+        ? [{ to: '/enteral', icon: Soup, label: '경관식 관리' }]
         : []),
     ],
     eval: [
