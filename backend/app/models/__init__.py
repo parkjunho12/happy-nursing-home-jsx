@@ -82,3 +82,6 @@ from app.models.marketing import MarketingCtaEvent
 
 # Recruitment (채용)
 from app.models.recruitment import RecruitmentPost, RecruitmentApplication
+
+# 경관식 재고
+from app.models.enteral import EnteralProduct, EnteralTransaction
