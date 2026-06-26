@@ -48,7 +48,7 @@ let pageCache: any = null
 export default function NaverAdsPage() {
   const cache = pageCache
   const navigate = useNavigate()
-  const [view, setView] = useState<'ads' | 'cta'>('ads')
+  const [view, setView] = useState<'ads' | 'cta'>('cta')
   const [period, setPeriod] = useState<Period>(cache?.period ?? '7d')
   const [customStart, setCustomStart] = useState<string>(cache?.customStart ?? '')
   const [customEnd, setCustomEnd] = useState<string>(cache?.customEnd ?? '')
@@ -311,7 +311,7 @@ export default function NaverAdsPage() {
 
   const TabBar = (
     <div className="flex gap-2 mb-5 border-b border-gray-200">
-      {([['ads', '광고 운영'], ['cta', 'CTA 추적']] as ['ads' | 'cta', string][]).map(([v, label]) => (
+      {([['cta', 'CTA 추적'], ['ads', '광고 운영']] as ['ads' | 'cta', string][]).map(([v, label]) => (
         <button key={v} onClick={() => setView(v)}
           className={`px-4 py-2.5 text-sm font-bold border-b-2 -mb-px transition-colors ${view === v ? 'border-primary-orange text-primary-orange' : 'border-transparent text-gray-500 hover:text-gray-800'}`}>
           {label}

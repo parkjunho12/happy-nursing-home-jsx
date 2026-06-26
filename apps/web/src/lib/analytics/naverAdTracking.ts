@@ -9,6 +9,7 @@ import { resolveApiBase } from '@/lib/api-client'
 const SS_AD = 'naver_ad_session_v2'
 const AD_TTL_MS = 12 * 60 * 60 * 1000 // 12시간
 const SS_SID = 'cta_session_id_v1'
+const SS_LANDED = 'cta_ad_landed_v1'
 const isDev = process.env.NODE_ENV !== 'production'
 
 export type CtaEventType =
@@ -16,6 +17,7 @@ export type CtaEventType =
   | 'consultation_click'
   | 'consultation_submit'
   | 'kakao_click'
+  | 'ad_landing'
 
 export interface AdInfo {
   utm_source?: string | null
@@ -102,6 +104,11 @@ export function initAdTracking(): void {
         if (isDev) console.log('[CTA_TRACKING] ad_session=true', info)
       }
     }
+    // 광고 세션이면 세션당 1회 랜딩 이벤트 전송 (퍼널 분모: 광고 유입 수)
+    if (isAdSession() && !sessionStorage.getItem(SS_LANDED)) {
+      sessionStorage.setItem(SS_LANDED, '1')
+      trackCtaEvent('ad_landing', { componentName: 'AdLanding', sectionName: 'Landing' })
+    }
   } catch { /* noop */ }
 }
 
@@ -124,6 +131,7 @@ export function resetAdSessionOnDirectEntry(): void {
     }
     if (!sameOrigin) {
       sessionStorage.removeItem(SS_AD)
+      sessionStorage.removeItem(SS_LANDED)
       if (isDev) console.log('[CTA_TRACKING] direct/external entry → ad_session reset')
     }
   } catch { /* noop */ }
