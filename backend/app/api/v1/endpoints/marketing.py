@@ -29,6 +29,8 @@ public_router = APIRouter()
 admin_router = APIRouter()
 
 EVENT_TYPES = ["phone_click", "consultation_click", "consultation_submit", "kakao_click"]
+# 수집 허용 타입(퍼널 분모용 광고 랜딩 포함). ad_landing 은 CTA 집계에선 제외된다.
+COLLECT_TYPES = EVENT_TYPES + ["ad_landing"]
 
 
 def _is_ad_event(r) -> bool:
@@ -140,7 +142,7 @@ def _clip(v: Optional[str], n: int = 300) -> Optional[str]:
 
 @public_router.post("/cta-event")
 def collect_cta_event(body: CtaEventBody, request: Request, db: Session = Depends(get_db)):
-    if body.event_type not in EVENT_TYPES:
+    if body.event_type not in COLLECT_TYPES:
         return ApiResponse(success=True, data={"ok": False, "reason": "ignored"})
 
     ip = _client_ip(request)
@@ -258,6 +260,66 @@ def cta_events_dashboard(
     if platform in ('pc', 'mobile'):
         rows = [r for r in rows if _ad_platform(r) == platform]
 
+    # ── 퍼널: 광고 유입(랜딩) → CTA(전화 등). 세션 단위, source 토글과 무관하게 광고 기준 ──
+    funnel_rows = ad_rows
+    if platform in ('pc', 'mobile'):
+        funnel_rows = [r for r in ad_rows if _ad_platform(r) == platform]
+
+    def _sessions(rws, et=None):
+        return {r.session_id for r in rws if r.session_id and (et is None or r.event_type == et)}
+
+    landing_sessions = _sessions(funnel_rows, "ad_landing")
+    all_ad_sessions = _sessions(funnel_rows)
+    # 랜딩 이벤트가 아직 없으면(구버전 데이터) CTA를 누른 세션 수로 근사
+    visits = len(landing_sessions) if landing_sessions else len(all_ad_sessions)
+    phone_s = _sessions(funnel_rows, "phone_click")
+    cclick_s = _sessions(funnel_rows, "consultation_click")
+    csubmit_s = _sessions(funnel_rows, "consultation_submit")
+    kakao_s = _sessions(funnel_rows, "kakao_click")
+    any_cta_s = _sessions([r for r in funnel_rows if r.event_type in EVENT_TYPES])
+
+    def _rate(n):
+        return round(n / visits * 100, 1) if visits else 0.0
+
+    funnel = {
+        "visits": visits,
+        "has_landing": bool(landing_sessions),
+        "any_cta": len(any_cta_s), "any_cta_rate": _rate(len(any_cta_s)),
+        "phone_click": len(phone_s), "phone_rate": _rate(len(phone_s)),
+        "consultation_click": len(cclick_s), "consultation_click_rate": _rate(len(cclick_s)),
+        "consultation_submit": len(csubmit_s), "consultation_submit_rate": _rate(len(csubmit_s)),
+        "kakao_click": len(kakao_s), "kakao_rate": _rate(len(kakao_s)),
+    }
+
+    # ── 전화 클릭 시간대(0~23, KST) — 광고 유입 기준 ──
+    phone_hourly = [0] * 24
+    for r in funnel_rows:
+        if r.event_type == "phone_click" and r.created_at:
+            try:
+                phone_hourly[r.created_at.astimezone(KST).hour] += 1
+            except Exception:
+                pass
+
+    # CTA 집계 대상(랜딩 제외)
+    cta_rows = [r for r in rows if r.event_type in EVENT_TYPES]
+
+    # 최근 클릭 로그(개별 클릭 시간 포함) — 최신 200건
+    recent = [
+        {
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "event_type": r.event_type,
+            "page_path": r.page_path,
+            "page_title": r.page_title,
+            "component_name": r.component_name,
+            "section_name": r.section_name,
+            "button_label": r.button_label,
+            "keyword": r.naver_query or r.utm_term,
+            "platform": _ad_platform(r),
+            "device_type": r.device_type,
+        }
+        for r in cta_rows[:200]
+    ]
+
     kpi = {"total": 0, "phone_click": 0, "consultation_click": 0, "consultation_submit": 0, "kakao_click": 0}
     by_page: Dict[str, Dict[str, Any]] = {}
     by_comp: Dict[tuple, Dict[str, Any]] = {}
@@ -266,7 +328,7 @@ def cta_events_dashboard(
     def blank_counts():
         return {"phone_click": 0, "consultation_click": 0, "consultation_submit": 0, "kakao_click": 0, "total": 0}
 
-    for r in rows:
+    for r in cta_rows:
         et = r.event_type
         kpi["total"] += 1
         if et in kpi:
@@ -334,6 +396,9 @@ def cta_events_dashboard(
         "by_page": sorted(by_page.values(), key=lambda x: x["total"], reverse=True),
         "by_component": comp_list,
         "by_keyword": sorted(by_kw.values(), key=lambda x: x["total"], reverse=True),
+        "funnel": funnel,
+        "phone_hourly": phone_hourly,
+        "recent": recent,
         "filters": {"pages": pages, "components": components, "campaigns": campaigns, "keywords": keywords},
         "event_types": EVENT_TYPES,
     })

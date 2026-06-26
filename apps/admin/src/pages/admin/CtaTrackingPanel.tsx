@@ -12,6 +12,8 @@ function range(p: Period): { start_date?: string; end_date?: string } {
   return {}
 }
 
+const fmtDateTime = (s?: string | null) => (s ? new Date(s).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-')
+
 const ETLABEL: Record<string, string> = {
   phone_click: '전화 클릭', consultation_click: '상담 신청 클릭', consultation_submit: '상담 폼 제출', kakao_click: '카카오 클릭',
 }
@@ -250,6 +252,35 @@ export default function CtaTrackingPanel() {
         ))}
       </div>
 
+      {/* 퍼널 + 전화 시간대 */}
+      <div className="grid lg:grid-cols-2 gap-4 mb-6">
+        <FunnelView funnel={data?.funnel} loading={loading} />
+        <HourlyChart hourly={data?.phone_hourly} loading={loading} />
+      </div>
+
+      {/* 표0: 최근 클릭 로그 (개별 시간) */}
+      <Section title="최근 클릭 로그 (클릭 시간)">
+        <DataTable
+          loading={loading}
+          rows={data?.recent ?? []}
+          initialSortKey="time"
+          empty="클릭 기록이 없습니다."
+          columns={[
+            { key: 'time', header: '클릭 시간', sortable: true, sort: r => r.created_at || '', cell: r => <span className="font-semibold text-gray-900 tabular-nums">{fmtDateTime(r.created_at)}</span> },
+            { key: 'event', header: '이벤트', sortable: true, sort: r => r.event_type, cell: r => <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${ETBADGE[r.event_type] ?? 'bg-gray-50 text-gray-600 ring-gray-200'}`}>{ETLABEL[r.event_type] ?? r.event_type}</span> },
+            { key: 'page', header: '페이지', sortable: true, sort: r => r.page_path || '', cell: r => <span className="text-gray-600">{r.page_path || '-'}</span> },
+            { key: 'component', header: '컴포넌트', sortable: true, sort: r => r.component_name || '', cell: r => <span className="text-gray-600">{r.component_name || '-'}{r.section_name ? <span className="text-gray-400"> · {r.section_name}</span> : null}</span> },
+            { key: 'keyword', header: '검색어', sortable: true, sort: r => r.keyword || '', cell: r => <span className="text-gray-500">{r.keyword || '-'}</span> },
+            { key: 'device', header: '기기', sortable: true, sort: r => r.platform || r.device_type || '', cell: r => {
+              const plat = r.platform === 'pc' ? 'PC' : r.platform === 'mobile' ? '모바일' : null
+              return plat
+                ? <span className={`inline-flex rounded-md px-1.5 py-0.5 text-xs font-bold ${plat === 'PC' ? 'bg-slate-100 text-slate-700' : 'bg-violet-50 text-violet-700'}`}>{plat}</span>
+                : <span className="text-gray-400">{r.device_type || '-'}</span>
+            } },
+          ]}
+        />
+      </Section>
+
       {/* 표1: 페이지별 */}
       <Section title="페이지별 전환 CTA">
         <DataTable
@@ -332,6 +363,95 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     <div className="mb-6">
       <h3 className="font-bold text-gray-900 mb-2">{title}</h3>
       {children}
+    </div>
+  )
+}
+
+/* ─────────────────── 퍼널 (광고 유입 → 전환) ─────────────────── */
+function FunnelView({ funnel, loading }: { funnel?: CtaDashboard['funnel']; loading?: boolean }) {
+  const f = funnel
+  const stages = [
+    { key: 'visits', label: '광고 유입(랜딩)', value: f?.visits ?? 0, rate: f?.visits ? 100 : 0, color: 'bg-orange-500' },
+    { key: 'any', label: 'CTA 클릭(전체)', value: f?.any_cta ?? 0, rate: f?.any_cta_rate ?? 0, color: 'bg-indigo-500' },
+    { key: 'phone', label: '전화 클릭', value: f?.phone_click ?? 0, rate: f?.phone_rate ?? 0, color: 'bg-blue-600', primary: true },
+    { key: 'cclick', label: '상담 신청 클릭', value: f?.consultation_click ?? 0, rate: f?.consultation_click_rate ?? 0, color: 'bg-sky-500' },
+    { key: 'csubmit', label: '상담 폼 제출', value: f?.consultation_submit ?? 0, rate: f?.consultation_submit_rate ?? 0, color: 'bg-green-600' },
+    { key: 'kakao', label: '카카오 클릭', value: f?.kakao_click ?? 0, rate: f?.kakao_rate ?? 0, color: 'bg-amber-500' },
+  ]
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+      <div className="flex items-end justify-between mb-4">
+        <div>
+          <h3 className="font-bold text-gray-900">광고 유입 → 전환 퍼널</h3>
+          <p className="text-xs text-gray-400 mt-0.5">세션 기준 · 광고 유입(네이버)만</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-gray-400">전화 전환율</p>
+          <p className="text-3xl font-bold text-blue-600 tabular-nums leading-none">{loading ? '…' : `${f?.phone_rate ?? 0}%`}</p>
+          <p className="text-[11px] text-gray-400 mt-1 tabular-nums">{(f?.visits ?? 0).toLocaleString()}명 → {(f?.phone_click ?? 0).toLocaleString()}명</p>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {stages.map(s => (
+          <div key={s.key} className="flex items-center gap-3">
+            <span className={`w-24 shrink-0 text-xs ${s.primary ? 'font-bold text-gray-900' : 'text-gray-500'}`}>{s.label}</span>
+            <div className="flex-1 h-6 rounded-md bg-gray-100 overflow-hidden">
+              <div className={`h-full ${s.color} rounded-md transition-all flex items-center`} style={{ width: `${Math.max(s.rate, s.value > 0 ? 4 : 0)}%` }} />
+            </div>
+            <span className="w-24 shrink-0 text-right text-xs tabular-nums text-gray-600">
+              <b className="text-gray-900">{s.value.toLocaleString()}</b> · {s.rate}%
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {f && !f.has_landing && (
+        <p className="mt-3 text-[11px] text-amber-600 leading-relaxed">
+          ※ 아직 랜딩 데이터가 없어 분모(유입수)를 ‘CTA를 누른 세션 수’로 근사했습니다. 광고 URL 재방문이 쌓이면 정확한 유입수 기준으로 자동 보정됩니다.
+        </p>
+      )}
+    </div>
+  )
+}
+
+/* ─────────────────── 전화 클릭 시간대 (24h) ─────────────────── */
+function HourlyChart({ hourly, loading }: { hourly?: number[]; loading?: boolean }) {
+  const data = hourly && hourly.length === 24 ? hourly : new Array(24).fill(0)
+  const max = Math.max(...data, 1)
+  const total = data.reduce((a, b) => a + b, 0)
+  const peakH = data.indexOf(Math.max(...data))
+  const peakV = data[peakH] ?? 0
+
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+      <div className="flex items-end justify-between mb-4">
+        <div>
+          <h3 className="font-bold text-gray-900">전화 클릭 시간대</h3>
+          <p className="text-xs text-gray-400 mt-0.5">광고 유입 · KST 기준</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-gray-400">피크 시간</p>
+          <p className="text-xl font-bold text-orange-600 tabular-nums leading-none">{total > 0 ? `${peakH}시` : '-'}</p>
+          <p className="text-[11px] text-gray-400 mt-1 tabular-nums">{total > 0 ? `${peakV}건` : '데이터 없음'}</p>
+        </div>
+      </div>
+
+      <div className="flex items-end gap-[2px] h-28">
+        {data.map((v, h) => (
+          <div key={h} className="flex-1 flex flex-col items-center justify-end h-full" title={`${h}시 · ${v}건`}>
+            <div
+              className={`w-full rounded-t ${v > 0 && h === peakH ? 'bg-orange-500' : v > 0 ? 'bg-blue-500' : 'bg-gray-100'}`}
+              style={{ height: `${(v / max) * 100}%`, minHeight: v > 0 ? 4 : 2 }}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-between mt-1.5 text-[10px] text-gray-400 tabular-nums px-[1px]">
+        {[0, 3, 6, 9, 12, 15, 18, 21].map(h => <span key={h}>{h}</span>)}
+        <span>23</span>
+      </div>
+      <p className="mt-2 text-[11px] text-gray-400 tabular-nums">총 전화 클릭 {loading ? '…' : `${total}건`}</p>
     </div>
   )
 }

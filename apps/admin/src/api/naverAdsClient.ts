@@ -145,6 +145,16 @@ export interface CtaDashboard {
   by_page: Array<{ page_path: string; page_title?: string | null; phone_click: number; consultation_click: number; consultation_submit: number; kakao_click: number; total: number }>
   by_component: Array<{ component_name: string; section_name: string; button_label: string; event_type: string; count: number; ratio: number }>
   by_keyword: Array<{ keyword: string; page_path: string; keyword_text?: string | null; media?: string | null; match_type?: string | null; rank_best?: number | null; phone_click: number; consultation_click: number; consultation_submit: number; kakao_click: number; total: number }>
+  funnel?: {
+    visits: number; has_landing: boolean
+    any_cta: number; any_cta_rate: number
+    phone_click: number; phone_rate: number
+    consultation_click: number; consultation_click_rate: number
+    consultation_submit: number; consultation_submit_rate: number
+    kakao_click: number; kakao_rate: number
+  }
+  phone_hourly?: number[]
+  recent?: Array<{ created_at?: string | null; event_type: string; page_path?: string | null; page_title?: string | null; component_name?: string | null; section_name?: string | null; button_label?: string | null; keyword?: string | null; platform?: string | null; device_type?: string | null }>
   filters: { pages: string[]; components: string[]; campaigns: string[]; keywords: string[] }
   event_types: string[]
 }
