@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import CtaTrackingPanel from './CtaTrackingPanel'
+import BidLogsPanel from './BidLogsPanel'
+import OverridesPanel from './OverridesPanel'
 import { useNavigate } from 'react-router-dom'
 import {
   naverAdsAPI,
@@ -48,7 +50,7 @@ let pageCache: any = null
 export default function NaverAdsPage() {
   const cache = pageCache
   const navigate = useNavigate()
-  const [view, setView] = useState<'ads' | 'cta'>('cta')
+  const [view, setView] = useState<'ads' | 'cta' | 'logs' | 'overrides'>('cta')
   const [period, setPeriod] = useState<Period>(cache?.period ?? '7d')
   const [customStart, setCustomStart] = useState<string>(cache?.customStart ?? '')
   const [customEnd, setCustomEnd] = useState<string>(cache?.customEnd ?? '')
@@ -311,7 +313,7 @@ export default function NaverAdsPage() {
 
   const TabBar = (
     <div className="flex gap-2 mb-5 border-b border-gray-200">
-      {([['cta', 'CTA 추적'], ['ads', '광고 운영']] as ['ads' | 'cta', string][]).map(([v, label]) => (
+      {([['cta', 'CTA 추적'], ['ads', '광고 운영'], ['overrides', '입찰 예약'], ['logs', '입찰 로그']] as ['ads' | 'cta' | 'logs' | 'overrides', string][]).map(([v, label]) => (
         <button key={v} onClick={() => setView(v)}
           className={`px-4 py-2.5 text-sm font-bold border-b-2 -mb-px transition-colors ${view === v ? 'border-primary-orange text-primary-orange' : 'border-transparent text-gray-500 hover:text-gray-800'}`}>
           {label}
@@ -326,6 +328,24 @@ export default function NaverAdsPage() {
         <h1 className="text-2xl font-bold text-gray-900 mb-1">네이버 광고 관리</h1>
         {TabBar}
         <CtaTrackingPanel />
+      </div>
+    )
+  }
+
+  if (view === 'logs') {
+    return (
+      <div className="p-6 max-w-[1400px] mx-auto">
+        {TabBar}
+        <BidLogsPanel />
+      </div>
+    )
+  }
+
+  if (view === 'overrides') {
+    return (
+      <div className="p-6 max-w-[1400px] mx-auto">
+        {TabBar}
+        <OverridesPanel />
       </div>
     )
   }

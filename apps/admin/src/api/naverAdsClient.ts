@@ -159,6 +159,27 @@ export interface CtaDashboard {
   event_types: string[]
 }
 
+export interface BidOverride {
+  id: string
+  keyword_id: string
+  keyword?: string | null
+  campaign_name?: string | null
+  adgroup_name?: string | null
+  override_bid: number
+  original_bid?: number | null
+  repeat?: 'once' | 'daily'
+  daily_start?: string | null
+  daily_end?: string | null
+  start_at?: string | null
+  end_at?: string | null
+  status: 'scheduled' | 'active' | 'done' | 'canceled' | 'failed'
+  enabled: boolean
+  note?: string | null
+  activated_at?: string | null
+  reverted_at?: string | null
+  created_at?: string | null
+}
+
 export const naverAdsAPI = {
   campaigns: () =>
     apiClient.get(`${BASE}/campaigns`).then(unwrap<{ configured: boolean; campaigns: Campaign[] }>),
@@ -227,6 +248,32 @@ export const naverAdsAPI = {
     adgroup_id?: string | null; enabled: boolean; hourly_bids: Record<string, number>
   }>) => apiClient.post(`${BASE}/keyword-schedules`, { items }).then(unwrap<{ saved: number }>),
 
+  keywordOverrides: (keyword_id: string) =>
+    apiClient.get(`${BASE}/keyword/${encodeURIComponent(keyword_id)}/overrides`).then(unwrap<BidOverride[]>),
+  listOverrides: (status?: string) =>
+    apiClient.get(`${BASE}/bid-overrides`, { params: status ? { status } : {} }).then(unwrap<BidOverride[]>),
+  schedulerStatus: () => apiClient.get(`${BASE}/scheduler-status`).then(unwrap<any>),
+  keywordSchedulesAll: () => apiClient.get(`${BASE}/keyword-schedules-all`).then(unwrap<any[]>),
+  setDaypartingEnabled: (enabled: boolean) =>
+    apiClient.post(`${BASE}/dayparting-enabled`, { enabled }).then(unwrap<{ enabled: boolean }>),
+  daypartingKeywords: () =>
+    apiClient.get(`${BASE}/dayparting-keywords`).then(unwrap<{ global_enabled: boolean; dry_run: boolean; items: any[] }>),
+  toggleDaypartingKeyword: (body: { keyword_id?: string; enabled: boolean; all?: boolean }) =>
+    apiClient.post(`${BASE}/dayparting-keywords/toggle`, body).then(unwrap<any>),
+  createOverride: (body: {
+    keyword_id: string; keyword?: string | null; adgroup_id?: string | null; adgroup_name?: string | null;
+    campaign_name?: string | null; override_bid: number; repeat?: 'once' | 'daily';
+    start_at?: string | null; end_at?: string | null; daily_start?: string | null; daily_end?: string | null; note?: string | null
+  }) => apiClient.post(`${BASE}/keyword-overrides`, body).then(unwrap<BidOverride>),
+  updateOverride: (id: string, body: {
+    override_bid?: number; repeat?: 'once' | 'daily';
+    start_at?: string | null; end_at?: string | null; daily_start?: string | null; daily_end?: string | null; note?: string | null
+  }) => apiClient.patch(`${BASE}/keyword-overrides/${id}`, body).then(unwrap<BidOverride>),
+  cancelOverride: (id: string) =>
+    apiClient.post(`${BASE}/keyword-overrides/${id}/cancel`).then(unwrap<BidOverride>),
+  deleteOverride: (id: string) =>
+    apiClient.delete(`${BASE}/keyword-overrides/${id}`).then(r => r.data),
+
   aiSummary: (body: {
     performance?: Partial<PerformanceData>
     keywords?: KeywordPerf[]
@@ -254,6 +301,12 @@ export const naverAdsAPI = {
 
   changeLogs: (limit = 50) =>
     apiClient.get(`${BASE}/change-logs`, { params: { limit } }).then(unwrap<any[]>),
+  keywordBidLogs: (keyword_id: string, limit = 30) =>
+    apiClient.get(`${BASE}/change-logs`, { params: { keyword_id, limit } }).then(unwrap<any[]>),
+  bidLogs: (params?: { limit?: number; suggested_by?: string; status?: string; q?: string }) =>
+    apiClient.get(`${BASE}/change-logs`, { params: params ?? {} }).then(unwrap<any[]>),
+  bidOverridesRunNow: () =>
+    apiClient.post(`${BASE}/bid-overrides-run-now`).then(unwrap<any>),
 
   statsDebug: (params: { start_date: string; end_date: string; limit?: number }) =>
     apiClient.get(`${BASE}/stats-debug`, { params }).then(unwrap<{

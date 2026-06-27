@@ -72,7 +72,7 @@ from app.models.blog_ai import BlogAiLog
 from app.models.push import FamilyPushToken
 
 # Naver Ads
-from app.models.naver_ads import NaverAdBidChangeLog, NaverAdsDaypartingConfig, NaverAdKeywordSchedule
+from app.models.naver_ads import NaverAdBidChangeLog, NaverAdsDaypartingConfig, NaverAdKeywordSchedule, NaverAdBidOverride
 
 # Volunteer
 from app.models.volunteer import VolunteerApplication

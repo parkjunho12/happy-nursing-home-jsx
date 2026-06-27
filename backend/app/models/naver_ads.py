@@ -71,3 +71,33 @@ class NaverAdKeywordSchedule(Base):
     updated_by    = Column(String, nullable=True)
     updated_at    = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)
     created_at    = Column(DateTime(timezone=True), default=now_kst)
+
+
+class NaverAdBidOverride(Base):
+    """키워드 임시 입찰 오버라이드.
+    지정한 시작~종료 시각 동안 입찰가를 override_bid 로 바꾸고,
+    종료 시 시작 시점에 캡처한 original_bid 로 자동 복원한다. (1회성)
+    """
+    __tablename__ = "naver_ad_bid_overrides"
+
+    id            = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    keyword_id    = Column(String, nullable=False, index=True)
+    keyword       = Column(String, nullable=True)
+    adgroup_id    = Column(String, nullable=True)
+    adgroup_name  = Column(String, nullable=True)
+    campaign_name = Column(String, nullable=True)
+    override_bid  = Column(Integer, nullable=False)        # 변경할 입찰가
+    original_bid  = Column(Integer, nullable=True)         # 시작 시점 캡처(복원용)
+    repeat        = Column(String, nullable=False, default="once")  # once | daily
+    start_at      = Column(DateTime(timezone=True), nullable=True, index=True)  # once 용
+    end_at        = Column(DateTime(timezone=True), nullable=True, index=True)  # once 용
+    daily_start   = Column(String, nullable=True)          # daily 용 "HH:MM"
+    daily_end     = Column(String, nullable=True)          # daily 용 "HH:MM"
+    status        = Column(String, nullable=False, default="scheduled", index=True)  # scheduled|active|done|canceled|failed
+    enabled       = Column(Boolean, default=True, nullable=False)
+    note          = Column(Text, nullable=True)
+    activated_at  = Column(DateTime(timezone=True), nullable=True)
+    reverted_at   = Column(DateTime(timezone=True), nullable=True)
+    created_by    = Column(String, nullable=True)
+    created_at    = Column(DateTime(timezone=True), default=now_kst)
+    updated_at    = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)

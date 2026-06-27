@@ -130,6 +130,9 @@ def run_dayparting_once(db, *, force: bool = False, triggered_by: str = "schedul
     changes = []
 
     for kid, info in base.items():
+        if info.get("enabled") is False:   # 키워드별 데이파팅 OFF
+            skipped += 1
+            continue
         base_bid = int(info.get("bid") or 0)
         if base_bid <= 0:
             skipped += 1
@@ -293,11 +296,170 @@ def cleanup_old_bid_logs(db, days: int = LOG_RETENTION_DAYS) -> int:
         return 0
 
 
+def _fetch_current_bid(client, keyword_id: str):
+    """현재 입찰가와 광고그룹ID 조회 (실패 시 (None, None))."""
+    try:
+        objs = client.request("GET", "/ncc/keywords", params={"ids": [keyword_id]}) or []
+        if objs:
+            o = objs[0]
+            return int(o.get("bidAmt") or 0), o.get("nccAdgroupId")
+    except NaverAdsError:
+        pass
+    return None, None
+
+
+def _in_daily_window(now, start_hm: Optional[str], end_hm: Optional[str]) -> bool:
+    """HH:MM ~ HH:MM 사이인지(자정 넘김 지원)."""
+    def _m(hm):
+        try:
+            h, mm = hm.split(":")
+            return int(h) * 60 + int(mm)
+        except Exception:
+            return None
+    s_ = _m(start_hm or "")
+    e_ = _m(end_hm or "")
+    if s_ is None or e_ is None or s_ == e_:
+        return False
+    cur = now.hour * 60 + now.minute
+    if s_ < e_:
+        return s_ <= cur < e_
+    return cur >= s_ or cur < e_  # 자정 넘김
+
+
+def apply_bid_overrides(db, *, force: bool = False) -> Dict[str, Any]:
+    """임시 입찰 오버라이드 적용/복원.
+    - 시작~종료 창 진입(scheduled) → 현재가 캡처(original_bid) 후 override_bid 적용 → active
+    - 종료 시각 경과 → original_bid 로 복원 → done
+    dry_run(데이파팅 설정) 이면 실제 API 호출 없이 상태/로그만 남긴다.
+    """
+    from app.models.naver_ads import NaverAdBidOverride
+
+    rows = (
+        db.query(NaverAdBidOverride)
+        .filter(NaverAdBidOverride.enabled == True, NaverAdBidOverride.status.in_(["scheduled", "active"]))
+        .all()
+    )
+    if not rows:
+        return {"ran": False, "reason": "no_overrides"}
+
+    cfg = get_or_create_config(db)
+    effective_dry = bool(cfg.dry_run)
+    now = datetime.now(KST)
+    client = get_naver_ads_client()
+
+    activated = reverted = failed = 0
+    for r in rows:
+        # ── 매일 반복 모드 ──
+        if (r.repeat or "once") == "daily":
+            in_win = _in_daily_window(now, r.daily_start, r.daily_end)
+            applied = (r.status == "active")
+            if in_win and not applied:
+                cur, ag = _fetch_current_bid(client, r.keyword_id)
+                if not r.adgroup_id and ag:
+                    r.adgroup_id = ag
+                if cur is not None:
+                    r.original_bid = cur
+                log = NaverAdBidChangeLog(
+                    keyword_id=r.keyword_id, keyword=r.keyword,
+                    campaign_name=r.campaign_name, adgroup_name=r.adgroup_name,
+                    old_bid=cur, new_bid=r.override_bid,
+                    reason="임시 입찰(매일) 시작", suggested_by="bid_override", status="pending",
+                )
+                if effective_dry:
+                    log.status = "dry_run"; r.status = "active"; r.activated_at = now_kst()
+                    db.add(log); activated += 1
+                else:
+                    try:
+                        client.update_keyword_bid(r.keyword_id, int(r.override_bid), adgroup_id=r.adgroup_id)
+                        log.status = "applied"; log.applied_at = now_kst()
+                        r.status = "active"; r.activated_at = now_kst(); activated += 1
+                    except NaverAdsError:
+                        log.status = "failed"; failed += 1
+                    db.add(log)
+            elif (not in_win) and applied:
+                if r.original_bid is not None and not effective_dry:
+                    log = NaverAdBidChangeLog(
+                        keyword_id=r.keyword_id, keyword=r.keyword,
+                        campaign_name=r.campaign_name, adgroup_name=r.adgroup_name,
+                        old_bid=r.override_bid, new_bid=r.original_bid,
+                        reason="임시 입찰(매일) 복원", suggested_by="bid_override", status="pending",
+                    )
+                    try:
+                        client.update_keyword_bid(r.keyword_id, int(r.original_bid), adgroup_id=r.adgroup_id)
+                        log.status = "applied"; log.applied_at = now_kst(); reverted += 1
+                    except NaverAdsError:
+                        log.status = "failed"; failed += 1
+                    db.add(log)
+                r.status = "scheduled"; r.reverted_at = now_kst()  # 다음 날 대기
+            continue
+
+        # ── 1회성 모드 ──
+        start = r.start_at
+        end = r.end_at
+        if start is not None and start.tzinfo is None:
+            start = start.replace(tzinfo=KST)
+        if end is not None and end.tzinfo is None:
+            end = end.replace(tzinfo=KST)
+
+        # 1) 종료 → 복원
+        if end is not None and now >= end:
+            if r.status == "active" and r.original_bid is not None and not effective_dry:
+                log = NaverAdBidChangeLog(
+                    keyword_id=r.keyword_id, keyword=r.keyword,
+                    campaign_name=r.campaign_name, adgroup_name=r.adgroup_name,
+                    old_bid=r.override_bid, new_bid=r.original_bid,
+                    reason="임시 입찰 종료 복원", suggested_by="bid_override", status="pending",
+                )
+                try:
+                    client.update_keyword_bid(r.keyword_id, int(r.original_bid), adgroup_id=r.adgroup_id)
+                    log.status = "applied"; log.applied_at = now_kst()
+                    reverted += 1
+                except NaverAdsError:
+                    log.status = "failed"; failed += 1
+                db.add(log)
+            r.status = "done"; r.reverted_at = now_kst()
+            continue
+
+        # 2) 창 진입 → 적용
+        if r.status == "scheduled" and start is not None and end is not None and start <= now < end:
+            cur, ag = _fetch_current_bid(client, r.keyword_id)
+            if not r.adgroup_id and ag:
+                r.adgroup_id = ag
+            if cur is not None:
+                r.original_bid = cur
+            log = NaverAdBidChangeLog(
+                keyword_id=r.keyword_id, keyword=r.keyword,
+                campaign_name=r.campaign_name, adgroup_name=r.adgroup_name,
+                old_bid=cur, new_bid=r.override_bid,
+                reason="임시 입찰 변경 시작", suggested_by="bid_override", status="pending",
+            )
+            if effective_dry:
+                log.status = "dry_run"
+                r.status = "active"; r.activated_at = now_kst()
+                db.add(log)
+                activated += 1
+                continue
+            try:
+                client.update_keyword_bid(r.keyword_id, int(r.override_bid), adgroup_id=r.adgroup_id)
+                log.status = "applied"; log.applied_at = now_kst()
+                r.status = "active"; r.activated_at = now_kst()
+                activated += 1
+            except NaverAdsError:
+                log.status = "failed"; failed += 1
+            db.add(log)
+
+    db.commit()
+    if (activated or reverted) and not effective_dry:
+        client.clear_cache()
+    return {"ran": True, "dry_run": effective_dry, "activated": activated, "reverted": reverted, "failed": failed}
+
+
 def run_hourly(db) -> Dict[str, Any]:
     """매시 실행: 키워드 시간표 + 시간대 가중치 둘 다 적용. 매일 04시 로그 정리."""
     kw = apply_keyword_schedules(db)
     mult = run_dayparting_once(db, triggered_by="scheduler")
+    ov = apply_bid_overrides(db)
     cleaned = 0
     if datetime.now(KST).hour == 4:
         cleaned = cleanup_old_bid_logs(db)
-    return {"keyword_schedules": kw, "dayparting": mult, "logs_cleaned": cleaned}
+    return {"keyword_schedules": kw, "dayparting": mult, "overrides": ov, "logs_cleaned": cleaned}

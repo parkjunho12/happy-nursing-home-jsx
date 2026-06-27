@@ -56,6 +56,25 @@ async def _dayparting_scheduler_loop():
             logger.warning("dayparting scheduler tick error: %s", type(e).__name__)
             await asyncio.sleep(60)
 
+
+async def _bid_override_loop():
+    """임시 입찰 오버라이드를 5분마다 점검(시작/종료 시각 근접 반영)."""
+    from app.core.database import SessionLocal
+    from app.services.naver_ads_scheduler import apply_bid_overrides
+    while True:
+        try:
+            await asyncio.sleep(300)
+            db = SessionLocal()
+            try:
+                await asyncio.to_thread(apply_bid_overrides, db)
+            finally:
+                db.close()
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.warning("bid override tick error: %s", type(e).__name__)
+            await asyncio.sleep(60)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -65,15 +84,18 @@ async def lifespan(app: FastAPI):
 
     # 시간대 자동 입찰 스케줄러 시작
     _scheduler_task = asyncio.create_task(_dayparting_scheduler_loop())
-    logger.info("⏰ Dayparting bid scheduler started")
+    _override_task = asyncio.create_task(_bid_override_loop())
+    logger.info("⏰ Dayparting bid scheduler + override loop started")
 
     yield
     # Shutdown
     _scheduler_task.cancel()
-    try:
-        await _scheduler_task
-    except Exception:
-        pass
+    _override_task.cancel()
+    for _t in (_scheduler_task, _override_task):
+        try:
+            await _t
+        except Exception:
+            pass
     logger.info("🛑 Shutting down...")
 
 app = FastAPI(

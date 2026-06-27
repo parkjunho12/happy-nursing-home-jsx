@@ -19,7 +19,7 @@ from app.core.database import get_db
 from app.core.security import get_current_admin_user
 from app.core.config import settings
 from app.models.user import User
-from app.models.naver_ads import NaverAdBidChangeLog, now_kst
+from app.models.naver_ads import NaverAdBidChangeLog, NaverAdBidOverride, now_kst
 from app.schemas.response import ApiResponse
 from app.services.naver_ads_client import (
     get_naver_ads_client, NaverAdsError, NaverAdsNotConfigured,
@@ -491,11 +491,27 @@ def ai_summary(body: AiSummaryBody, db: Session = Depends(get_db),
 # 변경 로그 조회
 # --------------------------------------------------------------------------- #
 @router.get("/change-logs")
-def change_logs(limit: int = Query(50, le=200), db: Session = Depends(get_db),
+def change_logs(limit: int = Query(100, le=1000), keyword_id: Optional[str] = Query(None),
+                suggested_by: Optional[str] = Query(None), status: Optional[str] = Query(None),
+                q: Optional[str] = Query(None),
+                db: Session = Depends(get_db),
                 current_user: User = Depends(get_current_admin_user)):
-    rows = (db.query(NaverAdBidChangeLog)
-            .order_by(NaverAdBidChangeLog.created_at.desc())
-            .limit(limit).all())
+    from sqlalchemy import or_ as _or
+    query = db.query(NaverAdBidChangeLog)
+    if keyword_id:
+        query = query.filter(NaverAdBidChangeLog.keyword_id == keyword_id)
+    if suggested_by:
+        query = query.filter(NaverAdBidChangeLog.suggested_by == suggested_by)
+    if status:
+        query = query.filter(NaverAdBidChangeLog.status == status)
+    if q:
+        like = f"%{q.strip()}%"
+        query = query.filter(_or(
+            NaverAdBidChangeLog.keyword.ilike(like),
+            NaverAdBidChangeLog.campaign_name.ilike(like),
+            NaverAdBidChangeLog.adgroup_name.ilike(like),
+        ))
+    rows = query.order_by(NaverAdBidChangeLog.created_at.desc()).limit(limit).all()
     data = [{
         "id": r.id, "keyword": r.keyword, "keyword_id": r.keyword_id,
         "campaign_name": r.campaign_name, "adgroup_name": r.adgroup_name,
@@ -839,3 +855,377 @@ def keyword_detail(keyword_id: str, db: Session = Depends(get_db),
         "hourly_bids": (_j.loads(row.hourly_bids) if (row and row.hourly_bids) else {}),
     }
     return ApiResponse(success=True, data=info)
+
+
+# =========================================================================
+# 임시 입찰 오버라이드 (지정 시간만 변경 후 복원)
+# =========================================================================
+_KST = timezone(timedelta(hours=9))
+
+
+def _parse_dt(v: str):
+    """'2026-06-26T18:00' 또는 ISO 문자열 → KST aware datetime."""
+    if not v:
+        return None
+    try:
+        dt = datetime.fromisoformat(v)
+    except ValueError:
+        try:
+            dt = datetime.strptime(v, "%Y-%m-%d %H:%M")
+        except ValueError:
+            return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_KST)
+    return dt
+
+
+def _valid_hm(v: str) -> bool:
+    try:
+        h, m = v.split(":")
+        return 0 <= int(h) <= 23 and 0 <= int(m) <= 59
+    except Exception:
+        return False
+
+
+def _override_view(o: NaverAdBidOverride) -> Dict[str, Any]:
+    return {
+        "id": o.id, "keyword_id": o.keyword_id, "keyword": o.keyword,
+        "campaign_name": o.campaign_name, "adgroup_name": o.adgroup_name, "adgroup_id": o.adgroup_id,
+        "override_bid": o.override_bid, "original_bid": o.original_bid,
+        "repeat": o.repeat or "once", "daily_start": o.daily_start, "daily_end": o.daily_end,
+        "start_at": o.start_at.isoformat() if o.start_at else None,
+        "end_at": o.end_at.isoformat() if o.end_at else None,
+        "status": o.status, "enabled": o.enabled, "note": o.note,
+        "activated_at": o.activated_at.isoformat() if o.activated_at else None,
+        "reverted_at": o.reverted_at.isoformat() if o.reverted_at else None,
+        "created_at": o.created_at.isoformat() if o.created_at else None,
+    }
+
+
+class DaypartingEnabledBody(BaseModel):
+    enabled: bool
+
+
+@router.post("/dayparting-enabled")
+def set_dayparting_enabled(body: DaypartingEnabledBody, db: Session = Depends(get_db),
+                           current_user: User = Depends(get_current_admin_user)):
+    from app.services.naver_ads_scheduler import get_or_create_config
+    cfg = get_or_create_config(db)
+    cfg.enabled = bool(body.enabled)
+    cfg.updated_at = now_kst()
+    db.add(cfg)
+    db.commit()
+    return ApiResponse(success=True, data={"enabled": cfg.enabled})
+
+
+@router.get("/dayparting-keywords")
+def dayparting_keywords(db: Session = Depends(get_db),
+                        current_user: User = Depends(get_current_admin_user)):
+    import json as _j
+    from app.services.naver_ads_scheduler import get_or_create_config
+    cfg = get_or_create_config(db)
+    try:
+        base = _j.loads(cfg.base_bids) if cfg.base_bids else {}
+    except Exception:
+        base = {}
+    items = []
+    for kid, info in base.items():
+        items.append({
+            "keyword_id": kid, "keyword": info.get("keyword"),
+            "bid": info.get("bid"), "adgroup_name": info.get("adgroup_name"),
+            "campaign_name": info.get("campaign_name"),
+            "enabled": info.get("enabled", True),
+        })
+    items.sort(key=lambda x: (x["keyword"] or ""))
+    return ApiResponse(success=True, data={
+        "global_enabled": bool(cfg.enabled), "dry_run": bool(cfg.dry_run), "items": items,
+    })
+
+
+class DaypartingToggleBody(BaseModel):
+    keyword_id: Optional[str] = None
+    enabled: bool
+    all: Optional[bool] = False
+
+
+@router.post("/dayparting-keywords/toggle")
+def toggle_dayparting_keyword(body: DaypartingToggleBody, db: Session = Depends(get_db),
+                              current_user: User = Depends(get_current_admin_user)):
+    import json as _j
+    from app.services.naver_ads_scheduler import get_or_create_config
+    cfg = get_or_create_config(db)
+    try:
+        base = _j.loads(cfg.base_bids) if cfg.base_bids else {}
+    except Exception:
+        base = {}
+    if body.all:
+        for kid in base:
+            base[kid]["enabled"] = bool(body.enabled)
+    elif body.keyword_id and body.keyword_id in base:
+        base[body.keyword_id]["enabled"] = bool(body.enabled)
+    else:
+        return ApiResponse(success=False, error="키워드를 찾을 수 없습니다.")
+    cfg.base_bids = _j.dumps(base, ensure_ascii=False)
+    cfg.updated_at = now_kst()
+    db.add(cfg)
+    db.commit()
+    return ApiResponse(success=True, data={"updated": True})
+
+
+@router.get("/keyword-schedules-all")
+def list_keyword_schedules_all(db: Session = Depends(get_db),
+                               current_user: User = Depends(get_current_admin_user)):
+    """DB에 등록된 모든 키워드 시간표(네이버 API 설정과 무관)."""
+    import json as _j
+    from app.models.naver_ads import NaverAdKeywordSchedule
+    rows = db.query(NaverAdKeywordSchedule).order_by(NaverAdKeywordSchedule.updated_at.desc()).all()
+    data = []
+    for r in rows:
+        try:
+            hb = _j.loads(r.hourly_bids) if r.hourly_bids else {}
+        except Exception:
+            hb = {}
+        hours = sorted(int(h) for h in hb.keys() if str(h).isdigit())
+        data.append({
+            "keyword_id": r.keyword_id, "keyword": r.keyword,
+            "campaign_name": r.campaign_name, "adgroup_name": r.adgroup_name,
+            "enabled": bool(r.enabled), "hours": hours, "hourly_bids": hb,
+            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+        })
+    return ApiResponse(success=True, data=data)
+
+
+@router.get("/scheduler-status")
+def scheduler_status(db: Session = Depends(get_db), current_user: User = Depends(get_current_admin_user)):
+    """현재 DB 기준 자동입찰 스케줄러 상태 요약."""
+    import json as _j
+    from datetime import timezone as _tz, timedelta as _td
+    from app.models.naver_ads import NaverAdsDaypartingConfig, NaverAdKeywordSchedule, NaverAdBidOverride
+    from app.services.naver_ads_scheduler import get_or_create_config, current_multiplier
+
+    kst = _tz(_td(hours=9))
+    now = datetime.now(kst)
+    cfg = get_or_create_config(db)
+
+    try:
+        base = _j.loads(cfg.base_bids) if cfg.base_bids else {}
+    except Exception:
+        base = {}
+    try:
+        last_summary = _j.loads(cfg.last_run_summary) if cfg.last_run_summary else None
+    except Exception:
+        last_summary = None
+
+    ks_total = db.query(NaverAdKeywordSchedule).count()
+    ks_enabled = db.query(NaverAdKeywordSchedule).filter(NaverAdKeywordSchedule.enabled == True).count()  # noqa: E712
+    ov_active = db.query(NaverAdBidOverride).filter(NaverAdBidOverride.status == "active").count()
+    ov_sched = db.query(NaverAdBidOverride).filter(NaverAdBidOverride.status == "scheduled").count()
+
+    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_applied = db.query(NaverAdBidChangeLog).filter(
+        NaverAdBidChangeLog.status == "applied",
+        NaverAdBidChangeLog.applied_at >= start_of_day,
+    ).count()
+
+    return ApiResponse(success=True, data={
+        "now": now.isoformat(),
+        "dayparting": {
+            "enabled": bool(cfg.enabled),
+            "dry_run": bool(cfg.dry_run),
+            "min_bid": cfg.min_bid,
+            "base_keyword_count": len(base),
+            "current_multiplier": current_multiplier(cfg, now),
+            "last_run_at": cfg.last_run_at.isoformat() if cfg.last_run_at else None,
+            "last_run_summary": last_summary,
+        },
+        "keyword_schedules": {"total": ks_total, "enabled": ks_enabled},
+        "overrides": {"active": ov_active, "scheduled": ov_sched},
+        "today_applied": today_applied,
+    })
+
+
+@router.get("/bid-overrides")
+def list_all_overrides(status: Optional[str] = Query(None), db: Session = Depends(get_db),
+                       current_user: User = Depends(get_current_admin_user)):
+    """모든 키워드의 임시 입찰 예약 목록.
+    status: 'live'(적용중+예약) | scheduled | active | done | canceled | failed | (없으면 전체)
+    """
+    q = db.query(NaverAdBidOverride)
+    if status == "live":
+        q = q.filter(NaverAdBidOverride.status.in_(["scheduled", "active"]))
+    elif status:
+        q = q.filter(NaverAdBidOverride.status == status)
+    rows = q.order_by(NaverAdBidOverride.created_at.desc()).limit(500).all()
+    order = {"active": 0, "scheduled": 1, "failed": 2, "done": 3, "canceled": 4}
+    rows.sort(key=lambda o: order.get(o.status, 9))
+    return ApiResponse(success=True, data=[_override_view(o) for o in rows])
+
+
+@router.get("/keyword/{keyword_id}/overrides")
+def list_keyword_overrides(keyword_id: str, db: Session = Depends(get_db),
+                           current_user: User = Depends(get_current_admin_user)):
+    rows = (
+        db.query(NaverAdBidOverride)
+        .filter(NaverAdBidOverride.keyword_id == keyword_id)
+        .order_by(NaverAdBidOverride.start_at.desc())
+        .limit(100).all()
+    )
+    return ApiResponse(success=True, data=[_override_view(o) for o in rows])
+
+
+class OverrideBody(BaseModel):
+    keyword_id: str
+    keyword: Optional[str] = None
+    adgroup_id: Optional[str] = None
+    adgroup_name: Optional[str] = None
+    campaign_name: Optional[str] = None
+    override_bid: int
+    repeat: Optional[str] = "once"        # once | daily
+    start_at: Optional[str] = None        # once
+    end_at: Optional[str] = None          # once
+    daily_start: Optional[str] = None     # daily "HH:MM"
+    daily_end: Optional[str] = None       # daily "HH:MM"
+    note: Optional[str] = None
+
+
+@router.post("/keyword-overrides")
+def create_keyword_override(body: OverrideBody, db: Session = Depends(get_db),
+                            current_user: User = Depends(get_current_admin_user)):
+    if not body.keyword_id:
+        return ApiResponse(success=False, error="keyword_id가 필요합니다.")
+    if not body.override_bid or body.override_bid <= 0:
+        return ApiResponse(success=False, error="변경 입찰가를 1 이상 입력하세요.")
+
+    repeat = (body.repeat or "once").lower()
+    start = end = None
+    daily_start = daily_end = None
+    if repeat == "daily":
+        if not body.daily_start or not body.daily_end or not _valid_hm(body.daily_start) or not _valid_hm(body.daily_end):
+            return ApiResponse(success=False, error="매일 반복은 시작/종료 시각(HH:MM)을 올바르게 입력하세요.")
+        if body.daily_start == body.daily_end:
+            return ApiResponse(success=False, error="시작/종료 시각이 같을 수 없습니다.")
+        daily_start, daily_end = body.daily_start, body.daily_end
+    else:
+        repeat = "once"
+        start = _parse_dt(body.start_at)
+        end = _parse_dt(body.end_at)
+        if not start or not end:
+            return ApiResponse(success=False, error="시작/종료 시각 형식이 올바르지 않습니다.")
+        if end <= start:
+            return ApiResponse(success=False, error="종료 시각은 시작 시각보다 뒤여야 합니다.")
+
+    o = NaverAdBidOverride(
+        keyword_id=body.keyword_id, keyword=body.keyword,
+        adgroup_id=body.adgroup_id, adgroup_name=body.adgroup_name,
+        campaign_name=body.campaign_name,
+        override_bid=int(body.override_bid),
+        repeat=repeat, start_at=start, end_at=end,
+        daily_start=daily_start, daily_end=daily_end, note=body.note,
+        status="scheduled", enabled=True,
+        created_by=current_user.id,
+    )
+    db.add(o)
+    db.commit()
+    db.refresh(o)
+    return ApiResponse(success=True, data=_override_view(o))
+
+
+class OverrideUpdateBody(BaseModel):
+    override_bid: Optional[int] = None
+    repeat: Optional[str] = None
+    start_at: Optional[str] = None
+    end_at: Optional[str] = None
+    daily_start: Optional[str] = None
+    daily_end: Optional[str] = None
+    note: Optional[str] = None
+
+
+@router.patch("/keyword-overrides/{oid}")
+def update_keyword_override(oid: str, body: OverrideUpdateBody, db: Session = Depends(get_db),
+                            current_user: User = Depends(get_current_admin_user)):
+    o = db.query(NaverAdBidOverride).filter(NaverAdBidOverride.id == oid).first()
+    if not o:
+        return ApiResponse(success=False, error="오버라이드를 찾을 수 없습니다.")
+    if o.status != "scheduled":
+        return ApiResponse(success=False, error="예약(대기) 상태만 수정할 수 있습니다. 적용 중이면 취소 후 다시 등록하세요.")
+
+    if body.override_bid is not None:
+        if body.override_bid <= 0:
+            return ApiResponse(success=False, error="변경 입찰가를 1 이상 입력하세요.")
+        o.override_bid = int(body.override_bid)
+
+    repeat = (body.repeat or o.repeat or "once").lower()
+    if repeat == "daily":
+        ds = body.daily_start if body.daily_start is not None else o.daily_start
+        de = body.daily_end if body.daily_end is not None else o.daily_end
+        if not ds or not de or not _valid_hm(ds) or not _valid_hm(de):
+            return ApiResponse(success=False, error="매일 반복은 시작/종료 시각(HH:MM)을 올바르게 입력하세요.")
+        if ds == de:
+            return ApiResponse(success=False, error="시작/종료 시각이 같을 수 없습니다.")
+        o.repeat = "daily"; o.daily_start = ds; o.daily_end = de
+        o.start_at = None; o.end_at = None
+    else:
+        s_ = _parse_dt(body.start_at) if body.start_at is not None else o.start_at
+        e_ = _parse_dt(body.end_at) if body.end_at is not None else o.end_at
+        if not s_ or not e_:
+            return ApiResponse(success=False, error="시작/종료 시각 형식이 올바르지 않습니다.")
+        if e_ <= s_:
+            return ApiResponse(success=False, error="종료 시각은 시작 시각보다 뒤여야 합니다.")
+        o.repeat = "once"; o.start_at = s_; o.end_at = e_
+        o.daily_start = None; o.daily_end = None
+
+    if body.note is not None:
+        o.note = body.note
+    o.updated_at = now_kst()
+    db.commit()
+    db.refresh(o)
+    return ApiResponse(success=True, data=_override_view(o))
+
+
+@router.post("/keyword-overrides/{oid}/cancel")
+def cancel_keyword_override(oid: str, db: Session = Depends(get_db),
+                            current_user: User = Depends(get_current_admin_user)):
+    """예약 취소. 이미 적용(active) 중이면 즉시 원래가로 복원한다."""
+    o = db.query(NaverAdBidOverride).filter(NaverAdBidOverride.id == oid).first()
+    if not o:
+        return ApiResponse(success=False, error="오버라이드를 찾을 수 없습니다.")
+    if o.status == "active" and o.original_bid is not None:
+        from app.services.naver_ads_scheduler import get_or_create_config
+        from app.services.naver_ads_client import get_naver_ads_client, NaverAdsError
+        cfg = get_or_create_config(db)
+        if not cfg.dry_run:
+            try:
+                get_naver_ads_client().update_keyword_bid(o.keyword_id, int(o.original_bid), adgroup_id=o.adgroup_id)
+                db.add(NaverAdBidChangeLog(
+                    keyword_id=o.keyword_id, keyword=o.keyword,
+                    campaign_name=o.campaign_name, adgroup_name=o.adgroup_name,
+                    old_bid=o.override_bid, new_bid=o.original_bid,
+                    reason="임시 입찰 취소 복원", suggested_by="bid_override",
+                    status="applied", applied_at=now_kst(),
+                ))
+            except NaverAdsError:
+                pass
+        o.reverted_at = now_kst()
+    o.status = "canceled"
+    o.enabled = False
+    db.commit()
+    return ApiResponse(success=True, data=_override_view(o))
+
+
+@router.delete("/keyword-overrides/{oid}")
+def delete_keyword_override(oid: str, db: Session = Depends(get_db),
+                            current_user: User = Depends(get_current_admin_user)):
+    o = db.query(NaverAdBidOverride).filter(NaverAdBidOverride.id == oid).first()
+    if not o:
+        return ApiResponse(success=False, error="오버라이드를 찾을 수 없습니다.")
+    db.delete(o)
+    db.commit()
+    return ApiResponse(success=True, message="삭제되었습니다.")
+
+
+@router.post("/bid-overrides-run-now")
+def bid_overrides_run_now(db: Session = Depends(get_db),
+                          current_user: User = Depends(get_current_admin_user)):
+    from app.services.naver_ads_scheduler import apply_bid_overrides
+    result = apply_bid_overrides(db, force=True)
+    return ApiResponse(success=True, data=result)
