@@ -58,12 +58,12 @@ async def _dayparting_scheduler_loop():
 
 
 async def _bid_override_loop():
-    """임시 입찰 오버라이드를 5분마다 점검(시작/종료 시각 근접 반영)."""
+    """임시 입찰 오버라이드를 1분마다 점검(짧은 창도 놓치지 않도록)."""
     from app.core.database import SessionLocal
     from app.services.naver_ads_scheduler import apply_bid_overrides
     while True:
         try:
-            await asyncio.sleep(300)
+            await asyncio.sleep(60)
             db = SessionLocal()
             try:
                 await asyncio.to_thread(apply_bid_overrides, db)

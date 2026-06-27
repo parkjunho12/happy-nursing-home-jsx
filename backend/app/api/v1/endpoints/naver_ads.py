@@ -918,6 +918,22 @@ def set_dayparting_enabled(body: DaypartingEnabledBody, db: Session = Depends(ge
     return ApiResponse(success=True, data={"enabled": cfg.enabled})
 
 
+class DaypartingDryRunBody(BaseModel):
+    dry_run: bool
+
+
+@router.post("/dayparting-dry-run")
+def set_dayparting_dry_run(body: DaypartingDryRunBody, db: Session = Depends(get_db),
+                           current_user: User = Depends(get_current_admin_user)):
+    from app.services.naver_ads_scheduler import get_or_create_config
+    cfg = get_or_create_config(db)
+    cfg.dry_run = bool(body.dry_run)
+    cfg.updated_at = now_kst()
+    db.add(cfg)
+    db.commit()
+    return ApiResponse(success=True, data={"dry_run": cfg.dry_run})
+
+
 @router.get("/dayparting-keywords")
 def dayparting_keywords(db: Session = Depends(get_db),
                         current_user: User = Depends(get_current_admin_user)):
@@ -1180,6 +1196,51 @@ def update_keyword_override(oid: str, body: OverrideUpdateBody, db: Session = De
     db.commit()
     db.refresh(o)
     return ApiResponse(success=True, data=_override_view(o))
+
+
+@router.post("/keyword-overrides/{oid}/activate-now")
+def activate_override_now(oid: str, db: Session = Depends(get_db),
+                          current_user: User = Depends(get_current_admin_user)):
+    """예약을 시작 시각과 무관하게 지금 즉시 적용한다(실제 반영). 종료 시각에 자동 복원."""
+    from app.services.naver_ads_client import get_naver_ads_client, NaverAdsError
+    o = db.query(NaverAdBidOverride).filter(NaverAdBidOverride.id == oid).first()
+    if not o:
+        return ApiResponse(success=False, error="오버라이드를 찾을 수 없습니다.")
+    if o.status != "scheduled":
+        return ApiResponse(success=False, error="예약(대기) 상태만 즉시 적용할 수 있습니다.")
+    client = get_naver_ads_client()
+    # 현재가 캡처(복원 기준)
+    cur = None
+    try:
+        objs = client.request("GET", "/ncc/keywords", params={"ids": [o.keyword_id]}) or []
+        if objs:
+            cur = int(objs[0].get("bidAmt") or 0)
+            if not o.adgroup_id and objs[0].get("nccAdgroupId"):
+                o.adgroup_id = objs[0].get("nccAdgroupId")
+    except NaverAdsError:
+        cur = None
+    if cur is None:
+        return ApiResponse(success=False, error="현재 입찰가를 불러오지 못했습니다. 잠시 후 다시 시도하세요.")
+    log = NaverAdBidChangeLog(
+        keyword_id=o.keyword_id, keyword=o.keyword,
+        campaign_name=o.campaign_name, adgroup_name=o.adgroup_name,
+        old_bid=cur, new_bid=o.override_bid, reason="임시 입찰 즉시 적용",
+        suggested_by="bid_override", status="pending",
+    )
+    try:
+        client.update_keyword_bid(o.keyword_id, int(o.override_bid), adgroup_id=o.adgroup_id)
+        log.status = "applied"; log.applied_at = now_kst()
+        o.original_bid = cur
+        o.status = "active"; o.activated_at = now_kst()
+        db.add(log); db.commit()
+        try:
+            client.clear_cache()
+        except Exception:
+            pass
+        return ApiResponse(success=True, data=_override_view(o))
+    except NaverAdsError as e:
+        log.status = "failed"; db.add(log); db.commit()
+        return ApiResponse(success=False, error=f"적용 실패: {getattr(e, 'detail', '') or type(e).__name__}")
 
 
 @router.post("/keyword-overrides/{oid}/cancel")

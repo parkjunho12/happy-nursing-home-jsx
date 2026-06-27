@@ -94,12 +94,13 @@ def _check_guardian_access(db: Session, gid: str, resident_id: str):
         raise HTTPException(403, "접근 권한이 없습니다")
 
 def _album_dict(a: Album, db: Session, include_resident: bool = True) -> dict:
-    count = db.query(AlbumMedia).filter(AlbumMedia.album_id == a.id).count()
+    count = db.query(AlbumMedia).filter(AlbumMedia.album_id == a.id, AlbumMedia.status == "approved").count()
+    pending = db.query(AlbumMedia).filter(AlbumMedia.album_id == a.id, AlbumMedia.status == "pending").count()
     res   = db.query(LtcResident).filter(LtcResident.id == a.resident_id).first() if include_resident else None
     return {
         "id": a.id, "title": a.title, "description": a.description,
         "cover_url": a.cover_url, "is_public": a.is_public,
-        "media_count": count,
+        "media_count": count, "pending_count": pending,
         "resident_name": res.name if res else "",
         "resident_id": a.resident_id,
         "created_at": a.created_at.isoformat(),
@@ -110,6 +111,7 @@ def _media_dict(m: AlbumMedia) -> dict:
         "id": m.id, "media_type": m.media_type,
         "file_url": m.file_url, "thumbnail_url": m.thumbnail_url,
         "file_name": m.file_name, "file_size": m.file_size,
+        "status": getattr(m, "status", "approved"),
         "created_at": m.created_at.isoformat(),
     }
 
@@ -117,6 +119,14 @@ def _media_dict(m: AlbumMedia) -> dict:
 # ══════════════════════════════════════════════════════════════════════════════
 # 관리자 API
 # ══════════════════════════════════════════════════════════════════════════════
+
+
+def _can_approve(current_user: User) -> bool:
+    """앨범 사진 승인 권한: ADMIN 또는 사회복지사"""
+    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    pos = getattr(current_user, "position", None)
+    pos = pos.value if hasattr(pos, "value") else str(pos or "")
+    return role == "ADMIN" or pos == "사회복지사"
 
 
 def _require_can_manage_guardians(current_user: User):
@@ -338,9 +348,13 @@ def upload_media(
     album_id: str,
     files: List[UploadFile] = File(...),
     db: Session = Depends(get_db),
-    _=Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     a = _get_album_or_404(db, album_id)
+    # 앨범담당이 올린 사진은 관리자 승인 전까지 비공개(pending)
+    pos = getattr(current_user, "position", None)
+    pos = pos.value if hasattr(pos, "value") else str(pos or "")
+    media_status = "pending" if pos == "앨범담당" else "approved"
 
     # R2 미설정 시 안내
     if not r2.is_configured():
@@ -362,18 +376,65 @@ def upload_media(
             thumbnail_url=thumb_url or None,
             file_name=file.filename,
             file_size=file_size,
+            status=media_status,
+            uploaded_by=current_user.id,
         )
         db.add(m)
 
-        # 첫 번째 사진을 커버로
-        if not a.cover_url and media_type == "photo":
+        # 첫 번째 '승인된' 사진만 커버로
+        if not a.cover_url and media_type == "photo" and media_status == "approved":
             a.cover_url = thumb_url or file_url
 
-        saved.append({"id": m.id, "url": file_url, "thumb": thumb_url, "type": media_type})
+        saved.append({"id": m.id, "url": file_url, "thumb": thumb_url, "type": media_type, "status": media_status})
 
     db.commit()
     # ※ 푸시는 자동 발송하지 않음. 관리자 화면의 '알림 보내기' 버튼으로 수동 발송.
     return ApiResponse(success=True, data=saved)
+
+
+class MediaStatusBody(BaseModel):
+    status: str  # approved | pending | rejected
+
+
+@admin_router.patch("/albums/{album_id}/media/{media_id}/status")
+def set_media_status(album_id: str, media_id: str, body: MediaStatusBody,
+                     db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not _can_approve(current_user):
+        raise HTTPException(403, "승인 권한이 없습니다. (관리자 또는 사회복지사)")
+    if body.status not in ("approved", "pending", "rejected"):
+        raise HTTPException(400, "잘못된 상태값입니다.")
+    m = db.query(AlbumMedia).filter(AlbumMedia.id == media_id, AlbumMedia.album_id == album_id).first()
+    if not m:
+        raise HTTPException(404, "사진을 찾을 수 없습니다.")
+    m.status = body.status
+    if body.status == "approved":
+        m.approved_by = current_user.id
+        m.approved_at = now_kst()
+        # 커버 미설정이면 이 사진으로
+        a = db.query(Album).filter(Album.id == album_id).first()
+        if a and not a.cover_url and m.media_type == "photo":
+            a.cover_url = m.thumbnail_url or m.file_url
+    db.commit()
+    return ApiResponse(success=True, data=_media_dict(m))
+
+
+@admin_router.get("/pending-media")
+def list_pending_media(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """승인 대기 사진 목록(앨범/어르신 정보 포함)."""
+    rows = db.query(AlbumMedia).filter(AlbumMedia.status == "pending")\
+             .order_by(AlbumMedia.created_at.desc()).limit(500).all()
+    out = []
+    for m in rows:
+        a = db.query(Album).filter(Album.id == m.album_id).first()
+        res = db.query(LtcResident).filter(LtcResident.id == a.resident_id).first() if a else None
+        d = _media_dict(m)
+        d.update({
+            "album_id": m.album_id,
+            "album_title": a.title if a else None,
+            "resident_name": res.name if res else None,
+        })
+        out.append(d)
+    return ApiResponse(success=True, data=out)
 
 
 @admin_router.delete("/albums/{album_id}/media/{media_id}")
@@ -462,7 +523,7 @@ def family_album_detail(
     if not a: raise HTTPException(404, "앨범을 찾을 수 없습니다")
     _check_guardian_access(db, gid, a.resident_id)
 
-    media = db.query(AlbumMedia).filter(AlbumMedia.album_id == album_id)\
+    media = db.query(AlbumMedia).filter(AlbumMedia.album_id == album_id, AlbumMedia.status == "approved")\
               .order_by(AlbumMedia.sort_order, AlbumMedia.created_at).all()
     res = db.query(LtcResident).filter(LtcResident.id == a.resident_id).first()
 

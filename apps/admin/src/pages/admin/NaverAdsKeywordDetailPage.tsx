@@ -126,6 +126,10 @@ export default function NaverAdsKeywordDetailPage() {
     document.getElementById('ov-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
   const cancelEdit = () => { setEditingId(null); setOvBid(''); setOvNote('') }
+  const activateNow = async (o: BidOverride) => {
+    if (!confirm(`지금 즉시 입찰가를 ${o.override_bid.toLocaleString()}원으로 변경할까요? (종료 시각에 자동 복원)`)) return
+    try { await naverAdsAPI.activateOverrideNow(o.id); await loadOverrides(); await loadLogs() } catch (e: any) { setError(e?.message ?? '적용 실패') }
+  }
   const cancelOv = async (id: string) => {
     if (!confirm('예약을 취소할까요? 적용 중이면 즉시 원래 입찰가로 복원됩니다.')) return
     try { await naverAdsAPI.cancelOverride(id); await loadOverrides(); await loadLogs() } catch (e: any) { setError(e?.message ?? '취소 실패') }
@@ -238,7 +242,7 @@ export default function NaverAdsKeywordDetailPage() {
         </div>
         <p className="text-xs text-gray-500 mb-4">
           지정한 <b>시작~종료 시간 동안만</b> 입찰가를 바꾸고, 종료 시 <b>시작 시점의 입찰가</b>로 자동 복원합니다.
-          시간별 설정과는 별개이며, 약 5분 간격으로 점검됩니다. (실제 반영은 ‘매시간 자동 입찰 조정’의 dry-run 설정을 따릅니다)
+          시간별 설정과는 별개이며 <b>항상 실제 반영</b>됩니다(약 1분 간격 점검). 시작 전에 바로 적용하려면 ‘즉시 적용’을 누르세요.
         </p>
         {runMsg && <div className="mb-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700">{runMsg}</div>}
 
@@ -321,6 +325,9 @@ export default function NaverAdsKeywordDetailPage() {
                       <td className="px-3 py-2 tabular-nums text-gray-600 whitespace-nowrap">{o.repeat === 'daily' ? `매일 ${o.daily_start}~${o.daily_end}` : `${fmtDT(o.start_at)} ~ ${fmtDT(o.end_at)}`}</td>
                       <td className="px-3 py-2 text-gray-500 max-w-[160px] truncate" title={o.note ?? ''}>{o.note || '-'}</td>
                       <td className="px-3 py-2 whitespace-nowrap text-right">
+                        {o.status === 'scheduled' && (
+                          <button onClick={() => activateNow(o)} className="text-xs px-2 py-1 rounded border border-green-200 text-green-700 font-semibold hover:bg-green-50 mr-1">즉시 적용</button>
+                        )}
                         {o.status === 'scheduled' && (
                           <button onClick={() => startEdit(o)} className="text-xs px-2 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 mr-1">수정</button>
                         )}

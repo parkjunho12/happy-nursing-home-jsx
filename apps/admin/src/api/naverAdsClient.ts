@@ -256,6 +256,8 @@ export const naverAdsAPI = {
   keywordSchedulesAll: () => apiClient.get(`${BASE}/keyword-schedules-all`).then(unwrap<any[]>),
   setDaypartingEnabled: (enabled: boolean) =>
     apiClient.post(`${BASE}/dayparting-enabled`, { enabled }).then(unwrap<{ enabled: boolean }>),
+  setDaypartingDryRun: (dry_run: boolean) =>
+    apiClient.post(`${BASE}/dayparting-dry-run`, { dry_run }).then(unwrap<{ dry_run: boolean }>),
   daypartingKeywords: () =>
     apiClient.get(`${BASE}/dayparting-keywords`).then(unwrap<{ global_enabled: boolean; dry_run: boolean; items: any[] }>),
   toggleDaypartingKeyword: (body: { keyword_id?: string; enabled: boolean; all?: boolean }) =>
@@ -271,6 +273,8 @@ export const naverAdsAPI = {
   }) => apiClient.patch(`${BASE}/keyword-overrides/${id}`, body).then(unwrap<BidOverride>),
   cancelOverride: (id: string) =>
     apiClient.post(`${BASE}/keyword-overrides/${id}/cancel`).then(unwrap<BidOverride>),
+  activateOverrideNow: (id: string) =>
+    apiClient.post(`${BASE}/keyword-overrides/${id}/activate-now`).then(unwrap<BidOverride>),
   deleteOverride: (id: string) =>
     apiClient.delete(`${BASE}/keyword-overrides/${id}`).then(r => r.data),
 

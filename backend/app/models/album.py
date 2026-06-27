@@ -47,4 +47,8 @@ class AlbumMedia(Base):
     file_name     = Column(String(255), nullable=True)
     file_size     = Column(Integer,   nullable=True)
     sort_order    = Column(Integer,   default=0)
+    status        = Column(String(12), default="approved", index=True)  # approved | pending | rejected
+    uploaded_by   = Column(String,    nullable=True)
+    approved_by   = Column(String,    nullable=True)
+    approved_at   = Column(DateTime(timezone=True), nullable=True)
     created_at    = Column(DateTime(timezone=True), default=now_kst)

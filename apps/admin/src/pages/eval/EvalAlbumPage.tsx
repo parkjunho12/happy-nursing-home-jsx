@@ -16,11 +16,12 @@ const PAGE_SIZE = 12
 interface Album {
   id: string; title: string; description: string
   cover_url: string | null; is_public: boolean
-  media_count: number; resident_name: string
+  media_count: number; pending_count?: number; resident_name: string
   resident_id: string; created_at: string
 }
 interface Media {
   id: string; media_type: 'photo' | 'video'
+  status?: 'approved' | 'pending' | 'rejected'
   file_url: string; thumbnail_url: string | null
   file_name: string; created_at: string
 }
@@ -155,6 +156,13 @@ export default function EvalAlbumPage() {
     if (selAlbum?.id === id) { setSelAlbum(null); setModal('none') }
   }
 
+  const canApprove = user?.role === 'ADMIN' || user?.position === '사회복지사'
+  const setMediaStatus = async (mediaId: string, status: 'approved' | 'pending' | 'rejected') => {
+    if (!selAlbum) return
+    await adminAlbumAPI.setMediaStatus(selAlbum.id, mediaId, status)
+    try { setMedia(await adminAlbumAPI.listMedia(selAlbum.id)) } catch {}
+    fetchAlbums()
+  }
   const deleteMedia = async (mediaId: string) => {
     if (!selAlbum) return
     await adminAlbumAPI.deleteMedia(selAlbum.id, mediaId)
@@ -540,6 +548,8 @@ export default function EvalAlbumPage() {
           uploading={uploading}
           onUpload={handleUpload}
           onDeleteMedia={deleteMedia}
+          canApprove={canApprove}
+          onSetStatus={setMediaStatus}
           onViewMedia={m => { setSelMedia(m); setModal('viewMedia') }}
           onClose={() => { setModal('none'); setSelAlbum(null); setMedia([]) }}
           fileRef={fileRef}
@@ -602,6 +612,9 @@ function AlbumCard({ album, onOpen, onEdit, onToggle, onDelete, onNotify }: {
           }`}>{album.is_public ? '공개' : '비공개'}</span>
         </div>
         {/* 미디어 수 */}
+        {(album.pending_count ?? 0) > 0 && (
+          <div className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-amber-500 text-white text-[11px] font-bold shadow">승인대기 {album.pending_count}</div>
+        )}
         {album.media_count > 0 && (
           <div className="absolute bottom-2 left-2">
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-black/50 text-white">
@@ -655,8 +668,10 @@ function AlbumCard({ album, onOpen, onEdit, onToggle, onDelete, onNotify }: {
 }
 
 // ── 미디어 모달 ───────────────────────────────────────────────────────────────
-function MediaModal({ album, media, uploading, onUpload, onDeleteMedia, onViewMedia, onClose, fileRef, folderRef }: {
+function MediaModal({ album, media, uploading, onUpload, onDeleteMedia, canApprove, onSetStatus, onViewMedia, onClose, fileRef, folderRef }: {
   album: Album; media: Media[]; uploading: boolean
+  canApprove?: boolean
+  onSetStatus?: (id: string, status: 'approved' | 'pending' | 'rejected') => void
   onUpload: (f: FileList|null)=>void
   onDeleteMedia: (id: string)=>void
   onViewMedia: (m: Media)=>void
@@ -844,6 +859,8 @@ function MediaModal({ album, media, uploading, onUpload, onDeleteMedia, onViewMe
                 onToggle={toggleSelect}
                 onView={onViewMedia}
                 onDelete={onDeleteMedia}
+                canApprove={canApprove}
+                onSetStatus={onSetStatus}
                 fmt={fmt}
               />
             </div>
@@ -855,13 +872,15 @@ function MediaModal({ album, media, uploading, onUpload, onDeleteMedia, onViewMe
 }
 
 // ── 미디어 그리드 (날짜별 그룹화) ───────────────────────────────────────────
-function MediaGrid({ media, selectMode, selected, onToggle, onView, onDelete, fmt }: {
+function MediaGrid({ media, selectMode, selected, onToggle, onView, onDelete, canApprove, onSetStatus, fmt }: {
   media: Media[]
   selectMode: boolean
   selected: Set<string>
   onToggle: (id: string) => void
   onView: (m: Media) => void
   onDelete: (id: string) => void
+  canApprove?: boolean
+  onSetStatus?: (id: string, status: 'approved' | 'pending' | 'rejected') => void
   fmt: (s: string) => string
 }) {
   // 날짜별 그룹화
@@ -896,6 +915,8 @@ function MediaGrid({ media, selectMode, selected, onToggle, onView, onDelete, fm
                 onToggle={() => onToggle(m.id)}
                 onView={() => onView(m)}
                 onDelete={() => onDelete(m.id)}
+                canApprove={canApprove}
+                onSetStatus={onSetStatus}
                 fmt={fmt}
               />
             ))}
@@ -907,12 +928,16 @@ function MediaGrid({ media, selectMode, selected, onToggle, onView, onDelete, fm
 }
 
 // ── 미디어 타일 ──────────────────────────────────────────────────────────────
-function MediaTile({ m, selectMode, isSelected, onToggle, onView, onDelete, fmt }: {
+function MediaTile({ m, selectMode, isSelected, onToggle, onView, onDelete, canApprove, onSetStatus, fmt }: {
   m: Media; selectMode: boolean; isSelected: boolean
   onToggle: () => void; onView: () => void; onDelete: () => void
+  canApprove?: boolean
+  onSetStatus?: (id: string, status: 'approved' | 'pending' | 'rejected') => void
   fmt: (s: string) => string
 }) {
   const url = m.thumbnail_url || m.file_url
+  const pending = m.status === 'pending'
+  const rejected = m.status === 'rejected'
 
   const handleClick = () => {
     if (selectMode) onToggle()
@@ -925,6 +950,18 @@ function MediaTile({ m, selectMode, isSelected, onToggle, onView, onDelete, fmt 
       className={`relative aspect-square rounded-2xl overflow-hidden cursor-pointer transition-all ${
         isSelected ? 'ring-3 ring-primary-orange scale-95' : 'hover:opacity-90'
       }`}>
+      {(pending || rejected) && (
+        <div className={`absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded-md text-[10px] font-bold ${pending ? 'bg-amber-500 text-white' : 'bg-red-500 text-white'}`}>{pending ? '승인대기' : '반려'}</div>
+      )}
+      {(pending || rejected) && <div className="absolute inset-0 z-0 bg-black/40" />}
+      {canApprove && onSetStatus && m.status !== 'approved' && (
+        <button onClick={(e) => { e.stopPropagation(); onSetStatus(m.id, 'approved') }}
+          className="absolute bottom-1 left-1 z-20 px-2 py-0.5 rounded-md bg-green-600 text-white text-[10px] font-bold hover:bg-green-700">승인</button>
+      )}
+      {canApprove && onSetStatus && m.status === 'approved' && (
+        <button onClick={(e) => { e.stopPropagation(); onSetStatus(m.id, 'rejected') }}
+          className="absolute bottom-1 left-1 z-20 px-2 py-0.5 rounded-md bg-black/60 text-white text-[10px] font-bold hover:bg-black/80">숨김</button>
+      )}
       {/* 이미지 / 영상 */}
       {m.media_type === 'photo' ? (
         <img src={mediaUrl(url)} alt=""

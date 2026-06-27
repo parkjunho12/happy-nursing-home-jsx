@@ -55,12 +55,17 @@ export default function OverridesPanel() {
     if (!confirm('이 예약 내역을 삭제할까요?')) return
     try { await naverAdsAPI.deleteOverride(o.id); await load() } catch (e: any) { setError(e?.message ?? '삭제 실패') }
   }
+  const activateNow = async (o: BidOverride) => {
+    if (!confirm(`'${o.keyword || o.keyword_id}' 입찰가를 지금 즉시 ${o.override_bid.toLocaleString()}원으로 변경할까요? (종료 시각에 자동 복원)`)) return
+    try { await naverAdsAPI.activateOverrideNow(o.id); await load() } catch (e: any) { setError(e?.message ?? '적용 실패') }
+  }
   const runNow = async () => {
     setRunning(true); setRunMsg(''); setError('')
     try {
       const r = await naverAdsAPI.bidOverridesRunNow()
-      setRunMsg(!r || r.ran === false ? '지금 적용/복원할 예약이 없습니다.'
-        : `점검 완료 · 적용 ${r.activated ?? 0} · 복원 ${r.reverted ?? 0} · 실패 ${r.failed ?? 0}${r.dry_run ? ' (모의 dry-run)' : ''}`)
+      if (!r || r.ran === false) setRunMsg('지금 적용/복원할 예약이 없습니다.')
+      else if (r.dry_run) setRunMsg(`⚠️ 모의(dry-run) 상태라 실제 입찰가는 변경되지 않았습니다. 아래 ‘실제 반영’을 켜야 적용됩니다. (적용 ${r.activated ?? 0} · 복원 ${r.reverted ?? 0})`)
+      else setRunMsg(`점검 완료 · 적용 ${r.activated ?? 0} · 복원 ${r.reverted ?? 0} · 실패 ${r.failed ?? 0}`)
       await load()
     } catch (e: any) { setError(e?.message ?? '점검 실패') }
     finally { setRunning(false) }
@@ -119,6 +124,9 @@ export default function OverridesPanel() {
                   <td className="px-3 py-2.5 font-bold tabular-nums text-gray-900">{won(o.override_bid)}</td>
                   <td className="px-3 py-2.5 tabular-nums text-gray-500">{o.original_bid != null ? won(o.original_bid) : '-'}</td>
                   <td className="px-3 py-2.5 whitespace-nowrap">
+                    {o.status === 'scheduled' && (
+                      <button onClick={() => activateNow(o)} className="text-xs px-2 py-1 rounded border border-green-200 text-green-700 font-semibold hover:bg-green-50 mr-1">즉시 적용</button>
+                    )}
                     {o.status === 'scheduled' && (
                       <button onClick={() => setEditing(o)} className="text-xs px-2 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 mr-1">수정</button>
                     )}
@@ -334,18 +342,29 @@ function DaypartingKeywords({ data, reload, setError, navigate }: { data: { glob
   const toggleAll = async (en: boolean) => {
     try { await naverAdsAPI.toggleDaypartingKeyword({ all: true, enabled: en }); await reload() } catch (e: any) { setError(e?.message ?? '변경 실패') }
   }
+  const setDry = async (dry: boolean) => {
+    try { await naverAdsAPI.setDaypartingDryRun(dry); await reload() } catch (e: any) { setError(e?.message ?? '변경 실패') }
+  }
   const onCnt = data.items.filter(i => i.enabled !== false).length
 
   return (
     <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm mb-4">
       <div className="flex items-center gap-3 mb-3 flex-wrap">
         <h3 className="font-bold text-gray-900">데이파팅 적용 키워드 <span className="text-xs font-normal text-gray-400">(적용 {onCnt}/{data.items.length})</span></h3>
-        <div className="flex items-center gap-2 ml-auto">
-          <span className="text-xs text-gray-500">전체 데이파팅</span>
-          <Toggle on={data.global_enabled} onClick={() => setGlobal(!data.global_enabled)} />
-          <span className={`text-xs font-bold ${data.global_enabled ? 'text-green-600' : 'text-gray-400'}`}>{data.global_enabled ? 'ON' : 'OFF'}</span>
+        <div className="flex items-center gap-4 ml-auto">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">실제 반영</span>
+            <Toggle on={!data.dry_run} onClick={() => setDry(!data.dry_run)} />
+            <span className={`text-xs font-bold ${!data.dry_run ? 'text-green-600' : 'text-amber-600'}`}>{data.dry_run ? '모의' : '실반영'}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">전체 데이파팅</span>
+            <Toggle on={data.global_enabled} onClick={() => setGlobal(!data.global_enabled)} />
+            <span className={`text-xs font-bold ${data.global_enabled ? 'text-green-600' : 'text-gray-400'}`}>{data.global_enabled ? 'ON' : 'OFF'}</span>
+          </div>
         </div>
       </div>
+      {data.dry_run && <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"><b>모의(dry-run)</b> 상태입니다. 데이파팅·키워드 시간표·임시 예약 <b>모두 실제 입찰가가 변경되지 않습니다.</b> 위 ‘실제 반영’을 켜세요.</div>}
       {!data.global_enabled && <div className="mb-3 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700">전체 데이파팅이 꺼져 있어 키워드별 설정과 무관하게 적용되지 않습니다.</div>}
 
       {data.items.length === 0 ? (
