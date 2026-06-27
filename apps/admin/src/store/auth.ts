@@ -8,7 +8,7 @@ interface AuthState {
   isAuthenticated: boolean
   isLoading: boolean
   
-  login: (email: string, password: string) => Promise<void>
+  login: (email: string, password: string, remember?: boolean) => Promise<void>
   logout: () => Promise<void>
   checkAuth: () => Promise<void>
   setUser: (user: User | null) => void
@@ -22,10 +22,10 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoading: false,
 
-      login: async (email: string, password: string) => {
+      login: async (email: string, password: string, remember = true) => {
         try {
           set({ isLoading: true })
-          const response = await authAPI.login({ email, password })
+          const response = await authAPI.login({ email, password, remember })
           
           // 토큰 저장
           localStorage.setItem(TOKEN_KEY, response.access_token)

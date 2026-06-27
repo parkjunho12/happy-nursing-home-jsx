@@ -28,6 +28,7 @@ class UserResponse(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1)
+    remember: bool = False   # True면 장기(기본 90일) 토큰 발급
 
 
 class TokenResponse(BaseModel):
@@ -66,7 +67,10 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    if payload.remember:
+        access_token_expires = timedelta(days=settings.LONG_TOKEN_EXPIRE_DAYS)
+    else:
+        access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={
             "sub": user.id,

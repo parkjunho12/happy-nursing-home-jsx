@@ -37,12 +37,23 @@ export function getNavConfig(
   const isManager = user?.position === '대표' || user?.position === '이사'
   const isCaregiverOnly =
     user?.role === 'STAFF' && user?.position === '요양보호사'
+  const isAlbumOnly = user?.position === '앨범담당'
 
   const {
     todayTodo = 0,
     activeResidents = 0,
     activeStaff = 0,
   } = counts
+
+  if (isAlbumOnly) {
+    return {
+      showDashboard: false,
+      main: [],
+      eval: [
+        { to: '/eval/albums', icon: ImageIcon, label: '보호자 앨범 관리' },
+      ],
+    }
+  }
 
   if (isCaregiverOnly) {
     return {

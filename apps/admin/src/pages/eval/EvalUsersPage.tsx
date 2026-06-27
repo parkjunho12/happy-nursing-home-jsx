@@ -6,7 +6,7 @@ import { apiClient } from '@/api/client'
 const POSITIONS = [
   '대표', '시설장', '이사',
   '사회복지사', '간호사', '간호조무사',
-  '물리치료사', '요양보호사', '요양팀장',
+  '물리치료사', '요양보호사', '요양팀장', '앨범담당',
 ] as const
 
 const ROLES = [

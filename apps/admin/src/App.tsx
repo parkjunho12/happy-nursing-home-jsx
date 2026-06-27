@@ -59,6 +59,13 @@ function RoleRedirect({ children }: { children: React.ReactNode }) {
 
   if (!isAuthenticated) return <>{children}</>
 
+  // 앨범담당: 보호자 앨범만 접근
+  if (user?.position === '앨범담당') {
+    const albumOk = location.pathname === '/eval/albums' || location.pathname.startsWith('/eval/albums/')
+    if (!albumOk) return <Navigate to="/eval/albums" replace />
+    return <>{children}</>
+  }
+
   const isCaregiverOnly = user?.role === 'STAFF' && user?.position === '요양보호사'
   const caregiverAllowed = [
     '/eval/albums',

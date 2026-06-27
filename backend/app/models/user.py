@@ -21,6 +21,7 @@ class UserPosition(str, enum.Enum):
     물리치료사 = "물리치료사"
     요양보호사 = "요양보호사"
     요양팀장  = "요양팀장"
+    앨범담당  = "앨범담당"
 
 
 ALLOWED_POSITIONS = [p.value for p in UserPosition]
