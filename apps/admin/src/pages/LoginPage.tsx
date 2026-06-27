@@ -10,6 +10,7 @@ const LoginPage = () => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [remember, setRemember] = useState(true)
 
   const ids = useMemo(
     () => ({
@@ -35,10 +36,10 @@ const LoginPage = () => {
     e.preventDefault()
     setError('')
     try {
-      await login(email, password)
+      await login(email, password, remember)
       // 로그인 직후 auth store에서 user 읽기
       const { user } = useAuthStore.getState()
-      if (user?.role === 'STAFF' && user?.position === '요양보호사') {
+      if (user?.position === '앨범담당' || (user?.role === 'STAFF' && user?.position === '요양보호사')) {
         navigate('/eval/albums', { replace: true })
       } else {
         navigate('/', { replace: true })
@@ -139,6 +140,13 @@ const LoginPage = () => {
                   />
                 </div>
               </div>
+
+              {/* 로그인 유지 */}
+              <label className="flex items-center gap-2 text-sm text-gray-600 select-none cursor-pointer">
+                <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)}
+                  className="h-4 w-4 accent-orange-500" />
+                로그인 상태 유지 <span className="text-gray-400">(약 90일, 공용 PC에서는 해제)</span>
+              </label>
 
               {/* 버튼 */}
               <button

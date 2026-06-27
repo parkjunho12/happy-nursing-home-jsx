@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    LONG_TOKEN_EXPIRE_DAYS: int = 90   # '로그인 유지' 선택 시 토큰 만료(일)
     
     # CORS
     CORS_ORIGINS: str
