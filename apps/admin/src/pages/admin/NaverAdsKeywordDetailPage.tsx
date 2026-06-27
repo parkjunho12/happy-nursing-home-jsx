@@ -1,8 +1,28 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { naverAdsAPI, type KeywordDetail } from '@/api/naverAdsClient'
+import { naverAdsAPI, type KeywordDetail, type BidOverride } from '@/api/naverAdsClient'
 
 const won = (n: number | null | undefined) => (n == null ? '-' : `${Math.round(n).toLocaleString()}원`)
+const pad2 = (n: number) => String(n).padStart(2, '0')
+const toLocalInput = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`
+const fmtDT = (s?: string | null) => (s ? new Date(s).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-')
+const OV_STATUS: Record<string, { label: string; cls: string }> = {
+  scheduled: { label: '예약', cls: 'bg-gray-100 text-gray-600' },
+  active: { label: '적용중', cls: 'bg-green-50 text-green-700' },
+  done: { label: '완료', cls: 'bg-blue-50 text-blue-700' },
+  canceled: { label: '취소', cls: 'bg-gray-100 text-gray-400' },
+  failed: { label: '실패', cls: 'bg-red-50 text-red-600' },
+}
+const LOG_STATUS: Record<string, { label: string; cls: string }> = {
+  applied: { label: '적용됨', cls: 'bg-green-50 text-green-700' },
+  dry_run: { label: '모의(dry-run)', cls: 'bg-gray-100 text-gray-500' },
+  failed: { label: '실패', cls: 'bg-red-50 text-red-600' },
+  pending: { label: '대기', cls: 'bg-amber-50 text-amber-700' },
+  skipped: { label: '건너뜀', cls: 'bg-gray-100 text-gray-400' },
+}
+const LOG_SRC: Record<string, string> = {
+  dayparting: '데이파팅', keyword_schedule: '키워드 시간표', bid_override: '임시 변경', rule_engine: '룰 엔진',
+}
 
 export default function NaverAdsKeywordDetailPage() {
   const { keywordId = '' } = useParams()
@@ -18,6 +38,20 @@ export default function NaverAdsKeywordDetailPage() {
   const [bids, setBids] = useState<Record<string, string>>({})
   const [enabled, setEnabled] = useState(true)
   const [hourMult, setHourMult] = useState<Record<string, number>>({})
+
+  const [overrides, setOverrides] = useState<BidOverride[]>([])
+  const [ovBid, setOvBid] = useState('')
+  const [ovRepeat, setOvRepeat] = useState<'once' | 'daily'>('once')
+  const [ovDStart, setOvDStart] = useState('18:00')
+  const [ovDEnd, setOvDEnd] = useState('21:00')
+  const [ovStart, setOvStart] = useState('')
+  const [ovEnd, setOvEnd] = useState('')
+  const [ovNote, setOvNote] = useState('')
+  const [ovSaving, setOvSaving] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [logs, setLogs] = useState<any[]>([])
+  const [running, setRunning] = useState(false)
+  const [runMsg, setRunMsg] = useState('')
 
   useEffect(() => {
     let alive = true
@@ -38,6 +72,78 @@ export default function NaverAdsKeywordDetailPage() {
       .finally(() => alive && setLoading(false))
     return () => { alive = false }
   }, [keywordId])
+
+  const loadOverrides = () => naverAdsAPI.keywordOverrides(keywordId).then(setOverrides).catch(() => {})
+  const loadLogs = () => naverAdsAPI.keywordBidLogs(keywordId).then(setLogs).catch(() => {})
+  useEffect(() => {
+    loadOverrides()
+    loadLogs()
+    const d = new Date(); d.setMinutes(0, 0, 0); d.setHours(d.getHours() + 1)
+    setOvStart(toLocalInput(d))
+    const e = new Date(d); e.setHours(e.getHours() + 1)
+    setOvEnd(toLocalInput(e))
+  }, [keywordId])
+
+  const createOverride = async () => {
+    const bid = Math.round(Number(ovBid))
+    if (!bid || bid <= 0) { setError('변경 입찰가를 입력하세요.'); return }
+    if (ovRepeat === 'daily') { if (!ovDStart || !ovDEnd) { setError('반복 시작/종료 시각을 입력하세요.'); return } }
+    else if (!ovStart || !ovEnd) { setError('시작/종료 시각을 입력하세요.'); return }
+    setOvSaving(true); setError('')
+    try {
+      const times = ovRepeat === 'daily'
+        ? { daily_start: ovDStart, daily_end: ovDEnd }
+        : { start_at: ovStart, end_at: ovEnd }
+      if (editingId) {
+        await naverAdsAPI.updateOverride(editingId, { override_bid: bid, repeat: ovRepeat, note: ovNote || null, ...times })
+      } else {
+        await naverAdsAPI.createOverride({
+          keyword_id: keywordId, keyword: keyword || null,
+          adgroup_id: detail?.adgroup_id ?? passed.adgroup_id ?? null,
+          adgroup_name: detail?.adgroup_name ?? passed.adgroup_name ?? null,
+          campaign_name: detail?.campaign_name ?? passed.campaign_name ?? null,
+          override_bid: bid, repeat: ovRepeat, ...times, note: ovNote || null,
+        })
+      }
+      setEditingId(null); setOvBid(''); setOvNote(''); await loadOverrides(); await loadLogs()
+    } catch (e: any) { setError(e?.message ?? '예약에 실패했습니다.') }
+    finally { setOvSaving(false) }
+  }
+
+  const startEdit = (o: BidOverride) => {
+    setEditingId(o.id)
+    setOvBid(String(o.override_bid))
+    setOvNote(o.note || '')
+    if (o.repeat === 'daily') {
+      setOvRepeat('daily')
+      if (o.daily_start) setOvDStart(o.daily_start)
+      if (o.daily_end) setOvDEnd(o.daily_end)
+    } else {
+      setOvRepeat('once')
+      if (o.start_at) setOvStart(toLocalInput(new Date(o.start_at)))
+      if (o.end_at) setOvEnd(toLocalInput(new Date(o.end_at)))
+    }
+    document.getElementById('ov-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+  const cancelEdit = () => { setEditingId(null); setOvBid(''); setOvNote('') }
+  const cancelOv = async (id: string) => {
+    if (!confirm('예약을 취소할까요? 적용 중이면 즉시 원래 입찰가로 복원됩니다.')) return
+    try { await naverAdsAPI.cancelOverride(id); await loadOverrides(); await loadLogs() } catch (e: any) { setError(e?.message ?? '취소 실패') }
+  }
+  const delOv = async (id: string) => {
+    if (!confirm('이 예약 내역을 삭제할까요?')) return
+    try { await naverAdsAPI.deleteOverride(id); await loadOverrides(); await loadLogs() } catch (e: any) { setError(e?.message ?? '삭제 실패') }
+  }
+  const runNow = async () => {
+    setRunning(true); setRunMsg(''); setError('')
+    try {
+      const r = await naverAdsAPI.bidOverridesRunNow()
+      if (!r || r.ran === false) setRunMsg('지금 적용/복원할 예약이 없습니다.')
+      else setRunMsg(`점검 완료 · 적용 ${r.activated ?? 0} · 복원 ${r.reverted ?? 0} · 실패 ${r.failed ?? 0}${r.dry_run ? ' (모의 dry-run)' : ''}`)
+      await loadOverrides(); await loadLogs()
+    } catch (e: any) { setError(e?.message ?? '점검 실패') }
+    finally { setRunning(false) }
+  }
 
   const curBid = detail?.current_bid ?? passed.current_bid ?? 0
   const keyword = detail?.keyword ?? passed.keyword ?? keywordId
@@ -121,6 +227,146 @@ export default function NaverAdsKeywordDetailPage() {
         <div className="flex justify-end gap-2 mt-5">
           <button onClick={() => navigate('/naver-ads')} className="px-4 py-2 rounded-lg text-sm font-semibold border border-gray-200 hover:bg-gray-50">취소</button>
           <button onClick={save} disabled={saving} className="px-5 py-2 rounded-lg text-sm font-bold bg-primary-orange text-white hover:bg-primary-orange/90 disabled:opacity-50">{saving ? '저장 중…' : '저장'}</button>
+        </div>
+      </div>
+
+      {/* 임시 입찰 변경 예약 (지정 시간만 변경 후 복원) */}
+      <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm mt-5">
+        <div id="ov-form" className="flex items-center justify-between mb-1">
+          <h2 className="font-bold text-gray-900">임시 입찰 변경 예약{editingId ? ' · 수정' : ''}</h2>
+          <button onClick={runNow} disabled={running} className="text-xs px-3 py-1.5 rounded-lg border border-blue-200 text-blue-700 font-semibold hover:bg-blue-50 disabled:opacity-50">{running ? '점검 중…' : '지금 점검'}</button>
+        </div>
+        <p className="text-xs text-gray-500 mb-4">
+          지정한 <b>시작~종료 시간 동안만</b> 입찰가를 바꾸고, 종료 시 <b>시작 시점의 입찰가</b>로 자동 복원합니다.
+          시간별 설정과는 별개이며, 약 5분 간격으로 점검됩니다. (실제 반영은 ‘매시간 자동 입찰 조정’의 dry-run 설정을 따릅니다)
+        </p>
+        {runMsg && <div className="mb-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700">{runMsg}</div>}
+
+        <div className="flex items-center gap-2 mb-3">
+          {(['once', 'daily'] as const).map(rp => (
+            <button key={rp} onClick={() => setOvRepeat(rp)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold border ${ovRepeat === rp ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
+              {rp === 'once' ? '한 번만' : '매일 반복'}
+            </button>
+          ))}
+        </div>
+        <div className="grid sm:grid-cols-2 gap-3 mb-3">
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">변경 입찰가 (원)</label>
+            <input type="number" min={0} value={ovBid} onChange={e => setOvBid(e.target.value)} placeholder="예) 300"
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">메모 (선택)</label>
+            <input value={ovNote} onChange={e => setOvNote(e.target.value)} placeholder="예) 저녁 상담 집중 시간 상향"
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full" />
+          </div>
+          {ovRepeat === 'daily' ? (
+            <>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">매일 시작 시각</label>
+                <input type="time" value={ovDStart} onChange={e => setOvDStart(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">매일 종료 시각</label>
+                <input type="time" value={ovDEnd} onChange={e => setOvDEnd(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full" />
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">시작 시각</label>
+                <input type="datetime-local" value={ovStart} onChange={e => setOvStart(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">종료 시각</label>
+                <input type="datetime-local" value={ovEnd} onChange={e => setOvEnd(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-full" />
+              </div>
+            </>
+          )}
+        </div>
+        <div className="flex justify-end gap-2 mb-5">
+          {editingId && (
+            <button onClick={cancelEdit} className="px-4 py-2 rounded-lg text-sm font-semibold border border-gray-200 hover:bg-gray-50">수정 취소</button>
+          )}
+          <button onClick={createOverride} disabled={ovSaving}
+            className="px-4 py-2 rounded-lg text-sm font-bold bg-gray-900 text-white hover:bg-black disabled:opacity-50">{ovSaving ? '저장 중…' : (editingId ? '수정 저장' : '+ 예약 등록')}</button>
+        </div>
+
+        {overrides.length === 0 ? (
+          <p className="text-sm text-gray-400">예약된 임시 변경이 없습니다.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 text-gray-500 text-xs">
+                  {['상태', '반복', '변경가', '원래가', '적용 시간', '메모', ''].map(h => (
+                    <th key={h} className="px-3 py-2 text-left font-semibold whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {overrides.map(o => {
+                  const st = OV_STATUS[o.status] ?? { label: o.status, cls: 'bg-gray-100 text-gray-600' }
+                  return (
+                    <tr key={o.id} className="border-t border-gray-50">
+                      <td className="px-3 py-2"><span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${st.cls}`}>{st.label}</span></td>
+                      <td className="px-3 py-2 text-xs font-semibold text-gray-600 whitespace-nowrap">{o.repeat === 'daily' ? '매일' : '한 번'}</td>
+                      <td className="px-3 py-2 font-bold tabular-nums text-gray-900">{won(o.override_bid)}</td>
+                      <td className="px-3 py-2 tabular-nums text-gray-500">{o.original_bid != null ? won(o.original_bid) : '-'}</td>
+                      <td className="px-3 py-2 tabular-nums text-gray-600 whitespace-nowrap">{o.repeat === 'daily' ? `매일 ${o.daily_start}~${o.daily_end}` : `${fmtDT(o.start_at)} ~ ${fmtDT(o.end_at)}`}</td>
+                      <td className="px-3 py-2 text-gray-500 max-w-[160px] truncate" title={o.note ?? ''}>{o.note || '-'}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-right">
+                        {o.status === 'scheduled' && (
+                          <button onClick={() => startEdit(o)} className="text-xs px-2 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 mr-1">수정</button>
+                        )}
+                        {(o.status === 'scheduled' || o.status === 'active') && (
+                          <button onClick={() => cancelOv(o.id)} className="text-xs px-2 py-1 rounded border border-amber-200 text-amber-700 hover:bg-amber-50 mr-1">취소</button>
+                        )}
+                        <button onClick={() => delOv(o.id)} className="text-xs px-2 py-1 rounded border border-gray-200 text-gray-400 hover:bg-gray-50">삭제</button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* 실행 로그 */}
+        <div className="mt-6 pt-4 border-t border-gray-100">
+          <h3 className="text-sm font-bold text-gray-700 mb-2">실행 로그 <span className="text-xs font-normal text-gray-400">(이 키워드의 최근 입찰 변경)</span></h3>
+          {logs.length === 0 ? (
+            <p className="text-sm text-gray-400">실행 기록이 없습니다. 예약이 시작 시각에 도달하거나 ‘지금 점검’ 시 여기에 표시됩니다.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 text-gray-500 text-xs">
+                    {['시각', '출처', '사유', '변경', '상태'].map(h => <th key={h} className="px-3 py-2 text-left font-semibold whitespace-nowrap">{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {logs.map(l => {
+                    const ls = LOG_STATUS[l.status] ?? { label: l.status, cls: 'bg-gray-100 text-gray-600' }
+                    return (
+                      <tr key={l.id} className="border-t border-gray-50">
+                        <td className="px-3 py-2 tabular-nums text-gray-600 whitespace-nowrap">{fmtDT(l.applied_at || l.created_at)}</td>
+                        <td className="px-3 py-2 whitespace-nowrap"><span className="text-xs font-semibold text-gray-500">{LOG_SRC[l.suggested_by] ?? l.suggested_by ?? '-'}</span></td>
+                        <td className="px-3 py-2 text-gray-600">{l.reason || '-'}</td>
+                        <td className="px-3 py-2 tabular-nums text-gray-700 whitespace-nowrap">{won(l.old_bid)} → <b>{won(l.new_bid)}</b></td>
+                        <td className="px-3 py-2"><span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${ls.cls}`}>{ls.label}</span></td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </div>
