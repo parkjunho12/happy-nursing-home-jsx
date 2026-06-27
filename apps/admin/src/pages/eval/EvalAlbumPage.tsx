@@ -159,9 +159,15 @@ export default function EvalAlbumPage() {
   const canApprove = user?.role === 'ADMIN' || user?.position === '사회복지사'
   const setMediaStatus = async (mediaId: string, status: 'approved' | 'pending' | 'rejected') => {
     if (!selAlbum) return
-    await adminAlbumAPI.setMediaStatus(selAlbum.id, mediaId, status)
-    try { setMedia(await adminAlbumAPI.listMedia(selAlbum.id)) } catch {}
-    fetchAlbums()
+    try {
+      await adminAlbumAPI.setMediaStatus(selAlbum.id, mediaId, status)
+      setMedia(await adminAlbumAPI.listMedia(selAlbum.id))
+      fetchAlbums()
+    } catch (e: any) {
+      const msg = e?.response?.data?.message || e?.response?.data?.detail || e?.message || '승인 처리에 실패했습니다.'
+      const code = e?.response?.status
+      alert(`승인 처리 실패${code ? ` (${code})` : ''}: ${msg}\n\n백엔드를 재시작했는지, 마이그레이션(alembic upgrade head)을 적용했는지 확인해 주세요.`)
+    }
   }
   const deleteMedia = async (mediaId: string) => {
     if (!selAlbum) return

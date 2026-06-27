@@ -61,7 +61,7 @@ export default function AlbumPreviewSection() {
             PROTECTOR ALBUM
           </div>
           <h2 className="font-serif text-3xl md:text-4xl lg:text-5xl font-bold text-primary-brown mb-4">
-            보호자 앨범, 우리도 제공합니다
+          📸 보호자 앨범, 부모님의 오늘을 사진으로
           </h2>
           <p className="text-lg text-text-gray max-w-2xl mx-auto leading-relaxed">
             멀리 계셔도 안심하실 수 있도록, 어르신의 한 주 일상을 사진과 따뜻한
