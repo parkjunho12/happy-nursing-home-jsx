@@ -409,7 +409,7 @@ def set_media_status(album_id: str, media_id: str, body: MediaStatusBody,
     m.status = body.status
     if body.status == "approved":
         m.approved_by = current_user.id
-        m.approved_at = now_kst()
+        m.approved_at = datetime.now(KST)
         # 커버 미설정이면 이 사진으로
         a = db.query(Album).filter(Album.id == album_id).first()
         if a and not a.cover_url and m.media_type == "photo":
