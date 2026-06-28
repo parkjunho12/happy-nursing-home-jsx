@@ -122,11 +122,11 @@ def _media_dict(m: AlbumMedia) -> dict:
 
 
 def _can_approve(current_user: User) -> bool:
-    """앨범 사진 승인 권한: ADMIN 또는 사회복지사"""
+    """앨범 사진 승인 권한: ADMIN · 대표 · 이사 · 시설장"""
     role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
     pos = getattr(current_user, "position", None)
     pos = pos.value if hasattr(pos, "value") else str(pos or "")
-    return role == "ADMIN" or pos == "사회복지사"
+    return role == "ADMIN" or pos in ("대표", "이사", "시설장")
 
 
 def _require_can_manage_guardians(current_user: User):
@@ -351,10 +351,12 @@ def upload_media(
     current_user: User = Depends(get_current_user),
 ):
     a = _get_album_or_404(db, album_id)
-    # 앨범담당이 올린 사진은 관리자 승인 전까지 비공개(pending)
+    # 자동 공개 대상: ADMIN · 대표 · 이사 · 시설장. 그 외 직책은 관리자 승인 전까지 비공개(pending)
+    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
     pos = getattr(current_user, "position", None)
     pos = pos.value if hasattr(pos, "value") else str(pos or "")
-    media_status = "pending" if pos == "앨범담당" else "approved"
+    auto_approve = (role == "ADMIN") or (pos in ("대표", "이사", "시설장"))
+    media_status = "approved" if auto_approve else "pending"
 
     # R2 미설정 시 안내
     if not r2.is_configured():
