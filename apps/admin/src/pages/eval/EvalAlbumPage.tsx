@@ -156,7 +156,7 @@ export default function EvalAlbumPage() {
     if (selAlbum?.id === id) { setSelAlbum(null); setModal('none') }
   }
 
-  const canApprove = user?.role === 'ADMIN' || user?.position === '사회복지사'
+  const canApprove = user?.role === 'ADMIN' || ['대표', '이사', '시설장'].includes(user?.position ?? '')
   const setMediaStatus = async (mediaId: string, status: 'approved' | 'pending' | 'rejected') => {
     if (!selAlbum) return
     try {
