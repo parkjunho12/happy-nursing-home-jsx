@@ -16,11 +16,14 @@ export default function MobileHeader({ onMenuClick }: Props) {
         <Menu className="w-5 h-5 text-gray-700" />
       </button>
 
-      <div className="flex flex-col items-center">
-        <span className="text-sm font-bold text-gray-900">행복한요양원</span>
-        {user?.name && (
-          <span className="text-[10px] text-gray-400">{user.name} · {user.position || user.role}</span>
-        )}
+      <div className="flex items-center gap-2 min-w-0">
+        <img src="/logo.png" alt="로고" className="w-7 h-7 object-contain shrink-0" />
+        <div className="flex flex-col items-start min-w-0">
+          <span className="text-sm font-bold text-gray-900 leading-tight">행복한요양원</span>
+          {user?.name && (
+            <span className="text-[10px] text-gray-400 truncate">{user.name} · {user.position || user.role}</span>
+          )}
+        </div>
       </div>
 
       <button

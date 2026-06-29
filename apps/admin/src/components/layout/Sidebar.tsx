@@ -79,11 +79,12 @@ export default function Sidebar({ mobile = false, onNavigate }: SidebarProps) {
         ${mobile ? '' : 'min-h-screen sticky top-0'}
       `}
     >
-      <div className="px-5 py-5 border-b border-gray-50">
-        <p className="text-base font-bold text-gray-900">행복한요양원</p>
-        <p className="text-xs text-gray-400 mt-0.5">
-          녹양역점 관리 시스템
-        </p>
+      <div className="px-5 py-5 border-b border-gray-50 flex items-center gap-3">
+        <img src="/logo.png" alt="행복한요양원 로고" className="w-10 h-10 object-contain shrink-0" />
+        <div className="min-w-0">
+          <p className="text-base font-bold text-gray-900 leading-tight">행복한요양원</p>
+          <p className="text-xs text-gray-400 mt-0.5">녹양역점 관리 시스템</p>
+        </div>
       </div>
 
       <div className="px-5 py-3 border-b border-gray-50">
