@@ -56,7 +56,7 @@ def _cl_to_out(item: ChecklistItem) -> dict:
             "id":                o.id,
             "checklist_item_id": o.checklist_item_id,
             "period_key":        o.period_key,
-            "frequency":         o.frequency,
+            "frequency":         _normalize_freq(o.frequency),
             "scheduled_date":    o.scheduled_date,
             "due_date":          o.due_date,
             "status":            o.status,
@@ -70,6 +70,7 @@ def _cl_to_out(item: ChecklistItem) -> dict:
     ]
 
     d = {c.key: getattr(item, c.key) for c in item.__table__.columns}
+    d["frequency"] = _normalize_freq(d.get("frequency"))
     d["completion_history"] = history
     d["occurrences"]        = occs
     # due_date는 마이그레이션 전에는 컬럼이 없을 수 있으므로 안전하게 처리

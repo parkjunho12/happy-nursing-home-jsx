@@ -61,8 +61,8 @@ const LoginPage = () => {
       <div className="relative w-full max-w-md">
         {/* 헤더 */}
         <div className="text-center mb-7">
-          <div className="mx-auto mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-[0_10px_30px_-12px_rgba(0,0,0,0.25)] ring-1 ring-black/5">
-            <span className="text-3xl">🏥</span>
+          <div className="mx-auto mb-4 inline-flex h-20 w-20 items-center justify-center rounded-2xl bg-white shadow-[0_10px_30px_-12px_rgba(0,0,0,0.25)] ring-1 ring-black/5 p-2.5">
+            <img src="/logo.png" alt="행복한요양원 로고" className="w-full h-full object-contain" />
           </div>
 
           <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">

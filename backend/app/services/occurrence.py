@@ -33,6 +33,18 @@ RECURRING_FREQS = {'daily', 'weekly', 'monthly', 'quarterly', 'half-yearly', 'ye
 EVENT_FREQS     = {'on_admission', 'on_discharge', 'on_hire'}
 ONE_TIME_FREQ   = 'one_time'
 
+# frequency 표기 흔들림 정규화 (예: 'half_yearly' → 'half-yearly')
+_FREQ_ALIASES = {
+    'half_yearly': 'half-yearly', 'halfyearly': 'half-yearly',
+    'semiannual': 'half-yearly', 'semi_annual': 'half-yearly',
+    'half-year': 'half-yearly', 'biannual': 'half-yearly',
+}
+def canon_freq(freq):
+    if not freq:
+        return freq
+    k = str(freq).strip()
+    return _FREQ_ALIASES.get(k, _FREQ_ALIASES.get(k.lower(), k))
+
 # 일일 occurrence 최대 소급 일수 (너무 오래된 것까지 만들면 DB 부담)
 DAILY_BACKFILL_LIMIT = 90
 
@@ -107,6 +119,7 @@ def _nth_weekday_of_month(year: int, month: int, weekday: int, n: int) -> date:
 
 def get_period_key(freq: str, d: date, cfg: Optional[dict] = None) -> str:
     cfg = cfg or {}
+    freq = canon_freq(freq)
     if freq == 'weekly_dow':
         # 매주 특정 요일 → 그 주의 해당 요일 날짜를 key로 (주마다 유일)
         wd = cfg.get('weekday')
@@ -144,6 +157,7 @@ def get_period_key(freq: str, d: date, cfg: Optional[dict] = None) -> str:
 def get_period_bounds(freq: str, d: date, cfg: Optional[dict] = None) -> Tuple[date, date]:
     """주기의 (시작일, 마감일) 반환"""
     cfg = cfg or {}
+    freq = canon_freq(freq)
 
     if freq == 'weekly_dow':
         wd = cfg.get('weekday')
@@ -208,6 +222,7 @@ def _period_start_dates(freq: str, from_date: date, to_date: date, cfg: Optional
     각 주기마다 occurrence 1개를 만들기 위한 대표 날짜.
     """
     cfg = cfg or {}
+    freq = canon_freq(freq)
     starts: List[date] = []
 
     if freq == 'weekly_dow':
@@ -314,8 +329,9 @@ def get_or_create_occurrence(
         target_date = today_kst()
 
     cfg = cfg_from_item(item)
-    period_key = get_period_key(item.frequency, target_date, cfg)
-    scheduled, due = get_period_bounds(item.frequency, target_date, cfg)
+    freq = canon_freq(item.frequency)
+    period_key = get_period_key(freq, target_date, cfg)
+    scheduled, due = get_period_bounds(freq, target_date, cfg)
 
     occ = db.query(ChecklistOccurrence).filter(
         ChecklistOccurrence.checklist_item_id == item.id,
@@ -329,7 +345,7 @@ def get_or_create_occurrence(
         id=str(uuid.uuid4()),
         checklist_item_id=item.id,
         period_key=period_key,
-        frequency=item.frequency,
+        frequency=freq,
         scheduled_date=scheduled.isoformat(),
         due_date=due.isoformat(),
         status='pending',
@@ -375,7 +391,7 @@ def backfill_occurrences(
     new_occs: List[ChecklistOccurrence] = []
 
     for item in items:
-        freq = item.frequency
+        freq = canon_freq(item.frequency)
         item_existing = existing.get(item.id, set())
 
         # ── 일회성 (one_time) ─────────────────────────────────────────
