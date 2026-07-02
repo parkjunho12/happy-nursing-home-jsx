@@ -22,6 +22,7 @@ interface Album {
 interface Media {
   id: string; media_type: 'photo' | 'video'
   status?: 'approved' | 'pending' | 'rejected'
+  uploaded_by_name?: string | null
   file_url: string; thumbnail_url: string | null
   file_name: string; created_at: string
 }
@@ -958,6 +959,9 @@ function MediaTile({ m, selectMode, isSelected, onToggle, onView, onDelete, canA
       }`}>
       {(pending || rejected) && (
         <div className={`absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded-md text-[10px] font-bold ${pending ? 'bg-amber-500 text-white' : 'bg-red-500 text-white'}`}>{pending ? '승인대기' : '반려'}</div>
+      )}
+      {m.uploaded_by_name && (
+        <div className="absolute top-1 right-1 z-10 max-w-[75%] truncate rounded-md bg-black/50 px-1.5 py-0.5 text-[9px] font-medium text-white">📷 {m.uploaded_by_name}</div>
       )}
       {(pending || rejected) && <div className="absolute inset-0 z-0 bg-black/40" />}
       {canApprove && onSetStatus && m.status !== 'approved' && (

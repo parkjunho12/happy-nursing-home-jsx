@@ -106,12 +106,15 @@ def _album_dict(a: Album, db: Session, include_resident: bool = True) -> dict:
         "created_at": a.created_at.isoformat(),
     }
 
-def _media_dict(m: AlbumMedia) -> dict:
+def _media_dict(m: AlbumMedia, uploader_names: dict | None = None) -> dict:
+    uid = getattr(m, "uploaded_by", None)
     return {
         "id": m.id, "media_type": m.media_type,
         "file_url": m.file_url, "thumbnail_url": m.thumbnail_url,
         "file_name": m.file_name, "file_size": m.file_size,
         "status": getattr(m, "status", "approved"),
+        "uploaded_by": uid,
+        "uploaded_by_name": (uploader_names or {}).get(uid),
         "created_at": m.created_at.isoformat(),
     }
 
@@ -127,6 +130,19 @@ def _can_approve(current_user: User) -> bool:
     pos = getattr(current_user, "position", None)
     pos = pos.value if hasattr(pos, "value") else str(pos or "")
     return role == "ADMIN" or pos in ("대표", "이사", "시설장")
+
+
+def _is_admin(current_user: User) -> bool:
+    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    return role == "ADMIN"
+
+
+def _uploader_names(db: Session, media_list) -> dict:
+    ids = {getattr(m, "uploaded_by", None) for m in media_list if getattr(m, "uploaded_by", None)}
+    if not ids:
+        return {}
+    rows = db.query(User.id, User.name).filter(User.id.in_(ids)).all()
+    return {r[0]: r[1] for r in rows}
 
 
 def _require_can_manage_guardians(current_user: User):
@@ -337,10 +353,11 @@ def delete_album(album_id: str, db: Session = Depends(get_db), _=Depends(get_cur
 
 
 @admin_router.get("/albums/{album_id}/media")
-def list_media(album_id: str, db: Session = Depends(get_db), _=Depends(get_current_user)):
+def list_media(album_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     media = db.query(AlbumMedia).filter(AlbumMedia.album_id == album_id)\
               .order_by(AlbumMedia.sort_order, AlbumMedia.created_at).all()
-    return ApiResponse(success=True, data=[_media_dict(m) for m in media])
+    uploader_names = _uploader_names(db, media) if _is_admin(current_user) else {}
+    return ApiResponse(success=True, data=[_media_dict(m, uploader_names) for m in media])
 
 
 @admin_router.post("/albums/{album_id}/media")
@@ -425,11 +442,12 @@ def list_pending_media(db: Session = Depends(get_db), current_user: User = Depen
     """승인 대기 사진 목록(앨범/어르신 정보 포함)."""
     rows = db.query(AlbumMedia).filter(AlbumMedia.status == "pending")\
              .order_by(AlbumMedia.created_at.desc()).limit(500).all()
+    unames = _uploader_names(db, rows) if _is_admin(current_user) else {}
     out = []
     for m in rows:
         a = db.query(Album).filter(Album.id == m.album_id).first()
         res = db.query(LtcResident).filter(LtcResident.id == a.resident_id).first() if a else None
-        d = _media_dict(m)
+        d = _media_dict(m, unames)
         d.update({
             "album_id": m.album_id,
             "album_title": a.title if a else None,

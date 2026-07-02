@@ -238,9 +238,33 @@ def update_checklist(
     updates = payload.model_dump(exclude_none=True)
     if "frequency" in updates:
         updates["frequency"] = _normalize_freq(updates["frequency"])
+    # FK 컬럼은 빈 문자열('')이 FK 제약 위반을 유발 → None 으로 정규화
+    _FK_FIELDS = {"related_indicator_id", "related_category_id", "related_domain_id",
+                  "assigned_user_id", "person_id"}
+    for field, val in list(updates.items()):
+        if field in _FK_FIELDS and (val == "" or val is False):
+            updates[field] = None
     for field, val in updates.items():
         setattr(item, field, val)
     db.commit()
+
+    # 반복 항목: 반복설정/주기 변경이 현재 주기 occurrence의 예정일/마감일에 반영되도록 갱신
+    try:
+        from app.services.occurrence import (
+            canon_freq, RECURRING_FREQS, get_or_create_occurrence,
+            get_period_bounds, cfg_from_item, today_kst,
+        )
+        fq = canon_freq(item.frequency)
+        if fq in RECURRING_FREQS:
+            occ = get_or_create_occurrence(db, item)
+            if occ.status != 'completed':
+                sd, dd = get_period_bounds(fq, today_kst(), cfg_from_item(item))
+                occ.scheduled_date = sd.isoformat()
+                occ.due_date = dd.isoformat()
+                db.commit()
+    except Exception:
+        db.rollback()
+
     item = _query_with_history(db).filter(ChecklistItem.id == item_id).first()
     return ApiResponse(success=True, data=_cl_to_out(item))
 
