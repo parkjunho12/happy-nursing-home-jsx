@@ -30,6 +30,18 @@ function formatDate(s: string) {
   const d = new Date(s)
   return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`
 }
+const _sod = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+function relativeDate(s: string) {
+  const d = new Date(s)
+  const days = Math.floor((_sod(new Date()) - _sod(d)) / 86400000)
+  if (days <= 0) return '오늘'
+  if (days === 1) return '어제'
+  if (days < 7) return `${days}일 전`
+  return formatDate(s)
+}
+function isNew(s: string) {
+  return Date.now() - new Date(s).getTime() < 3 * 86400000
+}
 
 export default function FamilyAlbumsPage() {
   const router = useRouter()
@@ -37,6 +49,7 @@ export default function FamilyAlbumsPage() {
   const [loading,   setLoading]   = useState(true)
   const [guardian,  setGuardian]  = useState<{ name: string } | null>(null)
   const [residents, setResidents] = useState<{ name: string; relation: string }[]>([])
+  const [error, setError] = useState('')
 
   const load = useCallback(async () => {
     const token = localStorage.getItem('family_token')
@@ -45,13 +58,15 @@ export default function FamilyAlbumsPage() {
     const r = localStorage.getItem('family_residents')
     if (g) setGuardian(JSON.parse(g))
     if (r) setResidents(JSON.parse(r))
-    setLoading(true)
+    setLoading(true); setError('')
     try {
       setAlbums(await fetchAlbums(token))
     } catch (e: any) {
       if (e.message === 'auth') {
         localStorage.clear()
         router.replace('/family')
+      } else {
+        setError('앨범을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.')
       }
     } finally { setLoading(false) }
   }, [router])
@@ -109,18 +124,30 @@ export default function FamilyAlbumsPage() {
       <header className="bg-white border-b border-orange-100 sticky top-0 z-20 shadow-sm">
         <div className="max-w-lg mx-auto px-5 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-orange-100 rounded-xl flex items-center justify-center text-xl">🌸</div>
+            <div className="w-9 h-9 rounded-xl overflow-hidden bg-white ring-1 ring-orange-100 flex items-center justify-center"><Image src="/assets/logo/logo.png" alt="로고" width={36} height={36} className="w-full h-full object-contain p-0.5" /></div>
             <div>
               <p className="font-bold text-gray-900 text-sm leading-tight">우리 가족 앨범</p>
               {guardian && <p className="text-xs text-gray-400">{guardian.name}님</p>}
             </div>
           </div>
-          <button
-            onClick={logout}
-            className="text-xs text-gray-400 hover:text-red-500 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors"
-          >
-            로그아웃
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => load()}
+              disabled={loading}
+              aria-label="새로고침"
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-400 hover:text-orange-600 hover:bg-orange-50 transition-colors disabled:opacity-50"
+            >
+              <svg className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 3v6h-6" />
+              </svg>
+            </button>
+            <button
+              onClick={logout}
+              className="text-xs text-gray-400 hover:text-red-500 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors"
+            >
+              로그아웃
+            </button>
+          </div>
         </div>
       </header>
 
@@ -144,9 +171,24 @@ export default function FamilyAlbumsPage() {
 
         {/* 앨범 목록 */}
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <div className="w-10 h-10 border-3 border-orange-300 border-t-orange-500 rounded-full animate-spin"/>
-            <p className="text-sm text-gray-400">앨범을 불러오는 중...</p>
+          <div className="space-y-4">
+            {[0, 1].map(i => (
+              <div key={i} className="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse">
+                <div className="w-full aspect-[16/10] bg-gray-100" />
+                <div className="px-4 py-3 space-y-2">
+                  <div className="h-4 bg-gray-100 rounded w-1/2" />
+                  <div className="h-3 bg-gray-100 rounded w-1/3" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : error ? (
+          <div className="text-center py-16">
+            <div className="w-20 h-20 bg-red-50 rounded-3xl flex items-center justify-center mx-auto mb-4 text-4xl">😢</div>
+            <p className="font-bold text-gray-700">{error}</p>
+            <button onClick={() => load()} className="mt-5 px-6 py-3 bg-orange-500 text-white rounded-2xl font-bold hover:bg-orange-600 active:scale-95 transition-all shadow-lg shadow-orange-200">
+              다시 시도
+            </button>
           </div>
         ) : albums.length === 0 ? (
           <div className="text-center py-20">
@@ -169,6 +211,9 @@ export default function FamilyAlbumsPage() {
                 >
                   {/* 큰 표지 사진 */}
                   <div className="relative w-full aspect-[16/10] bg-gradient-to-br from-orange-100 to-amber-100">
+                    {isNew(album.created_at) && (
+                      <span className="absolute top-2.5 left-2.5 z-10 text-[11px] font-extrabold text-white bg-rose-500 px-2.5 py-1 rounded-full shadow-md animate-pulse">NEW</span>
+                    )}
                     {cover ? (
                       <Image
                         src={cover}
@@ -192,7 +237,7 @@ export default function FamilyAlbumsPage() {
                     {album.description && (
                       <p className="text-sm text-gray-400 mt-0.5 line-clamp-1">{album.description}</p>
                     )}
-                    <p className="text-xs text-gray-400 mt-1">{formatDate(album.created_at)}</p>
+                    <p className="text-xs text-gray-400 mt-1">{relativeDate(album.created_at)}</p>
                   </div>
                 </button>
               )

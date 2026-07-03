@@ -204,7 +204,7 @@ interface LtcState {
   addChecklist:      (item: Omit<ChecklistItem,'id'|'createdAt'|'completionHistory'>) => Promise<void>
   updateChecklist:   (id: string, u: Partial<ChecklistItem>) => Promise<void>
   deleteChecklist:   (id: string) => Promise<void>
-  toggleComplete:    (id: string) => Promise<void>
+  toggleComplete:    (id: string, completed?: boolean) => Promise<void>
   addResident:       (r: Omit<LtcResident,'id'|'createdAt'>) => Promise<void>
   updateResident:    (id: string, u: Partial<LtcResident>) => Promise<void>
   dischargeResident: (id: string, date: string) => Promise<void>
@@ -323,9 +323,9 @@ export const useLtcStore = create<LtcState>((set, get) => ({
     await evalChecklistAPI.delete(id)
     set(s => ({ checklists: s.checklists.filter(c => c.id!==id) }))
   },
-  toggleComplete: async (id) => {
-    // period_key와 completed_date는 서버(KST)가 결정 — 프론트는 id만 전달
-    const raw = await evalChecklistAPI.toggle(id, {})
+  toggleComplete: async (id, completed) => {
+    // period_key/completed_date는 서버(KST) 결정. completed 를 주면 그 상태로 '설정'
+    const raw = await evalChecklistAPI.toggle(id, completed === undefined ? {} : { completed })
     const updated = mapCL(raw)
     set(s => ({ checklists: s.checklists.map(c => c.id===id ? updated : c) }))
     // occurrences 스토어도 동기화

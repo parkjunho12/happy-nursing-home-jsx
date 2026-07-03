@@ -32,9 +32,8 @@ APP_STATUS = ["접수", "검토중", "면접예정", "합격", "불합격"]
 
 def _require_manager(current_user: User = Depends(get_current_user)) -> User:
     role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
-    position = current_user.position.value if hasattr(current_user.position, "value") else str(current_user.position or "")
-    if role != "ADMIN" and position != "사회복지사":
-        raise HTTPException(status_code=403, detail="권한이 없습니다.")
+    if role != "ADMIN":
+        raise HTTPException(status_code=403, detail="권한이 없습니다. (관리자 전용)")
     return current_user
 
 

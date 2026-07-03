@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { resolveApiBase } from '@/lib/api-client'
 
 async function familyLogin(phone: string, password: string) {
@@ -52,8 +53,8 @@ export default function FamilyLoginPage() {
       <div className="flex-1 flex flex-col items-center justify-center px-5 py-12">
         {/* 로고 */}
         <div className="text-center mb-10">
-          <div className="w-24 h-24 bg-white rounded-[2rem] shadow-xl flex items-center justify-center mx-auto mb-6 ring-4 ring-orange-100">
-            <span className="text-5xl">🌸</span>
+          <div className="w-24 h-24 bg-white rounded-[2rem] shadow-xl flex items-center justify-center mx-auto mb-6 ring-4 ring-orange-100 p-4">
+            <Image src="/assets/logo/logo.png" alt="행복한요양원 로고" width={72} height={72} className="w-full h-full object-contain" priority />
           </div>
           <h1 className="text-3xl font-bold text-gray-800 tracking-tight">행복한요양원</h1>
           <p className="text-gray-500 mt-2.5 text-base leading-relaxed">

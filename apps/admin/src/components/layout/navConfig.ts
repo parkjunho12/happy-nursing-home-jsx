@@ -123,10 +123,7 @@ export function getNavConfig(
     main: [
       { to: '/contacts', icon: MessageSquare, label: '상담 관리' },
       ...(isSocialWorker
-        ? [
-            { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
-            { to: '/recruitment', icon: Briefcase, label: '채용 관리' },
-          ]
+        ? [{ to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' }]
         : []),
       ...(canEnteral
         ? [{ to: '/enteral', icon: Soup, label: '경관식 관리' }]
