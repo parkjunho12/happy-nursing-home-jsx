@@ -121,6 +121,9 @@ export default function FamilyAlbumDetailPage() {
             className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center hover:bg-orange-100 transition-colors text-gray-600 hover:text-orange-600 font-bold text-lg active:scale-95">
             ←
           </button>
+          <div className="w-8 h-8 rounded-lg overflow-hidden bg-white ring-1 ring-orange-100 flex items-center justify-center shrink-0">
+            <Image src="/assets/logo/logo.png" alt="로고" width={32} height={32} className="w-full h-full object-contain p-0.5" />
+          </div>
           <div className="flex-1 min-w-0">
             <p className="font-bold text-gray-900 truncate">{album.title}</p>
             <p className="text-xs text-gray-400">{album.resident_name} · {formatDate(album.created_at)}</p>

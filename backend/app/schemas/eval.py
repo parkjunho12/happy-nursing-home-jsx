@@ -151,9 +151,11 @@ class ChecklistItemUpdate(BaseModel):
 
 
 class ToggleRequest(BaseModel):
-    """toggle API — 서버가 KST 기준으로 period_key와 completed_date를 결정"""
+    """toggle API — 서버가 KST 기준으로 period_key와 completed_date를 결정
+    completed 를 주면 '설정'(멱등), 없으면 기존처럼 '토글'."""
     memo:            str = ""
     attachment_name: str = ""
+    completed:       Optional[bool] = None
 
 
 # ══════════════════════════════════════════════════════════════════════════════

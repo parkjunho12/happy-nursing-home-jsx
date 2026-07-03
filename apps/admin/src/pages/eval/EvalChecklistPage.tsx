@@ -238,11 +238,11 @@ export default function EvalChecklistPage() {
     return g
   }, [sorted, deadlineOf])
 
-  const handleToggle = async (id: string) => {
+  const handleToggle = async (id: string, desired?: boolean) => {
     setToggling(id)
 
     try {
-      await toggleComplete(id)
+      await toggleComplete(id, desired)
     } finally {
       setToggling(null)
     }
@@ -279,7 +279,7 @@ export default function EvalChecklistPage() {
     return (
       <div key={item.id} className={`bg-white rounded-lg border transition-colors hover:bg-gray-50/40 ${done ? 'border-gray-100 opacity-70' : highRisk ? 'border-gray-200 border-l-[3px] border-l-red-400' : 'border-gray-200'}`}>
         <div className="flex items-center gap-3 p-3">
-          <button onClick={() => handleToggle(item.id)} disabled={toggling === item.id}
+          <button onClick={() => handleToggle(item.id, !checkDone(item, ''))} disabled={toggling === item.id}
             className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center disabled:opacity-50 ${done ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-primary-orange'}`}>
             {toggling === item.id ? <div className="w-2 h-2 border border-gray-400 border-t-transparent rounded-full animate-spin" /> : done && <div className="w-2 h-2 bg-white rounded-full" />}
           </button>

@@ -347,8 +347,9 @@ def toggle_complete(
     period_key = today_str if is_event else _gpk(item.frequency, today, cfg_from_item(item))
 
     if is_event or is_one_time:
-        # ── 이벤트성 / 일회성: boolean 토글 ─────────────────────────────
-        item.completed = not item.completed
+        # ── 이벤트성 / 일회성 ─────────────────────────────
+        desired = payload.completed if payload.completed is not None else (not item.completed)
+        item.completed = desired
         item.completed_date = today_str if item.completed else None
 
         # one_time: period_key = item.due_date (기한 날짜)
@@ -368,9 +369,10 @@ def toggle_complete(
         # ── 반복 주기 ─────────────────────────────────────────────────────
         # 현재 주기 occurrence 찾기 (없으면 생성)
         occ = get_or_create_occurrence(db, item)
+        desired = payload.completed if payload.completed is not None else (occ.status != 'completed')
 
-        if occ.status == 'completed':
-            # 이미 완료 → 취소
+        if not desired:
+            # 미완료로 설정
             uncomplete_occurrence(db, occ)
             item.completed = False
             item.completed_date = None
