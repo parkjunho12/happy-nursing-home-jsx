@@ -48,6 +48,24 @@ export default function StaffWorkloadPage() {
   const totals = rows.reduce((t, r) => ({ people: t.people + 1, overdue: t.overdue + r.overdue, soon: t.soon + r.soon }),
     { people: 0, overdue: 0, soon: 0 })
 
+  // 전체/담당자별 완료 진행률 (현재 주기 기준, 옵션 스코프 반영)
+  const scopeItems = useMemo(
+    () => checklists.filter(c => c.active && (showFrequent || !FREQUENT.includes(c.frequency))),
+    [checklists, showFrequent])
+  const perAssignee = useMemo(() => {
+    const m: Record<string, { total: number; done: number }> = {}
+    scopeItems.forEach(c => {
+      const key = c.assigned_user_id || c.assignee || '__unassigned__'
+      const r = (m[key] ||= { total: 0, done: 0 })
+      r.total++; if (checkDone(c)) r.done++
+    })
+    return m
+  }, [scopeItems])
+  const overall = useMemo(
+    () => scopeItems.reduce((t, c) => ({ total: t.total + 1, done: t.done + (checkDone(c) ? 1 : 0) }), { total: 0, done: 0 }),
+    [scopeItems])
+  const overallPct = overall.total ? Math.round((overall.done / overall.total) * 100) : 0
+
   const dueLabel = (dl: number | null) =>
     dl == null ? '기한 없음' : dl < 0 ? `${Math.abs(dl)}일 지남` : dl === 0 ? '오늘 마감' : `D-${dl}`
 
@@ -77,6 +95,17 @@ export default function StaffWorkloadPage() {
         </label>
       </div>
 
+      {/* 전체 진행률 */}
+      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm mb-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-bold text-gray-900">전체 진행률</span>
+          <span className="text-sm text-gray-500 tabular-nums"><b className="text-green-600">{overall.done}</b> / {overall.total}개 완료 · {overallPct}%</span>
+        </div>
+        <div className="h-3 rounded-full bg-gray-100 overflow-hidden">
+          <div className="h-full rounded-full bg-green-500 transition-all" style={{ width: `${overallPct}%` }} />
+        </div>
+      </div>
+
       {/* 요약 */}
       <div className="grid grid-cols-3 gap-3 mb-5">
         <Kpi label="지연" value={`${totals.overdue}`} color={totals.overdue > 0 ? 'text-red-600' : 'text-gray-900'} icon={<AlertTriangle size={16} className={totals.overdue > 0 ? 'text-red-400' : 'text-gray-300'} />} />
@@ -98,8 +127,21 @@ export default function StaffWorkloadPage() {
                 <button onClick={() => setOpen(isOpen ? null : r.key)} className="w-full text-left p-4 hover:bg-gray-50/60 transition-colors flex items-center gap-3">
                   <div className="w-11 h-11 rounded-full bg-orange-50 text-primary-orange flex items-center justify-center font-bold shrink-0">{r.name.slice(0, 1)}</div>
                   <div className="flex-1 min-w-0">
-                    <span className="font-bold text-gray-900 truncate block">{r.name}</span>
-                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                    {(() => {
+                      const at = perAssignee[r.key]; const pct = at && at.total ? Math.round((at.done / at.total) * 100) : 0
+                      return (
+                        <>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-bold text-gray-900 truncate">{r.name}</span>
+                            <span className="text-[11px] text-gray-400 tabular-nums shrink-0">{at?.done ?? 0}/{at?.total ?? 0} · {pct}%</span>
+                          </div>
+                          <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden my-1.5">
+                            <div className={`h-full rounded-full ${pct >= 100 ? 'bg-green-500' : pct >= 50 ? 'bg-orange-400' : 'bg-red-400'}`} style={{ width: `${pct}%` }} />
+                          </div>
+                        </>
+                      )
+                    })()}
+                    <div className="flex flex-wrap items-center gap-1.5">
                       {r.overdue > 0 && <span className="text-[11px] font-bold text-red-600 bg-red-50 rounded px-1.5 py-0.5">지연 {r.overdue}</span>}
                       {r.soon > 0 && <span className="text-[11px] font-bold text-orange-600 bg-orange-50 rounded px-1.5 py-0.5">임박 {r.soon}</span>}
                     </div>
