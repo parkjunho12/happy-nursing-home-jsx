@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, UserCog, MessageSquare, FileText,
-  Star, Settings, ClipboardList, CalendarDays,
+  Star, Settings, ClipboardList, ClipboardCheck, CalendarDays,
   UserRound, ShieldCheck, Sparkles, FileSearch,
   Image as ImageIcon, Users, BookOpen, PenLine, Megaphone, HeartHandshake, Briefcase, Soup,
   type LucideIcon,
@@ -94,6 +94,7 @@ export function getNavConfig(
           label: '체크리스트',
           badge: todayTodo > 0 ? `${todayTodo}` : undefined,
         },
+        { to: '/eval/workload', icon: ClipboardCheck, label: '담당자별 현황' },
         { to: '/eval/calendar', icon: CalendarDays, label: '평가 캘린더' },
         {
           to: '/eval/residents',
