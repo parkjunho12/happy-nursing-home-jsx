@@ -430,7 +430,16 @@ export default function EvalChecklistPage() {
         <div className="space-y-4">
           {SECTION_DEFS.map(sec => groups[sec.key].length > 0 && (
             <div key={sec.key}>
-              <p className={`text-xs font-semibold mb-1.5 px-0.5 ${sec.cls}`}>{sec.label} · {groups[sec.key].length}</p>
+              {sec.key === 'overdue' ? (
+                <div className="flex items-center gap-2 mb-2 rounded-xl bg-red-50 border border-red-200 px-3 py-2.5 shadow-sm">
+                  <AlertTriangle size={18} className="text-red-500 shrink-0" />
+                  <span className="text-sm font-extrabold text-red-700">긴급 · 기한 지남</span>
+                  <span className="text-[11px] text-red-500">지금 바로 처리가 필요해요</span>
+                  <span className="ml-auto text-xs font-bold text-white bg-red-500 rounded-full px-2.5 py-0.5">{groups.overdue.length}건</span>
+                </div>
+              ) : (
+                <p className={`text-xs font-semibold mb-1.5 px-0.5 ${sec.cls}`}>{sec.label} · {groups[sec.key].length}</p>
+              )}
               <div className="space-y-1.5">
                 {groups[sec.key].map(renderRow)}
               </div>

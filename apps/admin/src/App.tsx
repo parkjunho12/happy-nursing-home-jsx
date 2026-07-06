@@ -32,6 +32,7 @@ import EvalAlbumPage        from './pages/eval/EvalAlbumPage'
 import EvalRecordGuidePage from './pages/eval/EvalRecordGuidePage'
 import BlogAiWriterPage from './pages/eval/BlogAiWriterPage'
 import EvalUsersPage        from './pages/eval/EvalUsersPage'
+import StaffWorkloadPage    from './pages/eval/StaffWorkloadPage'
 import NaverAdsPage         from './pages/admin/NaverAdsPage'
 import NaverAdsKeywordDetailPage from './pages/admin/NaverAdsKeywordDetailPage'
 import VolunteersPage from './pages/admin/VolunteersPage'
@@ -194,6 +195,7 @@ function App() {
             {/* ADMIN 전용 */}
             <Route path="eval/ai-review" element={<AdminRoute><EvalAIReviewPage /></AdminRoute>} />
             <Route path="eval/users"     element={<AdminRoute><EvalUsersPage /></AdminRoute>} />
+            <Route path="eval/workload"  element={<AdminRoute><StaffWorkloadPage /></AdminRoute>} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
