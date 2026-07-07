@@ -317,6 +317,53 @@ def _period_start_dates(freq: str, from_date: date, to_date: date, cfg: Optional
 # 핵심 함수
 # ══════════════════════════════════════════════════════════════════════════════
 
+def reconcile_occurrences(db: Session, item) -> int:
+    """한 항목의 occurrence를 '정규 주기키'로 재정렬하고 중복을 제거한다.
+    (frequency 표기 변화 등으로 옛 키/중복이 생겨 완료가 미완료로 보이는 문제 해결)
+    같은 주기키가 여러 개면 완료 > 지남 > 대기 우선으로 하나만 남긴다. 삭제 수 반환.
+    """
+    occs = db.query(ChecklistOccurrence).filter(
+        ChecklistOccurrence.checklist_item_id == item.id
+    ).all()
+    if len(occs) <= 1:
+        return 0
+
+    freq = canon_freq(item.frequency)
+    if freq not in RECURRING_FREQS and freq != ONE_TIME:
+        return 0
+    cfg = cfg_from_item(item)
+
+    # 1) 정규 키로 재키
+    for o in occs:
+        base_s = (o.scheduled_date or o.due_date or "")[:10]
+        try:
+            base = date.fromisoformat(base_s)
+            ck = get_period_key(freq, base, cfg)
+        except Exception:
+            continue
+        if ck and o.period_key != ck:
+            o.period_key = ck
+        if o.frequency != freq:
+            o.frequency = freq
+
+    # 2) 같은 키 중복 제거 (완료 우선)
+    RANK = {"completed": 0, "overdue": 1, "pending": 2}
+    best: dict = {}
+    deleted = 0
+    for o in occs:
+        k = o.period_key
+        cur = best.get(k)
+        if cur is None:
+            best[k] = o
+            continue
+        if RANK.get(o.status, 3) < RANK.get(cur.status, 3):
+            db.delete(cur); best[k] = o
+        else:
+            db.delete(o)
+        deleted += 1
+    return deleted
+
+
 def get_or_create_occurrence(
     db: Session,
     item: ChecklistItem,

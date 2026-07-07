@@ -115,6 +115,18 @@ def list_checklists(
 
     items = q.order_by(ChecklistItem.created_at).all()
 
+    # occurrence 중복/구식 키 자동 정리 (완료가 미완료로 보이는 문제 방지)
+    try:
+        from app.services.occurrence import reconcile_occurrences
+        changed = 0
+        for it in items:
+            changed += reconcile_occurrences(db, it)
+        if changed:
+            db.commit()
+            items = q.order_by(ChecklistItem.created_at).all()
+    except Exception:
+        db.rollback()
+
     return ApiResponse(
         success=True,
         data=[_cl_to_out(i) for i in items],
@@ -367,7 +379,12 @@ def toggle_complete(
 
     else:
         # ── 반복 주기 ─────────────────────────────────────────────────────
-        # 현재 주기 occurrence 찾기 (없으면 생성)
+        # 옛 키/중복 occurrence 정리 후 현재 주기 occurrence 확보
+        try:
+            from app.services.occurrence import reconcile_occurrences
+            reconcile_occurrences(db, item)
+        except Exception:
+            pass
         occ = get_or_create_occurrence(db, item)
         desired = payload.completed if payload.completed is not None else (occ.status != 'completed')
 
