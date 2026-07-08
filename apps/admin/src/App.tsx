@@ -92,6 +92,15 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+// 일정 캘린더 — 앨범담당 제외 전 직원 접근 가능
+function ScheduleRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, user } = useAuthStore()
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  if (user?.position === '앨범담당') return <Navigate to="/eval/albums" replace />
+  return <>{children}</>
+}
+
+
 // 사회복지사 또는 ADMIN만 접근 가능
 function SocialWorkerRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuthStore()
@@ -176,7 +185,7 @@ function App() {
             <Route path="naver-ads/keyword/:keywordId" element={<AdminRoute><NaverAdsKeywordDetailPage /></AdminRoute>} />
             <Route path="volunteers"               element={<SocialWorkerRoute><VolunteersPage /></SocialWorkerRoute>} />
             <Route path="recruitment"              element={<AdminRoute><RecruitmentPage /></AdminRoute>} />
-            <Route path="schedule"                 element={<AdminRoute><SchedulePage /></AdminRoute>} />
+            <Route path="schedule"                 element={<ScheduleRoute><SchedulePage /></ScheduleRoute>} />
             <Route path="enteral"                  element={<CareInventoryRoute><EnteralPage /></CareInventoryRoute>} />
 
             {/* 평가 관리 — 공통 (role 필터는 백엔드에서) */}
