@@ -11,6 +11,7 @@ from app.api.v1.endpoints.volunteers import public_router as volunteer_public_ro
 from app.api.v1.endpoints.marketing import public_router as marketing_public_router, admin_router as marketing_admin_router
 from app.api.v1.endpoints.recruitment import public_router as recruitment_public_router, admin_router as recruitment_admin_router
 from app.api.v1.endpoints.enteral import router as enteral_router
+from app.api.v1.endpoints.schedule import router as schedule_router
 from app.api.v1.endpoints.albums import admin_router as album_admin_router, family_router as album_family_router
 api_router = APIRouter()
 
@@ -104,3 +105,4 @@ api_router.include_router(marketing_admin_router, prefix="/admin/naver-ads", tag
 api_router.include_router(recruitment_public_router, prefix="/public/recruitment", tags=["recruitment-public"])
 api_router.include_router(recruitment_admin_router, prefix="/admin/recruitment", tags=["recruitment-admin"])
 api_router.include_router(enteral_router, prefix="/admin/enteral", tags=["admin-enteral"])
+api_router.include_router(schedule_router, prefix="/admin/schedule", tags=["admin-schedule"])

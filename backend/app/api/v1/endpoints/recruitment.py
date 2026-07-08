@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
@@ -17,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
-from app.models.recruitment import RecruitmentPost, RecruitmentApplication, now_kst
+from app.models.recruitment import RecruitmentPost, RecruitmentApplication, RecruitmentInterview, now_kst
 from app.schemas.response import ApiResponse
 from app.services.email_service import notify_admins_new_recruitment, recruitment_application_to_dict
 
@@ -270,3 +271,193 @@ def admin_update_application(aid: str, body: AppUpdateBody, db: Session = Depend
     db.commit()
     db.refresh(a)
     return ApiResponse(success=True, data=_app_view(a))
+
+
+# --------------------------------------------------------------------------- #
+# 어드민 — 면접 일정 + 결과 통보 추적
+# --------------------------------------------------------------------------- #
+_KST = timezone(timedelta(hours=9))
+_WD = ["월", "화", "수", "목", "금", "토", "일"]
+NOTIFY_DAYS = 7
+FACILITY_ADDR = "행복한요양원 녹양역점 (경기 양주시 외미로20번길 34)"
+FACILITY_TEL = "031-856-8090"
+
+
+def _parse_dt_kst(v: Optional[str]):
+    if not v:
+        return None
+    try:
+        dt = datetime.fromisoformat(v)
+    except ValueError:
+        try:
+            dt = datetime.strptime(v, "%Y-%m-%d %H:%M")
+        except ValueError:
+            return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_KST)
+    return dt
+
+
+def _kst(dt):
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_KST)
+    return dt.astimezone(_KST)
+
+
+def _interview_message(iv: RecruitmentInterview) -> str:
+    dt = _kst(iv.interview_at)
+    if dt:
+        ampm = "오전" if dt.hour < 12 else "오후"
+        h12 = dt.hour % 12 or 12
+        when = f"{dt.year}년 {dt.month}월 {dt.day}일({_WD[dt.weekday()]}) {ampm} {h12}시 {dt.minute:02d}분"
+    else:
+        when = "(일시 미정)"
+    cat = f"\n▪ 지원 분야: {iv.category}" if iv.category else ""
+    return (
+        f"안녕하세요, {iv.name}님. {FACILITY_ADDR.split(' (')[0]}입니다.\n"
+        f"지원해 주셔서 감사합니다. 아래와 같이 면접 일정을 안내드립니다.\n\n"
+        f"▪ 면접 일시: {when}\n"
+        f"▪ 장소: {iv.location or FACILITY_ADDR}{cat}\n\n"
+        f"방문 시 신분증을 지참해 주세요. 일정 변경이 필요하시면 아래 번호로 연락 부탁드립니다.\n"
+        f"문의: {FACILITY_TEL}"
+    )
+
+
+def _iv_view(iv: RecruitmentInterview) -> dict:
+    at = _kst(iv.interview_at)
+    notify_due = (at + timedelta(days=NOTIFY_DAYS)) if at else None
+    return {
+        "id": iv.id, "application_id": iv.application_id,
+        "name": iv.name, "phone": iv.phone, "category": iv.category,
+        "interview_at": at.isoformat() if at else None,
+        "location": iv.location, "note": iv.note,
+        "status": iv.status, "result": iv.result,
+        "notified": iv.notified,
+        "notified_at": _kst(iv.notified_at).isoformat() if iv.notified_at else None,
+        "notify_due": notify_due.isoformat() if notify_due else None,
+        "memo": iv.memo,
+        "message": _interview_message(iv),
+        "created_at": _kst(iv.created_at).isoformat() if iv.created_at else None,
+    }
+
+
+class InterviewBody(BaseModel):
+    application_id: Optional[str] = None
+    name: str
+    phone: Optional[str] = None
+    category: Optional[str] = None
+    interview_at: str
+    location: Optional[str] = None
+    note: Optional[str] = None
+
+
+@admin_router.get("/interviews")
+def list_interviews(
+    start_date: Optional[str] = Query(None),   # YYYY-MM-DD
+    end_date: Optional[str] = Query(None),
+    notify: Optional[str] = Query(None),        # 'pending' → 결과 통보 대기
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_manager),
+):
+    q = db.query(RecruitmentInterview)
+    if notify == "pending":
+        q = q.filter(RecruitmentInterview.status == "done", RecruitmentInterview.notified == False)  # noqa: E712
+    else:
+        if start_date:
+            sd = _parse_dt_kst(start_date + "T00:00")
+            if sd:
+                q = q.filter(RecruitmentInterview.interview_at >= sd)
+        if end_date:
+            ed = _parse_dt_kst(end_date + "T23:59")
+            if ed:
+                q = q.filter(RecruitmentInterview.interview_at <= ed)
+    rows = q.order_by(RecruitmentInterview.interview_at.asc()).all()
+    return ApiResponse(success=True, data=[_iv_view(i) for i in rows])
+
+
+@admin_router.post("/interviews")
+def create_interview(body: InterviewBody, db: Session = Depends(get_db),
+                     current_user: User = Depends(_require_manager)):
+    if not body.name.strip():
+        raise HTTPException(status_code=400, detail="이름을 입력해주세요.")
+    at = _parse_dt_kst(body.interview_at)
+    if not at:
+        raise HTTPException(status_code=400, detail="면접 일시 형식이 올바르지 않습니다.")
+    iv = RecruitmentInterview(
+        application_id=body.application_id, name=body.name.strip(),
+        phone=(body.phone or "").strip() or None, category=body.category,
+        interview_at=at, location=body.location, note=body.note,
+        status="scheduled", created_by=getattr(current_user, "name", None),
+    )
+    db.add(iv); db.commit(); db.refresh(iv)
+    # 지원자와 연결됐으면 지원서 상태를 '면접예정'으로
+    if body.application_id:
+        app = db.query(RecruitmentApplication).filter(RecruitmentApplication.id == body.application_id).first()
+        if app and app.status in ("접수", "검토중"):
+            app.status = "면접예정"; db.commit()
+    return ApiResponse(success=True, data=_iv_view(iv))
+
+
+class InterviewUpdate(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    category: Optional[str] = None
+    interview_at: Optional[str] = None
+    location: Optional[str] = None
+    note: Optional[str] = None
+    status: Optional[str] = None        # scheduled/done/canceled/no_show
+    result: Optional[str] = None        # pass/fail/hold
+    notified: Optional[bool] = None
+    memo: Optional[str] = None
+
+
+@admin_router.patch("/interviews/{iid}")
+def update_interview(iid: str, body: InterviewUpdate, db: Session = Depends(get_db),
+                     current_user: User = Depends(_require_manager)):
+    iv = db.query(RecruitmentInterview).filter(RecruitmentInterview.id == iid).first()
+    if not iv:
+        raise HTTPException(status_code=404, detail="면접 일정을 찾을 수 없습니다.")
+    if body.name is not None and body.name.strip():
+        iv.name = body.name.strip()
+    if body.phone is not None:
+        iv.phone = body.phone.strip() or None
+    if body.category is not None:
+        iv.category = body.category
+    if body.interview_at is not None:
+        at = _parse_dt_kst(body.interview_at)
+        if at:
+            iv.interview_at = at
+    if body.location is not None:
+        iv.location = body.location
+    if body.note is not None:
+        iv.note = body.note
+    if body.status is not None:
+        iv.status = body.status
+    if body.result is not None:
+        iv.result = body.result
+    if body.memo is not None:
+        iv.memo = body.memo
+    if body.notified is not None:
+        iv.notified = bool(body.notified)
+        iv.notified_at = now_kst() if body.notified else None
+    iv.updated_at = now_kst()
+    db.commit(); db.refresh(iv)
+    # 결과 확정 시 지원서 상태 반영
+    if body.result and iv.application_id:
+        app = db.query(RecruitmentApplication).filter(RecruitmentApplication.id == iv.application_id).first()
+        if app:
+            app.status = "합격" if body.result == "pass" else ("불합격" if body.result == "fail" else app.status)
+            db.commit()
+    return ApiResponse(success=True, data=_iv_view(iv))
+
+
+@admin_router.delete("/interviews/{iid}")
+def delete_interview(iid: str, db: Session = Depends(get_db),
+                     current_user: User = Depends(_require_manager)):
+    iv = db.query(RecruitmentInterview).filter(RecruitmentInterview.id == iid).first()
+    if not iv:
+        raise HTTPException(status_code=404, detail="면접 일정을 찾을 수 없습니다.")
+    db.delete(iv); db.commit()
+    return ApiResponse(success=True, message="삭제되었습니다.")

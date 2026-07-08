@@ -84,6 +84,7 @@ export function getNavConfig(
         { to: '/naver-ads', icon: Megaphone, label: '네이버 광고 관리' },
         { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
         { to: '/recruitment', icon: Briefcase, label: '채용 관리' },
+        { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
         { to: '/enteral', icon: Soup, label: '경관식 관리' },
         { to: '/settings', icon: Settings, label: '설정' },
       ],

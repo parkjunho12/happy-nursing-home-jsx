@@ -52,3 +52,25 @@ class RecruitmentApplication(Base):
     admin_memo         = Column(Text, nullable=True)
     created_at         = Column(DateTime(timezone=True), default=now_kst)
     updated_at         = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)
+
+
+class RecruitmentInterview(Base):
+    """채용 면접 일정 + 결과 통보 추적 (전화 문의 포함, 지원서와 선택적 연결)"""
+    __tablename__ = "recruitment_interviews"
+
+    id             = Column(String, primary_key=True, default=_uuid)
+    application_id = Column(String, nullable=True)   # recruitment_applications.id (선택)
+    name           = Column(String, nullable=False)
+    phone          = Column(String, nullable=True)
+    category       = Column(String, nullable=True)   # 지원 분야
+    interview_at   = Column(DateTime(timezone=True), nullable=False, index=True)  # 면접 일시(KST)
+    location       = Column(String, nullable=True)
+    note           = Column(Text, nullable=True)
+    status         = Column(String, default="scheduled", nullable=False, index=True)  # scheduled/done/canceled/no_show
+    result         = Column(String, nullable=True)   # pass/fail/hold
+    notified       = Column(Boolean, default=False, nullable=False)  # 결과 통보 완료 여부
+    notified_at    = Column(DateTime(timezone=True), nullable=True)
+    memo           = Column(Text, nullable=True)
+    created_by     = Column(String, nullable=True)
+    created_at     = Column(DateTime(timezone=True), default=now_kst)
+    updated_at     = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)
