@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   CalendarDays, Plus, ChevronLeft, ChevronRight, X, Trash2, MapPin,
-  Phone, Clock, Briefcase, Loader2,
+  Phone, Clock, Briefcase, Loader2, Grid3x3, Columns3, List,
 } from 'lucide-react'
 import {
   scheduleAPI, SCHEDULE_CATEGORIES, type ScheduleEvent, type EventInput,
@@ -17,6 +17,7 @@ const hmOf = (iso?: string | null) => {
   const d = new Date(iso)
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`
 }
+const startOfWeek = (d: Date) => { const x = new Date(d); x.setDate(x.getDate() - x.getDay()); x.setHours(0, 0, 0, 0); return x }
 
 /* 카테고리 색상 */
 type CatKey = '방문상담' | '외부방문' | '회의' | '행사' | '기타' | '면접'
@@ -50,7 +51,8 @@ const WEEK = ['일', '월', '화', '수', '목', '금', '토']
 
 export default function SchedulePage() {
   const navigate = useNavigate()
-  const [cursor, setCursor] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1) })
+  const [cursor, setCursor] = useState(() => new Date())
+  const [view, setView] = useState<'month' | 'week' | 'agenda'>('month')
   const [events, setEvents] = useState<ScheduleEvent[]>([])
   const [interviews, setInterviews] = useState<Interview[]>([])
   const [loading, setLoading] = useState(true)
@@ -60,20 +62,27 @@ export default function SchedulePage() {
   const [detail, setDetail] = useState<UEvent | null>(null)
 
   const y = cursor.getFullYear(), m = cursor.getMonth()
-  const monthStart = ymd(new Date(y, m, 1))
-  const monthEnd = ymd(new Date(y, m + 1, 0))
+
+  const range = useMemo(() => {
+    if (view === 'week') {
+      const s = startOfWeek(cursor)
+      const e = new Date(s); e.setDate(e.getDate() + 6)
+      return { start: s, end: e }
+    }
+    return { start: new Date(y, m, 1), end: new Date(y, m + 1, 0) }
+  }, [view, cursor, y, m])
+  const rangeStart = ymd(range.start), rangeEnd = ymd(range.end)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
       const [ev, iv] = await Promise.all([
-        scheduleAPI.events({ start_date: monthStart, end_date: monthEnd }).catch(() => [] as ScheduleEvent[]),
-        recruitmentAPI.interviews({ start_date: monthStart, end_date: monthEnd }).catch(() => [] as Interview[]),
+        scheduleAPI.events({ start_date: rangeStart, end_date: rangeEnd }).catch(() => [] as ScheduleEvent[]),
+        recruitmentAPI.interviews({ start_date: rangeStart, end_date: rangeEnd }).catch(() => [] as Interview[]),
       ])
       setEvents(ev); setInterviews(iv)
     } finally { setLoading(false) }
-  }, [monthStart, monthEnd])
-
+  }, [rangeStart, rangeEnd])
   useEffect(() => { load() }, [load])
 
   const unified: UEvent[] = useMemo(() => {
@@ -100,16 +109,21 @@ export default function SchedulePage() {
     return out.sort((a, b) => (a.start! < b.start! ? -1 : 1))
   }, [events, interviews])
 
+  const shown = useMemo(() => unified.filter(u => active.has(u.category)), [unified, active])
+
   const byDay = useMemo(() => {
     const map: Record<string, UEvent[]> = {}
-    for (const u of unified) {
-      if (!active.has(u.category)) continue
-      ;(map[u.dateKey] ??= []).push(u)
-    }
+    for (const u of shown) (map[u.dateKey] ??= []).push(u)
     return map
-  }, [unified, active])
+  }, [shown])
 
-  /* 달력 그리드 */
+  const catCounts = useMemo(() => {
+    const c = {} as Record<CatKey, number>
+    for (const u of unified) c[u.category] = (c[u.category] ?? 0) + 1
+    return c
+  }, [unified])
+
+  /* 월 그리드 */
   const firstDow = new Date(y, m, 1).getDay()
   const daysIn = new Date(y, m + 1, 0).getDate()
   const cells: (number | null)[] = [
@@ -117,20 +131,43 @@ export default function SchedulePage() {
     ...Array.from({ length: daysIn }, (_, i) => i + 1),
   ]
   while (cells.length % 7 !== 0) cells.push(null)
+
+  /* 주 그리드 */
+  const weekDays = useMemo(() => {
+    const s = startOfWeek(cursor)
+    return Array.from({ length: 7 }, (_, i) => { const d = new Date(s); d.setDate(d.getDate() + i); return d })
+  }, [cursor])
+
+  /* 아젠다 그룹 */
+  const groups = useMemo(() => {
+    const map = new Map<string, UEvent[]>()
+    for (const u of shown) { if (!map.has(u.dateKey)) map.set(u.dateKey, []); map.get(u.dateKey)!.push(u) }
+    return [...map.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))
+  }, [shown])
+
   const todayKey = ymd(new Date())
+  const tomorrowKey = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return ymd(d) })()
+  const relBadge = (dk: string) => (dk === todayKey ? '오늘' : dk === tomorrowKey ? '내일' : null)
 
-  const toggleCat = (c: CatKey) => setActive(prev => {
-    const n = new Set(prev)
-    n.has(c) ? n.delete(c) : n.add(c)
-    return n
+  const go = (dir: number) => setCursor(prev => {
+    const d = new Date(prev)
+    if (view === 'week') d.setDate(d.getDate() + dir * 7)
+    else d.setMonth(d.getMonth() + dir)
+    return d
   })
+  const goToday = () => setCursor(new Date())
 
+  const title = view === 'week'
+    ? `${range.start.getMonth() + 1}.${range.start.getDate()} ~ ${range.end.getMonth() + 1}.${range.end.getDate()}`
+    : `${y}년 ${m + 1}월`
+
+  const toggleCat = (c: CatKey) => setActive(prev => { const n = new Set(prev); n.has(c) ? n.delete(c) : n.add(c); return n })
   const openAdd = (dateKey?: string) => { setAddDate(dateKey ?? null); setAddOpen(true) }
 
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto">
       {/* 헤더 */}
-      <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div className="flex items-center gap-2.5">
           <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center">
             <CalendarDays className="w-5 h-5 text-violet-600" />
@@ -145,84 +182,151 @@ export default function SchedulePage() {
         </button>
       </div>
 
-      {/* 범례/필터 */}
-      <div className="flex flex-wrap items-center gap-2 mb-4">
+      {/* 컨트롤 바: 뷰 토글 + 네비 */}
+      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+        <div className="inline-flex bg-gray-100 rounded-xl p-1">
+          {([['month', '월', Grid3x3], ['week', '주', Columns3], ['agenda', '목록', List]] as const).map(([v, label, Icon]) => (
+            <button key={v} onClick={() => setView(v)}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all ${view === v ? 'bg-white text-violet-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+              <Icon className="w-4 h-4" /> {label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button onClick={() => go(-1)} className="w-9 h-9 rounded-lg hover:bg-gray-100 flex items-center justify-center"><ChevronLeft className="w-5 h-5 text-gray-500" /></button>
+          <div className="text-base font-bold text-gray-900 min-w-[8rem] text-center flex items-center justify-center gap-2">
+            {title}
+            {loading && <Loader2 className="w-4 h-4 animate-spin text-violet-400" />}
+          </div>
+          <button onClick={() => go(1)} className="w-9 h-9 rounded-lg hover:bg-gray-100 flex items-center justify-center"><ChevronRight className="w-5 h-5 text-gray-500" /></button>
+          <button onClick={goToday} className="ml-1 px-3 py-1.5 text-xs font-semibold text-violet-600 hover:bg-violet-50 rounded-lg border border-violet-100">오늘</button>
+        </div>
+      </div>
+
+      {/* 범례/필터 (건수 포함) */}
+      <div className="flex flex-wrap items-center gap-1.5 mb-4">
         {ALL_CATS.map(c => {
           const on = active.has(c)
+          const n = catCounts[c] ?? 0
           return (
             <button key={c} onClick={() => toggleCat(c)}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold transition-all ${on ? CAT[c].chip : 'bg-white text-gray-300 border-gray-100'}`}>
               <span className={`w-2 h-2 rounded-full ${on ? CAT[c].dot : 'bg-gray-200'}`} />
-              {c}
+              {c}{n > 0 && <span className="opacity-70">{n}</span>}
             </button>
           )
         })}
       </div>
 
-      {/* 월 네비 */}
-      <div className="flex items-center justify-center gap-4 mb-3">
-        <button onClick={() => setCursor(new Date(y, m - 1, 1))} className="w-9 h-9 rounded-lg hover:bg-gray-100 flex items-center justify-center"><ChevronLeft className="w-5 h-5 text-gray-500" /></button>
-        <div className="text-lg font-bold text-gray-900 w-40 text-center flex items-center justify-center gap-2">
-          {y}년 {m + 1}월
-          {loading && <Loader2 className="w-4 h-4 animate-spin text-violet-400" />}
+      {/* ── 월 뷰 ── */}
+      {view === 'month' && (
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+          <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50/50">
+            {WEEK.map((w, i) => (
+              <div key={w} className={`py-2.5 text-center text-xs font-bold ${i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-400' : 'text-gray-400'}`}>{w}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7">
+            {cells.map((day, i) => {
+              const dow = i % 7
+              const weekendBg = dow === 0 || dow === 6
+              if (day === null) return <div key={i} className={`min-h-[116px] border-b border-r border-gray-50 ${weekendBg ? 'bg-gray-50/40' : 'bg-gray-50/20'}`} />
+              const dk = ymd(new Date(y, m, day))
+              const items = byDay[dk] ?? []
+              const isToday = dk === todayKey
+              return (
+                <div key={i} onClick={() => openAdd(dk)}
+                  className={`group min-h-[116px] border-b border-r border-gray-50 p-1.5 transition-colors cursor-pointer flex flex-col gap-1 ${isToday ? 'bg-violet-50/60' : weekendBg ? 'bg-gray-50/30 hover:bg-violet-50/30' : 'hover:bg-violet-50/30'}`}>
+                  <div className="flex items-center justify-between">
+                    <span className={`text-xs font-bold ${isToday ? 'w-5 h-5 rounded-full bg-violet-600 text-white flex items-center justify-center' : dow === 0 ? 'text-red-400' : dow === 6 ? 'text-blue-400' : 'text-gray-500'}`}>{day}</span>
+                    <Plus className="w-3.5 h-3.5 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    {items.slice(0, 3).map(u => (
+                      <button key={u.key} onClick={(e) => { e.stopPropagation(); setDetail(u) }}
+                        className={`flex items-center gap-1 text-left text-[11px] leading-tight px-1.5 py-1 rounded-md border-l-2 ${CAT[u.category].bar} hover:brightness-95 transition`}>
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${CAT[u.category].dot}`} />
+                        <span className="font-bold shrink-0">{u.time}</span>
+                        <span className="truncate">{u.title}</span>
+                      </button>
+                    ))}
+                    {items.length > 3 && (
+                      <button onClick={(e) => { e.stopPropagation(); setCursor(new Date(y, m, day)); setView('agenda') }}
+                        className="text-[10px] font-semibold text-violet-500 hover:text-violet-700 pl-1 text-left">+{items.length - 3}건 더보기</button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
-        <button onClick={() => setCursor(new Date(y, m + 1, 1))} className="w-9 h-9 rounded-lg hover:bg-gray-100 flex items-center justify-center"><ChevronRight className="w-5 h-5 text-gray-500" /></button>
-        <button onClick={() => setCursor(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1) })} className="ml-2 px-3 py-1.5 text-xs font-semibold text-violet-600 hover:bg-violet-50 rounded-lg">오늘</button>
-      </div>
+      )}
 
-      {/* 달력 */}
-      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
-        <div className="grid grid-cols-7 border-b border-gray-100">
-          {WEEK.map((w, i) => (
-            <div key={w} className={`py-2.5 text-center text-xs font-bold ${i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-400' : 'text-gray-400'}`}>{w}</div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7">
-          {cells.map((day, i) => {
-            if (day === null) return <div key={i} className="min-h-[92px] border-b border-r border-gray-50 bg-gray-50/30" />
-            const dk = ymd(new Date(y, m, day))
+      {/* ── 주 뷰 ── */}
+      {view === 'week' && (
+        <div className="grid grid-cols-7 gap-2">
+          {weekDays.map((d, i) => {
+            const dk = ymd(d)
             const items = byDay[dk] ?? []
             const isToday = dk === todayKey
-            const dow = i % 7
             return (
-              <div key={i} onClick={() => openAdd(dk)}
-                className="min-h-[92px] border-b border-r border-gray-50 p-1.5 hover:bg-violet-50/30 transition-colors cursor-pointer flex flex-col gap-1">
-                <div className={`text-xs font-semibold ${isToday ? 'w-5 h-5 rounded-full bg-violet-600 text-white flex items-center justify-center' : dow === 0 ? 'text-red-400' : dow === 6 ? 'text-blue-400' : 'text-gray-500'}`}>{day}</div>
-                <div className="flex flex-col gap-0.5">
-                  {items.slice(0, 3).map(u => (
-                    <button key={u.key} onClick={(e) => { e.stopPropagation(); setDetail(u) }}
-                      className={`text-left text-[11px] leading-tight px-1.5 py-0.5 rounded border-l-2 truncate ${CAT[u.category].bar} hover:brightness-95`}>
-                      <span className="font-semibold">{u.time}</span> {u.title}
+              <div key={i} className={`rounded-xl border overflow-hidden flex flex-col ${isToday ? 'border-violet-300 bg-violet-50/40' : 'border-gray-100 bg-white'}`}>
+                <button onClick={() => openAdd(dk)} className={`px-2 py-2 text-center border-b hover:bg-violet-50/50 ${isToday ? 'border-violet-200' : 'border-gray-50'}`}>
+                  <div className={`text-[11px] font-bold ${i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-400' : 'text-gray-400'}`}>{WEEK[i]}</div>
+                  <div className={`text-sm font-bold ${isToday ? 'text-violet-700' : 'text-gray-700'}`}>{d.getDate()}</div>
+                </button>
+                <div className="p-1.5 flex flex-col gap-1 min-h-[240px]">
+                  {items.map(u => (
+                    <button key={u.key} onClick={() => setDetail(u)}
+                      className={`text-left text-[11px] leading-tight px-1.5 py-1.5 rounded-md border-l-2 ${CAT[u.category].bar} hover:brightness-95`}>
+                      <div className="flex items-center gap-1"><span className={`w-1.5 h-1.5 rounded-full shrink-0 ${CAT[u.category].dot}`} /><span className="font-bold">{u.time}</span></div>
+                      <div className="truncate mt-0.5 font-medium text-gray-700">{u.title}</div>
                     </button>
                   ))}
-                  {items.length > 3 && <span className="text-[10px] text-gray-400 pl-1">+{items.length - 3}건</span>}
+                  {items.length === 0 && <div className="text-[10px] text-gray-300 text-center pt-3">·</div>}
                 </div>
               </div>
             )
           })}
         </div>
-      </div>
+      )}
 
-      {/* 이번 달 목록 */}
-      <div className="mt-6">
-        <h2 className="text-sm font-bold text-gray-700 mb-2">이번 달 일정 ({unified.filter(u => active.has(u.category)).length}건)</h2>
-        <div className="space-y-1.5">
-          {unified.filter(u => active.has(u.category)).map(u => (
-            <button key={u.key} onClick={() => setDetail(u)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border-l-4 ${CAT[u.category].bar} border border-gray-100 hover:shadow-sm transition-all text-left`}>
-              <div className="text-xs font-bold text-gray-500 w-24 shrink-0">{u.dateKey.slice(5)} {u.time}</div>
-              <span className={`text-[11px] px-2 py-0.5 rounded-full border font-semibold shrink-0 ${CAT[u.category].chip}`}>{u.category}</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-800 truncate">{u.title}</p>
-                {u.location && <p className="text-xs text-gray-400 truncate">📍 {u.location}</p>}
+      {/* ── 목록(아젠다) 뷰 ── */}
+      {view === 'agenda' && (
+        <div className="space-y-4">
+          {groups.map(([dk, items]) => {
+            const d = new Date(dk + 'T00:00:00')
+            const rb = relBadge(dk)
+            const dow = d.getDay()
+            return (
+              <div key={dk}>
+                <div className="flex items-center gap-2 mb-1.5 py-1">
+                  <span className="text-sm font-bold text-gray-800">{d.getMonth() + 1}월 {d.getDate()}일</span>
+                  <span className={`text-xs font-semibold ${dow === 0 ? 'text-red-400' : dow === 6 ? 'text-blue-400' : 'text-gray-400'}`}>({WEEK[dow]})</span>
+                  {rb && <span className="text-[11px] font-bold text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full">{rb}</span>}
+                  <span className="text-xs text-gray-300 ml-auto">{items.length}건</span>
+                </div>
+                <div className="space-y-1.5">
+                  {items.map(u => (
+                    <button key={u.key} onClick={() => setDetail(u)}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border-l-4 ${CAT[u.category].bar} border border-gray-100 hover:shadow-sm transition-all text-left`}>
+                      <div className="text-sm font-bold text-gray-600 w-14 shrink-0">{u.time}</div>
+                      <span className={`text-[11px] px-2 py-0.5 rounded-full border font-semibold shrink-0 ${CAT[u.category].chip}`}>{u.category}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 truncate">{u.title}</p>
+                        {u.location && <p className="text-xs text-gray-400 truncate">📍 {u.location}</p>}
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </button>
-          ))}
-          {!loading && unified.filter(u => active.has(u.category)).length === 0 && (
-            <div className="text-center py-10 text-sm text-gray-400">등록된 일정이 없습니다.</div>
+            )
+          })}
+          {!loading && groups.length === 0 && (
+            <div className="text-center py-16 text-sm text-gray-400">이 기간에 등록된 일정이 없습니다.</div>
           )}
         </div>
-      </div>
+      )}
 
       {addOpen && <AddModal presetDate={addDate} onClose={() => setAddOpen(false)} onSaved={() => { setAddOpen(false); load() }} />}
       {detail && <DetailModal ev={detail} onClose={() => setDetail(null)} onChanged={() => { setDetail(null); load() }} onGoRecruit={() => navigate('/recruitment')} />}

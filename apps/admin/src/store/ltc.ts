@@ -179,6 +179,7 @@ function clPayload(item: Omit<ChecklistItem,'id'|'createdAt'|'completionHistory'
     memo:item.memo, attachment_name:item.attachmentName,
     person_id:item.personId, person_name:item.personName,
     person_type:item.personType, template_id:item.templateId,
+    due_date:(item as any).dueDate || null,
   }
 }
 
@@ -296,6 +297,7 @@ export const useLtcStore = create<LtcState>((set, get) => ({
     if (u.title !== undefined)            p.title             = u.title
     if (u.description !== undefined)      p.description       = u.description
     if (u.frequency !== undefined)        p.frequency         = u.frequency
+    if ((u as any).dueDate !== undefined) p.due_date          = (u as any).dueDate || null
     if (u.relatedDomainId !== undefined)  p.related_domain_id = u.relatedDomainId
     if (u.relatedCategoryId !== undefined)p.related_category_id = u.relatedCategoryId
     if (u.relatedIndicatorId !== undefined) p.related_indicator_id = u.relatedIndicatorId
