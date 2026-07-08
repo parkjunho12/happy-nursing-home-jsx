@@ -12,6 +12,7 @@ from app.api.v1.endpoints.marketing import public_router as marketing_public_rou
 from app.api.v1.endpoints.recruitment import public_router as recruitment_public_router, admin_router as recruitment_admin_router
 from app.api.v1.endpoints.enteral import router as enteral_router
 from app.api.v1.endpoints.schedule import router as schedule_router
+from app.api.v1.endpoints.expense import router as expense_router
 from app.api.v1.endpoints.albums import admin_router as album_admin_router, family_router as album_family_router
 api_router = APIRouter()
 
@@ -106,3 +107,4 @@ api_router.include_router(recruitment_public_router, prefix="/public/recruitment
 api_router.include_router(recruitment_admin_router, prefix="/admin/recruitment", tags=["recruitment-admin"])
 api_router.include_router(enteral_router, prefix="/admin/enteral", tags=["admin-enteral"])
 api_router.include_router(schedule_router, prefix="/admin/schedule", tags=["admin-schedule"])
+api_router.include_router(expense_router, prefix="/admin/expense", tags=["admin-expense"])

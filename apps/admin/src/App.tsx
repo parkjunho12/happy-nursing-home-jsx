@@ -38,6 +38,7 @@ import NaverAdsKeywordDetailPage from './pages/admin/NaverAdsKeywordDetailPage'
 import VolunteersPage from './pages/admin/VolunteersPage'
 import RecruitmentPage from './pages/admin/RecruitmentPage'
 import SchedulePage from './pages/admin/SchedulePage'
+import ExpensePage from './pages/admin/ExpensePage'
 import EnteralPage from './pages/admin/EnteralPage'
 import FamilyLoginPage      from './pages/family/FamilyLoginPage'
 import FamilyAlbumsPage     from './pages/family/FamilyAlbumsPage'
@@ -94,6 +95,14 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 
 // 일정 캘린더 — 앨범담당 제외 전 직원 접근 가능
 function ScheduleRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, user } = useAuthStore()
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  if (user?.position === '앨범담당') return <Navigate to="/eval/albums" replace />
+  return <>{children}</>
+}
+
+// 지출결의 — 앨범담당 제외 전 직원 접근 가능
+function ExpenseRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
   if (user?.position === '앨범담당') return <Navigate to="/eval/albums" replace />
@@ -186,6 +195,7 @@ function App() {
             <Route path="volunteers"               element={<SocialWorkerRoute><VolunteersPage /></SocialWorkerRoute>} />
             <Route path="recruitment"              element={<AdminRoute><RecruitmentPage /></AdminRoute>} />
             <Route path="schedule"                 element={<ScheduleRoute><SchedulePage /></ScheduleRoute>} />
+            <Route path="expense"                  element={<ExpenseRoute><ExpensePage /></ExpenseRoute>} />
             <Route path="enteral"                  element={<CareInventoryRoute><EnteralPage /></CareInventoryRoute>} />
 
             {/* 평가 관리 — 공통 (role 필터는 백엔드에서) */}
