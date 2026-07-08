@@ -21,14 +21,13 @@ router = APIRouter()
 
 _KST = timezone(timedelta(hours=9))
 CATEGORIES = ["방문상담", "외부방문", "회의", "행사", "기타"]
-ALLOWED_POSITIONS = {"사회복지사", "시설장", "대표", "이사"}
 
 
 def _require_manager(current_user: User = Depends(get_current_user)) -> User:
-    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    """일정 캘린더는 앨범담당을 제외한 모든 직원이 사용 가능."""
     pos = getattr(current_user, "position", None)
     pos = pos.value if hasattr(pos, "value") else str(pos or "")
-    if role != "ADMIN" and pos not in ALLOWED_POSITIONS:
+    if pos == "앨범담당":
         raise HTTPException(status_code=403, detail="권한이 없습니다.")
     return current_user
 

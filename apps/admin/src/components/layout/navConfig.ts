@@ -67,6 +67,7 @@ export function getNavConfig(
           badge: todayTodo > 0 ? `${todayTodo}` : undefined,
         },
         { to: '/eval/calendar', icon: CalendarDays, label: '체크 캘린더' },
+        { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
         { to: '/eval/albums', icon: ImageIcon, label: '보호자 앨범 관리' },
       ],
     }
@@ -124,6 +125,7 @@ export function getNavConfig(
     showDashboard: true,
     main: [
       { to: '/contacts', icon: MessageSquare, label: '상담 관리' },
+      { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
       ...(isSocialWorker
         ? [{ to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' }]
         : []),
