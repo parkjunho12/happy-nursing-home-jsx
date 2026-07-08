@@ -163,6 +163,7 @@ def create_checklist(
         recur_week_of_month=payload.recur_week_of_month,
         recur_day=payload.recur_day,
         recur_due_day=payload.recur_due_day,
+        due_date=payload.due_date,
         active=True, completed=False,
     )
 
@@ -220,6 +221,7 @@ def create_checklists_bulk(
             recur_week_of_month=payload.recur_week_of_month,
             recur_day=payload.recur_day,
             recur_due_day=payload.recur_due_day,
+            due_date=payload.due_date,
             active=True, completed=False,
         )
         db.add(item)

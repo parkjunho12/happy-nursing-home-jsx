@@ -149,6 +149,7 @@ class ChecklistItem(Base):
     recur_week_of_month = Column(Integer, nullable=True)  # 1~5 (5=마지막 주) (monthly_nth_dow)
     recur_day           = Column(Integer, nullable=True)  # 1~31 생성일 (monthly_day)
     recur_due_day       = Column(Integer, nullable=True)  # 1~31 기한일 (monthly_day)
+    due_date            = Column(String(20), nullable=True)  # one_time 기한 날짜(YYYY-MM-DD)
     evidence_required = Column(Text, default="")
     storage_location = Column(String(200), default="")
     how_to = Column(Text, default="")
