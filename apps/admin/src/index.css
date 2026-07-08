@@ -41,3 +41,9 @@
     @apply bg-background text-foreground antialiased;
   }
 }
+
+@layer components {
+  .inp {
+    @apply w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-400;
+  }
+}

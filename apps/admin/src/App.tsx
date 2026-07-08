@@ -37,6 +37,7 @@ import NaverAdsPage         from './pages/admin/NaverAdsPage'
 import NaverAdsKeywordDetailPage from './pages/admin/NaverAdsKeywordDetailPage'
 import VolunteersPage from './pages/admin/VolunteersPage'
 import RecruitmentPage from './pages/admin/RecruitmentPage'
+import SchedulePage from './pages/admin/SchedulePage'
 import EnteralPage from './pages/admin/EnteralPage'
 import FamilyLoginPage      from './pages/family/FamilyLoginPage'
 import FamilyAlbumsPage     from './pages/family/FamilyAlbumsPage'
@@ -175,6 +176,7 @@ function App() {
             <Route path="naver-ads/keyword/:keywordId" element={<AdminRoute><NaverAdsKeywordDetailPage /></AdminRoute>} />
             <Route path="volunteers"               element={<SocialWorkerRoute><VolunteersPage /></SocialWorkerRoute>} />
             <Route path="recruitment"              element={<AdminRoute><RecruitmentPage /></AdminRoute>} />
+            <Route path="schedule"                 element={<AdminRoute><SchedulePage /></AdminRoute>} />
             <Route path="enteral"                  element={<CareInventoryRoute><EnteralPage /></CareInventoryRoute>} />
 
             {/* 평가 관리 — 공통 (role 필터는 백엔드에서) */}

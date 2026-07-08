@@ -81,7 +81,10 @@ from app.models.volunteer import VolunteerApplication
 from app.models.marketing import MarketingCtaEvent
 
 # Recruitment (채용)
-from app.models.recruitment import RecruitmentPost, RecruitmentApplication
+from app.models.recruitment import RecruitmentPost, RecruitmentApplication, RecruitmentInterview
+
+# 통합 일정
+from app.models.schedule import ScheduleEvent
 
 # 경관식 재고
 from app.models.enteral import EnteralProduct, EnteralTransaction

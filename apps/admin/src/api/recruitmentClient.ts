@@ -57,4 +57,42 @@ export const recruitmentAPI = {
   getApplication: (id: string) => apiClient.get(`${BASE}/applications/${id}`).then(unwrap<RecruitmentApplication>),
   updateApplication: (id: string, body: { status?: string; admin_memo?: string }) =>
     apiClient.patch(`${BASE}/applications/${id}`, body).then(unwrap<RecruitmentApplication>),
+
+  // 면접 일정
+  interviews: (params?: { start_date?: string; end_date?: string; notify?: string }) =>
+    apiClient.get(`${BASE}/interviews`, { params: params ?? {} }).then(unwrap<Interview[]>),
+  createInterview: (body: InterviewInput) => apiClient.post(`${BASE}/interviews`, body).then(unwrap<Interview>),
+  updateInterview: (id: string, body: Partial<InterviewInput> & { status?: string; result?: string; notified?: boolean; memo?: string }) =>
+    apiClient.patch(`${BASE}/interviews/${id}`, body).then(unwrap<Interview>),
+  deleteInterview: (id: string) => apiClient.delete(`${BASE}/interviews/${id}`).then(r => r.data),
+}
+
+export type IvStatus = 'scheduled' | 'done' | 'canceled' | 'no_show'
+export type IvResult = 'pass' | 'fail' | 'hold'
+export interface Interview {
+  id: string
+  application_id?: string | null
+  name: string
+  phone?: string | null
+  category?: string | null
+  interview_at?: string | null
+  location?: string | null
+  note?: string | null
+  status: IvStatus
+  result?: IvResult | null
+  notified: boolean
+  notified_at?: string | null
+  notify_due?: string | null
+  memo?: string | null
+  message: string
+  created_at?: string | null
+}
+export interface InterviewInput {
+  application_id?: string | null
+  name: string
+  phone?: string | null
+  category?: string | null
+  interview_at: string
+  location?: string | null
+  note?: string | null
 }
