@@ -2,7 +2,7 @@ import {
   LayoutDashboard, UserCog, MessageSquare, FileText,
   Star, Settings, ClipboardList, ClipboardCheck, CalendarDays,
   UserRound, ShieldCheck, Sparkles, FileSearch,
-  Image as ImageIcon, Users, BookOpen, PenLine, Megaphone, HeartHandshake, Briefcase, Soup,
+  Image as ImageIcon, Users, BookOpen, PenLine, Megaphone, HeartHandshake, Briefcase, Soup, Receipt,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -68,6 +68,7 @@ export function getNavConfig(
         },
         { to: '/eval/calendar', icon: CalendarDays, label: '체크 캘린더' },
         { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
+        { to: '/expense', icon: Receipt, label: '지출결의' },
         { to: '/eval/albums', icon: ImageIcon, label: '보호자 앨범 관리' },
       ],
     }
@@ -86,6 +87,7 @@ export function getNavConfig(
         { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
         { to: '/recruitment', icon: Briefcase, label: '채용 관리' },
         { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
+        { to: '/expense', icon: Receipt, label: '지출결의' },
         { to: '/enteral', icon: Soup, label: '경관식 관리' },
         { to: '/settings', icon: Settings, label: '설정' },
       ],
@@ -126,6 +128,7 @@ export function getNavConfig(
     main: [
       { to: '/contacts', icon: MessageSquare, label: '상담 관리' },
       { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
+      { to: '/expense', icon: Receipt, label: '지출결의' },
       ...(isSocialWorker
         ? [{ to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' }]
         : []),
