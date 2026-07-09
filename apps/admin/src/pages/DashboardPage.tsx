@@ -3,9 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import {
   Users, UserCog, MessageSquare, TrendingUp, Calendar,
   AlertTriangle, CheckCircle2, Clock, ChevronRight,
-  LogIn, LogOut, UserPlus, UserMinus, ClipboardList, Sparkles,
+  LogIn, LogOut, UserPlus, UserMinus, ClipboardList,
+  Receipt, Image as ImageIcon, Inbox, Megaphone,
 } from 'lucide-react'
-import { dashboardAPI } from '@/api/client'
+import { dashboardAPI, apiClient } from '@/api/client'
+import { expenseAPI } from '@/api/expenseClient'
+import { scheduleAPI, type ScheduleEvent } from '@/api/scheduleClient'
+import { newsAPI, type FacilityNews } from '@/api/newsClient'
 import { useLtcStore } from '@/store/ltc'
 import type { DashboardStats } from '@/types'
 import { RECURRING, FREQUENCY_LABELS, getPeriodEnd, todayKST, todayDateKST, getCurrentPeriodKey, daysFromToday } from '@/utils/period'
@@ -31,10 +35,14 @@ export default function DashboardPage() {
   const navigate = useNavigate()
   const [siteStats, setSiteStats] = useState<DashboardStats | null>(null)
   const [loadingSite, setLoadingSite] = useState(true)
+  const [pending, setPending] = useState<{ expense: number; album: number }>({ expense: 0, album: 0 })
+  const [upcoming, setUpcoming] = useState<ScheduleEvent[]>([])
+  const [recentNews, setRecentNews] = useState<FacilityNews[]>([])
 
   const { checklists, occurrences, residents, staffList, loaded, loadAll, toggleComplete, completeOccurrence } = useLtcStore()
 
   useEffect(() => { loadSiteStats() }, [])
+  useEffect(() => { loadPending() }, [])
   useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
 
   const loadSiteStats = async () => {
@@ -44,6 +52,22 @@ export default function DashboardPage() {
       setSiteStats(res || null)
     } catch (e) { console.error(e) }
     finally { setLoadingSite(false) }
+  }
+
+  // 크로스 기능 '처리 대기' 카운트 — 권한 없으면 0으로 폴백(대시보드에 영향 없음)
+  const loadPending = async () => {
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const d0 = new Date(); const d7 = new Date(); d7.setDate(d7.getDate() + 7)
+    const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+    const [exp, alb, ev, news] = await Promise.all([
+      expenseAPI.list({ status: 'pending' }).then(r => r.length).catch(() => 0),
+      apiClient.get('/api/v1/admin/pending-media').then((r: any) => (r.data?.data ?? []).length).catch(() => 0),
+      scheduleAPI.events({ start_date: ymd(d0), end_date: ymd(d7) }).catch(() => [] as ScheduleEvent[]),
+      newsAPI.list().then(rows => rows.filter(n => n.is_published).slice(0, 3)).catch(() => [] as FacilityNews[]),
+    ])
+    setPending({ expense: exp, album: alb })
+    setUpcoming(ev.slice(0, 5))
+    setRecentNews(news)
   }
 
   // ── occurrence 기반: 오늘 해야 할 것 ────────────────────────────────────
@@ -268,50 +292,52 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* ── 오늘 업무 히어로 + 보조 KPI */}
-      <div className="grid lg:grid-cols-3 gap-3">
-        {/* 히어로: 오늘 미완료 + 경고 */}
-        <button
-          onClick={() => navigate('/eval/checklist')}
-          className={`lg:col-span-2 text-left rounded-2xl p-5 border shadow-sm transition-colors ${
-            urgentTasks.length > 0
-              ? 'bg-gradient-to-br from-red-50 to-orange-50 border-red-200 hover:border-red-300'
-              : 'bg-white border-gray-100 hover:border-gray-200'
-          }`}
-        >
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className={`text-sm font-semibold ${urgentTasks.length > 0 ? 'text-red-500' : 'text-gray-500'}`}>오늘 미완료</p>
-              <p className={`text-4xl font-extrabold leading-none mt-1.5 ${urgentTasks.length > 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                {todayTasks.length}<span className="text-lg font-bold ml-0.5">건</span>
-              </p>
-              <p className="text-sm text-gray-500 mt-2 leading-snug">
-                {urgentTasks.length > 0
-                  ? `위험도 높음 ${urgentTasks.length}건 포함 · 지금 확인하세요`
-                  : todayTasks.length > 0 ? '정기 반복 업무를 확인하세요' : '오늘 미완료 업무가 없습니다 👍'}
-              </p>
-            </div>
-            <div className="flex flex-col items-end gap-1.5 shrink-0">
-              {eventPendingTasks.length > 0 && (
-                <span className="inline-flex items-center gap-1 text-xs font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-2.5 py-1 rounded-full">
-                  <AlertTriangle size={12}/> 이벤트 미완료 {eventPendingTasks.length}
-                </span>
-              )}
-              <span className="text-xs text-gray-400 whitespace-nowrap">체크리스트 열기 →</span>
-            </div>
-          </div>
-        </button>
-
-        {/* 보조: 수급자 · 직원 현황 */}
-        <div className="grid grid-cols-2 lg:grid-cols-1 gap-3">
-          <KpiCard label="입소 수급자" value={activeResidents}
-            sub={siteStats ? `전체 ${siteStats.totalResidents}명` : ''} color="teal"
-            icon={<Users size={18}/>} onClick={() => navigate('/eval/residents')}/>
-          <KpiCard label="재직 직원" value={activeStaff}
-            sub={loadingSite ? '' : `전체 ${siteStats?.totalStaff ?? 0}명`} color="indigo"
-            icon={<UserCog size={18}/>} onClick={() => navigate('/eval/staff')}/>
-        </div>
+      {/* ── 핵심 지표 4종 (동일 높이, 균형) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard label="오늘 미완료" value={todayTasks.length}
+          sub={urgentTasks.length > 0
+            ? `위험 ${urgentTasks.length}건 포함`
+            : eventPendingTasks.length > 0 ? `이벤트 미완료 ${eventPendingTasks.length}건`
+            : todayTasks.length > 0 ? '정기 반복 업무' : '오늘 모두 완료 👍'}
+          color={urgentTasks.length > 0 ? 'red' : 'orange'} alert={urgentTasks.length > 0}
+          icon={<ClipboardList size={18}/>} onClick={() => navigate('/eval/checklist')}/>
+        <KpiCard label="입소 수급자" value={activeResidents}
+          sub={siteStats ? `전체 ${siteStats.totalResidents}명` : ''} color="teal"
+          icon={<Users size={18}/>} onClick={() => navigate('/eval/residents')}/>
+        <KpiCard label="재직 직원" value={activeStaff}
+          sub={loadingSite ? '' : `전체 ${siteStats?.totalStaff ?? 0}명`} color="indigo"
+          icon={<UserCog size={18}/>} onClick={() => navigate('/eval/staff')}/>
+        <KpiCard label="이번 달 입소" value={siteStats?.monthlyAdmissions ?? 0}
+          sub={siteStats ? `오늘 ${siteStats.todayAdmissions}명` : ''} color="purple"
+          icon={<UserPlus size={18}/>} onClick={() => navigate('/eval/residents')}/>
       </div>
+
+      {/* ── 처리 대기(결재·확인) 액션 센터 — 크로스 기능 */}
+      {(() => {
+        const items = [
+          { show: pending.expense > 0, label: '지출결의 승인 대기', value: pending.expense, unit: '건', to: '/expense', icon: Receipt, tone: 'emerald' as const },
+          { show: pending.album > 0, label: '앨범 사진 승인 대기', value: pending.album, unit: '장', to: '/eval/albums', icon: ImageIcon, tone: 'blue' as const },
+          { show: (siteStats?.pendingContacts ?? 0) > 0, label: '대기 중인 상담', value: siteStats?.pendingContacts ?? 0, unit: '건', to: '/contacts', icon: MessageSquare, tone: 'orange' as const },
+        ].filter(i => i.show)
+        return (
+          <section>
+            <div className="flex items-center gap-2 mb-2">
+              <Inbox size={15} className="text-gray-500" />
+              <h2 className="text-sm font-bold text-gray-700">처리 대기</h2>
+              {items.length > 0 && <span className="text-xs font-bold text-white bg-gray-800 rounded-full px-2 py-0.5">{items.reduce((a, b) => a + b.value, 0)}</span>}
+            </div>
+            {items.length === 0 ? (
+              <div className="rounded-2xl border border-gray-100 bg-white px-5 py-4 text-sm text-gray-400 flex items-center gap-2">
+                <CheckCircle2 size={16} className="text-green-400" /> 지금 결재·확인할 대기 항목이 없습니다.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {items.map(it => <ActionCard key={it.to} {...it} onClick={() => navigate(it.to)} />)}
+              </div>
+            )}
+          </section>
+        )
+      })()}
 
       {/* ── 메인 2열 */}
       <div className="grid lg:grid-cols-5 gap-4">
@@ -323,7 +349,7 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-50">
               <div className="flex items-center gap-2">
                 <Clock size={15} className="text-primary-orange"/>
-                <h2 className="text-sm font-bold text-gray-800">오늘 일일 업무</h2>
+                <h2 className="text-sm font-bold text-gray-800">일일 업무 체크</h2>
                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                   dailyTasks.length===0 ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
                 }`}>
@@ -337,7 +363,7 @@ export default function DashboardPage() {
             {dailyTasks.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10">
                 <CheckCircle2 size={32} className="mb-2 text-green-400"/>
-                <p className="text-sm font-medium text-green-600">오늘 일일 업무 모두 완료!</p>
+                <p className="text-sm font-medium text-green-600">일일 업무 모두 완료!</p>
                 {totalDone > 0 && <p className="text-xs text-gray-400 mt-1">오늘 완료 {totalDone}건</p>}
               </div>
             ) : (
@@ -451,6 +477,63 @@ export default function DashboardPage() {
         {/* 오른쪽 2열 */}
         <div className="lg:col-span-2 space-y-4">
 
+          {/* 다가오는 일정 */}
+          <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Calendar size={14} className="text-violet-500"/>
+                <h2 className="text-sm font-bold text-gray-800">다가오는 일정</h2>
+              </div>
+              <button onClick={() => navigate('/schedule')} className="text-xs text-gray-400 hover:text-violet-600 flex items-center gap-0.5">일정 캘린더<ChevronRight size={13}/></button>
+            </div>
+            {upcoming.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-4">예정된 일정이 없습니다</p>
+            ) : (
+              <div className="space-y-1.5">
+                {upcoming.map(ev => {
+                  const d = ev.start_at ? new Date(ev.start_at) : null
+                  const isToday = d && new Date().toDateString() === d.toDateString()
+                  return (
+                    <button key={ev.id} onClick={() => navigate('/schedule')} className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-gray-50 text-left">
+                      <div className={`text-xs font-bold w-12 shrink-0 ${isToday ? 'text-violet-600' : 'text-gray-500'}`}>
+                        {d ? (isToday ? '오늘' : `${d.getMonth()+1}.${d.getDate()}`) : ''}
+                        <span className="block text-[10px] font-medium text-gray-400">{d ? `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` : ''}</span>
+                      </div>
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-600 shrink-0">{ev.category}</span>
+                      <span className="text-sm text-gray-700 truncate flex-1">{ev.title}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </section>
+
+          {/* 최근 시설소식 */}
+          {recentNews.length > 0 && (
+            <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Megaphone size={14} className="text-orange-500"/>
+                  <h2 className="text-sm font-bold text-gray-800">최근 시설소식</h2>
+                </div>
+                <button onClick={() => navigate('/facility-news')} className="text-xs text-gray-400 hover:text-orange-600 flex items-center gap-0.5">전체보기<ChevronRight size={13}/></button>
+              </div>
+              <div className="space-y-1.5">
+                {recentNews.map(n => {
+                  const dt = n.published_at || n.created_at
+                  const ds = dt ? (() => { const d = new Date(dt); return `${d.getMonth()+1}.${d.getDate()}` })() : ''
+                  return (
+                    <button key={n.id} onClick={() => navigate('/facility-news')} className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-gray-50 text-left">
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 shrink-0">{n.category}</span>
+                      <span className="text-sm text-gray-700 truncate flex-1">{n.title}</span>
+                      <span className="text-[11px] text-gray-400 shrink-0">{ds}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </section>
+          )}
+
           {/* 주기별 완료율 */}
           <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
             <div className="flex items-center gap-2 mb-3">
@@ -518,26 +601,6 @@ export default function DashboardPage() {
             )}
           </section>
 
-          {/* 빠른 이동 */}
-          <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-            <h2 className="text-sm font-bold text-gray-800 mb-3">빠른 이동</h2>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { label:'체크리스트', icon:ClipboardList, to:'/eval/checklist', color:'text-primary-orange' },
-                { label:'캘린더',     icon:Calendar,      to:'/eval/calendar',  color:'text-teal-600' },
-                { label:'수급자',     icon:Users,         to:'/eval/residents', color:'text-indigo-600' },
-                { label:'AI 검토',    icon:Sparkles,      to:'/eval/ai-review', color:'text-purple-600' },
-                { label:'상담',       icon:MessageSquare, to:'/contacts',       color:'text-orange-600' },
-                { label:'직원',       icon:UserCog,       to:'/eval/staff',     color:'text-pink-600' },
-              ].map(item => (
-                <button key={item.to} onClick={() => navigate(item.to)}
-                  className="flex items-center gap-2 p-2.5 rounded-xl border border-gray-100 hover:border-gray-200 hover:bg-gray-50 text-left transition-colors">
-                  <item.icon size={14} className={item.color}/>
-                  <span className="text-xs font-semibold text-gray-700">{item.label}</span>
-                </button>
-              ))}
-            </div>
-          </section>
         </div>
       </div>
     </div>
@@ -545,6 +608,32 @@ export default function DashboardPage() {
 }
 
 // ── 서브 컴포넌트 ──────────────────────────────────────────────────────────
+
+function ActionCard({ label, value, unit, icon: Icon, tone, onClick }: {
+  label: string; value: number; unit: string
+  icon: React.ElementType; tone: 'emerald' | 'blue' | 'orange'
+  onClick?: () => void; show?: boolean; to?: string
+}) {
+  const tones: Record<string, string> = {
+    emerald: 'bg-emerald-50 text-emerald-600',
+    blue: 'bg-blue-50 text-blue-600',
+    orange: 'bg-orange-50 text-orange-600',
+  }
+  return (
+    <button onClick={onClick}
+      className="flex items-center gap-3 bg-white rounded-2xl border border-gray-100 hover:border-gray-200 hover:shadow-sm transition-all p-4 text-left w-full">
+      <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${tones[tone] ?? 'bg-gray-50 text-gray-500'}`}>
+        <Icon size={20} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-gray-700 truncate">{label}</p>
+        <p className="text-xl font-extrabold text-gray-900 leading-tight">{value}<span className="text-sm font-bold text-gray-400 ml-0.5">{unit}</span></p>
+      </div>
+      <ChevronRight size={16} className="text-gray-300 shrink-0" />
+    </button>
+  )
+}
+
 
 function KpiCard({ label, value, sub, color, icon, onClick, alert }: {
   label:string; value:number; sub:string; color:string
