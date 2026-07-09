@@ -200,9 +200,39 @@ function ResidentCard({ r, expanded, onExpand, onEdit, onDischarge, checklists, 
 
 const ic = "w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40"
 
+// 한국식 생년월일 선택 — 년/월/일 드롭다운 (고령 수급자 대응, 1930년 기본)
+function BirthDateSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const nowY = new Date().getFullYear()
+  const valid = /^\d{4}-\d{2}-\d{2}$/.test(value)
+  const [yy, mm, dd] = valid ? value.split('-').map(Number) : [1930, 1, 1]
+  const years: number[] = []
+  for (let y = nowY; y >= 1915; y--) years.push(y)
+  const months = Array.from({ length: 12 }, (_, i) => i + 1)
+  const daysInMonth = new Date(yy, mm, 0).getDate()
+  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1)
+  const emit = (y: number, m: number, d: number) => {
+    const dim = new Date(y, m, 0).getDate()
+    const d2 = Math.min(d, dim)
+    onChange(`${y}-${String(m).padStart(2, '0')}-${String(d2).padStart(2, '0')}`)
+  }
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      <select className={ic} value={yy} onChange={e => emit(Number(e.target.value), mm, dd)}>
+        {years.map(y => <option key={y} value={y}>{y}년</option>)}
+      </select>
+      <select className={ic} value={mm} onChange={e => emit(yy, Number(e.target.value), dd)}>
+        {months.map(m => <option key={m} value={m}>{m}월</option>)}
+      </select>
+      <select className={ic} value={dd} onChange={e => emit(yy, mm, Number(e.target.value))}>
+        {days.map(d => <option key={d} value={d}>{d}일</option>)}
+      </select>
+    </div>
+  )
+}
+
 function ResidentForm({ existing, onClose }: { existing?: LtcResident; onClose:()=>void }) {
   const { addResident, updateResident } = useLtcStore()
-  const [form, setForm] = useState({ name:existing?.name??'', birthDate:existing?.birthDate??'', gender:existing?.gender??'female', admissionDate:existing?.admissionDate??new Date().toISOString().split('T')[0], careGradeStartDate:existing?.careGradeStartDate??new Date().toISOString().split('T')[0], memo:existing?.memo??'' })
+  const [form, setForm] = useState({ name:existing?.name??'', birthDate:existing?.birthDate??'1930-01-01', gender:existing?.gender??'female', admissionDate:existing?.admissionDate??new Date().toISOString().split('T')[0], careGradeStartDate:existing?.careGradeStartDate??new Date().toISOString().split('T')[0], memo:existing?.memo??'' })
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -222,11 +252,14 @@ function ResidentForm({ existing, onClose }: { existing?: LtcResident; onClose:(
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           {!existing && <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 text-xs text-orange-700">✨ 등록 시 입소 관련 체크리스트 <strong>12건</strong>이 자동 생성됩니다.</div>}
           <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">성명 *</label><input required className={ic} value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="홍길동"/></div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">생년월일 *</label><input required type="date" className={ic} value={form.birthDate} onChange={e=>setForm({...form,birthDate:e.target.value})}/></div>
-            <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">성별</label>
-              <select className={ic} value={form.gender} onChange={e=>setForm({...form,gender:e.target.value})}><option value="female">여</option><option value="male">남</option></select>
-            </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">생년월일 *</label>
+            <BirthDateSelect value={form.birthDate} onChange={v=>setForm({...form,birthDate:v})}/>
+            {form.birthDate && <p className="text-xs text-gray-400 mt-1">만 {calcAge(form.birthDate)}세</p>}
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">성별</label>
+            <select className={ic} value={form.gender} onChange={e=>setForm({...form,gender:e.target.value})}><option value="female">여</option><option value="male">남</option></select>
           </div>
           <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">입소일 *</label><input required type="date" className={ic} value={form.admissionDate} onChange={e=>setForm({...form,admissionDate:e.target.value})}/></div>
           <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">장기요양등급 인정서 시작일 *</label><input required type="date" className={ic} value={form.careGradeStartDate} onChange={e=>setForm({...form,careGradeStartDate:e.target.value})}/><p className="text-xs text-gray-400 mt-1">반기 주기(욕구사정·급여계획 등)의 기준이 됩니다.</p></div>

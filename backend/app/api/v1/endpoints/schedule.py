@@ -15,6 +15,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
 from app.models.schedule import ScheduleEvent, now_kst
+from app.models.eval import LtcResident, LtcStaffMember
 from app.schemas.response import ApiResponse
 
 router = APIRouter()
@@ -171,3 +172,42 @@ def delete_event(eid: str, db: Session = Depends(get_db),
         raise HTTPException(status_code=404, detail="일정을 찾을 수 없습니다.")
     db.delete(e); db.commit()
     return ApiResponse(success=True, message="삭제되었습니다.")
+
+
+@router.get("/lifecycle")
+def lifecycle(
+    start_date: Optional[str] = Query(None),  # YYYY-MM-DD
+    end_date: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_manager),
+):
+    """수급자 입소일 · 직원 입사일을 파생 이벤트로 반환(등록 시 자동 반영)."""
+    out = []
+
+    rq = db.query(LtcResident).filter(LtcResident.admission_date.isnot(None))
+    if start_date:
+        rq = rq.filter(LtcResident.admission_date >= start_date)
+    if end_date:
+        rq = rq.filter(LtcResident.admission_date <= end_date)
+    for r in rq.all():
+        if not r.admission_date:
+            continue
+        out.append({
+            "id": r.id, "kind": "admission", "name": r.name,
+            "date": r.admission_date, "gender": r.gender, "status": r.status,
+        })
+
+    sq = db.query(LtcStaffMember).filter(LtcStaffMember.hire_date.isnot(None))
+    if start_date:
+        sq = sq.filter(LtcStaffMember.hire_date >= start_date)
+    if end_date:
+        sq = sq.filter(LtcStaffMember.hire_date <= end_date)
+    for m in sq.all():
+        if not m.hire_date:
+            continue
+        out.append({
+            "id": m.id, "kind": "hire", "name": m.name,
+            "date": m.hire_date, "gender": m.gender, "status": m.status,
+        })
+
+    return ApiResponse(success=True, data=out)
