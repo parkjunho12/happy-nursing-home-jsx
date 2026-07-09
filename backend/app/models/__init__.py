@@ -86,6 +86,8 @@ from app.models.recruitment import RecruitmentPost, RecruitmentApplication, Recr
 # 통합 일정
 from app.models.schedule import ScheduleEvent
 from app.models.expense import ExpenseRequest, ExpenseAttachment
+from app.models.album_view import FamilyAlbumView
+from app.models.facility_news import FacilityNews
 
 # 경관식 재고
 from app.models.enteral import EnteralProduct, EnteralTransaction

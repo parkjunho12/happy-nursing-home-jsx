@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react'
 import {
   Plus, Trash2, Upload, X, Eye, EyeOff, ImagePlus,
   Users, Folder, Play, Image, Search, ChevronDown,
@@ -51,7 +51,7 @@ export default function EvalAlbumPage() {
   const [selAlbum,  setSelAlbum]  = useState<Album | null>(null)
   const [selMedia,  setSelMedia]  = useState<Media | null>(null)
   const [modal,     setModal]     = useState<ModalType>('none')
-  const [tab,       setTab]       = useState<'albums' | 'guardians'>('albums')
+  const [tab,       setTab]       = useState<'albums' | 'guardians' | 'engagement'>('albums')
 
   // 요양보호사는 guardians 탭 접근 불가 — 강제로 albums로 돌려보냄
   useEffect(() => {
@@ -251,18 +251,20 @@ export default function EvalAlbumPage() {
       {/* 탭 — 요양보호사는 앨범만, 그 외 2개 탭 */}
       {canManage && (
         <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
-          {(['albums', 'guardians'] as const).map(t => (
+          {(['albums', 'guardians', 'engagement'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
               className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
                 tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
               }`}>
               {t === 'albums'
                 ? `앨범 관리${albums.length > 0 ? ` (${albums.length})` : ''}`
-                : '보호자 계정'}
+                : t === 'guardians' ? '보호자 계정' : '참여도'}
             </button>
           ))}
         </div>
       )}
+
+      {canManage && tab === 'engagement' && <EngagementPanel />}
 
       {/* ── 앨범 탭 ── */}
       {tab === 'albums' && (
@@ -1625,6 +1627,107 @@ function AlbumEditModal({ album, onClose, onSaved }: {
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+/* ── 보호자 참여도 패널 ── */
+function EngStat({ label, value, icon }: { label: string; value: number; icon: ReactNode }) {
+  return (
+    <div className="rounded-xl p-3 sm:p-4 border bg-gray-50 border-gray-100">
+      <div className="flex items-center gap-1.5 text-gray-400 mb-1">{icon}<span className="text-[11px] sm:text-xs font-medium">{label}</span></div>
+      <p className="text-xl sm:text-2xl font-bold text-gray-900">{value}</p>
+    </div>
+  )
+}
+
+function EngagementPanel() {
+  const [days, setDays] = useState(30)
+  const [data, setData] = useState<any>(null)
+  const [fcm, setFcm] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [e, f] = await Promise.all([
+        adminAlbumAPI.engagement(days),
+        adminAlbumAPI.fcmStatus().catch(() => null),
+      ])
+      setData(e); setFcm(f)
+    } finally { setLoading(false) }
+  }, [days])
+  useEffect(() => { load() }, [load])
+
+  const s = data?.summary
+  const albums = data?.albums ?? []
+  const fmt = (iso?: string | null) => {
+    if (!iso) return '-'
+    const d = new Date(iso)
+    return `${d.getMonth() + 1}.${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* FCM 상태 — 푸시가 잘 되는지 확인 */}
+      <div className="rounded-2xl border border-gray-100 bg-white p-4 flex items-center gap-3 flex-wrap">
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${fcm?.configured ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-500'}`}>
+          <Bell size={18} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-gray-800">푸시 알림 {fcm?.configured ? '정상 연결됨' : '설정 필요'}</p>
+          <p className="text-xs text-gray-500">
+            {fcm ? `등록 토큰 ${fcm.tokens}개 · 알림 받는 보호자 ${fcm.guardians_with_token}명` : '상태 확인 중...'}
+          </p>
+        </div>
+        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${fcm?.configured ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-600 border border-red-200'}`}>
+          {fcm?.configured ? '● 연결됨' : '○ 미설정'}
+        </span>
+      </div>
+
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h3 className="text-sm font-bold text-gray-700">보호자 열람 참여도</h3>
+        <div className="flex items-center gap-2">
+          <div className="inline-flex bg-gray-100 rounded-lg p-0.5">
+            {[7, 30, 90].map(d => (
+              <button key={d} onClick={() => setDays(d)}
+                className={`px-2.5 py-1 rounded-md text-xs font-semibold ${days === d ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>{d}일</button>
+            ))}
+          </div>
+          <button onClick={load} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500"><RefreshCw size={14} /></button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+        <EngStat label="앨범 열람" value={s?.total_opens ?? 0} icon={<Eye size={16} />} />
+        <EngStat label="사진 조회" value={s?.total_photo_views ?? 0} icon={<Image size={16} />} />
+        <EngStat label="다운로드" value={s?.total_downloads ?? 0} icon={<Folder size={16} />} />
+        <EngStat label="열람 보호자" value={s?.active_guardians ?? 0} icon={<Users size={16} />} />
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-10"><Loader2 className="animate-spin text-gray-300" /></div>
+      ) : albums.length === 0 ? (
+        <div className="text-center py-12 text-sm text-gray-400 bg-white rounded-xl border border-gray-100">
+          최근 {days}일간 보호자 열람 기록이 없습니다.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {albums.map((a: any) => (
+            <div key={a.album_id} className="flex items-center gap-3 bg-white rounded-xl border border-gray-100 px-4 py-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-gray-800 truncate">{a.album_title}</p>
+                <p className="text-xs text-gray-400 truncate">{a.resident_name ?? '-'} · 마지막 열람 {fmt(a.last_viewed_at)}</p>
+              </div>
+              <div className="flex items-center gap-3 text-xs shrink-0">
+                <span className="flex items-center gap-1 text-blue-600" title="앨범 열람"><Eye size={13} />{a.opens}</span>
+                <span className="flex items-center gap-1 text-purple-600" title="사진 조회"><Image size={13} />{a.photo_views}</span>
+                <span className="text-gray-500 hidden sm:inline">보호자 {a.unique_guardians}명</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

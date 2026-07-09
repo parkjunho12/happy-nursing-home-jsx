@@ -36,6 +36,11 @@ def _ensure_app():
         return None
 
 
+def is_available() -> bool:
+    """FCM 초기화 가능 여부(서비스계정 설정+SDK 로드)."""
+    return _ensure_app() is not None
+
+
 def send_to_tokens(
     tokens: List[str],
     title: str,

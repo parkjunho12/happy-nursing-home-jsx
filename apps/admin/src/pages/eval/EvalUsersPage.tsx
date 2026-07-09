@@ -1,3 +1,4 @@
+import StickyToolbar from '../../components/common/StickyToolbar'
 import { useState, useEffect, useMemo } from 'react'
 import { Plus, Edit2, Trash2, Search, X, Eye, EyeOff, KeyRound } from 'lucide-react'
 import { apiClient } from '@/api/client'
@@ -86,7 +87,8 @@ export default function EvalUsersPage() {
         </button>
       </div>
 
-      {/* 검색 */}
+      {/* 검색 (상단 고정) */}
+      <StickyToolbar>
       <div className="relative">
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
         <input value={search} onChange={e => setSearch(e.target.value)}
@@ -98,6 +100,7 @@ export default function EvalUsersPage() {
           </button>
         )}
       </div>
+      </StickyToolbar>
 
       {/* 목록 */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">

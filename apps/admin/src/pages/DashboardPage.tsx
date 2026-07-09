@@ -268,23 +268,49 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* ── KPI 4개 */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard label="입소 수급자" value={activeResidents}
-          sub={siteStats ? `전체 ${siteStats.totalResidents}명` : ''} color="teal"
-          icon={<Users size={18}/>} onClick={() => navigate('/eval/residents')}/>
-        <KpiCard label="재직 직원" value={activeStaff}
-          sub={loadingSite ? '' : `전체 ${siteStats?.totalStaff ?? 0}명`} color="indigo"
-          icon={<UserCog size={18}/>} onClick={() => navigate('/eval/staff')}/>
-        <KpiCard label="오늘 미완료" value={todayTasks.length}
-          sub={urgentTasks.length > 0 ? `위험 ${urgentTasks.length}건 포함` : '정기 반복 업무'}
-          color={urgentTasks.length > 0 ? 'red' : 'orange'}
-          icon={<ClipboardList size={18}/>} onClick={() => navigate('/eval/checklist')}
-          alert={urgentTasks.length > 0}/>
-        <KpiCard label="이벤트 미완료" value={eventPendingTasks.length}
-          sub="입소·입사 관련 누적" color={eventPendingTasks.length > 0 ? 'purple' : 'gray'}
-          icon={<AlertTriangle size={18}/>} onClick={() => navigate('/eval/checklist')}
-          alert={eventPendingTasks.some(t => t.daysOverdue >= 7)}/>
+      {/* ── 오늘 업무 히어로 + 보조 KPI */}
+      <div className="grid lg:grid-cols-3 gap-3">
+        {/* 히어로: 오늘 미완료 + 경고 */}
+        <button
+          onClick={() => navigate('/eval/checklist')}
+          className={`lg:col-span-2 text-left rounded-2xl p-5 border shadow-sm transition-colors ${
+            urgentTasks.length > 0
+              ? 'bg-gradient-to-br from-red-50 to-orange-50 border-red-200 hover:border-red-300'
+              : 'bg-white border-gray-100 hover:border-gray-200'
+          }`}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className={`text-sm font-semibold ${urgentTasks.length > 0 ? 'text-red-500' : 'text-gray-500'}`}>오늘 미완료</p>
+              <p className={`text-4xl font-extrabold leading-none mt-1.5 ${urgentTasks.length > 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                {todayTasks.length}<span className="text-lg font-bold ml-0.5">건</span>
+              </p>
+              <p className="text-sm text-gray-500 mt-2 leading-snug">
+                {urgentTasks.length > 0
+                  ? `위험도 높음 ${urgentTasks.length}건 포함 · 지금 확인하세요`
+                  : todayTasks.length > 0 ? '정기 반복 업무를 확인하세요' : '오늘 미완료 업무가 없습니다 👍'}
+              </p>
+            </div>
+            <div className="flex flex-col items-end gap-1.5 shrink-0">
+              {eventPendingTasks.length > 0 && (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-2.5 py-1 rounded-full">
+                  <AlertTriangle size={12}/> 이벤트 미완료 {eventPendingTasks.length}
+                </span>
+              )}
+              <span className="text-xs text-gray-400 whitespace-nowrap">체크리스트 열기 →</span>
+            </div>
+          </div>
+        </button>
+
+        {/* 보조: 수급자 · 직원 현황 */}
+        <div className="grid grid-cols-2 lg:grid-cols-1 gap-3">
+          <KpiCard label="입소 수급자" value={activeResidents}
+            sub={siteStats ? `전체 ${siteStats.totalResidents}명` : ''} color="teal"
+            icon={<Users size={18}/>} onClick={() => navigate('/eval/residents')}/>
+          <KpiCard label="재직 직원" value={activeStaff}
+            sub={loadingSite ? '' : `전체 ${siteStats?.totalStaff ?? 0}명`} color="indigo"
+            icon={<UserCog size={18}/>} onClick={() => navigate('/eval/staff')}/>
+        </div>
       </div>
 
       {/* ── 메인 2열 */}

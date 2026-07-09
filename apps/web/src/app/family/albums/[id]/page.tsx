@@ -92,6 +92,22 @@ export default function FamilyAlbumDetailPage() {
     return () => { document.body.style.overflow = prev }
   }, [idx])
 
+  // 사진 열람 추적 (보호자 참여도) — 같은 사진은 세션당 1회만 전송
+  const viewedRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (idx === null || !album) return
+    const m = album.media[idx]
+    if (!m || viewedRef.current.has(m.id)) return
+    viewedRef.current.add(m.id)
+    const token = localStorage.getItem('family_token')
+    if (!token) return
+    fetch(`${resolveApiBase()}/api/v1/family/albums/${album.id}/view`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ media_id: m.id, event_type: 'photo' }),
+    }).catch(() => {})
+  }, [idx, album])
+
   if (loading) return (
     <div className="min-h-screen bg-amber-50 flex items-center justify-center">
       <div className="flex flex-col items-center gap-3">
@@ -156,9 +172,13 @@ export default function FamilyAlbumDetailPage() {
         </div>
 
         {album.media.length === 0 ? (
-          <div className="text-center py-16 text-gray-400">
-            <p className="text-4xl mb-3">📷</p>
-            <p className="text-sm">아직 사진이 없습니다</p>
+          <div className="text-center py-16 px-4">
+            <p className="text-5xl mb-4">🌻</p>
+            <p className="font-bold text-gray-800 text-lg">아직 등록된 사진이 없습니다</p>
+            <p className="text-[15px] text-gray-500 mt-3 leading-relaxed">
+              어르신의 일상 사진이 준비되는 대로<br />
+              이곳에서 확인하실 수 있습니다.
+            </p>
           </div>
         ) : (
           <div className="space-y-6">

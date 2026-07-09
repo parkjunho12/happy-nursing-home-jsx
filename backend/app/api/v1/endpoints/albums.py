@@ -19,7 +19,8 @@ from app.core.security import get_current_user
 from app.models.user import User
 from app.models.album import GuardianAccount, ResidentGuardian, Album, AlbumMedia
 from app.models.push import FamilyPushToken
-from app.services.fcm import send_to_tokens
+from app.models.album_view import FamilyAlbumView
+from app.services.fcm import send_to_tokens, is_available
 from pydantic import BaseModel
 from app.models.eval import LtcResident
 from app.schemas.response import ApiResponse
@@ -34,6 +35,7 @@ ALGORITHM    = "HS256"
 TOKEN_EXPIRE = 60 * 24 * 30   # 30일 (분 단위)
 
 KST     = timezone(timedelta(hours=9))
+NOTIFY_DEBOUNCE_SEC = 180  # 승인 자동 푸시 디바운스(여러 장 승인 시 1회)
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 bearer  = HTTPBearer(auto_error=False)
 
@@ -434,6 +436,23 @@ def set_media_status(album_id: str, media_id: str, body: MediaStatusBody,
         if a and not a.cover_url and m.media_type == "photo":
             a.cover_url = m.thumbnail_url or m.file_url
     db.commit()
+
+    # 승인 시 보호자에게 자동 푸시 — 3분 디바운스(여러 장 연속 승인해도 1회만 발송)
+    if body.status == "approved":
+        try:
+            a = db.query(Album).filter(Album.id == album_id).first()
+            now = datetime.now(KST)
+            ln = a.last_notified_at if a else None
+            if ln is not None and ln.tzinfo is None:
+                ln = ln.replace(tzinfo=KST)
+            if a and (ln is None or (now - ln).total_seconds() > NOTIFY_DEBOUNCE_SEC):
+                _notify_album_guardians(db, a)
+                a.last_notified_at = now
+                db.commit()
+        except Exception as e:
+            logger.warning(f"승인 자동 푸시 실패: {e}")
+            db.rollback()
+
     return ApiResponse(success=True, data=_media_dict(m))
 
 
@@ -547,6 +566,8 @@ def family_album_detail(
               .order_by(AlbumMedia.sort_order, AlbumMedia.created_at).all()
     res = db.query(LtcResident).filter(LtcResident.id == a.resident_id).first()
 
+    _log_view(db, gid, album_id, None, "open")
+
     return ApiResponse(success=True, data={
         "id": a.id, "title": a.title, "description": a.description,
         "cover_url": a.cover_url,
@@ -554,6 +575,24 @@ def family_album_detail(
         "created_at": a.created_at.isoformat(),
         "media": [_media_dict(m) for m in media],
     })
+
+
+class ViewBody(BaseModel):
+    media_id: Optional[str] = None
+    event_type: Optional[str] = "photo"
+
+
+@family_router.post("/albums/{album_id}/view")
+def family_track_view(
+    album_id: str,
+    body: ViewBody,
+    gid: str = Depends(get_guardian_id),
+    db: Session = Depends(get_db),
+):
+    """보호자앱 열람 추적(사진 조회 등). fire-and-forget."""
+    et = body.event_type if body.event_type in ("open", "photo") else "photo"
+    _log_view(db, gid, album_id, body.media_id, et)
+    return ApiResponse(success=True, data={"ok": True})
 
 
 @family_router.get("/download/{media_id}")
@@ -580,6 +619,8 @@ def family_download(
     album = db.query(Album).filter(Album.id == m.album_id).first()
     if not album: raise HTTPException(404, "앨범을 찾을 수 없습니다")
     _check_guardian_access(db, gid, album.resident_id)
+
+    _log_view(db, gid, m.album_id, m.id, "download")
 
     # R2 presigned URL 발급 → 302 리디렉트
     download_url = r2.presigned_download_url(
@@ -713,6 +754,19 @@ def unregister_push_token(
     return ApiResponse(success=True, data={"unregistered": True})
 
 
+def _log_view(db: Session, guardian_id: str, album_id: str, media_id, event_type: str):
+    """보호자 열람 이벤트 기록 (실패해도 요청에 영향 없음)."""
+    try:
+        db.add(FamilyAlbumView(
+            guardian_id=guardian_id, album_id=album_id,
+            media_id=media_id, event_type=event_type,
+        ))
+        db.commit()
+    except Exception as e:
+        logger.warning(f"열람 로그 기록 실패: {e}")
+        db.rollback()
+
+
 def _notify_album_guardians(db: Session, album: Album) -> dict:
     """앨범 수급자의 보호자들에게 '새 사진' 푸시 발송. (무효 토큰은 정리)"""
     links = db.query(ResidentGuardian).filter(
@@ -769,3 +823,63 @@ def notify_album(
     if result["guardians"] == 0:
         result["message"] = "연결된 보호자가 없습니다"
     return ApiResponse(success=True, data=result)
+
+
+@admin_router.get("/albums-fcm-status")
+def fcm_status(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """FCM 설정 상태 + 등록 토큰 현황."""
+    _require_can_manage_guardians(current_user)
+    total = db.query(FamilyPushToken).count()
+    guardians = db.query(FamilyPushToken.guardian_id).distinct().count()
+    return ApiResponse(success=True, data={
+        "configured": is_available(),
+        "project_id": _settings.FCM_PROJECT_ID or None,
+        "tokens": total,
+        "guardians_with_token": guardians,
+    })
+
+
+@admin_router.get("/albums-engagement")
+def album_engagement(days: int = 30, db: Session = Depends(get_db),
+                     current_user: User = Depends(get_current_user)):
+    """보호자 앨범 열람 참여도 집계(앨범별)."""
+    _require_can_manage_guardians(current_user)
+    since = datetime.now(KST) - timedelta(days=max(1, min(days, 365)))
+    rows = db.query(FamilyAlbumView).filter(FamilyAlbumView.created_at >= since).all()
+
+    agg = {}
+    for v in rows:
+        d = agg.setdefault(v.album_id, {"opens": 0, "photos": 0, "downloads": 0, "guardians": set(), "last": None})
+        if v.event_type == "open": d["opens"] += 1
+        elif v.event_type == "photo": d["photos"] += 1
+        elif v.event_type == "download": d["downloads"] += 1
+        d["guardians"].add(v.guardian_id)
+        if v.created_at and (d["last"] is None or v.created_at > d["last"]):
+            d["last"] = v.created_at
+
+    out = []
+    for aid, d in agg.items():
+        alb = db.query(Album).filter(Album.id == aid).first()
+        res = db.query(LtcResident).filter(LtcResident.id == alb.resident_id).first() if alb else None
+        last = d["last"]
+        if last is not None and last.tzinfo is None:
+            last = last.replace(tzinfo=KST)
+        out.append({
+            "album_id": aid,
+            "album_title": alb.title if alb else "(삭제된 앨범)",
+            "resident_name": res.name if res else None,
+            "opens": d["opens"], "photo_views": d["photos"], "downloads": d["downloads"],
+            "unique_guardians": len(d["guardians"]),
+            "last_viewed_at": last.astimezone(KST).isoformat() if last else None,
+        })
+    out.sort(key=lambda x: (x["opens"] + x["photo_views"]), reverse=True)
+
+    summary = {
+        "days": days,
+        "total_opens": sum(o["opens"] for o in out),
+        "total_photo_views": sum(o["photo_views"] for o in out),
+        "total_downloads": sum(o["downloads"] for o in out),
+        "active_albums": len(out),
+        "active_guardians": len({v.guardian_id for v in rows}),
+    }
+    return ApiResponse(success=True, data={"summary": summary, "albums": out})

@@ -1,3 +1,4 @@
+import StickyToolbar from '../../components/common/StickyToolbar'
 import { useState, useMemo, useEffect } from 'react'
 import { UserPlus, UserMinus, Edit2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
@@ -68,7 +69,8 @@ export default function EvalStaffPage() {
         </div>
       </div>
 
-      {/* 탭 */}
+      {/* 탭 (상단 고정) */}
+      <StickyToolbar>
       <div className="flex gap-1.5">
         {(['active','resigned','all'] as Tab[]).map(t => (
           <button key={t} onClick={() => setTab(t)}
@@ -77,6 +79,7 @@ export default function EvalStaffPage() {
           </button>
         ))}
       </div>
+      </StickyToolbar>
 
       {/* 목록 */}
       {filtered.length === 0 ? (
