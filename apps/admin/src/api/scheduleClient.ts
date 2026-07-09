@@ -35,6 +35,15 @@ export interface EventInput {
   memo?: string | null
 }
 
+export interface LifecycleEvent {
+  id: string
+  kind: 'admission' | 'hire'
+  name: string
+  date: string          // YYYY-MM-DD
+  gender?: string | null
+  status?: string | null
+}
+
 export const scheduleAPI = {
   events: (params?: { start_date?: string; end_date?: string; category?: string }) =>
     apiClient.get(`${BASE}/events`, { params: params ?? {} }).then(unwrap<ScheduleEvent[]>),
@@ -42,4 +51,6 @@ export const scheduleAPI = {
   updateEvent: (id: string, body: Partial<EventInput> & { status?: string }) =>
     apiClient.patch(`${BASE}/events/${id}`, body).then(unwrap<ScheduleEvent>),
   deleteEvent: (id: string) => apiClient.delete(`${BASE}/events/${id}`).then(r => r.data),
+  lifecycle: (params?: { start_date?: string; end_date?: string }) =>
+    apiClient.get(`${BASE}/lifecycle`, { params: params ?? {} }).then(unwrap<LifecycleEvent[]>),
 }

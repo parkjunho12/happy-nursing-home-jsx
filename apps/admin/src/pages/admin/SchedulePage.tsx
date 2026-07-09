@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   CalendarDays, Plus, ChevronLeft, ChevronRight, X, Trash2, MapPin,
-  Phone, Clock, Briefcase, Loader2, Grid3x3, Columns3, List,
+  Phone, Clock, Briefcase, Loader2, Grid3x3, Columns3, List, UserPlus,
 } from 'lucide-react'
 import {
-  scheduleAPI, SCHEDULE_CATEGORIES, type ScheduleEvent, type EventInput,
+  scheduleAPI, SCHEDULE_CATEGORIES, type ScheduleEvent, type EventInput, type LifecycleEvent,
 } from '../../api/scheduleClient'
 import { recruitmentAPI, type Interview } from '../../api/recruitmentClient'
 
@@ -20,7 +20,7 @@ const hmOf = (iso?: string | null) => {
 const startOfWeek = (d: Date) => { const x = new Date(d); x.setDate(x.getDate() - x.getDay()); x.setHours(0, 0, 0, 0); return x }
 
 /* 카테고리 색상 */
-type CatKey = '방문상담' | '외부방문' | '회의' | '행사' | '기타' | '면접'
+type CatKey = '방문상담' | '외부방문' | '회의' | '행사' | '기타' | '면접' | '입소' | '입사'
 const CAT: Record<CatKey, { dot: string; chip: string; bar: string }> = {
   방문상담: { dot: 'bg-blue-500',   chip: 'bg-blue-50 text-blue-700 border-blue-200',       bar: 'border-l-blue-500 bg-blue-50' },
   외부방문: { dot: 'bg-teal-500',   chip: 'bg-teal-50 text-teal-700 border-teal-200',       bar: 'border-l-teal-500 bg-teal-50' },
@@ -28,13 +28,15 @@ const CAT: Record<CatKey, { dot: string; chip: string; bar: string }> = {
   행사:    { dot: 'bg-pink-500',   chip: 'bg-pink-50 text-pink-700 border-pink-200',       bar: 'border-l-pink-500 bg-pink-50' },
   기타:    { dot: 'bg-gray-400',   chip: 'bg-gray-50 text-gray-600 border-gray-200',       bar: 'border-l-gray-400 bg-gray-50' },
   면접:    { dot: 'bg-violet-500', chip: 'bg-violet-50 text-violet-700 border-violet-200', bar: 'border-l-violet-500 bg-violet-50' },
+  입소:    { dot: 'bg-rose-500',   chip: 'bg-rose-50 text-rose-600 border-rose-200',       bar: 'border-l-rose-500 bg-rose-50' },
+  입사:    { dot: 'bg-cyan-500',   chip: 'bg-cyan-50 text-cyan-700 border-cyan-200',       bar: 'border-l-cyan-500 bg-cyan-50' },
 }
-const ALL_CATS: CatKey[] = ['방문상담', '외부방문', '회의', '행사', '기타', '면접']
+const ALL_CATS: CatKey[] = ['방문상담', '외부방문', '회의', '행사', '기타', '면접', '입소', '입사']
 
 /* 통합 이벤트 */
 type UEvent = {
   key: string
-  kind: 'event' | 'interview'
+  kind: 'event' | 'interview' | 'lifecycle'
   category: CatKey
   title: string
   start?: string | null
@@ -55,6 +57,7 @@ export default function SchedulePage() {
   const [view, setView] = useState<'month' | 'week' | 'agenda'>('month')
   const [events, setEvents] = useState<ScheduleEvent[]>([])
   const [interviews, setInterviews] = useState<Interview[]>([])
+  const [lifecycles, setLifecycles] = useState<LifecycleEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [active, setActive] = useState<Set<CatKey>>(new Set(ALL_CATS))
   const [addOpen, setAddOpen] = useState(false)
@@ -76,11 +79,12 @@ export default function SchedulePage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [ev, iv] = await Promise.all([
+      const [ev, iv, lc] = await Promise.all([
         scheduleAPI.events({ start_date: rangeStart, end_date: rangeEnd }).catch(() => [] as ScheduleEvent[]),
         recruitmentAPI.interviews({ start_date: rangeStart, end_date: rangeEnd }).catch(() => [] as Interview[]),
+        scheduleAPI.lifecycle({ start_date: rangeStart, end_date: rangeEnd }).catch(() => [] as LifecycleEvent[]),
       ])
-      setEvents(ev); setInterviews(iv)
+      setEvents(ev); setInterviews(iv); setLifecycles(lc)
     } finally { setLoading(false) }
   }, [rangeStart, rangeEnd])
   useEffect(() => { load() }, [load])
@@ -106,8 +110,19 @@ export default function SchedulePage() {
         location: iv.location, contactName: iv.name, contactPhone: iv.phone, memo: iv.note, raw: iv,
       })
     }
+    for (const l of lifecycles) {
+      if (!l.date) continue
+      const cat: CatKey = l.kind === 'admission' ? '입소' : '입사'
+      const label = l.kind === 'admission' ? '입소' : '입사'
+      out.push({
+        key: `l-${l.kind}-${l.id}`, kind: 'lifecycle', category: cat,
+        title: `${label} · ${l.name}`,
+        start: `${l.date}T00:00`, dateKey: l.date, time: '',
+        location: null, contactName: l.name, contactPhone: null, memo: null, raw: l as any,
+      })
+    }
     return out.sort((a, b) => (a.start! < b.start! ? -1 : 1))
-  }, [events, interviews])
+  }, [events, interviews, lifecycles])
 
   const shown = useMemo(() => unified.filter(u => active.has(u.category)), [unified, active])
 
@@ -478,6 +493,7 @@ function AddModal({ presetDate, onClose, onSaved }: { presetDate: string | null;
 function DetailModal({ ev, onClose, onChanged, onGoRecruit }: { ev: UEvent; onClose: () => void; onChanged: () => void; onGoRecruit: () => void }) {
   const [busy, setBusy] = useState(false)
   const isEvent = ev.kind === 'event'
+  const isInterview = ev.kind === 'interview'
 
   const del = async () => {
     if (!isEvent) return
@@ -494,24 +510,31 @@ function DetailModal({ ev, onClose, onChanged, onGoRecruit }: { ev: UEvent; onCl
           <p className="text-base font-bold text-gray-900">{ev.title}</p>
         </div>
         <div className="space-y-1.5 text-sm text-gray-600">
-          <p className="flex items-center gap-2"><Clock className="w-4 h-4 text-gray-400" /> {ev.dateKey} {ev.time}</p>
+          <p className="flex items-center gap-2"><Clock className="w-4 h-4 text-gray-400" /> {ev.dateKey}{ev.time ? ` ${ev.time}` : ""}</p>
           {ev.location && <p className="flex items-center gap-2"><MapPin className="w-4 h-4 text-gray-400" /> {ev.location}</p>}
           {ev.contactPhone && <p className="flex items-center gap-2"><Phone className="w-4 h-4 text-gray-400" /> {ev.contactName ? `${ev.contactName} · ` : ''}{ev.contactPhone}</p>}
           {ev.memo && <p className="text-gray-500 bg-gray-50 rounded-lg p-2.5 whitespace-pre-wrap">{ev.memo}</p>}
         </div>
-        {!isEvent && (
+        {isInterview && (
           <div className="bg-violet-50 rounded-lg p-3 text-xs text-violet-700 flex items-start gap-2">
             <Briefcase className="w-4 h-4 shrink-0 mt-0.5" />
             <span>채용 면접 일정입니다. 상태·결과·통보 관리는 채용 관리에서 진행하세요.</span>
           </div>
         )}
+        {ev.kind === 'lifecycle' && (
+          <div className={`rounded-lg p-3 text-xs flex items-start gap-2 ${ev.category === '입소' ? 'bg-rose-50 text-rose-600' : 'bg-cyan-50 text-cyan-700'}`}>
+            <UserPlus className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>{ev.category === '입소' ? '수급자 입소일입니다. 입소 정보는 수급자 관리에서 관리됩니다.' : '직원 입사일입니다. 입사 정보는 직원 관리에서 관리됩니다.'}</span>
+          </div>
+        )}
       </div>
       <ModalFooter>
-        {isEvent ? (
+        {isEvent && (
           <button onClick={del} disabled={busy} className="px-4 py-2 text-sm font-semibold text-red-500 hover:bg-red-50 rounded-lg inline-flex items-center gap-1.5 disabled:opacity-50">
             <Trash2 className="w-4 h-4" /> 삭제
           </button>
-        ) : (
+        )}
+        {isInterview && (
           <button onClick={onGoRecruit} className="px-4 py-2 text-sm font-semibold text-violet-600 hover:bg-violet-50 rounded-lg inline-flex items-center gap-1.5">
             <Briefcase className="w-4 h-4" /> 채용 관리에서 열기
           </button>
