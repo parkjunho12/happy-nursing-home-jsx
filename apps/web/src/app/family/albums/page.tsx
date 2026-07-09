@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { resolveApiBase } from '@/lib/api-client'
+import FamilyTabBar from '@/components/family/FamilyTabBar'
 
 type Album = {
   id: string; title: string; description: string
@@ -151,7 +152,7 @@ export default function FamilyAlbumsPage() {
         </div>
       </header>
 
-      <main className="max-w-lg mx-auto px-5 py-6 space-y-5 pb-10">
+      <main className="max-w-lg mx-auto px-5 py-6 space-y-5 pb-28">
         {/* 가족 안내 배너 */}
         {residents.length > 0 && (
           <div className="bg-gradient-to-r from-orange-500 to-amber-500 rounded-2xl px-5 py-4 text-white shadow-lg shadow-orange-200">
@@ -186,17 +187,24 @@ export default function FamilyAlbumsPage() {
           <div className="text-center py-16">
             <div className="w-20 h-20 bg-red-50 rounded-3xl flex items-center justify-center mx-auto mb-4 text-4xl">😢</div>
             <p className="font-bold text-gray-700">{error}</p>
-            <button onClick={() => load()} className="mt-5 px-6 py-3 bg-orange-500 text-white rounded-2xl font-bold hover:bg-orange-600 active:scale-95 transition-all shadow-lg shadow-orange-200">
+            <button onClick={() => load()} className="mt-5 px-6 py-3.5 min-h-[48px] bg-orange-500 text-white rounded-2xl font-bold hover:bg-orange-600 active:scale-95 transition-all shadow-lg shadow-orange-200 text-[15px]">
               다시 시도
             </button>
           </div>
         ) : albums.length === 0 ? (
-          <div className="text-center py-20">
+          <div className="text-center py-16 px-4">
             <div className="w-24 h-24 bg-orange-100 rounded-3xl flex items-center justify-center mx-auto mb-5 text-5xl">
-              📷
+              🌻
             </div>
-            <p className="font-bold text-gray-700 text-lg">아직 앨범이 없습니다</p>
-            <p className="text-sm text-gray-400 mt-2">곧 소중한 순간들이 올라올 거예요 🌻</p>
+            <p className="font-bold text-gray-800 text-lg">아직 등록된 사진이 없습니다</p>
+            <p className="text-[15px] text-gray-500 mt-3 leading-relaxed">
+              어르신의 일상 사진이 준비되는 대로<br />
+              이곳에서 확인하실 수 있습니다.
+            </p>
+            <div className="mt-6 inline-flex items-center gap-2 bg-amber-50 text-amber-700 rounded-2xl px-4 py-3 text-sm font-medium">
+              <span aria-hidden>💛</span>
+              소중한 가족의 하루를 정성껏 담고 있어요
+            </div>
           </div>
         ) : (
           <div className="space-y-4">
@@ -245,6 +253,8 @@ export default function FamilyAlbumsPage() {
           </div>
         )}
       </main>
+
+      <FamilyTabBar />
     </div>
   )
 }

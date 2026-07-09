@@ -35,6 +35,7 @@ class Album(Base):
     is_public   = Column(Boolean,    default=True)
     created_at  = Column(DateTime(timezone=True), default=now_kst)
     updated_at  = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)
+    last_notified_at = Column(DateTime(timezone=True), nullable=True)  # 마지막 푸시 발송(디바운스)
 
 
 class AlbumMedia(Base):

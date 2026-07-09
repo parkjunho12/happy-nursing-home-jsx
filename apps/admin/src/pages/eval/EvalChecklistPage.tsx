@@ -1,3 +1,4 @@
+import StickyToolbar from '../../components/common/StickyToolbar'
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import {
   Search,
@@ -169,15 +170,16 @@ export default function EvalChecklistPage() {
 
 
   const metrics = useMemo(() => {
-    let overdue = 0, weekTodo = 0, done = 0, total = 0
+    let overdue = 0, weekTodo = 0, done = 0, total = 0, todayDue = 0
     checklists.filter(c => c.active).forEach(c => {
       total++
       const d = deadlineOf(c)
       if (d.done) { done++; return }
       if (d.daysLeft != null && d.daysLeft < 0) overdue++
+      else if (d.daysLeft === 0) { todayDue++; weekTodo++ }
       else if (d.daysLeft != null && d.daysLeft <= 7) weekTodo++
     })
-    return { overdue, weekTodo, done, total }
+    return { overdue, weekTodo, done, total, todayDue }
   }, [checklists, deadlineOf])
 
   const filtered = useMemo(() => {
@@ -288,8 +290,8 @@ export default function EvalChecklistPage() {
       <div key={item.id} className={`bg-white rounded-lg border transition-colors hover:bg-gray-50/40 ${done ? 'border-gray-100 opacity-70' : highRisk ? 'border-gray-200 border-l-[3px] border-l-red-400' : 'border-gray-200'}`}>
         <div className="flex items-center gap-3 p-3">
           <button onClick={() => handleToggle(item.id, !checkDone(item, ''))} disabled={toggling === item.id}
-            className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center disabled:opacity-50 ${done ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-primary-orange'}`}>
-            {toggling === item.id ? <div className="w-2 h-2 border border-gray-400 border-t-transparent rounded-full animate-spin" /> : done && <div className="w-2 h-2 bg-white rounded-full" />}
+            className={`w-7 h-7 rounded-full border-2 flex-shrink-0 flex items-center justify-center disabled:opacity-50 ${done ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-primary-orange'}`}>
+            {toggling === item.id ? <div className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" /> : done && <div className="w-2.5 h-2.5 bg-white rounded-full" />}
           </button>
           <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setSelectedItem(item)}>
             <p className={`text-sm font-semibold leading-snug truncate ${done ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
@@ -366,7 +368,33 @@ export default function EvalChecklistPage() {
         </div>
       </div>
 
-      {/* 요약 스트립 */}
+      {/* 오늘 할 일 — 상단 강조(컴팩트) */}
+      <button
+        onClick={() => setFilterStatus('todo')}
+        className="w-full text-left rounded-xl bg-gradient-to-r from-primary-orange to-orange-500 text-white px-4 py-3 shadow-sm active:scale-[0.99] transition-transform"
+      >
+        <div className="flex items-center gap-3">
+          <div className="flex items-baseline gap-1.5 shrink-0">
+            <span className="text-sm font-semibold text-orange-50">오늘 할 일</span>
+            <span className="text-2xl font-extrabold leading-none">{metrics.overdue + metrics.todayDue}</span>
+            <span className="text-sm font-bold">건</span>
+          </div>
+          <span className="text-xs text-orange-50 truncate flex-1 min-w-0">
+            {metrics.overdue + metrics.todayDue > 0
+              ? (metrics.overdue > 0 ? `기한 지난 ${metrics.overdue}건 포함` : '오늘 안에 처리해 주세요')
+              : '급한 일 없어요 👍'}
+          </span>
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="hidden sm:block w-16 h-1.5 rounded-full bg-white/25 overflow-hidden">
+              <div className="h-full bg-white rounded-full" style={{ width: `${metrics.total ? Math.round(metrics.done / metrics.total * 100) : 0}%` }} />
+            </div>
+            <span className="text-sm font-bold tabular-nums">{metrics.done}<span className="text-xs text-orange-100">/{metrics.total}</span></span>
+          </div>
+        </div>
+      </button>
+
+      {/* 요약 스트립 (관리자 상세) */}
+      {isAdmin && (
       <div className="grid grid-cols-3 gap-2 sm:gap-3">
         <button onClick={() => setFilterStatus('todo')}
           className={`text-left rounded-xl p-3 sm:p-4 border transition-colors ${metrics.overdue > 0 ? 'bg-red-50 border-red-100 hover:bg-red-100' : 'bg-gray-50 border-gray-100'}`}>
@@ -383,8 +411,10 @@ export default function EvalChecklistPage() {
           <p className="text-xl sm:text-2xl font-bold text-green-600">{metrics.done}<span className="text-sm text-gray-400">/{metrics.total}</span></p>
         </div>
       </div>
+      )}
 
-      {/* 필터 바 */}
+      {/* 필터 바 (스크롤 시 상단 고정) */}
+      <StickyToolbar>
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[160px]">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -427,6 +457,7 @@ export default function EvalChecklistPage() {
           ))}
         </div>
       </div>
+      </StickyToolbar>
 
       {/* 목록 (긴급도별 그룹) */}
       {sorted.length === 0 ? (

@@ -57,6 +57,11 @@ export const adminAlbumAPI = {
 
   notify: (albumId: string) =>
     apiClient.post(`${BASE}/admin/albums/${albumId}/notify`).then(unwrap<any>),
+
+  fcmStatus: () =>
+    apiClient.get(`${BASE}/admin/albums-fcm-status`).then(unwrap<any>),
+  engagement: (days = 30) =>
+    apiClient.get(`${BASE}/admin/albums-engagement`, { params: { days } }).then(unwrap<any>),
 }
 
 // ── 보호자 ────────────────────────────────────────────────────────────────────

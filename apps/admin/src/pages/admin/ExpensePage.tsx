@@ -1,3 +1,4 @@
+import StickyToolbar from '../../components/common/StickyToolbar'
 import { useEffect, useState, useCallback } from 'react'
 import {
   Receipt, Plus, X, Check, Trash2, Paperclip, Loader2,
@@ -128,7 +129,8 @@ export default function ExpensePage() {
         </div>
       )}
 
-      {/* 필터 */}
+      {/* 필터 (상단 고정) */}
+      <StickyToolbar edge="container">
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         <div className="inline-flex bg-gray-100 rounded-xl p-1">
           {STATUS_TABS.map(t => (
@@ -149,6 +151,7 @@ export default function ExpensePage() {
         )}
         {loading && <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />}
       </div>
+      </StickyToolbar>
 
       {/* 목록 */}
       <div className="space-y-2">

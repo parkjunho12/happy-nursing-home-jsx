@@ -18,10 +18,14 @@ export interface NavItem {
   badge?: string
 }
 
+export interface NavSection {
+  label: string
+  items: NavItem[]
+}
+
 export interface NavConfig {
   showDashboard: boolean
-  main: NavItem[]
-  eval: NavItem[]
+  sections: NavSection[]
 }
 
 export function getNavConfig(
@@ -45,127 +49,161 @@ export function getNavConfig(
     activeStaff = 0,
   } = counts
 
+  const checklistItem: NavItem = {
+    to: '/eval/checklist',
+    icon: ClipboardList,
+    label: '체크리스트',
+    badge: todayTodo > 0 ? `${todayTodo}` : undefined,
+  }
+
+  // 앨범담당 — 앨범만
   if (isAlbumOnly) {
     return {
       showDashboard: false,
-      main: [],
-      eval: [
-        { to: '/eval/albums', icon: ImageIcon, label: '보호자 앨범 관리' },
+      sections: [
+        { label: '앨범', items: [{ to: '/eval/albums', icon: ImageIcon, label: '보호자 앨범 관리' }] },
       ],
     }
   }
 
+  // 요양보호사 — 업무 · 회계 · 앨범
   if (isCaregiverOnly) {
     return {
       showDashboard: false,
-      main: [],
-      eval: [
+      sections: [
         {
-          to: '/eval/checklist',
-          icon: ClipboardList,
-          label: '체크리스트',
-          badge: todayTodo > 0 ? `${todayTodo}` : undefined,
+          label: '업무',
+          items: [
+            checklistItem,
+            { to: '/eval/calendar', icon: CalendarDays, label: '체크 캘린더' },
+            { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
+          ],
         },
-        { to: '/eval/calendar', icon: CalendarDays, label: '체크 캘린더' },
-        { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
-        { to: '/expense', icon: Receipt, label: '지출결의' },
-        { to: '/eval/albums', icon: ImageIcon, label: '보호자 앨범 관리' },
+        { label: '회계', items: [{ to: '/expense', icon: Receipt, label: '지출결의' }] },
+        { label: '앨범', items: [{ to: '/eval/albums', icon: ImageIcon, label: '보호자 앨범 관리' }] },
       ],
     }
   }
 
+  // ADMIN — 전체 섹션
   if (isAdmin) {
     return {
       showDashboard: true,
-      main: [
-        { to: '/contacts', icon: MessageSquare, label: '상담 관리' },
-        { to: '/history', icon: FileText, label: '블로그' },
-        { to: '/reviews', icon: Star, label: '후기 관리' },
-        { to: '/analytics/page-views', icon: LayoutDashboard, label: '페이지뷰 통계' },
-        { to: '/analytics/suspicious-ips', icon: ShieldCheck, label: '의심 IP 통계' },
-        { to: '/naver-ads', icon: Megaphone, label: '네이버 광고 관리' },
-        { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
-        { to: '/recruitment', icon: Briefcase, label: '채용 관리' },
-        { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
-        { to: '/expense', icon: Receipt, label: '지출결의' },
-        { to: '/enteral', icon: Soup, label: '경관식 관리' },
-        { to: '/settings', icon: Settings, label: '설정' },
-      ],
-      eval: [
+      sections: [
         {
-          to: '/eval/checklist',
-          icon: ClipboardList,
-          label: '체크리스트',
-          badge: todayTodo > 0 ? `${todayTodo}` : undefined,
-        },
-        { to: '/eval/workload', icon: ClipboardCheck, label: '담당자별 현황' },
-        { to: '/eval/calendar', icon: CalendarDays, label: '평가 캘린더' },
-        {
-          to: '/eval/residents',
-          icon: UserRound,
-          label: '수급자 관리',
-          badge: activeResidents > 0 ? `${activeResidents}명` : undefined,
+          label: '운영',
+          items: [
+            { to: '/contacts', icon: MessageSquare, label: '상담 관리' },
+            { to: '/eval/residents', icon: UserRound, label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined },
+            { to: '/eval/staff', icon: UserCog, label: '직원 관리', badge: activeStaff > 0 ? `${activeStaff}명` : undefined },
+            { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
+            { to: '/facility-news', icon: Megaphone, label: '시설소식' },
+            { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
+            { to: '/recruitment', icon: Briefcase, label: '채용 관리' },
+            { to: '/enteral', icon: Soup, label: '경관식 관리' },
+          ],
         },
         {
-          to: '/eval/staff',
-          icon: UserCog,
-          label: '직원 관리(평가)',
-          badge: activeStaff > 0 ? `${activeStaff}명` : undefined,
+          label: '평가',
+          items: [
+            checklistItem,
+            { to: '/eval/calendar', icon: CalendarDays, label: '평가 캘린더' },
+            { to: '/eval/workload', icon: ClipboardCheck, label: '담당자별 현황' },
+            { to: '/eval/record-audit', icon: FileSearch, label: '제공기록지 검수' },
+            { to: '/eval/record-guide', icon: BookOpen, label: '검수 기준' },
+            { to: '/eval/ai-review', icon: Sparkles, label: 'AI 체크리스트 검토' },
+          ],
         },
-        { to: '/eval/users', icon: Users, label: '직원 계정 관리' },
-        { to: '/eval/record-audit', icon: FileSearch, label: '제공기록지 검수' },
-        { to: '/eval/record-guide', icon: BookOpen, label: '검수 기준' },
-        { to: '/eval/blog-ai-writer', icon: PenLine, label: '블로그 AI 작성' },
-        { to: '/eval/albums', icon: ImageIcon, label: '보호자 앨범' },
-        { to: '/eval/ai-review', icon: Sparkles, label: 'AI 체크리스트 검토' },
+        {
+          label: '앨범',
+          items: [{ to: '/eval/albums', icon: ImageIcon, label: '보호자 앨범' }],
+        },
+        {
+          label: '회계',
+          items: [{ to: '/expense', icon: Receipt, label: '지출결의' }],
+        },
+        {
+          label: '마케팅',
+          items: [
+            { to: '/history', icon: FileText, label: '블로그' },
+            { to: '/eval/blog-ai-writer', icon: PenLine, label: '블로그 AI 작성' },
+            { to: '/reviews', icon: Star, label: '후기 관리' },
+            { to: '/naver-ads', icon: Megaphone, label: '네이버 광고 관리' },
+            { to: '/analytics/page-views', icon: LayoutDashboard, label: '페이지뷰 통계' },
+            { to: '/analytics/suspicious-ips', icon: ShieldCheck, label: '의심 IP 통계' },
+          ],
+        },
+        {
+          label: '시스템',
+          items: [
+            { to: '/eval/users', icon: Users, label: '직원 계정 관리' },
+            { to: '/settings', icon: Settings, label: '설정' },
+          ],
+        },
       ],
     }
   }
 
+  // 일반 직원 (사회복지사·간호조무사·이사·대표·시설장 등)
   const canEnteral = ['사회복지사', '간호조무사', '이사', '대표', '시설장'].includes(user?.position ?? '')
-  return {
-    showDashboard: true,
-    main: [
-      { to: '/contacts', icon: MessageSquare, label: '상담 관리' },
-      { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
-      { to: '/expense', icon: Receipt, label: '지출결의' },
-      ...(isSocialWorker
-        ? [{ to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' }]
-        : []),
-      ...(canEnteral
-        ? [{ to: '/enteral', icon: Soup, label: '경관식 관리' }]
-        : []),
-    ],
-    eval: [
-      {
-        to: '/eval/checklist',
-        icon: ClipboardList,
-        label: '체크리스트',
-        badge: todayTodo > 0 ? `${todayTodo}` : undefined,
-      },
-      { to: '/eval/calendar', icon: CalendarDays, label: '평가 캘린더' },
-      ...(isSocialWorker
-        ? [
-            {
-              to: '/eval/residents',
-              icon: UserRound,
-              label: '수급자 관리',
-              badge: activeResidents > 0 ? `${activeResidents}명` : undefined,
-            },
-            {
-              to: '/eval/staff',
-              icon: UserCog,
-              label: '직원 관리(평가)',
-              badge: activeStaff > 0 ? `${activeStaff}명` : undefined,
-            },
-          ]
-        : []),
-      { to: '/eval/record-audit', icon: FileSearch, label: '제공기록지 검수' },
-      { to: '/eval/record-guide', icon: BookOpen, label: '검수 기준' },
-      ...(isSocialWorker || isManager
-        ? [{ to: '/eval/blog-ai-writer', icon: PenLine, label: '블로그 AI 작성' }]
-        : []),
-      { to: '/eval/albums', icon: ImageIcon, label: '보호자 앨범' },
-    ],
+  const operItems: NavItem[] = [
+    { to: '/contacts', icon: MessageSquare, label: '상담 관리' },
+    { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
+  ]
+  if (isSocialWorker) operItems.push(
+    { to: '/facility-news', icon: Megaphone, label: '시설소식' },
+    { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
+  )
+  if (canEnteral) operItems.push({ to: '/enteral', icon: Soup, label: '경관식 관리' })
+
+  const evalItems: NavItem[] = [
+    checklistItem,
+    { to: '/eval/calendar', icon: CalendarDays, label: '평가 캘린더' },
+  ]
+  if (isSocialWorker) {
+    evalItems.push(
+      { to: '/eval/residents', icon: UserRound, label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined },
+      { to: '/eval/staff', icon: UserCog, label: '직원 관리', badge: activeStaff > 0 ? `${activeStaff}명` : undefined },
+    )
   }
+  evalItems.push(
+    { to: '/eval/record-audit', icon: FileSearch, label: '제공기록지 검수' },
+    { to: '/eval/record-guide', icon: BookOpen, label: '검수 기준' },
+  )
+
+  const marketingItems: NavItem[] = []
+  if (isSocialWorker || isManager) marketingItems.push({ to: '/eval/blog-ai-writer', icon: PenLine, label: '블로그 AI 작성' })
+
+  const sections: NavSection[] = [
+    { label: '운영', items: operItems },
+    { label: '평가', items: evalItems },
+    { label: '앨범', items: [{ to: '/eval/albums', icon: ImageIcon, label: '보호자 앨범' }] },
+    { label: '회계', items: [{ to: '/expense', icon: Receipt, label: '지출결의' }] },
+    { label: '마케팅', items: marketingItems },
+  ]
+
+  return { showDashboard: true, sections }
+}
+
+// 모바일 하단 탭 — 권한별 자주 쓰는 기능 1탭 접근 (마지막 "전체" 버튼은 컴포넌트에서 추가)
+export function getMobileTabs(user: NavUser | null): NavItem[] {
+  const pos = user?.position ?? ''
+  if (pos === '앨범담당') {
+    return [{ to: '/eval/albums', icon: ImageIcon, label: '보호자 앨범' }]
+  }
+  const isCaregiver = user?.role === 'STAFF' && pos === '요양보호사'
+  if (isCaregiver) {
+    return [
+      { to: '/eval/checklist', icon: ClipboardList, label: '체크리스트' },
+      { to: '/schedule',       icon: CalendarDays,  label: '일정' },
+      { to: '/eval/albums',    icon: ImageIcon,     label: '앨범' },
+    ]
+  }
+  // ADMIN · 일반 직원 공통
+  return [
+    { to: '/',               icon: LayoutDashboard, label: '홈' },
+    { to: '/eval/checklist', icon: ClipboardList,   label: '체크리스트' },
+    { to: '/schedule',       icon: CalendarDays,    label: '일정' },
+    { to: '/eval/albums',    icon: ImageIcon,       label: '앨범' },
+  ]
 }
