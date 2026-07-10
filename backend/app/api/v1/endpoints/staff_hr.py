@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
-from app.models.staff_hr import StaffHrRecord, DOC_FIELDS, now_kst
+from app.models.staff_hr import StaffHrRecord, DOC_FIELDS, now_kst, minus_one_month, contract_end_3m, to_iso
 from app.schemas.response import ApiResponse
 
 router = APIRouter()
@@ -53,7 +53,7 @@ def list_records(include_inactive: bool = False, db: Session = Depends(get_db), 
     q = db.query(StaffHrRecord)
     if not include_inactive:
         q = q.filter((StaffHrRecord.active == True) | (StaffHrRecord.active.is_(None)))  # noqa: E712
-    rows = q.order_by(StaffHrRecord.seq.asc(), StaffHrRecord.hire_date.asc()).all()
+    rows = q.order_by(StaffHrRecord.hire_date.asc(), StaffHrRecord.name.asc()).all()
     return ApiResponse(success=True, data=[_view(r) for r in rows])
 
 
@@ -72,19 +72,7 @@ class HrBody(BaseModel):
     active: Optional[bool] = None
 
 
-import calendar as _cal
-
-def _minus_one_month(iso: str):
-    """ISO(YYYY-MM-DD) 1개월 전. 월말 보정."""
-    try:
-        y, m, d = [int(x) for x in iso.split("-")]
-    except Exception:
-        return None
-    m -= 1
-    if m < 1:
-        m = 12; y -= 1
-    d = min(d, _cal.monthrange(y, m)[1])
-    return f"{y:04d}-{m:02d}-{d:02d}"
+_minus_one_month = minus_one_month
 
 
 def _apply(r: StaffHrRecord, body: HrBody):
@@ -130,6 +118,14 @@ def create_record(body: HrBody, db: Session = Depends(get_db), current_user: Use
         body.seq = (mx.seq + 1) if mx and mx.seq else 1
     r = StaffHrRecord()
     _apply(r, body)
+    # 신규 입사자: 계약이 없고 입사일이 있으면 3개월 기본 계약 자동 생성
+    if (not r.contracts) and r.hire_date:
+        hd = to_iso(r.hire_date) or r.hire_date
+        r.hire_date = hd
+        end = contract_end_3m(hd)
+        r.contracts = [{"start": hd, "end": end}]
+        if end:
+            r.renewal_date = minus_one_month(end)
     db.add(r); db.commit(); db.refresh(r)
     return ApiResponse(success=True, data=_view(r))
 

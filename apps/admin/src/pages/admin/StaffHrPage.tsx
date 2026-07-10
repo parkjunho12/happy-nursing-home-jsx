@@ -41,6 +41,7 @@ export default function StaffHrPage() {
   }, [rows])
 
   const positions = useMemo(() => [...new Set(rows.map(r => r.position).filter(Boolean))] as string[], [rows])
+  const rankById = useMemo(() => new Map(rows.map((r, i) => [r.id, i + 1])), [rows])
   const filtered = useMemo(() => rows.filter(r => {
     if (search && !(r.name ?? '').includes(search)) return false
     if (posFilter && r.position !== posFilter) return false
@@ -137,7 +138,7 @@ export default function StaffHrPage() {
                   <tr key={r.id} className={`group hover:bg-indigo-50/20 ${r.active === false ? 'opacity-50' : ''}`}>
                     <td className={`${td} sticky left-0 z-10 bg-white group-hover:bg-indigo-50/40 text-left border-r border-gray-100`}>
                       <div className="flex items-baseline gap-1.5">
-                        <span className="text-[10px] text-gray-300">{r.seq}</span>
+                        <span className="text-[10px] text-gray-300">{rankById.get(r.id)}</span>
                         <span className="text-sm font-bold text-gray-800">{r.name || '-'}</span>
                         {r.active === false && <span className="text-[9px] font-bold text-white bg-gray-400 px-1 py-0.5 rounded">퇴사</span>}
                       </div>
@@ -247,6 +248,26 @@ function HrFormModal({ editing, onClose, onSaved }: { editing: HrRecord | null; 
     return { ...p, contracts: cs, ...(rn !== undefined ? { renewal_date: rn } : {}) }
   })
   const addContract = () => setF(p => ({ ...p, contracts: [...(p.contracts ?? []), { start: '', end: '' }] }))
+  const contractEnd3m = (start?: string | null) => {
+    if (!start) return ''
+    const [y, m, d] = start.split('-').map(Number)
+    if (!y || !m || !d) return ''
+    let m2 = m + 3, y2 = y
+    if (m2 > 12) { y2 += Math.floor((m2 - 1) / 12); m2 = ((m2 - 1) % 12) + 1 }
+    const dim = new Date(y2, m2, 0).getDate()
+    const end = new Date(y2, m2 - 1, Math.min(d, dim))
+    end.setDate(end.getDate() - 1)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${end.getFullYear()}-${pad(end.getMonth() + 1)}-${pad(end.getDate())}`
+  }
+  const onHireChange = (v: string) => setF(p => {
+    // 신규(수정 아님)이고 계약이 비어 있으면 입사일 기준 3개월 계약 자동
+    if (!isEdit && (!p.contracts || p.contracts.length === 0) && v) {
+      const end = contractEnd3m(v)
+      return { ...p, hire_date: v, contracts: [{ start: v, end }], renewal_date: end ? minusMonth(end) : '' }
+    }
+    return { ...p, hire_date: v }
+  })
 
   const submit = async () => {
     if (!f.name?.trim()) { setErr('이름을 입력해주세요.'); return }
@@ -277,7 +298,7 @@ function HrFormModal({ editing, onClose, onSaved }: { editing: HrRecord | null; 
               <datalist id="hr-pos">{POSITIONS.map(p => <option key={p} value={p} />)}</datalist></Field>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <Field label="입사일"><input type="date" value={f.hire_date ?? ''} onChange={e => setF({ ...f, hire_date: e.target.value })} className={inp} /></Field>
+            <Field label="입사일"><input type="date" value={f.hire_date ?? ''} onChange={e => onHireChange(e.target.value)} className={inp} /></Field>
             <Field label="재계약일자 (자동)">
               <div className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-700">
                 {f.renewal_date ? fmtD(f.renewal_date) : '계약 기간 추가 시 자동'}
