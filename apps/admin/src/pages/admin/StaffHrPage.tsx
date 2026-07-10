@@ -222,8 +222,30 @@ function HrFormModal({ editing, onClose, onSaved }: { editing: HrRecord | null; 
   const [err, setErr] = useState('')
 
   const setDoc = (k: DocKey, v: boolean | null) => setF(p => ({ ...p, docs: { ...p.docs, [k]: v } }))
-  const updateContract = (i: number, k: 'start' | 'end', v: string) => setF(p => { const cs = [...(p.contracts ?? [])]; cs[i] = { ...cs[i], [k]: v }; return { ...p, contracts: cs } })
-  const removeContract = (i: number) => setF(p => ({ ...p, contracts: (p.contracts ?? []).filter((_, x) => x !== i) }))
+  const minusMonth = (iso?: string | null) => {
+    if (!iso) return ''
+    const [y, m, d] = iso.split('-').map(Number)
+    if (!y || !m || !d) return ''
+    let ny = y, nm = m - 1
+    if (nm < 1) { nm = 12; ny -= 1 }
+    const dim = new Date(ny, nm, 0).getDate()
+    const nd = Math.min(d, dim)
+    return `${ny}-${String(nm).padStart(2, '0')}-${String(nd).padStart(2, '0')}`
+  }
+  const recalcRenewal = (cs: { start?: string | null; end?: string | null }[]): string | undefined => {
+    const ends = cs.map(c => c.end).filter(Boolean) as string[]
+    return ends.length ? minusMonth(ends.sort().slice(-1)[0]) : undefined
+  }
+  const updateContract = (i: number, k: 'start' | 'end', v: string) => setF(p => {
+    const cs = [...(p.contracts ?? [])]; cs[i] = { ...cs[i], [k]: v }
+    const rn = recalcRenewal(cs)
+    return { ...p, contracts: cs, ...(rn !== undefined ? { renewal_date: rn } : {}) }
+  })
+  const removeContract = (i: number) => setF(p => {
+    const cs = (p.contracts ?? []).filter((_, x) => x !== i)
+    const rn = recalcRenewal(cs)
+    return { ...p, contracts: cs, ...(rn !== undefined ? { renewal_date: rn } : {}) }
+  })
   const addContract = () => setF(p => ({ ...p, contracts: [...(p.contracts ?? []), { start: '', end: '' }] }))
 
   const submit = async () => {
@@ -256,7 +278,11 @@ function HrFormModal({ editing, onClose, onSaved }: { editing: HrRecord | null; 
           </div>
           <div className="grid grid-cols-2 gap-2">
             <Field label="입사일"><input type="date" value={f.hire_date ?? ''} onChange={e => setF({ ...f, hire_date: e.target.value })} className={inp} /></Field>
-            <Field label="재계약일자 (임박 시 일정에 표시)"><input type="date" value={f.renewal_date ?? ''} onChange={e => setF({ ...f, renewal_date: e.target.value })} className={inp} /></Field>
+            <Field label="재계약일자 (자동)">
+              <div className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-700">
+                {f.renewal_date ? fmtD(f.renewal_date) : '계약 기간 추가 시 자동'}
+              </div>
+            </Field>
           </div>
           <div>
             <label className="text-xs font-semibold text-gray-500 mb-1 block">근로계약 기간 <span className="text-gray-400 font-normal">(재계약 시 계속 추가)</span></label>
@@ -270,6 +296,7 @@ function HrFormModal({ editing, onClose, onSaved }: { editing: HrRecord | null; 
                 </div>
               ))}
               <button type="button" onClick={addContract} className="text-xs font-semibold text-indigo-600 hover:underline">+ 근로계약 기간 추가</button>
+              <p className="text-[11px] text-gray-400">재계약일은 최근 계약 종료일의 1개월 전으로 자동 계산됩니다.</p>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2 items-center">
