@@ -1,3 +1,4 @@
+import DateField from '@/components/ui/DateField'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   Upload, X, Image as ImageIcon, Smile, Wand2, Copy, RefreshCw,
@@ -315,8 +316,8 @@ export default function BlogAiWriterPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="제목 키워드"><input className={ic} value={form.title_keyword}
               onChange={e => setForm({ ...form, title_keyword: e.target.value })} placeholder="예: 봄나들이, 어버이날" /></Field>
-            <Field label="활동 날짜"><input type="date" className={ic} value={form.activity_date}
-              onChange={e => setForm({ ...form, activity_date: e.target.value })} /></Field>
+            <Field label="활동 날짜"><DateField className={ic} value={form.activity_date}
+              onChange={v => setForm({ ...form, activity_date: v })} /></Field>
             <Field label="프로그램명"><input className={ic} value={form.program_name}
               onChange={e => setForm({ ...form, program_name: e.target.value })} placeholder="예: 원예치료, 음악프로그램" /></Field>
             <Field label="참여 어르신 수"><input className={ic} value={form.participant_count}

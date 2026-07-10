@@ -1,3 +1,4 @@
+import DateField from '@/components/ui/DateField'
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { FileText, Plus, X, Trash2, Loader2, Check } from 'lucide-react'
 import { hrAPI, DOC_FIELDS, type HrRecord, type HrInput, type DocKey } from '../../api/hrClient'
@@ -317,7 +318,7 @@ function HrFormModal({ editing, onClose, onSaved }: { editing: HrRecord | null; 
               <datalist id="hr-pos">{POSITIONS.map(p => <option key={p} value={p} />)}</datalist></Field>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <Field label="입사일"><input type="date" value={f.hire_date ?? ''} onChange={e => onHireChange(e.target.value)} className={inp} /></Field>
+            <Field label="입사일"><DateField value={f.hire_date} onChange={v => onHireChange(v)} className={inp} /></Field>
             <Field label="재계약일자 (자동)">
               <div className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-700">
                 {f.renewal_date ? fmtD(f.renewal_date) : '계약 기간 추가 시 자동'}
@@ -329,9 +330,9 @@ function HrFormModal({ editing, onClose, onSaved }: { editing: HrRecord | null; 
             <div className="space-y-2">
               {(f.contracts ?? []).map((c, i) => (
                 <div key={i} className="flex items-center gap-1.5">
-                  <input type="date" value={c.start ?? ''} onChange={e => updateContract(i, 'start', e.target.value)} className={`${inp} flex-1`} />
+                  <DateField value={c.start} onChange={v => updateContract(i, 'start', v)} className={inp} wrapperClassName="flex-1" />
                   <span className="text-gray-400 shrink-0">~</span>
-                  <input type="date" value={c.end ?? ''} onChange={e => updateContract(i, 'end', e.target.value)} className={`${inp} flex-1`} />
+                  <DateField value={c.end} onChange={v => updateContract(i, 'end', v)} className={inp} wrapperClassName="flex-1" />
                   <button type="button" onClick={() => removeContract(i)} className="text-gray-300 hover:text-red-500 shrink-0"><X className="w-4 h-4" /></button>
                 </div>
               ))}

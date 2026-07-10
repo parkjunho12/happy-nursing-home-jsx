@@ -1,3 +1,4 @@
+import DateField from '@/components/ui/DateField'
 import StickyToolbar from '../../components/common/StickyToolbar'
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import {
@@ -721,8 +722,8 @@ function QuickTicketModal({ options, onClose, onCreated }: {
             <div className="flex items-center gap-1.5 mb-2">
               {chip('오늘', today)}{chip('내일', plus(1))}{chip('3일', plus(3))}{chip('1주', plus(7))}
             </div>
-            <input type="date" value={dueDate} min={today} onChange={e => setDueDate(e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40" />
+            <DateField value={dueDate} onChange={v => setDueDate(v)}
+              className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">담당자 (선택)</label>

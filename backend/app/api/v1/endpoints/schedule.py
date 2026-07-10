@@ -17,6 +17,7 @@ from app.models.user import User
 from app.models.schedule import ScheduleEvent, now_kst
 from app.models.eval import LtcResident, LtcStaffMember
 from app.models.staff_hr import StaffHrRecord
+from app.models.resident_docs import ResidentDocStatus
 from app.schemas.response import ApiResponse
 
 router = APIRouter()
@@ -244,4 +245,44 @@ def renewals(
             "id": r.id, "name": r.name, "position": r.position,
             "date": r.renewal_date,
         })
+    return ApiResponse(success=True, data=out)
+
+
+@router.get("/doc-events")
+def doc_events(
+    start_date: Optional[str] = Query(None),  # YYYY-MM-DD
+    end_date: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_manager),
+):
+    """어르신 서류(계약서·급여제공계획서·결과평가) 일시를 파생 이벤트로 반환."""
+    out = []
+    rows = db.query(ResidentDocStatus).filter(ResidentDocStatus.active == True).all()  # noqa: E712
+    fields = (
+        ("contract", "계약서", lambda r: r.contract_lines),
+        ("plan", "급여제공계획서", lambda r: r.plan_lines),
+        ("eval", "결과평가", lambda r: r.eval_lines),
+    )
+    for r in rows:
+        for doc_type, label, getter in fields:
+            for it in (getter(r) or []):
+                if not isinstance(it, dict):
+                    continue
+                d = (it.get("date") or "").strip() if it.get("date") else None
+                if not d:
+                    continue
+                if start_date and d < start_date:
+                    continue
+                if end_date and d > end_date:
+                    continue
+                out.append({
+                    "id": f"{r.id}:{doc_type}:{d}",
+                    "resident_id": r.resident_id,
+                    "name": r.name,
+                    "doc_type": doc_type,
+                    "doc_label": label,
+                    "date": d,
+                    "kind": it.get("kind"),
+                    "memo": it.get("memo"),
+                })
     return ApiResponse(success=True, data=out)

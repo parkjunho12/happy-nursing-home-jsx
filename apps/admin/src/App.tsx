@@ -41,6 +41,7 @@ import SchedulePage from './pages/admin/SchedulePage'
 import ExpensePage from './pages/admin/ExpensePage'
 import FacilityNewsPage from './pages/admin/FacilityNewsPage'
 import StaffHrPage from './pages/admin/StaffHrPage'
+import ResidentDocsPage from './pages/admin/ResidentDocsPage'
 import GuidePage from './pages/GuidePage'
 import EnteralPage from './pages/admin/EnteralPage'
 import FamilyLoginPage      from './pages/family/FamilyLoginPage'
@@ -212,7 +213,8 @@ function App() {
             <Route path="schedule"                 element={<ScheduleRoute><SchedulePage /></ScheduleRoute>} />
             <Route path="expense"                  element={<ExpenseRoute><ExpensePage /></ExpenseRoute>} />
             <Route path="facility-news"            element={<SocialWorkerRoute><FacilityNewsPage /></SocialWorkerRoute>} />
-            <Route path="staff-hr"                 element={<SocialWorkerRoute><StaffHrPage /></SocialWorkerRoute>} />
+            <Route path="staff-hr"                 element={<ManagerRoute><StaffHrPage /></ManagerRoute>} />
+            <Route path="resident-docs"            element={<SocialWorkerRoute><ResidentDocsPage /></SocialWorkerRoute>} />
             <Route path="enteral"                  element={<CareInventoryRoute><EnteralPage /></CareInventoryRoute>} />
 
             {/* 평가 관리 — 공통 (role 필터는 백엔드에서) */}

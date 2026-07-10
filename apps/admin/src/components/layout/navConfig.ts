@@ -96,6 +96,7 @@ export function getNavConfig(
           items: [
             { to: '/contacts', icon: MessageSquare, label: '상담 관리' },
             { to: '/eval/residents', icon: UserRound, label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined },
+            { to: '/resident-docs', icon: ClipboardList, label: '어르신 서류현황' },
             { to: '/eval/staff', icon: UserCog, label: '직원 관리', badge: activeStaff > 0 ? `${activeStaff}명` : undefined },
             { to: '/staff-hr', icon: FileText, label: '근로계약·서류' },
             { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
@@ -156,6 +157,7 @@ export function getNavConfig(
           items: [
             { to: '/contacts', icon: MessageSquare, label: '상담 관리' },
             { to: '/eval/residents', icon: UserRound, label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined },
+            { to: '/resident-docs', icon: ClipboardList, label: '어르신 서류현황' },
             { to: '/eval/staff', icon: UserCog, label: '직원 관리', badge: activeStaff > 0 ? `${activeStaff}명` : undefined },
             { to: '/staff-hr', icon: FileText, label: '근로계약·서류' },
             { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
@@ -218,8 +220,8 @@ export function getNavConfig(
   if (isSocialWorker) {
     evalItems.push(
       { to: '/eval/residents', icon: UserRound, label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined },
+      { to: '/resident-docs', icon: ClipboardList, label: '어르신 서류현황' },
       { to: '/eval/staff', icon: UserCog, label: '직원 관리', badge: activeStaff > 0 ? `${activeStaff}명` : undefined },
-      { to: '/staff-hr', icon: FileText, label: '근로계약·서류' },
     )
   }
   evalItems.push(

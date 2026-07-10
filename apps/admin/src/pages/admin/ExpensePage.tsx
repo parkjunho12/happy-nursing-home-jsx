@@ -1,3 +1,4 @@
+import DateField from '@/components/ui/DateField'
 import StickyToolbar from '../../components/common/StickyToolbar'
 import { useEffect, useState, useCallback } from 'react'
 import {
@@ -268,7 +269,7 @@ function ExpenseFormModal({ meta, editing, onClose, onSaved }:
             <input inputMode="numeric" value={amount ? new Intl.NumberFormat('ko-KR').format(amountNum) : ''}
               onChange={e => setAmount(e.target.value)} placeholder="0" className="einp text-right font-bold" />
           </Field>
-          <Field label="구매일"><input type="date" value={purchasedAt} onChange={e => setPurchasedAt(e.target.value)} className="einp" /></Field>
+          <Field label="구매일"><DateField value={purchasedAt} onChange={v => setPurchasedAt(v)} className="einp" clearable={false} /></Field>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <Field label="계정과목">

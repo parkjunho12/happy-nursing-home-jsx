@@ -214,6 +214,10 @@ class LtcResidentCreate(BaseModel):
     gender:                str
     admission_date:        str
     care_grade_start_date: str
+    certifications:        Optional[List[dict]] = None   # 입소 시 장기요양인정서(등급·기간·급여) → 서류현황 seed용
+    contract_lines:        Optional[List[dict]] = None   # 자동 생성된 계약서 일시
+    plan_lines:            Optional[List[dict]] = None   # 자동 생성된 계획서 일시
+    eval_lines:            Optional[List[dict]] = None   # 자동 생성된 평가 일시
     memo:                  str = ""
 
 

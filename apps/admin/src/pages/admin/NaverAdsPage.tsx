@@ -1,3 +1,4 @@
+import DateField from '@/components/ui/DateField'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import CtaTrackingPanel from './CtaTrackingPanel'
 import BidLogsPanel from './BidLogsPanel'
@@ -375,9 +376,9 @@ export default function NaverAdsPage() {
           ))}
           {period === 'custom' && (
             <div className="flex items-center gap-2 text-sm">
-              <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1" />
+              <DateField value={customStart} onChange={v => setCustomStart(v)} className="border border-gray-200 rounded-lg px-2 py-1" />
               <span>~</span>
-              <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1" />
+              <DateField value={customEnd} onChange={v => setCustomEnd(v)} className="border border-gray-200 rounded-lg px-2 py-1" />
             </div>
           )}
           <span className="text-xs text-gray-400 ml-1">{start} ~ {end}</span>

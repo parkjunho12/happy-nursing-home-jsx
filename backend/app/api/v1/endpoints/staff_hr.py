@@ -23,8 +23,8 @@ def _require_hr(current_user: User = Depends(get_current_user)) -> User:
     role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
     pos = getattr(current_user, "position", None)
     pos = pos.value if hasattr(pos, "value") else str(pos or "")
-    if role != "ADMIN" and pos != "사회복지사":
-        raise HTTPException(403, "근로계약·서류 관리 권한이 없습니다. (관리자·사회복지사)")
+    if role != "ADMIN" and pos != "시설장":
+        raise HTTPException(403, "근로계약·서류 관리 권한이 없습니다. (관리자·시설장)")
     return current_user
 
 

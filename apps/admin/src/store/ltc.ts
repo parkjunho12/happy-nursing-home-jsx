@@ -61,6 +61,7 @@ export interface ChecklistItem {
 export interface LtcResident {
   id: string; name: string; birthDate: string; gender: string
   admissionDate: string; dischargeDate?: string; careGradeStartDate: string
+  grade?: string; certEnd?: string
   status: string; memo: string; createdAt: string
 }
 
@@ -212,6 +213,7 @@ interface LtcState {
   addResident:       (r: Omit<LtcResident,'id'|'createdAt'>) => Promise<void>
   updateResident:    (id: string, u: Partial<LtcResident>) => Promise<void>
   dischargeResident: (id: string, date: string) => Promise<void>
+  deleteResident:    (id: string) => Promise<void>
   addStaff:          (s: Omit<LtcStaff,'id'|'createdAt'>) => Promise<void>
   updateStaff:       (id: string, u: Partial<LtcStaff>) => Promise<void>
   resignStaff:       (id: string, date: string) => Promise<void>
@@ -360,7 +362,7 @@ export const useLtcStore = create<LtcState>((set, get) => ({
   },
 
   addResident: async (r) => {
-    const raw = await evalResidentsAPI.create({ name:r.name, birth_date:r.birthDate, gender:r.gender, admission_date:r.admissionDate, care_grade_start_date:r.careGradeStartDate, memo:r.memo })
+    const raw = await evalResidentsAPI.create({ name:r.name, birth_date:r.birthDate, gender:r.gender, admission_date:r.admissionDate, care_grade_start_date:r.careGradeStartDate, certifications:(r as any).certifications, contract_lines:(r as any).contract_lines, plan_lines:(r as any).plan_lines, eval_lines:(r as any).eval_lines, memo:r.memo })
     const newR = mapR(raw)
     const templates = generateResidentAdmissionChecklists(newR as any)
     const newCls = await evalChecklistAPI.createBulk(templates.map(clPayload as any))
@@ -398,6 +400,18 @@ export const useLtcStore = create<LtcState>((set, get) => ({
     const newOccs = await occurrenceAPI.list({ person_id: id }).catch(() => [])
     if (newOccs.length > 0)
       set(s => ({ occurrences: [...s.occurrences.filter(o => !newItemIds.includes(o.checklistItemId)), ...newOccs.map(mapOcc)] }))
+  },
+
+  deleteResident: async (id) => {
+    await evalResidentsAPI.delete(id)
+    set(s => ({
+      residents:   s.residents.filter(r => r.id !== id),
+      checklists:  s.checklists.filter(c => c.personId !== id),
+      occurrences: s.occurrences.filter(o => {
+        const cl = s.checklists.find(c => c.id === o.checklistItemId)
+        return cl ? cl.personId !== id : true
+      }),
+    }))
   },
 
   addStaff: async (s) => {

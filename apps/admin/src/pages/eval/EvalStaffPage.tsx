@@ -1,3 +1,4 @@
+import DateField from '@/components/ui/DateField'
 import StickyToolbar from '../../components/common/StickyToolbar'
 import { useState, useMemo, useEffect } from 'react'
 import { UserPlus, UserMinus, Edit2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw } from 'lucide-react'
@@ -206,12 +207,12 @@ function StaffForm({ existing, onClose }: { existing?: LtcStaff; onClose:()=>voi
           {!existing && <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 text-xs text-orange-700">✨ 등록 시 입사 관련 체크리스트 <strong>2건</strong>이 자동 생성됩니다.</div>}
           <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">성명 *</label><input required className={ic} value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="홍길동"/></div>
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">생년월일 *</label><input required type="date" className={ic} value={form.birthDate} onChange={e=>setForm({...form,birthDate:e.target.value})}/></div>
+            <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">생년월일 *</label><DateField className={ic} value={form.birthDate} onChange={v=>setForm({...form,birthDate:v})} clearable={false}/></div>
             <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">성별</label>
               <select className={ic} value={form.gender} onChange={e=>setForm({...form,gender:e.target.value})}><option value="female">여</option><option value="male">남</option></select>
             </div>
           </div>
-          <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">입사일 *</label><input required type="date" className={ic} value={form.hireDate} onChange={e=>setForm({...form,hireDate:e.target.value})}/></div>
+          <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">입사일 *</label><DateField className={ic} value={form.hireDate} onChange={v=>setForm({...form,hireDate:v})} clearable={false}/></div>
           <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">직종 *</label>
             <input list="staff-pos" className={ic} value={form.position} onChange={e=>setForm({...form,position:e.target.value})} placeholder="예: 요양보호사"/>
             <datalist id="staff-pos">{['시설장','사무국장','대표','이사','사회복지사','간호사','간호팀장','간호조무사','물리치료사','요양팀장','요양보호사','조리원','영양사'].map(p=><option key={p} value={p}/>)}</datalist>
@@ -244,7 +245,7 @@ function ResignModal({ staffId, onClose }: { staffId:string; onClose:()=>void })
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
         <div className="px-5 py-4 border-b"><h2 className="font-bold text-gray-900">퇴사 처리 — {s.name}</h2></div>
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">퇴사일 *</label><input required type="date" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40" value={date} onChange={e=>setDate(e.target.value)}/></div>
+          <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">퇴사일 *</label><DateField className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40" value={date} onChange={v=>setDate(v)} clearable={false}/></div>
           <div className="flex gap-3 pt-2">
             <button type="submit" disabled={loading} className="flex-1 bg-orange-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-orange-600 disabled:opacity-50">{loading?'처리 중...':'퇴사 처리'}</button>
             <button type="button" onClick={onClose} className="flex-1 border border-gray-200 text-gray-700 rounded-xl py-2.5 text-sm">취소</button>
