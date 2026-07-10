@@ -50,6 +50,10 @@ export const evalChecklistAPI = {
     const res = await apiClient.post(`/api/v1/eval/checklists/${id}/toggle`, d)
     return unwrap<any>(res)
   },
+  setProgress: async (id: string, in_progress: boolean) => {
+    const res = await apiClient.post(`/api/v1/eval/checklists/${id}/progress`, { in_progress })
+    return unwrap<any>(res)
+  },
 }
 
 // ── 평가용 수급자 ─────────────────────────────────────────────

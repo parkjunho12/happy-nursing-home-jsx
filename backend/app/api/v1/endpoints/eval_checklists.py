@@ -14,7 +14,7 @@ from app.schemas.eval import (
 )
 from app.schemas.response import ApiResponse
 from app.services.occurrence import (
-    get_or_create_occurrence, complete_occurrence, uncomplete_occurrence,
+    get_or_create_occurrence, complete_occurrence, uncomplete_occurrence, set_occurrence_progress,
 )
 
 router = APIRouter()
@@ -60,6 +60,7 @@ def _cl_to_out(item: ChecklistItem) -> dict:
             "scheduled_date":    o.scheduled_date,
             "due_date":          o.due_date,
             "status":            o.status,
+            "started_by":        getattr(o, "started_by", None),
             "completed_date":    o.completed_date,
             "memo":              o.memo or "",
             "attachment_name":   o.attachment_name or "",
@@ -192,6 +193,16 @@ def create_checklist(
     get_or_create_occurrence(db, item)
 
     db.commit()
+
+    # 생성 시 담당자가 본인이 아니면 그 직원에게 푸시
+    try:
+        if assigned_id and assigned_id != current_user.id:
+            from app.services.staff_notify import notify_user
+            notify_user(db, assigned_id, "📋 새 업무가 배정되었어요",
+                        item.title, data={"type": "checklist", "item_id": item.id})
+    except Exception:
+        pass
+
     item = _query_with_history(db).filter(ChecklistItem.id == item.id).first()
     return ApiResponse(success=True, data=_cl_to_out(item))
 
@@ -265,9 +276,10 @@ def update_checklist(
     # 반복 항목: 반복설정/주기 변경이 현재 주기 occurrence의 예정일/마감일에 반영되도록 갱신
     try:
         from app.services.occurrence import (
-            canon_freq, RECURRING_FREQS, get_or_create_occurrence,
+            canon_freq, RECURRING_FREQS, ONE_TIME_FREQ, get_or_create_occurrence,
             get_period_bounds, cfg_from_item, today_kst,
         )
+        from app.models.eval import ChecklistOccurrence
         fq = canon_freq(item.frequency)
         if fq in RECURRING_FREQS:
             occ = get_or_create_occurrence(db, item)
@@ -276,6 +288,20 @@ def update_checklist(
                 occ.scheduled_date = sd.isoformat()
                 occ.due_date = dd.isoformat()
                 db.commit()
+        elif fq == ONE_TIME_FREQ and getattr(item, 'due_date', None):
+            # 일회성: 기한 변경을 미완료 occurrence에 반영(화면 표시는 occurrence 기준)
+            occs = db.query(ChecklistOccurrence).filter(
+                ChecklistOccurrence.checklist_item_id == item.id,
+                ChecklistOccurrence.status != 'completed',
+            ).all()
+            if occs:
+                for occ in occs:
+                    occ.period_key = item.due_date
+                    occ.scheduled_date = item.due_date
+                    occ.due_date = item.due_date
+            else:
+                get_or_create_occurrence(db, item)
+            db.commit()
     except Exception:
         db.rollback()
 
@@ -312,14 +338,26 @@ def assign_checklist(
         u = db.query(User).filter(User.id == assigned_user_id).first()
         if not u:
             raise HTTPException(404, f"직원을 찾을 수 없습니다: {assigned_user_id}")
+        prev_uid = item.assigned_user_id
         item.assigned_user_id = assigned_user_id
         item.assignee = u.name
         logging.warning(f"[ASSIGN] → user.name={u.name!r} user.id={u.id!r}")
     else:
+        prev_uid = item.assigned_user_id
         item.assigned_user_id = None
         item.assignee = ""
 
     db.commit()
+
+    # 새로 배정된 담당자(본인 제외)에게 푸시
+    try:
+        if assigned_user_id and assigned_user_id != prev_uid and assigned_user_id != current_user.id:
+            from app.services.staff_notify import notify_user
+            notify_user(db, assigned_user_id, "📋 새 업무가 배정되었어요",
+                        item.title, data={"type": "checklist", "item_id": item.id})
+    except Exception:
+        pass
+
     return ApiResponse(success=True, data=_cl_to_out(item))
 
 
@@ -419,6 +457,48 @@ def toggle_complete(
                     attachment_name=payload.attachment_name,
                 ))
 
+    db.commit()
+    item = _query_with_history(db).filter(ChecklistItem.id == item_id).first()
+    return ApiResponse(success=True, data=_cl_to_out(item))
+
+
+class ProgressRequest(BaseModel):
+    in_progress: bool = True
+
+
+@router.post("/{item_id}/progress", response_model=ApiResponse)
+def set_progress(
+    item_id: str,
+    payload: ProgressRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """진행 중(착수) 토글 — 현재 주기 occurrence 상태를 in_progress ↔ pending 으로."""
+    from app.services.occurrence import EVENT_FREQS as _EV, ONE_TIME_FREQ
+    item = _query_with_history(db).filter(ChecklistItem.id == item_id).first()
+    if not item:
+        raise HTTPException(404, "Not found")
+
+    is_one_time = item.frequency == ONE_TIME_FREQ
+    target = None
+    if is_one_time and getattr(item, "due_date", None):
+        from datetime import date as _date
+        try:
+            target = _date.fromisoformat(item.due_date)
+        except Exception:
+            target = None
+
+    if item.frequency not in _EV and not is_one_time:
+        try:
+            from app.services.occurrence import reconcile_occurrences
+            reconcile_occurrences(db, item)
+        except Exception:
+            pass
+
+    occ = get_or_create_occurrence(db, item, target if is_one_time else None)
+    if occ.status == "completed":
+        raise HTTPException(400, "이미 완료된 항목입니다.")
+    set_occurrence_progress(db, occ, payload.in_progress, getattr(current_user, "name", None))
     db.commit()
     item = _query_with_history(db).filter(ChecklistItem.id == item_id).first()
     return ApiResponse(success=True, data=_cl_to_out(item))

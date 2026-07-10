@@ -11,6 +11,7 @@ const ContactsPage = () => {
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<Contact['status'] | 'ALL'>('ALL')
   const [searchTerm, setSearchTerm] = useState('')
+  const [completing, setCompleting] = useState<string | null>(null)
 
   useEffect(() => {
     loadContacts()
@@ -28,6 +29,20 @@ const ContactsPage = () => {
       setContacts([])
     } finally {
       setLoading(false)
+    }
+  }
+
+  // 답변 없이 바로 완료 처리
+  const handleComplete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation()
+    setCompleting(id)
+    try {
+      await contactsAPI.updateStatus(id, 'CLOSED')
+      setContacts(prev => prev.map(c => (c.id === id ? { ...c, status: 'CLOSED' } : c)))
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setCompleting(null)
     }
   }
 
@@ -273,11 +288,24 @@ const ContactsPage = () => {
               </div>
             )}
 
-            <div className="mt-4 flex items-center justify-between text-sm text-gray-500">
-              <span>접수: {new Date(contact.created_at).toLocaleString('ko-KR')}</span>
-              <button className="text-primary-orange font-semibold hover:underline">
-                상세 보기 →
-              </button>
+            <div className="mt-4 flex items-center justify-between gap-2 text-sm text-gray-500">
+              <span className="truncate">접수: {new Date(contact.created_at).toLocaleString('ko-KR')}</span>
+              <div className="flex items-center gap-2 shrink-0">
+                {contact.status !== 'CLOSED' ? (
+                  <button
+                    onClick={(e) => handleComplete(e, contact.id)}
+                    disabled={completing === contact.id}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-50 text-green-700 font-semibold border border-green-200 hover:bg-green-100 disabled:opacity-50"
+                  >
+                    <CheckCircle className="w-4 h-4" /> {completing === contact.id ? '처리 중...' : '완료 처리'}
+                  </button>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-500 font-semibold">
+                    <CheckCircle className="w-4 h-4" /> 완료됨
+                  </span>
+                )}
+                <button className="text-primary-orange font-semibold hover:underline">상세 보기 →</button>
+              </div>
             </div>
           </div>
         ))}

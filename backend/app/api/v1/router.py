@@ -15,6 +15,7 @@ from app.api.v1.endpoints.schedule import router as schedule_router
 from app.api.v1.endpoints.expense import router as expense_router
 from app.api.v1.endpoints.albums import admin_router as album_admin_router, family_router as album_family_router
 from app.api.v1.endpoints.facility_news import admin_router as news_admin_router, family_router as news_family_router
+from app.api.v1.endpoints.staff_push import router as staff_push_router
 api_router = APIRouter()
 
 # Public endpoints (인증 불필요)
@@ -111,3 +112,4 @@ api_router.include_router(schedule_router, prefix="/admin/schedule", tags=["admi
 api_router.include_router(expense_router, prefix="/admin/expense", tags=["admin-expense"])
 api_router.include_router(news_admin_router,  prefix="/admin",  tags=["admin-news"])
 api_router.include_router(news_family_router, prefix="/family", tags=["family-news"])
+api_router.include_router(staff_push_router, prefix="/staff/push", tags=["staff-push"])
