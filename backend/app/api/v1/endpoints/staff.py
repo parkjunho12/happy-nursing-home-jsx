@@ -103,13 +103,33 @@ def assignee_options(
     return {"success": True, "data": [_to_dict(u) for u in users]}
 
 
-# ── 전체 목록 (ADMIN만) ────────────────────────────────────────────────────────
+
+def _role_str(u: User) -> str:
+    return u.role.value if hasattr(u.role, "value") else str(u.role)
+
+def _pos_str(u: User) -> str:
+    p = getattr(u, "position", None)
+    return p.value if hasattr(p, "value") else str(p or "")
+
+def _is_admin_user(u: User) -> bool:
+    return _role_str(u) == "ADMIN"
+
+def _require_user_manager(current_user: User = Depends(get_current_user)) -> User:
+    """직원 계정 관리: ADMIN 또는 시설장. (시설장은 ADMIN 계정 관리 불가 — 각 엔드포인트에서 강제)"""
+    if _is_admin_user(current_user) or _pos_str(current_user) == "시설장":
+        return current_user
+    raise HTTPException(403, "직원 계정 관리 권한이 없습니다.")
+
+
+# ── 전체 목록 (ADMIN·시설장) ────────────────────────────────────────────────────────
 @router.get("")
 def list_users(
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(_require_user_manager),
     db: Session = Depends(get_db),
 ):
     users = db.query(User).order_by(User.name).all()
+    if not _is_admin_user(current_user):   # 시설장: ADMIN 계정 제외
+        users = [u for u in users if _role_str(u) != "ADMIN"]
     return {"success": True, "data": [_to_dict(u) for u in users]}
 
 
@@ -117,9 +137,11 @@ def list_users(
 @router.post("", status_code=201)
 def create_user(
     body: UserCreate,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(_require_user_manager),
     db: Session = Depends(get_db),
 ):
+    if not _is_admin_user(current_user) and body.role == "ADMIN":
+        raise HTTPException(403, "관리자 계정 생성은 ADMIN만 가능합니다.")
     if db.query(User).filter(User.email == body.email).first():
         raise HTTPException(400, "이미 사용 중인 이메일입니다")
 
@@ -141,12 +163,17 @@ def create_user(
 def update_user(
     target_id: str,
     body: UserUpdate,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(_require_user_manager),
     db: Session = Depends(get_db),
 ):
     u = db.query(User).filter(User.id == target_id).first()
     if not u:
         raise HTTPException(404, "사용자를 찾을 수 없습니다")
+    if not _is_admin_user(current_user):
+        if _role_str(u) == "ADMIN":
+            raise HTTPException(403, "관리자 계정은 수정할 수 없습니다.")
+        if body.role == "ADMIN":
+            raise HTTPException(403, "관리자 권한 부여는 ADMIN만 가능합니다.")
 
     if body.name     is not None: u.name     = body.name
     if body.position is not None: u.position = body.position
@@ -161,12 +188,14 @@ def update_user(
 def change_password(
     target_id: str,
     body: PasswordChange,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(_require_user_manager),
     db: Session = Depends(get_db),
 ):
     u = db.query(User).filter(User.id == target_id).first()
     if not u:
         raise HTTPException(404, "사용자를 찾을 수 없습니다")
+    if not _is_admin_user(current_user) and _role_str(u) == "ADMIN":
+        raise HTTPException(403, "관리자 계정은 관리할 수 없습니다.")
     u.hashed_password = get_password_hash(body.password)
     db.commit()
     return {"success": True, "data": {"id": u.id}}
@@ -176,7 +205,7 @@ def change_password(
 @router.delete("/{target_id}")
 def delete_user(
     target_id: str,
-    current_user: User = Depends(get_current_admin_user),
+    current_user: User = Depends(_require_user_manager),
     db: Session = Depends(get_db),
 ):
     if target_id == current_user.id:
@@ -184,6 +213,8 @@ def delete_user(
     u = db.query(User).filter(User.id == target_id).first()
     if not u:
         raise HTTPException(404, "사용자를 찾을 수 없습니다")
+    if not _is_admin_user(current_user) and _role_str(u) == "ADMIN":
+        raise HTTPException(403, "관리자 계정은 삭제할 수 없습니다.")
     db.delete(u)
     db.commit()
     return {"success": True, "data": None}

@@ -5,7 +5,7 @@ import {
   Phone, Clock, Briefcase, Loader2, Grid3x3, Columns3, List, UserPlus,
 } from 'lucide-react'
 import {
-  scheduleAPI, SCHEDULE_CATEGORIES, type ScheduleEvent, type EventInput, type LifecycleEvent,
+  scheduleAPI, SCHEDULE_CATEGORIES, type ScheduleEvent, type EventInput, type LifecycleEvent, type RenewalEvent,
 } from '../../api/scheduleClient'
 import { recruitmentAPI, type Interview } from '../../api/recruitmentClient'
 
@@ -20,7 +20,7 @@ const hmOf = (iso?: string | null) => {
 const startOfWeek = (d: Date) => { const x = new Date(d); x.setDate(x.getDate() - x.getDay()); x.setHours(0, 0, 0, 0); return x }
 
 /* 카테고리 색상 */
-type CatKey = '방문상담' | '외부방문' | '회의' | '행사' | '기타' | '면접' | '입소' | '입사'
+type CatKey = '방문상담' | '외부방문' | '회의' | '행사' | '기타' | '면접' | '입소' | '입사' | '재계약'
 const CAT: Record<CatKey, { dot: string; chip: string; bar: string }> = {
   방문상담: { dot: 'bg-blue-500',   chip: 'bg-blue-50 text-blue-700 border-blue-200',       bar: 'border-l-blue-500 bg-blue-50' },
   외부방문: { dot: 'bg-teal-500',   chip: 'bg-teal-50 text-teal-700 border-teal-200',       bar: 'border-l-teal-500 bg-teal-50' },
@@ -30,8 +30,9 @@ const CAT: Record<CatKey, { dot: string; chip: string; bar: string }> = {
   면접:    { dot: 'bg-violet-500', chip: 'bg-violet-50 text-violet-700 border-violet-200', bar: 'border-l-violet-500 bg-violet-50' },
   입소:    { dot: 'bg-rose-500',   chip: 'bg-rose-50 text-rose-600 border-rose-200',       bar: 'border-l-rose-500 bg-rose-50' },
   입사:    { dot: 'bg-cyan-500',   chip: 'bg-cyan-50 text-cyan-700 border-cyan-200',       bar: 'border-l-cyan-500 bg-cyan-50' },
+  재계약:  { dot: 'bg-amber-500',  chip: 'bg-amber-50 text-amber-700 border-amber-200',     bar: 'border-l-amber-500 bg-amber-50' },
 }
-const ALL_CATS: CatKey[] = ['방문상담', '외부방문', '회의', '행사', '기타', '면접', '입소', '입사']
+const ALL_CATS: CatKey[] = ['방문상담', '외부방문', '회의', '행사', '기타', '면접', '입소', '입사', '재계약']
 
 /* 통합 이벤트 */
 type UEvent = {
@@ -58,6 +59,7 @@ export default function SchedulePage() {
   const [events, setEvents] = useState<ScheduleEvent[]>([])
   const [interviews, setInterviews] = useState<Interview[]>([])
   const [lifecycles, setLifecycles] = useState<LifecycleEvent[]>([])
+  const [renewals, setRenewals] = useState<RenewalEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [active, setActive] = useState<Set<CatKey>>(new Set(ALL_CATS))
   const [addOpen, setAddOpen] = useState(false)
@@ -79,12 +81,13 @@ export default function SchedulePage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [ev, iv, lc] = await Promise.all([
+      const [ev, iv, lc, rn] = await Promise.all([
         scheduleAPI.events({ start_date: rangeStart, end_date: rangeEnd }).catch(() => [] as ScheduleEvent[]),
         recruitmentAPI.interviews({ start_date: rangeStart, end_date: rangeEnd }).catch(() => [] as Interview[]),
         scheduleAPI.lifecycle({ start_date: rangeStart, end_date: rangeEnd }).catch(() => [] as LifecycleEvent[]),
+        scheduleAPI.renewals({ start_date: rangeStart, end_date: rangeEnd }).catch(() => [] as RenewalEvent[]),
       ])
-      setEvents(ev); setInterviews(iv); setLifecycles(lc)
+      setEvents(ev); setInterviews(iv); setLifecycles(lc); setRenewals(rn)
     } finally { setLoading(false) }
   }, [rangeStart, rangeEnd])
   useEffect(() => { load() }, [load])
@@ -121,8 +124,17 @@ export default function SchedulePage() {
         location: null, contactName: l.name, contactPhone: null, memo: null, raw: l as any,
       })
     }
+    for (const rn of renewals) {
+      if (!rn.date) continue
+      out.push({
+        key: `r-${rn.id}`, kind: 'lifecycle', category: '재계약',
+        title: `재계약 · ${rn.name ?? ''}${rn.position ? ` (${rn.position})` : ''}`,
+        start: `${rn.date}T00:00`, dateKey: rn.date, time: '',
+        location: null, contactName: rn.name ?? null, contactPhone: null, memo: null, raw: rn as any,
+      })
+    }
     return out.sort((a, b) => (a.start! < b.start! ? -1 : 1))
-  }, [events, interviews, lifecycles])
+  }, [events, interviews, lifecycles, renewals])
 
   const shown = useMemo(() => unified.filter(u => active.has(u.category)), [unified, active])
 
@@ -522,9 +534,11 @@ function DetailModal({ ev, onClose, onChanged, onGoRecruit }: { ev: UEvent; onCl
           </div>
         )}
         {ev.kind === 'lifecycle' && (
-          <div className={`rounded-lg p-3 text-xs flex items-start gap-2 ${ev.category === '입소' ? 'bg-rose-50 text-rose-600' : 'bg-cyan-50 text-cyan-700'}`}>
+          <div className={`rounded-lg p-3 text-xs flex items-start gap-2 ${ev.category === '입소' ? 'bg-rose-50 text-rose-600' : ev.category === '재계약' ? 'bg-amber-50 text-amber-700' : 'bg-cyan-50 text-cyan-700'}`}>
             <UserPlus className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>{ev.category === '입소' ? '수급자 입소일입니다. 입소 정보는 수급자 관리에서 관리됩니다.' : '직원 입사일입니다. 입사 정보는 직원 관리에서 관리됩니다.'}</span>
+            <span>{ev.category === '입소' ? '수급자 입소일입니다. 입소 정보는 수급자 관리에서 관리됩니다.'
+              : ev.category === '재계약' ? '직원 재계약 예정일입니다. 근로계약·서류에서 관리됩니다.'
+              : '직원 입사일입니다. 입사 정보는 직원 관리에서 관리됩니다.'}</span>
           </div>
         )}
       </div>

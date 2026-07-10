@@ -40,6 +40,7 @@ import RecruitmentPage from './pages/admin/RecruitmentPage'
 import SchedulePage from './pages/admin/SchedulePage'
 import ExpensePage from './pages/admin/ExpensePage'
 import FacilityNewsPage from './pages/admin/FacilityNewsPage'
+import StaffHrPage from './pages/admin/StaffHrPage'
 import EnteralPage from './pages/admin/EnteralPage'
 import FamilyLoginPage      from './pages/family/FamilyLoginPage'
 import FamilyAlbumsPage     from './pages/family/FamilyAlbumsPage'
@@ -94,6 +95,15 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+// 관리자급(ADMIN·시설장) — 네이버 광고 제외 대부분의 관리 메뉴 접근
+function ManagerRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, user } = useAuthStore()
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  const ok = user?.role === 'ADMIN' || user?.position === '시설장'
+  if (!ok) return <Navigate to="/eval/checklist" replace />
+  return <>{children}</>
+}
+
 // 일정 캘린더 — 앨범담당 제외 전 직원 접근 가능
 function ScheduleRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuthStore()
@@ -115,7 +125,7 @@ function ExpenseRoute({ children }: { children: React.ReactNode }) {
 function SocialWorkerRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
-  if (user?.role !== 'ADMIN' && user?.position !== '사회복지사')
+  if (user?.role !== 'ADMIN' && user?.position !== '사회복지사' && user?.position !== '시설장')
     return <Navigate to="/eval/checklist" replace />
   return <>{children}</>
 }
@@ -133,7 +143,7 @@ function CareInventoryRoute({ children }: { children: React.ReactNode }) {
 function BlogWriterRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
-  const ok = user?.role === 'ADMIN' || ['사회복지사', '대표', '이사'].includes(user?.position ?? '')
+  const ok = user?.role === 'ADMIN' || ['사회복지사', '대표', '이사', '시설장'].includes(user?.position ?? '')
   if (!ok) return <Navigate to="/eval/checklist" replace />
   return <>{children}</>
 }
@@ -182,22 +192,23 @@ function App() {
             <Route path="contacts/:id" element={<ContactDetailPage />} />
 
             {/* ADMIN 전용 일반 메뉴 */}
-            <Route path="residents"                element={<AdminRoute><ResidentsPage /></AdminRoute>} />
-            <Route path="staff"                    element={<AdminRoute><StaffPage /></AdminRoute>} />
-            <Route path="history"                  element={<AdminRoute><HistoryPage /></AdminRoute>} />
-            <Route path="history/new"              element={<AdminRoute><HistoryEditPage /></AdminRoute>} />
-            <Route path="history/edit/:id"         element={<AdminRoute><HistoryEditPage /></AdminRoute>} />
-            <Route path="reviews"                  element={<AdminRoute><ReviewsPage /></AdminRoute>} />
-            <Route path="analytics/page-views"     element={<AdminRoute><PageViewStats /></AdminRoute>} />
-            <Route path="analytics/suspicious-ips" element={<AdminRoute><SuspiciousIPPage /></AdminRoute>} />
-            <Route path="settings"                 element={<AdminRoute><SettingsPage /></AdminRoute>} />
+            <Route path="residents"                element={<ManagerRoute><ResidentsPage /></ManagerRoute>} />
+            <Route path="staff"                    element={<ManagerRoute><StaffPage /></ManagerRoute>} />
+            <Route path="history"                  element={<ManagerRoute><HistoryPage /></ManagerRoute>} />
+            <Route path="history/new"              element={<ManagerRoute><HistoryEditPage /></ManagerRoute>} />
+            <Route path="history/edit/:id"         element={<ManagerRoute><HistoryEditPage /></ManagerRoute>} />
+            <Route path="reviews"                  element={<ManagerRoute><ReviewsPage /></ManagerRoute>} />
+            <Route path="analytics/page-views"     element={<ManagerRoute><PageViewStats /></ManagerRoute>} />
+            <Route path="analytics/suspicious-ips" element={<ManagerRoute><SuspiciousIPPage /></ManagerRoute>} />
+            <Route path="settings"                 element={<ManagerRoute><SettingsPage /></ManagerRoute>} />
             <Route path="naver-ads"                element={<AdminRoute><NaverAdsPage /></AdminRoute>} />
             <Route path="naver-ads/keyword/:keywordId" element={<AdminRoute><NaverAdsKeywordDetailPage /></AdminRoute>} />
             <Route path="volunteers"               element={<SocialWorkerRoute><VolunteersPage /></SocialWorkerRoute>} />
-            <Route path="recruitment"              element={<AdminRoute><RecruitmentPage /></AdminRoute>} />
+            <Route path="recruitment"              element={<ManagerRoute><RecruitmentPage /></ManagerRoute>} />
             <Route path="schedule"                 element={<ScheduleRoute><SchedulePage /></ScheduleRoute>} />
             <Route path="expense"                  element={<ExpenseRoute><ExpensePage /></ExpenseRoute>} />
             <Route path="facility-news"            element={<SocialWorkerRoute><FacilityNewsPage /></SocialWorkerRoute>} />
+            <Route path="staff-hr"                 element={<SocialWorkerRoute><StaffHrPage /></SocialWorkerRoute>} />
             <Route path="enteral"                  element={<CareInventoryRoute><EnteralPage /></CareInventoryRoute>} />
 
             {/* 평가 관리 — 공통 (role 필터는 백엔드에서) */}
@@ -216,9 +227,9 @@ function App() {
             <Route path="eval/staff"     element={<SocialWorkerRoute><EvalStaffPage /></SocialWorkerRoute>} />
 
             {/* ADMIN 전용 */}
-            <Route path="eval/ai-review" element={<AdminRoute><EvalAIReviewPage /></AdminRoute>} />
-            <Route path="eval/users"     element={<AdminRoute><EvalUsersPage /></AdminRoute>} />
-            <Route path="eval/workload"  element={<AdminRoute><StaffWorkloadPage /></AdminRoute>} />
+            <Route path="eval/ai-review" element={<ManagerRoute><EvalAIReviewPage /></ManagerRoute>} />
+            <Route path="eval/users"     element={<ManagerRoute><EvalUsersPage /></ManagerRoute>} />
+            <Route path="eval/workload"  element={<ManagerRoute><StaffWorkloadPage /></ManagerRoute>} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -42,6 +42,7 @@ export function getNavConfig(
   const isCaregiverOnly =
     user?.role === 'STAFF' && user?.position === '요양보호사'
   const isAlbumOnly = user?.position === '앨범담당'
+  const isFacilityHead = user?.role !== 'ADMIN' && user?.position === '시설장'
 
   const {
     todayTodo = 0,
@@ -96,6 +97,7 @@ export function getNavConfig(
             { to: '/contacts', icon: MessageSquare, label: '상담 관리' },
             { to: '/eval/residents', icon: UserRound, label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined },
             { to: '/eval/staff', icon: UserCog, label: '직원 관리', badge: activeStaff > 0 ? `${activeStaff}명` : undefined },
+            { to: '/staff-hr', icon: FileText, label: '근로계약·서류' },
             { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
             { to: '/facility-news', icon: Megaphone, label: '시설소식' },
             { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
@@ -144,6 +146,59 @@ export function getNavConfig(
     }
   }
 
+  // 시설장(직원 겸직) — 관리자급 메뉴, 단 네이버 광고 제외 / 지출결의 승인권은 백엔드에서 차단
+  if (isFacilityHead) {
+    return {
+      showDashboard: true,
+      sections: [
+        {
+          label: '운영',
+          items: [
+            { to: '/contacts', icon: MessageSquare, label: '상담 관리' },
+            { to: '/eval/residents', icon: UserRound, label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined },
+            { to: '/eval/staff', icon: UserCog, label: '직원 관리', badge: activeStaff > 0 ? `${activeStaff}명` : undefined },
+            { to: '/staff-hr', icon: FileText, label: '근로계약·서류' },
+            { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
+            { to: '/facility-news', icon: Megaphone, label: '시설소식' },
+            { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
+            { to: '/recruitment', icon: Briefcase, label: '채용 관리' },
+            { to: '/enteral', icon: Soup, label: '경관식 관리' },
+          ],
+        },
+        {
+          label: '평가',
+          items: [
+            checklistItem,
+            { to: '/eval/calendar', icon: CalendarDays, label: '평가 캘린더' },
+            { to: '/eval/workload', icon: ClipboardCheck, label: '담당자별 현황' },
+            { to: '/eval/record-audit', icon: FileSearch, label: '제공기록지 검수' },
+            { to: '/eval/record-guide', icon: BookOpen, label: '검수 기준' },
+            { to: '/eval/ai-review', icon: Sparkles, label: 'AI 체크리스트 검토' },
+          ],
+        },
+        { label: '앨범', items: [{ to: '/eval/albums', icon: ImageIcon, label: '보호자 앨범' }] },
+        { label: '회계', items: [{ to: '/expense', icon: Receipt, label: '지출결의' }] },
+        {
+          label: '마케팅',
+          items: [
+            { to: '/history', icon: FileText, label: '블로그' },
+            { to: '/eval/blog-ai-writer', icon: PenLine, label: '블로그 AI 작성' },
+            { to: '/reviews', icon: Star, label: '후기 관리' },
+            { to: '/analytics/page-views', icon: LayoutDashboard, label: '페이지뷰 통계' },
+            { to: '/analytics/suspicious-ips', icon: ShieldCheck, label: '의심 IP 통계' },
+          ],
+        },
+        {
+          label: '시스템',
+          items: [
+            { to: '/eval/users', icon: Users, label: '직원 계정 관리' },
+            { to: '/settings', icon: Settings, label: '설정' },
+          ],
+        },
+      ],
+    }
+  }
+
   // 일반 직원 (사회복지사·간호조무사·이사·대표·시설장 등)
   const canEnteral = ['사회복지사', '간호조무사', '이사', '대표', '시설장'].includes(user?.position ?? '')
   const operItems: NavItem[] = [
@@ -164,6 +219,7 @@ export function getNavConfig(
     evalItems.push(
       { to: '/eval/residents', icon: UserRound, label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined },
       { to: '/eval/staff', icon: UserCog, label: '직원 관리', badge: activeStaff > 0 ? `${activeStaff}명` : undefined },
+      { to: '/staff-hr', icon: FileText, label: '근로계약·서류' },
     )
   }
   evalItems.push(

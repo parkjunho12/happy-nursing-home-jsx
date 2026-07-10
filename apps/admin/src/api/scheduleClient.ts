@@ -44,6 +44,13 @@ export interface LifecycleEvent {
   status?: string | null
 }
 
+export interface RenewalEvent {
+  id: string
+  name?: string | null
+  position?: string | null
+  date: string          // YYYY-MM-DD
+}
+
 export const scheduleAPI = {
   events: (params?: { start_date?: string; end_date?: string; category?: string }) =>
     apiClient.get(`${BASE}/events`, { params: params ?? {} }).then(unwrap<ScheduleEvent[]>),
@@ -53,4 +60,6 @@ export const scheduleAPI = {
   deleteEvent: (id: string) => apiClient.delete(`${BASE}/events/${id}`).then(r => r.data),
   lifecycle: (params?: { start_date?: string; end_date?: string }) =>
     apiClient.get(`${BASE}/lifecycle`, { params: params ?? {} }).then(unwrap<LifecycleEvent[]>),
+  renewals: (params?: { start_date?: string; end_date?: string }) =>
+    apiClient.get(`${BASE}/renewals`, { params: params ?? {} }).then(unwrap<RenewalEvent[]>),
 }

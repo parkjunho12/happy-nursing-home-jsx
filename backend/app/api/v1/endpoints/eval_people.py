@@ -118,6 +118,23 @@ def create_ltc_staff(
     db.add(s)
     db.commit()
     db.refresh(s)
+
+    # 근로계약·서류(HR) 표에 자동 추가 (중복 방지)
+    try:
+        from app.models.staff_hr import StaffHrRecord
+        exists = db.query(StaffHrRecord).filter(StaffHrRecord.staff_id == s.id).first()
+        if not exists:
+            mx = db.query(StaffHrRecord).order_by(StaffHrRecord.seq.desc()).first()
+            db.add(StaffHrRecord(
+                staff_id=s.id, name=s.name,
+                hire_date=getattr(s, "hire_date", None),
+                seq=((mx.seq + 1) if (mx and mx.seq) else 1),
+                contract_written=False,
+            ))
+            db.commit()
+    except Exception:
+        db.rollback()
+
     return ApiResponse(success=True, data=LtcStaffOut.model_validate(s).model_dump())
 
 
@@ -139,8 +156,17 @@ def update_ltc_staff(
     s = db.query(LtcStaffMember).filter(LtcStaffMember.id == sid).first()
     if not s:
         raise HTTPException(404, "Not found")
-    for k, v in payload.model_dump(exclude_none=True).items():
+    fields = payload.model_dump(exclude_none=True)
+    for k, v in fields.items():
         setattr(s, k, v)
+    # 재직/퇴사 상태가 바뀌면 HR 표시 동기화
+    if "status" in fields:
+        try:
+            from app.models.staff_hr import StaffHrRecord
+            db.query(StaffHrRecord).filter(StaffHrRecord.staff_id == sid).update(
+                {"active": fields["status"] != "resigned"})
+        except Exception:
+            pass
     db.commit()
     db.refresh(s)
     return ApiResponse(success=True, data=LtcStaffOut.model_validate(s).model_dump())
@@ -163,6 +189,12 @@ def resign_ltc_staff(
         .where(ChecklistItem.person_id == sid, ChecklistItem.completed == False)
         .values(active=False)
     )
+    # 근로계약·서류 표에서 숨김
+    try:
+        from app.models.staff_hr import StaffHrRecord
+        db.query(StaffHrRecord).filter(StaffHrRecord.staff_id == sid).update({"active": False})
+    except Exception:
+        pass
     db.commit()
     db.refresh(s)
     return ApiResponse(success=True, data=LtcStaffOut.model_validate(s).model_dump())
