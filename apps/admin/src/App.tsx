@@ -41,6 +41,7 @@ import SchedulePage from './pages/admin/SchedulePage'
 import ExpensePage from './pages/admin/ExpensePage'
 import FacilityNewsPage from './pages/admin/FacilityNewsPage'
 import StaffHrPage from './pages/admin/StaffHrPage'
+import GuidePage from './pages/GuidePage'
 import EnteralPage from './pages/admin/EnteralPage'
 import FamilyLoginPage      from './pages/family/FamilyLoginPage'
 import FamilyAlbumsPage     from './pages/family/FamilyAlbumsPage'
@@ -212,6 +213,7 @@ function App() {
             <Route path="enteral"                  element={<CareInventoryRoute><EnteralPage /></CareInventoryRoute>} />
 
             {/* 평가 관리 — 공통 (role 필터는 백엔드에서) */}
+            <Route path="guide"          element={<GuidePage />} />
             <Route path="eval/checklist" element={<EvalChecklistPage />} />
             <Route path="eval/calendar"  element={<EvalCalendarPage />} />
             <Route path="eval/albums"    element={<EvalAlbumPage />} />

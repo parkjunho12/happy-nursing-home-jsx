@@ -72,6 +72,21 @@ class HrBody(BaseModel):
     active: Optional[bool] = None
 
 
+import calendar as _cal
+
+def _minus_one_month(iso: str):
+    """ISO(YYYY-MM-DD) 1개월 전. 월말 보정."""
+    try:
+        y, m, d = [int(x) for x in iso.split("-")]
+    except Exception:
+        return None
+    m -= 1
+    if m < 1:
+        m = 12; y -= 1
+    d = min(d, _cal.monthrange(y, m)[1])
+    return f"{y:04d}-{m:02d}-{d:02d}"
+
+
 def _apply(r: StaffHrRecord, body: HrBody):
     if body.seq is not None: r.seq = body.seq
     if body.hire_date is not None: r.hire_date = body.hire_date or None
@@ -89,6 +104,10 @@ def _apply(r: StaffHrRecord, body: HrBody):
             if st or en:
                 cleaned.append({"start": st, "end": en})
         r.contracts = cleaned
+        # 재계약일 자동: 최신 계약 종료일 1개월 전
+        ends = [c["end"] for c in cleaned if c.get("end")]
+        if ends:
+            r.renewal_date = _minus_one_month(max(ends))
     if body.contract_written is not None: r.contract_written = bool(body.contract_written)
     if body.renewal_date is not None: r.renewal_date = (body.renewal_date or "").strip() or None
     if body.note is not None: r.note = body.note or None
