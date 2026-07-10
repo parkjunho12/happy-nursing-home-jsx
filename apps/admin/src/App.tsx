@@ -77,6 +77,9 @@ function RoleRedirect({ children }: { children: React.ReactNode }) {
     '/eval/albums',
     '/eval/checklist',
     '/eval/calendar',
+    '/guide',
+    '/schedule',
+    '/expense',
   ]
   const isAllowed =
     caregiverAllowed.includes(location.pathname) ||

@@ -179,6 +179,111 @@ const TOPICS: Topic[] = [
 
 const CATS = ['전체', '시작', '업무', '소통', '회계·인사', '기타'] as const
 
+
+/* ── 화면 예시(그림) ── */
+function Visual({ id }: { id: string }) {
+  const box = 'rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-2'
+  const cap = 'text-[13px] text-gray-500 leading-relaxed'
+  const tag = 'text-[11px] text-gray-400'
+  switch (id) {
+    case 'checklist':
+      return (
+        <div className={box}>
+          <p className={tag}>화면 예시</p>
+          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-2.5 py-2">
+            <div className="w-6 h-6 rounded-full border-2 border-gray-300 shrink-0" />
+            <span className="text-sm font-semibold text-gray-800 flex-1 truncate">기저귀 교체 확인</span>
+            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full border border-gray-200 text-gray-500 shrink-0">착수</span>
+          </div>
+          <p className={cap}>· 일을 <b className="text-blue-600">시작</b>할 때 → 오른쪽 <b className="text-blue-600">착수</b>를 누르세요</p>
+          <p className={cap}>· 일을 <b className="text-green-600">끝냈을</b> 때 → 왼쪽 <b className="text-green-600">동그라미</b>를 누르세요</p>
+        </div>
+      )
+    case 'ticket':
+      return (
+        <div className={box}>
+          <p className={tag}>화면 예시</p>
+          <div className="flex items-center gap-2 bg-white border border-dashed border-gray-300 rounded-lg px-3 py-2.5">
+            <span className="text-gray-400 text-lg leading-none">＋</span>
+            <span className="text-sm text-gray-400 flex-1">할 일을 입력하고 Enter로 발행…</span>
+            <span className="text-[11px] text-gray-300">Enter ↵</span>
+          </div>
+          <p className={cap}>· 여기에 적고 <b>Enter(엔터)</b>를 누르면 바로 등록돼요</p>
+        </div>
+      )
+    case 'album':
+      return (
+        <div className={box}>
+          <p className={tag}>화면 예시</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="inline-flex items-center gap-1 bg-primary-orange text-white text-xs font-bold px-3 py-1.5 rounded-lg">＋ 사진 올리기</span>
+            <span className="text-xs text-gray-400">→</span>
+            <span className="bg-amber-100 text-amber-700 text-[11px] font-bold px-2 py-0.5 rounded-full">승인 대기</span>
+            <span className="text-xs text-gray-400">→</span>
+            <span className="bg-green-100 text-green-700 text-[11px] font-bold px-2 py-0.5 rounded-full">공개 ✓</span>
+          </div>
+          <p className={cap}>· 승인되면 보호자 휴대폰으로 <b>알림</b>이 갑니다</p>
+        </div>
+      )
+    case 'schedule':
+      return (
+        <div className={box}>
+          <p className={tag}>화면 예시</p>
+          <div className="grid grid-cols-7 gap-0.5">
+            {Array.from({ length: 14 }).map((_, i) => (
+              <div key={i} className={`h-6 rounded flex items-center justify-center text-[9px] text-gray-400 border border-gray-100 ${i === 4 ? 'bg-violet-100' : i === 9 ? 'bg-cyan-100' : 'bg-white'}`}>{i + 1}</div>
+            ))}
+          </div>
+          <p className={cap}>· <b className="text-violet-600">보라색</b>=일정, <b className="text-cyan-600">하늘색</b>=입사/재계약 처럼 색으로 구분돼요</p>
+        </div>
+      )
+    case 'expense':
+      return (
+        <div className={box}>
+          <p className={tag}>화면 예시</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg">＋ 결제 서류 등록</span>
+            <span className="text-xs text-gray-400">→</span>
+            <span className="bg-amber-100 text-amber-700 text-[11px] font-bold px-2 py-0.5 rounded-full">대기</span>
+            <span className="text-xs text-gray-400">→</span>
+            <span className="bg-green-100 text-green-700 text-[11px] font-bold px-2 py-0.5 rounded-full">승인</span>
+          </div>
+          <p className={cap}>· <b>영수증 사진</b>을 꼭 첨부해 주세요</p>
+        </div>
+      )
+    case 'hr':
+      return (
+        <div className={box}>
+          <p className={tag}>화면 예시 — 서류 칸을 누르면 바뀝니다</p>
+          <div className="flex items-center gap-2">
+            <span className="bg-green-100 text-green-700 text-[11px] font-bold px-2 py-0.5 rounded-full">제출</span>
+            <span className="text-gray-300">→</span>
+            <span className="bg-red-100 text-red-600 text-[11px] font-bold px-2 py-0.5 rounded-full">미제출</span>
+            <span className="text-gray-300">→</span>
+            <span className="bg-gray-100 text-gray-400 text-[11px] font-bold px-2 py-0.5 rounded-full">-</span>
+          </div>
+          <p className={cap}>· 누를 때마다 순서대로 바뀝니다</p>
+        </div>
+      )
+    case 'push':
+      return (
+        <div className={box}>
+          <p className={tag}>알림 예시</p>
+          <div className="bg-white border border-gray-200 rounded-lg p-2.5 flex items-start gap-2">
+            <div className="w-8 h-8 rounded-lg bg-primary-orange/10 flex items-center justify-center shrink-0">🔔</div>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-gray-800">📋 새 업무가 배정되었어요</p>
+              <p className="text-[11px] text-gray-500 truncate">기저귀 교체 확인</p>
+            </div>
+          </div>
+          <p className={cap}>· 누르면 <b>체크리스트</b>로 바로 이동해요</p>
+        </div>
+      )
+    default:
+      return null
+  }
+}
+
 export default function GuidePage() {
   const navigate = useNavigate()
   const { user } = useAuthStore()
@@ -262,6 +367,7 @@ export default function GuidePage() {
               </button>
               {isOpen && (
                 <div className="px-4 md:px-5 pb-5 pt-0 space-y-4">
+                  <Visual id={t.id} />
                   <div>
                     <p className="text-sm font-bold text-gray-700 mb-2">이렇게 하세요</p>
                     <ol className="space-y-2.5">
