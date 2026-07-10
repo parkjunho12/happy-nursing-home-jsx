@@ -121,15 +121,23 @@ def create_ltc_staff(
 
     # 근로계약·서류(HR) 표에 자동 추가 (중복 방지)
     try:
-        from app.models.staff_hr import StaffHrRecord
+        from app.models.staff_hr import StaffHrRecord, to_iso, contract_end_3m, minus_one_month
         exists = db.query(StaffHrRecord).filter(StaffHrRecord.staff_id == s.id).first()
         if not exists:
             mx = db.query(StaffHrRecord).order_by(StaffHrRecord.seq.desc()).first()
+            hd = to_iso(getattr(s, "hire_date", None))
+            contracts = None
+            renewal = None
+            if hd:
+                end = contract_end_3m(hd)
+                contracts = [{"start": hd, "end": end}]
+                renewal = minus_one_month(end) if end else None
             db.add(StaffHrRecord(
                 staff_id=s.id, name=s.name,
-                hire_date=getattr(s, "hire_date", None),
+                hire_date=hd or getattr(s, "hire_date", None),
                 seq=((mx.seq + 1) if (mx and mx.seq) else 1),
                 contract_written=False,
+                contracts=contracts, renewal_date=renewal,
             ))
             db.commit()
     except Exception:
