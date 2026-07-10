@@ -134,6 +134,7 @@ def create_ltc_staff(
                 renewal = minus_one_month(end) if end else None
             db.add(StaffHrRecord(
                 staff_id=s.id, name=s.name,
+                position=getattr(s, "position", None),
                 hire_date=hd or getattr(s, "hire_date", None),
                 seq=((mx.seq + 1) if (mx and mx.seq) else 1),
                 contract_written=False,

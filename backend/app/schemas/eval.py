@@ -253,6 +253,7 @@ class LtcStaffCreate(BaseModel):
     birth_date: str
     gender:     str
     hire_date:  str
+    position:   Optional[str] = None
     memo:       str = ""
 
 
@@ -261,6 +262,7 @@ class LtcStaffUpdate(BaseModel):
     birth_date: Optional[str] = None
     gender:     Optional[str] = None
     hire_date:  Optional[str] = None
+    position:   Optional[str] = None
     memo:       Optional[str] = None
 
 
@@ -271,6 +273,7 @@ class LtcStaffOut(BaseModel):
     gender:      str
     hire_date:   str
     resign_date: Optional[str] = None
+    position:    Optional[str] = None
     status:      str
     memo:        str
     created_at:  datetime

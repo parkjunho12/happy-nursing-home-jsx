@@ -25,6 +25,8 @@ export default function StaffHrPage() {
   const [posFilter, setPosFilter] = useState('')
   const [incompleteOnly, setIncompleteOnly] = useState(false)
   const [showResigned, setShowResigned] = useState(false)
+  const [expandedC, setExpandedC] = useState<Set<string>>(new Set())
+  const toggleC = (id: string) => setExpandedC(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -145,10 +147,27 @@ export default function StaffHrPage() {
                       <span className="text-[11px] text-gray-400">{r.position || '-'}</span>
                     </td>
                     <td className={`${td} text-gray-500`}>{r.hire_date || '-'}</td>
-                    <td className={`${td} text-left text-gray-500 max-w-[170px]`}>
-                      {r.contracts && r.contracts.length > 0
-                        ? <div className="space-y-0.5">{r.contracts.map((c, i) => <div key={i} className="whitespace-nowrap">{fmtD(c.start) || '?'} ~ {fmtD(c.end) || '진행'}</div>)}</div>
-                        : (r.contract_period || '-')}
+                    <td className={`${td} text-left text-gray-500 max-w-[180px]`}>
+                      {r.contracts && r.contracts.length > 0 ? (
+                        expandedC.has(r.id) ? (
+                          <button onClick={() => toggleC(r.id)} className="text-left space-y-0.5">
+                            {r.contracts.map((c, i) => (
+                              <div key={i} className="whitespace-nowrap">
+                                <span className={i === r.contracts!.length - 1 ? 'font-semibold text-gray-700' : ''}>{fmtD(c.start) || '?'} ~ {fmtD(c.end) || '진행'}</span>
+                              </div>
+                            ))}
+                            <span className="text-[10px] text-indigo-500">접기 ▴</span>
+                          </button>
+                        ) : (() => {
+                          const last = r.contracts[r.contracts.length - 1]
+                          return (
+                            <button onClick={() => toggleC(r.id)} className="text-left whitespace-nowrap">
+                              <span className="font-semibold text-gray-700">{fmtD(last.start) || '?'} ~ {fmtD(last.end) || '진행'}</span>
+                              {r.contracts.length > 1 && <span className="text-[10px] text-indigo-500 ml-1">외 {r.contracts.length - 1}건 ▾</span>}
+                            </button>
+                          )
+                        })()
+                      ) : (r.contract_period || '-')}
                     </td>
                     <td className={td}>
                       <button onClick={() => toggleWritten(r)}

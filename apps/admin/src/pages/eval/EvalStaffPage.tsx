@@ -185,7 +185,7 @@ const ic = "w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:o
 
 function StaffForm({ existing, onClose }: { existing?: LtcStaff; onClose:()=>void }) {
   const { addStaff, updateStaff } = useLtcStore()
-  const [form, setForm] = useState({ name:existing?.name??'', birthDate:existing?.birthDate??'', gender:existing?.gender??'female', hireDate:existing?.hireDate??new Date().toISOString().split('T')[0], memo:existing?.memo??'' })
+  const [form, setForm] = useState({ name:existing?.name??'', birthDate:existing?.birthDate??'', gender:existing?.gender??'female', hireDate:existing?.hireDate??new Date().toISOString().split('T')[0], position:(existing as any)?.position??'요양보호사', memo:existing?.memo??'' })
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -212,7 +212,11 @@ function StaffForm({ existing, onClose }: { existing?: LtcStaff; onClose:()=>voi
             </div>
           </div>
           <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">입사일 *</label><input required type="date" className={ic} value={form.hireDate} onChange={e=>setForm({...form,hireDate:e.target.value})}/></div>
-          <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">직종·메모</label><input className={ic} value={form.memo} onChange={e=>setForm({...form,memo:e.target.value})} placeholder="예: 요양보호사, 간호사"/></div>
+          <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">직종 *</label>
+            <input list="staff-pos" className={ic} value={form.position} onChange={e=>setForm({...form,position:e.target.value})} placeholder="예: 요양보호사"/>
+            <datalist id="staff-pos">{['시설장','사무국장','대표','이사','사회복지사','간호사','간호팀장','간호조무사','물리치료사','요양팀장','요양보호사','조리원','영양사'].map(p=><option key={p} value={p}/>)}</datalist>
+          </div>
+          <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">메모</label><input className={ic} value={form.memo} onChange={e=>setForm({...form,memo:e.target.value})} placeholder="예: 1등급 전담, 야간 근무"/></div>
           <div className="flex gap-3 pt-2">
             <button type="submit" disabled={loading} className="flex-1 bg-primary-orange text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-primary-orange/90 disabled:opacity-50">{loading?'처리 중...':existing?'수정':'입사 등록'}</button>
             <button type="button" onClick={onClose} className="flex-1 border border-gray-200 text-gray-700 rounded-xl py-2.5 text-sm">취소</button>
