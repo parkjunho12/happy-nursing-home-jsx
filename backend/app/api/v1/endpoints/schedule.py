@@ -16,6 +16,7 @@ from app.core.security import get_current_user
 from app.models.user import User
 from app.models.schedule import ScheduleEvent, now_kst
 from app.models.eval import LtcResident, LtcStaffMember
+from app.models.staff_hr import StaffHrRecord
 from app.schemas.response import ApiResponse
 
 router = APIRouter()
@@ -210,4 +211,37 @@ def lifecycle(
             "date": m.hire_date, "gender": m.gender, "status": m.status,
         })
 
+    return ApiResponse(success=True, data=out)
+
+
+@router.get("/renewals")
+def renewals(
+    start_date: Optional[str] = Query(None),  # YYYY-MM-DD
+    end_date: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_manager),
+):
+    """재계약 예정일(ADMIN·시설장 전용). 그 외에는 빈 목록."""
+    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    pos = getattr(current_user, "position", None)
+    pos = pos.value if hasattr(pos, "value") else str(pos or "")
+    if role != "ADMIN" and pos != "시설장":
+        return ApiResponse(success=True, data=[])
+
+    q = db.query(StaffHrRecord).filter(
+        StaffHrRecord.renewal_date.isnot(None),
+        (StaffHrRecord.active == True) | (StaffHrRecord.active.is_(None)),  # noqa: E712
+    )
+    if start_date:
+        q = q.filter(StaffHrRecord.renewal_date >= start_date)
+    if end_date:
+        q = q.filter(StaffHrRecord.renewal_date <= end_date)
+    out = []
+    for r in q.all():
+        if not r.renewal_date:
+            continue
+        out.append({
+            "id": r.id, "name": r.name, "position": r.position,
+            "date": r.renewal_date,
+        })
     return ApiResponse(success=True, data=out)
