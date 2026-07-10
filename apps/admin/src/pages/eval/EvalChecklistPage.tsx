@@ -6,7 +6,7 @@ import {
   CheckCircle2,
   User,
   RotateCcw,
-  Plus,
+  Plus, Zap,
 } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
 import { useAuthStore } from '@/store/auth'
@@ -25,7 +25,7 @@ import {
   todayKST,
 } from '@/utils/period'
 
-type Deco = { item: ChecklistItem; done: boolean; daysLeft: number | null; dueStr: string | null }
+type Deco = { item: ChecklistItem; done: boolean; daysLeft: number | null; dueStr: string | null; inProgress: boolean; startedBy?: string }
 
 const SECTION_DEFS: { key: 'overdue' | 'week' | 'upcoming' | 'done'; label: string; cls: string }[] = [
   { key: 'overdue',  label: '기한 지남', cls: 'text-red-600' },
@@ -67,6 +67,8 @@ export default function EvalChecklistPage() {
     loaded,
     loadAll,
     toggleComplete,
+    addChecklist,
+    setProgress,
   } = useLtcStore()
 
   const { user } = useAuthStore()
@@ -79,6 +81,7 @@ export default function EvalChecklistPage() {
   const [selectedItem, setSelectedItem] = useState<ChecklistItem | null>(null)
   const [editItem, setEditItem] = useState<ChecklistItem | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [quickOpen, setQuickOpen] = useState(false)
   const [activeFreq, setActiveFreq] = useState<string>('all')
   const [activePerson, setActivePerson] = useState('all')
   const [search, setSearch] = useState('')
@@ -86,6 +89,9 @@ export default function EvalChecklistPage() {
   const [toggling, setToggling] = useState<string | null>(null)
   const [assigningId, setAssigningId] = useState<string | null>(null)
   const [savingAssign, setSavingAssign] = useState(false)
+  const [quickTitle, setQuickTitle] = useState('')
+  const [quickAdding, setQuickAdding] = useState(false)
+  const [lastCreated, setLastCreated] = useState<ChecklistItem | null>(null)
 
   useEffect(() => {
     if (!loaded) loadAll()
@@ -147,7 +153,14 @@ export default function EvalChecklistPage() {
         if (daysLeft == null || dl < daysLeft) { daysLeft = dl; dueStr = oldest.dueDate }
       }
     }
-    return { item, done, daysLeft, dueStr }
+    // 진행 중(착수) — 미완료 occurrence 중 in_progress 가 있으면 표시
+    let inProgress = false
+    let startedBy: string | undefined
+    if (!done && item.occurrences?.length) {
+      const ip = item.occurrences.find(o => (o.status as any) === 'in_progress')
+      if (ip) { inProgress = true; startedBy = (ip as any).startedBy }
+    }
+    return { item, done, daysLeft, dueStr, inProgress, startedBy }
   }, [todayStr])
 
   const activeResidents = residents.filter(r => r.status === 'active')
@@ -248,6 +261,28 @@ export default function EvalChecklistPage() {
     return g
   }, [sorted, deadlineOf])
 
+  // Jira식 인라인 빠른 발행: 제목 입력 → Enter → 즉시 일회성 티켓 발행(기본 기한 7일)
+  const handleQuickAdd = async () => {
+    const t = quickTitle.trim()
+    if (!t || quickAdding) return
+    setQuickAdding(true)
+    try {
+      const due = (() => { const d = new Date(todayKST() + 'T00:00:00'); d.setDate(d.getDate() + 7); return d.toISOString().split('T')[0] })()
+      const created = await addChecklist({
+        title: t, description: '', frequency: 'one_time' as any, dueDate: due,
+        relatedIndicatorId: '', relatedCategoryId: '', relatedDomainId: '',
+        assignee: '', assigned_user_id: user?.id ?? null,
+        evidenceRequired: '', storageLocation: '', howTo: '', evalNote: '', riskLevel: 'medium' as any,
+        personId: undefined, personName: undefined, personType: 'facility',
+        recurWeekday: null, recurWeekOfMonth: null, recurDay: null, recurDueDay: null,
+        active: true, memo: '', attachmentName: '', completed: false,
+        completionHistory: [], occurrences: [],
+      } as any)
+      setQuickTitle('')
+      setLastCreated(created)
+    } catch (e) { console.error(e) } finally { setQuickAdding(false) }
+  }
+
   const handleToggle = async (id: string, desired?: boolean) => {
     setToggling(id)
 
@@ -256,6 +291,12 @@ export default function EvalChecklistPage() {
     } finally {
       setToggling(null)
     }
+  }
+
+  const handleProgress = async (e: React.MouseEvent, id: string, on: boolean) => {
+    e.stopPropagation()
+    setToggling(id)
+    try { await setProgress(id, on) } finally { setToggling(null) }
   }
 
   const handleAssign = async (itemId: string, userId: string | null) => {
@@ -283,11 +324,11 @@ export default function EvalChecklistPage() {
   }
 
   const renderRow = (d: Deco) => {
-    const { item, done, daysLeft, dueStr } = d
+    const { item, done, daysLeft, dueStr, inProgress, startedBy } = d
     const b = badgeFor(done, daysLeft)
     const highRisk = item.riskLevel === 'high' && !done
     return (
-      <div key={item.id} className={`bg-white rounded-lg border transition-colors hover:bg-gray-50/40 ${done ? 'border-gray-100 opacity-70' : highRisk ? 'border-gray-200 border-l-[3px] border-l-red-400' : 'border-gray-200'}`}>
+      <div key={item.id} className={`rounded-lg border transition-colors hover:bg-gray-50/40 ${done ? 'bg-white border-gray-100 opacity-70' : inProgress ? 'bg-blue-50/40 border-blue-200 border-l-[3px] border-l-blue-400' : highRisk ? 'bg-white border-gray-200 border-l-[3px] border-l-red-400' : 'bg-white border-gray-200'}`}>
         <div className="flex items-center gap-3 p-3">
           <button onClick={() => handleToggle(item.id, !checkDone(item, ''))} disabled={toggling === item.id}
             className={`w-7 h-7 rounded-full border-2 flex-shrink-0 flex items-center justify-center disabled:opacity-50 ${done ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-primary-orange'}`}>
@@ -300,6 +341,11 @@ export default function EvalChecklistPage() {
             </p>
             <div className="flex items-center gap-1.5 mt-1 flex-wrap">
               <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${FREQUENCY_COLORS[item.frequency as any] ?? 'bg-gray-100 text-gray-600'}`}>{FREQUENCY_LABELS[item.frequency as any] ?? item.frequency}</span>
+              {inProgress && (
+                <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded-full inline-flex items-center gap-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" /> 진행 중{startedBy ? ` · ${startedBy}` : ''}
+                </span>
+              )}
               {item.personName ? (
                 <span className="text-[10px] font-semibold text-purple-600 flex items-center gap-0.5"><User size={9} />{item.personName}</span>
               ) : item.assignee ? (
@@ -314,6 +360,15 @@ export default function EvalChecklistPage() {
               )}
             </div>
           </div>
+          {!done && (
+            inProgress ? (
+              <button onClick={e => handleProgress(e, item.id, false)} disabled={toggling === item.id}
+                title="착수 취소" className="text-[11px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 bg-blue-100 text-blue-700 hover:bg-blue-200 disabled:opacity-50">진행 중</button>
+            ) : (
+              <button onClick={e => handleProgress(e, item.id, true)} disabled={toggling === item.id}
+                className="text-[11px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 border border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-600 disabled:opacity-50">착수</button>
+            )
+          )}
           <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${b.cls}`}>{b.text}</span>
           {isAdmin && (
             <button onClick={e => { e.stopPropagation(); setEditItem(item) }} className="text-[10px] text-gray-400 hover:text-gray-600 px-1.5 py-0.5 rounded hover:bg-gray-100 flex-shrink-0">수정</button>
@@ -353,10 +408,16 @@ export default function EvalChecklistPage() {
 
         <div className="flex gap-2">
           <button
-            onClick={() => setShowAddModal(true)}
+            onClick={() => setQuickOpen(true)}
             className="flex items-center gap-1.5 text-sm text-white bg-primary-orange rounded-lg px-3 py-1.5 hover:bg-primary-orange/90 font-semibold shadow-sm"
           >
-            <Plus size={14} /> 항목 추가
+            <Zap size={14} /> 빠른 티켓
+          </button>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-1.5 text-sm text-gray-600 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 font-semibold"
+          >
+            <Plus size={14} /> 상세 추가
           </button>
 
           <button
@@ -459,6 +520,35 @@ export default function EvalChecklistPage() {
       </div>
       </StickyToolbar>
 
+      {/* Jira식 인라인 빠른 발행 */}
+      <div className="bg-white rounded-xl border border-dashed border-gray-300 focus-within:border-primary-orange focus-within:ring-2 focus-within:ring-primary-orange/20 transition-colors">
+        <div className="flex items-center gap-2 px-3 py-2.5">
+          <Plus size={16} className="text-gray-400 shrink-0" />
+          <input
+            value={quickTitle}
+            onChange={e => setQuickTitle(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleQuickAdd() }}
+            placeholder="할 일을 입력하고 Enter로 바로 발행…"
+            disabled={quickAdding}
+            className="flex-1 text-sm bg-transparent focus:outline-none placeholder:text-gray-400 disabled:opacity-50"
+          />
+          {quickAdding
+            ? <div className="w-4 h-4 border-2 border-primary-orange border-t-transparent rounded-full animate-spin shrink-0" />
+            : <span className="text-[11px] text-gray-300 shrink-0 hidden sm:inline">Enter ↵</span>}
+        </div>
+        {lastCreated && (
+          <div className="flex items-center gap-2 px-3 py-2 border-t border-gray-50 bg-orange-50/40 text-xs">
+            <CheckCircle2 size={13} className="text-green-500 shrink-0" />
+            <span className="text-gray-600 truncate flex-1">‘{lastCreated.title}’ 발행됨 · 기본 기한 7일(일회성)</span>
+            {isAdmin && (
+              <button onClick={() => { setEditItem(lastCreated); setLastCreated(null) }}
+                className="font-semibold text-primary-orange hover:underline shrink-0">주기·담당자 설정 →</button>
+            )}
+            <button onClick={() => setLastCreated(null)} className="text-gray-300 hover:text-gray-500 shrink-0">✕</button>
+          </div>
+        )}
+      </div>
+
       {/* 목록 (긴급도별 그룹) */}
       {sorted.length === 0 ? (
         <div className="text-center py-16 text-gray-400 bg-white rounded-xl border border-gray-100">
@@ -489,6 +579,10 @@ export default function EvalChecklistPage() {
 
       {selectedItem && (
         <ChecklistDetailModal item={selectedItem} onClose={() => setSelectedItem(null)} />
+      )}
+
+      {quickOpen && (
+        <QuickTicketModal options={assigneeOptions} onClose={() => setQuickOpen(false)} onCreated={() => { setQuickOpen(false); loadAll() }} />
       )}
 
       {showAddModal && (
@@ -557,6 +651,96 @@ function AssignPanel({
         >
           취소
         </button>
+      </div>
+    </div>
+  )
+}
+
+/* ── 빠른 티켓(일회성) 발행 ── */
+function QuickTicketModal({ options, onClose, onCreated }: {
+  options: Array<{ id: string; name: string; position?: string | null }>
+  onClose: () => void
+  onCreated: () => void
+}) {
+  const { addChecklist } = useLtcStore()
+  const { user } = useAuthStore()
+  const today = todayKST()
+  const plus = (n: number) => { const d = new Date(today + 'T00:00:00'); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0] }
+  const [title, setTitle] = useState('')
+  const [dueDate, setDueDate] = useState(plus(7))
+  const [assignee, setAssignee] = useState(user?.id ?? '')
+  const opts = user && !options.some(o => o.id === user.id)
+    ? [{ id: user.id, name: `${user.name ?? '나'} (본인)`, position: (user as any).position ?? null }, ...options]
+    : options
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+
+  const submit = async () => {
+    if (!title.trim()) { setErr('할 일을 입력해주세요.'); return }
+    if (!dueDate) { setErr('기한을 선택해주세요.'); return }
+    setSaving(true); setErr('')
+    try {
+      await addChecklist({
+        title: title.trim(), description: '', frequency: 'one_time' as any, dueDate,
+        relatedIndicatorId: '', relatedCategoryId: '', relatedDomainId: '',
+        assignee: '', assigned_user_id: assignee || null,
+        evidenceRequired: '', storageLocation: '', howTo: '', evalNote: '', riskLevel: 'medium' as any,
+        personId: undefined, personName: undefined, personType: 'facility',
+        recurWeekday: null, recurWeekOfMonth: null, recurDay: null, recurDueDay: null,
+        active: true, memo: '', attachmentName: '', completed: false,
+        completionHistory: [], occurrences: [],
+      } as any)
+      onCreated()
+    } catch (e: any) { setErr(e?.message ?? '발행 실패') } finally { setSaving(false) }
+  }
+
+  const chip = (label: string, v: string) => (
+    <button type="button" onClick={() => setDueDate(v)}
+      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${dueDate === v ? 'bg-primary-orange text-white border-primary-orange' : 'bg-white text-gray-500 border-gray-200 hover:border-primary-orange/50'}`}>{label}</button>
+  )
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-4 bg-black/50" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between px-5 py-4 border-b">
+          <div className="flex items-center gap-2">
+            <Zap size={16} className="text-primary-orange" />
+            <h2 className="font-bold text-gray-900">빠른 티켓 발행</h2>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">할 일 *</label>
+            <input value={title} onChange={e => setTitle(e.target.value)} autoFocus
+              placeholder="예: 소방 점검표 제출"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">기한 *</label>
+            <div className="flex items-center gap-1.5 mb-2">
+              {chip('오늘', today)}{chip('내일', plus(1))}{chip('3일', plus(3))}{chip('1주', plus(7))}
+            </div>
+            <input type="date" value={dueDate} min={today} onChange={e => setDueDate(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">담당자 (선택)</label>
+            <select value={assignee} onChange={e => setAssignee(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40">
+              <option value="">미지정</option>
+              {opts.map(u => <option key={u.id} value={u.id}>{u.name}{u.position ? ` (${u.position})` : ''}</option>)}
+            </select>
+          </div>
+          {err && <p className="text-xs text-red-500">{err}</p>}
+        </div>
+        <div className="flex gap-2 px-5 py-4 border-t">
+          <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-700 rounded-xl py-2.5 text-sm font-semibold">취소</button>
+          <button onClick={submit} disabled={saving}
+            className="flex-1 bg-primary-orange text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-primary-orange/90 disabled:opacity-50">
+            {saving ? '발행 중...' : '발행'}
+          </button>
+        </div>
       </div>
     </div>
   )

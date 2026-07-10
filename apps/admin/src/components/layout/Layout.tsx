@@ -1,14 +1,22 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import MobileHeader from './MobileHeader'
 import MobileDrawer from './MobileDrawer'
 import MobileTabBar from './MobileTabBar'
 import BackToTop from '../common/BackToTop'
+import { registerStaffPush } from '@/api/staffPushClient'
 
 export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const mainRef = useRef<HTMLElement>(null)
+
+  // 직원앱(WebView)이면 FCM 토큰 등록 (토큰 준비 지연 대비 1회 재시도)
+  useEffect(() => {
+    registerStaffPush()
+    const t = setTimeout(registerStaffPush, 2000)
+    return () => clearTimeout(t)
+  }, [])
 
   return (
     <div className="min-h-screen bg-gray-50">

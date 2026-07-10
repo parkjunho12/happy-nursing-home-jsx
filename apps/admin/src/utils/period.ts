@@ -204,7 +204,8 @@ export interface OccurrenceRecord {
   frequency: string
   scheduledDate: string
   dueDate: string
-  status: 'pending' | 'completed' | 'overdue'
+  status: 'pending' | 'completed' | 'overdue' | 'in_progress'
+  startedBy?: string
   completedDate?: string
   memo: string
   attachmentName: string

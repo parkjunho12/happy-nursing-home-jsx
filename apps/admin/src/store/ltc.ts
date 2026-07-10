@@ -81,7 +81,8 @@ export interface ChecklistOccurrence {
   frequency: string
   scheduledDate: string
   dueDate: string
-  status: 'pending' | 'completed' | 'overdue'
+  status: 'pending' | 'completed' | 'overdue' | 'in_progress'
+  startedBy?: string
   completedDate?: string
   memo: string
   attachmentName: string
@@ -100,6 +101,7 @@ function mapOcc(raw: any): ChecklistOccurrence {
     scheduledDate:   raw.scheduled_date,
     dueDate:         raw.due_date,
     status:          raw.status,
+    startedBy:       raw.started_by ?? undefined,
     completedDate:   raw.completed_date ?? undefined,
     memo:            raw.memo ?? '',
     attachmentName:  raw.attachment_name ?? '',
@@ -202,8 +204,9 @@ interface LtcState {
   reset:             () => void            // 로그아웃 시 캐시 초기화
   completeOccurrence:   (id: string, completedDate: string, memo?: string, attachmentName?: string) => Promise<void>
   uncompleteOccurrence: (id: string) => Promise<void>
-  addChecklist:      (item: Omit<ChecklistItem,'id'|'createdAt'|'completionHistory'>) => Promise<void>
+  addChecklist:      (item: Omit<ChecklistItem,'id'|'createdAt'|'completionHistory'>) => Promise<ChecklistItem>
   updateChecklist:   (id: string, u: Partial<ChecklistItem>) => Promise<void>
+  setProgress:       (id: string, on: boolean) => Promise<void>
   deleteChecklist:   (id: string) => Promise<void>
   toggleComplete:    (id: string, completed?: boolean) => Promise<void>
   addResident:       (r: Omit<LtcResident,'id'|'createdAt'>) => Promise<void>
@@ -291,6 +294,7 @@ export const useLtcStore = create<LtcState>((set, get) => ({
     if (newOccs.length > 0) {
       set(s => ({ occurrences: [...s.occurrences.filter(o => o.checklistItemId !== newItem.id), ...newOccs.map(mapOcc)] }))
     }
+    return newItem
   },
   updateChecklist: async (id, u) => {
     const p: any = {}
@@ -331,6 +335,20 @@ export const useLtcStore = create<LtcState>((set, get) => ({
     const updated = mapCL(raw)
     set(s => ({ checklists: s.checklists.map(c => c.id===id ? updated : c) }))
     // occurrences 스토어도 동기화
+    if (updated.occurrences.length > 0) {
+      set(s => ({
+        occurrences: [
+          ...s.occurrences.filter(o => o.checklistItemId !== id),
+          ...updated.occurrences,
+        ]
+      }))
+    }
+  },
+
+  setProgress: async (id, on) => {
+    const raw = await evalChecklistAPI.setProgress(id, on)
+    const updated = mapCL(raw)
+    set(s => ({ checklists: s.checklists.map(c => c.id===id ? updated : c) }))
     if (updated.occurrences.length > 0) {
       set(s => ({
         occurrences: [

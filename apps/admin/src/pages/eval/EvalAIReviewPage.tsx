@@ -268,7 +268,7 @@ export default function EvalAIReviewPage() {
 
 function ReviewResultView({ result, onAddChecklist, domains }: {
   result: ReviewRecord
-  onAddChecklist: (item: any) => Promise<void>
+  onAddChecklist: (item: any) => Promise<any>
   domains: { id: string; name: string }[]
 }) {
   const r = result.result

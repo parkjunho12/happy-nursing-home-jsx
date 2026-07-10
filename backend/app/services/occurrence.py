@@ -580,6 +580,30 @@ def uncomplete_occurrence(
     return occurrence
 
 
+def set_occurrence_progress(
+    db: Session,
+    occurrence: ChecklistOccurrence,
+    on: bool,
+    user_name: str = None,
+) -> ChecklistOccurrence:
+    """진행 중(in_progress) 상태 토글. 완료 상태에서는 호출하지 않음."""
+    from datetime import datetime, timezone, timedelta
+    KST = timezone(timedelta(hours=9))
+    if on:
+        occurrence.status = 'in_progress'
+        occurrence.started_by = user_name
+        if getattr(occurrence, 'started_at', None) is None:
+            occurrence.started_at = datetime.now(KST)
+    else:
+        today = today_kst()
+        due = date.fromisoformat(occurrence.due_date)
+        occurrence.status = 'overdue' if today > due else 'pending'
+        occurrence.started_by = None
+        occurrence.started_at = None
+    db.flush()
+    return occurrence
+
+
 def get_occurrences_for_period(
     db: Session,
     period_key: str,

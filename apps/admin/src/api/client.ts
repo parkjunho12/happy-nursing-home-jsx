@@ -57,9 +57,13 @@ export const apiClient: AxiosInstance = axios.create({
 // Request interceptor: attach bearer token
 apiClient.interceptors.request.use((config) => {
   const token = tokenStorage.get()
-  if (token) {
-    config.headers = config.headers ?? {}
-    config.headers.Authorization = `Bearer ${token}`
+  config.headers = config.headers ?? {}
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  // FormData(멀티파트) 전송 시 Content-Type을 제거 → 브라우저가 boundary 포함해 자동 지정
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+    const h: any = config.headers
+    if (typeof h.delete === 'function') h.delete('Content-Type')
+    else delete h['Content-Type']
   }
   return config
 })
