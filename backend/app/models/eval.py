@@ -268,6 +268,7 @@ class LtcStaffMember(Base):
     birth_date = Column(String(20), nullable=False)
     gender = Column(String(10), nullable=False)
     hire_date = Column(String(20), nullable=False)
+    position = Column(String(50), nullable=True)  # 직종
     resign_date = Column(String(20), nullable=True)
     status = Column(String(20), default="active", index=True)
     memo = Column(Text, default="")

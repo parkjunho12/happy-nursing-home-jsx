@@ -66,7 +66,7 @@ export interface LtcResident {
 
 export interface LtcStaff {
   id: string; name: string; birthDate: string; gender: string
-  hireDate: string; resignDate?: string; status: string; memo: string; createdAt: string
+  hireDate: string; resignDate?: string; position?: string; status: string; memo: string; createdAt: string
 }
 
 export interface EvalDomain     { id: string; name: string; color: string; active: boolean }
@@ -158,7 +158,7 @@ function mapR(raw: any): LtcResident {
 }
 function mapS(raw: any): LtcStaff {
   return { id:raw.id, name:raw.name, birthDate:raw.birth_date, gender:raw.gender,
-    hireDate:raw.hire_date, resignDate:raw.resign_date, status:raw.status,
+    hireDate:raw.hire_date, resignDate:raw.resign_date, position:raw.position??undefined, status:raw.status,
     memo:raw.memo??'', createdAt:raw.created_at??'' }
 }
 function mapSettings(raw: any): EvalSettings {
@@ -401,7 +401,7 @@ export const useLtcStore = create<LtcState>((set, get) => ({
   },
 
   addStaff: async (s) => {
-    const raw = await evalStaffAPI.create({ name:s.name, birth_date:s.birthDate, gender:s.gender, hire_date:s.hireDate, memo:s.memo })
+    const raw = await evalStaffAPI.create({ name:s.name, birth_date:s.birthDate, gender:s.gender, hire_date:s.hireDate, position:(s as any).position, memo:s.memo })
     const newS = mapS(raw)
     const templates = generateStaffHireChecklists(newS as any)
     const newCls = await evalChecklistAPI.createBulk(templates.map(clPayload as any))
@@ -417,6 +417,7 @@ export const useLtcStore = create<LtcState>((set, get) => ({
     if (u.birthDate !== undefined) p.birth_date = u.birthDate
     if (u.gender !== undefined)    p.gender     = u.gender
     if (u.hireDate !== undefined)  p.hire_date  = u.hireDate
+    if ((u as any).position !== undefined) p.position = (u as any).position
     if (u.memo !== undefined)      p.memo       = u.memo
     const raw = await evalStaffAPI.update(id, p)
     set(st => ({ staffList: st.staffList.map(s => s.id===id ? mapS(raw) : s) }))
