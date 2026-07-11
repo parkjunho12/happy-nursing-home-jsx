@@ -18,6 +18,7 @@ from app.api.v1.endpoints.facility_news import admin_router as news_admin_router
 from app.api.v1.endpoints.staff_push import router as staff_push_router
 from app.api.v1.endpoints.staff_hr import router as staff_hr_router
 from app.api.v1.endpoints.card_keys import router as card_keys_router
+from app.api.v1.endpoints.staffing import router as staffing_router
 from app.api.v1.endpoints.resident_docs import router as resident_docs_router
 api_router = APIRouter()
 
@@ -118,4 +119,5 @@ api_router.include_router(news_family_router, prefix="/family", tags=["family-ne
 api_router.include_router(staff_push_router, prefix="/staff/push", tags=["staff-push"])
 api_router.include_router(staff_hr_router, prefix="/admin/staff-hr", tags=["admin-staff-hr"])
 api_router.include_router(card_keys_router, prefix="/admin/card-keys", tags=["admin-card-keys"])
+api_router.include_router(staffing_router, prefix="/admin/staffing", tags=["admin-staffing"])
 api_router.include_router(resident_docs_router, prefix="/admin/resident-docs", tags=["admin-resident-docs"])

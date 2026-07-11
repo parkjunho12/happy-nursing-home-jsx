@@ -25,6 +25,7 @@ import EvalChecklistPage    from './pages/eval/EvalChecklistPage'
 import EvalCalendarPage     from './pages/eval/EvalCalendarPage'
 import EvalResidentsPage    from './pages/eval/EvalResidentsPage'
 import EvalStaffPage        from './pages/eval/EvalStaffPage'
+import StaffingSimulatorPage from './pages/admin/StaffingSimulatorPage'
 import EvalAIReviewPage     from './pages/eval/EvalAIReviewPage'
 import EvalRecordAuditPage  from './pages/eval/EvalRecordAuditPage'
 import EvalRecordAuditDetailPage from './pages/eval/EvalRecordAuditDetailPage'
@@ -223,6 +224,7 @@ function App() {
             <Route path="expense"                  element={<ExpenseRoute><ExpensePage /></ExpenseRoute>} />
             <Route path="facility-news"            element={<SocialWorkerRoute><FacilityNewsPage /></SocialWorkerRoute>} />
             <Route path="staff-hr"                 element={<StaffAdminRoute><StaffHrPage /></StaffAdminRoute>} />
+            <Route path="staffing"                 element={<ManagerRoute><StaffingSimulatorPage /></ManagerRoute>} />
             <Route path="resident-docs"            element={<SocialWorkerRoute><ResidentDocsPage /></SocialWorkerRoute>} />
             <Route path="enteral"                  element={<CareInventoryRoute><EnteralPage /></CareInventoryRoute>} />
 

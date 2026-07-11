@@ -30,6 +30,7 @@ export interface ResidentDoc {
   active?: boolean
 }
 export interface DocInput {
+  resident_id?: string | null
   floor?: string | null
   name?: string | null
   admission_date?: string | null
