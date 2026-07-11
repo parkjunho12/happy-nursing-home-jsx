@@ -6,6 +6,7 @@ import CertificationEditor from '@/components/eval/CertificationEditor'
 import DocEventsEditor from '@/components/eval/DocEventsEditor'
 import { currentCert, certState, renewalDue, gradeLabel, benefitLabel } from '@/utils/cert'
 import { type DocEvent, type DocType, KINDS, kindMeta, asEvent, fmtYMD, fmtMD, autoDocEvents } from '@/utils/docEvents'
+import { useLtcStore, type LtcResident } from '@/store/ltc'
 
 const fmtD = (s?: string | null) => {
   if (!s) return ''
@@ -43,6 +44,8 @@ export default function ResidentDocsPage() {
   const [fee, setFee] = useState('')
   const [quick, setQuick] = useState<'all' | 'cert' | 'month'>('all')
   const [sopOpen, setSopOpen] = useState(false)
+  const { residents, loaded: ltcLoaded, loadAll } = useLtcStore()
+  useEffect(() => { if (!ltcLoaded) loadAll() }, [ltcLoaded, loadAll])
   const [exp, setExp] = useState<Set<string>>(new Set())
   const toggleExp = (k: string) => setExp(p => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n })
 
@@ -260,7 +263,7 @@ export default function ResidentDocsPage() {
       <p className="text-[11px] text-gray-400 mt-2">💡 계약서·계획서·평가 칸을 클릭하면 전체 이력이 펼쳐집니다. 기준일 옆 (6개월 …)은 반기 갱신 기준일입니다.</p>
 
       {(addOpen || editing) && (
-        <DocFormModal editing={editing} onClose={() => { setAddOpen(false); setEditing(null) }} onSaved={() => { setAddOpen(false); setEditing(null); load() }} />
+        <DocFormModal editing={editing} residents={residents} docByResident={new Map(rows.filter(r => r.resident_id).map(r => [r.resident_id as string, r]))} onClose={() => { setAddOpen(false); setEditing(null) }} onSaved={() => { setAddOpen(false); setEditing(null); load() }} />
       )}
     </div>
   )
@@ -270,10 +273,10 @@ function Field({ label, children }: { label: string; children: any }) {
   return <div><label className="text-xs font-semibold text-gray-500 mb-1 block">{label}</label>{children}</div>
 }
 
-function DocFormModal({ editing, onClose, onSaved }: { editing: ResidentDoc | null; onClose: () => void; onSaved: () => void }) {
+function DocFormModal({ editing, residents = [], docByResident = new Map<string, ResidentDoc>(), onClose, onSaved }: { editing: ResidentDoc | null; residents?: LtcResident[]; docByResident?: Map<string, ResidentDoc>; onClose: () => void; onSaved: () => void }) {
   const isEdit = !!editing
   const [f, setF] = useState<DocInput>({
-    name: editing?.name ?? '', admission_date: editing?.admission_date ?? '', floor: editing?.floor ?? '2층',
+    resident_id: editing?.resident_id ?? null, name: editing?.name ?? '', admission_date: editing?.admission_date ?? '', floor: editing?.floor ?? '2층',
     certifications: editing?.certifications ? editing.certifications.map(c => ({ ...c, benefits: (c.benefits ?? []).map(b => ({ ...b })) })) : [],
     contract_lines: editing?.contract_lines ?? [], plan_lines: editing?.plan_lines ?? [], eval_lines: editing?.eval_lines ?? [],
     memo: editing?.memo ?? '', active: editing?.active ?? true,
@@ -307,6 +310,38 @@ function DocFormModal({ editing, onClose, onSaved }: { editing: ResidentDoc | nu
           <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center"><X className="w-5 h-5 text-gray-400" /></button>
         </div>
         <div className="px-5 py-4 space-y-3">
+          {!isEdit && (() => {
+            const actives = residents.filter(r => r.status === 'active')
+            if (actives.length === 0) return null
+            const picked = actives.find(x => x.id === f.resident_id)
+            const pickedDoc = picked ? docByResident.get(picked.id) : undefined
+            const certCount = pickedDoc?.certifications?.length ?? 0
+            return (
+              <div className="bg-teal-50 border border-teal-100 rounded-xl p-3">
+                <label className="text-xs font-semibold text-teal-700 mb-1 block">기존 수급자에서 불러오기</label>
+                <select className={inp} value={f.resident_id ?? ''} onChange={e => {
+                  const r = actives.find(x => x.id === e.target.value)
+                  if (!r) { setF(p => ({ ...p, resident_id: null })); return }
+                  const doc = docByResident.get(r.id)
+                  const certs = doc?.certifications ? doc.certifications.map(c => ({ ...c, benefits: (c.benefits ?? []).map(b => ({ ...b })) })) : undefined
+                  setF(p => ({
+                    ...p, resident_id: r.id, name: r.name, admission_date: r.admissionDate,
+                    base_date: doc?.base_date || r.careGradeStartDate,
+                    ...(certs ? { certifications: certs } : {}),
+                  }))
+                }}>
+                  <option value="">직접 입력</option>
+                  {actives.map(r => {
+                    const cnt = docByResident.get(r.id)?.certifications?.length ?? 0
+                    return <option key={r.id} value={r.id}>{r.name} (입소 {r.admissionDate || '-'}){docByResident.has(r.id) ? ` · 등록됨${cnt ? ` (인정서 ${cnt}건)` : ''}` : ''}</option>
+                  })}
+                </select>
+                {pickedDoc
+                  ? <p className="text-[11px] text-amber-600 mt-1">⚠ 이미 서류가 등록된 수급자입니다{certCount ? ` — 인정서 갱신 이력 ${certCount}건을 함께 불러왔습니다` : ''}. 기존 기록 수정 권장.</p>
+                  : <p className="text-[11px] text-teal-500 mt-1">선택하면 성함·입소일·인정서 이력이 자동으로 채워지고 수급자와 연동됩니다.</p>}
+              </div>
+            )
+          })()}
           <div className="grid grid-cols-2 gap-2">
             <Field label="성함 *"><input value={f.name ?? ''} onChange={e => setF({ ...f, name: e.target.value })} className={inp} autoFocus /></Field>
             <Field label="입소일"><DateField value={f.admission_date} onChange={v => setF({ ...f, admission_date: v })} className={inp} /></Field>

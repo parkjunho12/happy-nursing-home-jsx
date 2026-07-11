@@ -11,6 +11,7 @@ import { expenseAPI } from '@/api/expenseClient'
 import { scheduleAPI, type ScheduleEvent } from '@/api/scheduleClient'
 import { newsAPI, type FacilityNews } from '@/api/newsClient'
 import { useLtcStore } from '@/store/ltc'
+import { useAuthStore } from '@/store/auth'
 import type { DashboardStats } from '@/types'
 import { RECURRING, FREQUENCY_LABELS, getPeriodEnd, todayKST, todayDateKST, getCurrentPeriodKey, daysFromToday } from '@/utils/period'
 
@@ -243,6 +244,28 @@ export default function DashboardPage() {
   // ── 집계 ───────────────────────────────────────────────────────────────
   const activeResidents = residents.filter(r => r.status === 'active').length
   const activeStaff     = staffList.filter(s => s.status === 'active').length
+
+  // 요양보호사 배치기준(2.1:1) — ADMIN·시설장 전용
+  const { user } = useAuthStore()
+  const isManagerView = user?.role === 'ADMIN' || user?.position === '시설장'
+  const CAREGIVER_RATIO = 2.1
+  const staffing = useMemo(() => {
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const now = new Date(), y = now.getFullYear(), m = now.getMonth()
+    let total = 0, days = 0
+    for (let d = new Date(y, m, 1); d <= now; d.setDate(d.getDate() + 1)) {
+      const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+      const cnt = residents.filter(r => r.admissionDate && r.admissionDate <= iso && (!r.dischargeDate || r.dischargeDate >= iso)).length
+      total += cnt; days++
+    }
+    const avg = days ? total / days : activeResidents
+    const isCg = (p?: string) => { const q = (p ?? '').replace(/\s/g, ''); return q === '요양보호사' || q === '요양팀장' || q === '요양보호원' || q.includes('요양보호') }
+    const caregivers = staffList.filter(s => s.status === 'active' && isCg(s.position)).length
+    const requiredExact = avg / CAREGIVER_RATIO
+    const requiredMin = Math.ceil(requiredExact - 1e-9)
+    const shortfall = Math.max(0, requiredMin - caregivers)
+    return { avg, caregivers, requiredExact, requiredMin, shortfall }
+  }, [residents, staffList, activeResidents])
   const totalActive     = checklists.filter(c => c.active).length
   const totalDone       = occurrences.length > 0
     ? occurrences.filter(o => o.status === 'completed' && o.scheduledDate <= todayStr && o.dueDate >= todayStr).length
@@ -311,6 +334,34 @@ export default function DashboardPage() {
           sub={siteStats ? `오늘 ${siteStats.todayAdmissions}명` : ''} color="purple"
           icon={<UserPlus size={18}/>} onClick={() => navigate('/eval/residents')}/>
       </div>
+
+      {/* ── 요양보호사 인력배치 요약 (ADMIN·시설장) — 자세한 판단은 시뮬레이터 */}
+      {isManagerView && (
+        <button onClick={() => navigate('/staffing')}
+          className="w-full text-left bg-white rounded-2xl border border-gray-100 shadow-sm p-4 hover:border-indigo-200 transition-colors">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center"><UserCog size={18} className="text-indigo-600"/></div>
+              <div>
+                <p className="text-sm font-bold text-gray-900">요양보호사 인력배치 (2.1:1)</p>
+                <p className="text-[11px] text-gray-400">월 평균 입소자 {staffing.avg.toFixed(1)}명 기준 · 예상값</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="text-center">
+                <p className="text-[11px] text-gray-400">현재 / 필요</p>
+                <p className="text-lg font-extrabold text-gray-800">{staffing.caregivers} / {staffing.requiredMin}<span className="text-xs font-bold text-gray-400">명</span></p>
+              </div>
+              <div className="text-center">
+                <p className="text-[11px] text-gray-400">추가 필요</p>
+                <p className={`text-lg font-extrabold ${staffing.shortfall > 0 ? 'text-red-600' : 'text-green-600'}`}>{staffing.shortfall}<span className="text-xs font-bold text-gray-400">명</span></p>
+              </div>
+              <span className="text-xs font-semibold text-indigo-600 whitespace-nowrap">시뮬레이터 &rsaquo;</span>
+            </div>
+          </div>
+          {staffing.shortfall > 0 && <p className="text-[11px] text-red-500 mt-2">⚠ 현재 입소자 기준 요양보호사 {staffing.shortfall}명이 부족합니다. 입소·채용 전 시뮬레이터로 확인하세요.</p>}
+        </button>
+      )}
 
       {/* ── 처리 대기(결재·확인) 액션 센터 — 크로스 기능 */}
       {(() => {
