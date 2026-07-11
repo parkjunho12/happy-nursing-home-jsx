@@ -1,6 +1,10 @@
 import StickyToolbar from '../../components/common/StickyToolbar'
 import { useState, useMemo, useEffect } from 'react'
-import { UserPlus, LogOut, Edit2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw } from 'lucide-react'
+import { UserPlus, LogOut, Edit2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw, Trash2 } from 'lucide-react'
+import DateField from '@/components/ui/DateField'
+import CertificationEditor from '@/components/eval/CertificationEditor'
+import { endFromStart, type Certification } from '@/utils/cert'
+import { autoDocEvents } from '@/utils/docEvents'
 import { useLtcStore } from '@/store/ltc'
 import type { LtcResident } from '@/store/ltc'
 import type { ChecklistItem } from '@/utils/period'
@@ -11,7 +15,7 @@ import { adminAlbumAPI } from '@/api/albumClient'
 type Tab = 'active' | 'discharged' | 'all'
 
 export default function EvalResidentsPage() {
-  const { residents, checklists, loaded, loadAll } = useLtcStore()
+  const { residents, checklists, loaded, loadAll, deleteResident } = useLtcStore()
   const [tab, setTab] = useState<Tab>('active')
   const [showAdd, setShowAdd] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -21,6 +25,11 @@ export default function EvalResidentsPage() {
   const [addGuardianFor, setAddGuardianFor] = useState<{ id: string; name: string } | null>(null)
 
   useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
+
+  const handleDeleteResident = async (r: LtcResident) => {
+    if (!confirm(`'${r.name}' 수급자를 완전히 삭제할까요?\n\n개인 체크리스트·수행기록·서류현황이 함께 삭제되며 되돌릴 수 없습니다.`)) return
+    try { await deleteResident(r.id) } catch (e: any) { alert(e?.message ?? '삭제 실패') }
+  }
 
   const filtered = residents.filter(r => tab === 'all' ? true : tab === 'active' ? r.status === 'active' : r.status === 'discharged')
   const resCls = useMemo(() => {
@@ -97,6 +106,7 @@ export default function EvalResidentsPage() {
               onExpand={() => setExpandedId(expandedId===r.id ? null : r.id)}
               onEdit={() => setEditingId(r.id)}
               onDischarge={() => setShowDischarge(r.id)}
+              onDelete={() => handleDeleteResident(r)}
               checklists={resCls[r.id]??[]}
               onClClick={setSelectedCl}
               onAddGuardian={() => setAddGuardianFor({ id: r.id, name: r.name })} />
@@ -119,8 +129,8 @@ export default function EvalResidentsPage() {
   )
 }
 
-function ResidentCard({ r, expanded, onExpand, onEdit, onDischarge, checklists, onClClick, onAddGuardian }: {
-  r: LtcResident; expanded:boolean; onExpand:()=>void; onEdit:()=>void; onDischarge:()=>void;
+function ResidentCard({ r, expanded, onExpand, onEdit, onDischarge, onDelete, checklists, onClClick, onAddGuardian }: {
+  r: LtcResident; expanded:boolean; onExpand:()=>void; onEdit:()=>void; onDischarge:()=>void; onDelete:()=>void;
   checklists: ChecklistItem[]; onClClick:(c:ChecklistItem)=>void; onAddGuardian:()=>void;
 }) {
   const age = calcAge(r.birthDate)
@@ -163,6 +173,7 @@ function ResidentCard({ r, expanded, onExpand, onEdit, onDischarge, checklists, 
               </button>
               <button onClick={e=>{e.stopPropagation();onEdit()}} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"><Edit2 size={14}/></button>
               <button onClick={e=>{e.stopPropagation();onDischarge()}} className="flex items-center gap-1 text-xs font-medium text-red-500 border border-red-200 px-2.5 py-1.5 rounded-xl hover:bg-red-50"><LogOut size={12}/>퇴소</button>
+              <button onClick={e=>{e.stopPropagation();onDelete()}} title="수급자 삭제" className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-300 hover:bg-red-50 hover:text-red-500"><Trash2 size={14}/></button>
             </>
           )}
           {expanded ? <ChevronUp size={16} className="text-gray-400"/> : <ChevronDown size={16} className="text-gray-400"/>}
@@ -235,13 +246,24 @@ function BirthDateSelect({ value, onChange }: { value: string; onChange: (v: str
 
 function ResidentForm({ existing, onClose }: { existing?: LtcResident; onClose:()=>void }) {
   const { addResident, updateResident } = useLtcStore()
-  const [form, setForm] = useState({ name:existing?.name??'', birthDate:existing?.birthDate??'1930-01-01', gender:existing?.gender??'female', admissionDate:existing?.admissionDate??new Date().toISOString().split('T')[0], careGradeStartDate:existing?.careGradeStartDate??new Date().toISOString().split('T')[0], memo:existing?.memo??'' })
+  const today = new Date().toISOString().split('T')[0]
+  const [form, setForm] = useState({ name:existing?.name??'', birthDate:existing?.birthDate??'1930-01-01', gender:existing?.gender??'female', admissionDate:existing?.admissionDate??today, careGradeStartDate:existing?.careGradeStartDate??today, memo:existing?.memo??'' })
+  const [certs, setCerts] = useState<Certification[]>([
+    { grade:'3', cert_no:'', start: today, end: endFromStart(today, 2), benefits:[{ type:'시설', from: today }] },
+  ])
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); if(!form.name||!form.birthDate) return
     setLoading(true)
-    try { if(existing) await updateResident(existing.id, form); else await addResident({...form, status:'active'}); onClose() }
+    const certifications = certs.filter(c=>c.start||c.end||(c.benefits??[]).length)
+    const careGradeStartDate = certs[0]?.start || form.careGradeStartDate || today
+    const auto = autoDocEvents(certifications, form.admissionDate)
+    try {
+      if(existing) await updateResident(existing.id, form)
+      else await addResident({...form, careGradeStartDate, certifications, contract_lines:auto.contract, plan_lines:auto.plan, eval_lines:auto.eval, status:'active'} as any)
+      onClose()
+    }
     finally { setLoading(false) }
   }
 
@@ -264,8 +286,12 @@ function ResidentForm({ existing, onClose }: { existing?: LtcResident; onClose:(
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">성별</label>
             <select className={ic} value={form.gender} onChange={e=>setForm({...form,gender:e.target.value})}><option value="female">여</option><option value="male">남</option></select>
           </div>
-          <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">입소일 *</label><input required type="date" className={ic} value={form.admissionDate} onChange={e=>setForm({...form,admissionDate:e.target.value})}/></div>
-          <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">장기요양등급 인정서 시작일 *</label><input required type="date" className={ic} value={form.careGradeStartDate} onChange={e=>setForm({...form,careGradeStartDate:e.target.value})}/><p className="text-xs text-gray-400 mt-1">반기 주기(욕구사정·급여계획 등)의 기준이 됩니다.</p></div>
+          <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">입소일 *</label><DateField className={ic} value={form.admissionDate} onChange={v=>setForm({...form,admissionDate:v})} clearable={false}/></div>
+          {!existing && <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">장기요양인정서 <span className="text-gray-400 font-normal">— 등급·유효기간(2/3/4년)·급여(재가↔시설)</span></label>
+            <CertificationEditor value={certs} onChange={setCerts} />
+            <p className="text-xs text-gray-400 mt-1">등록 시 어르신 서류현황에 자동 반영됩니다. (종료 90일 전 갱신 알림)</p>
+          </div>}
           <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">메모</label><textarea className={ic} rows={2} value={form.memo} onChange={e=>setForm({...form,memo:e.target.value})} placeholder="예: 1등급, 낙상 고위험"/></div>
           <div className="flex gap-3 pt-2">
             <button type="submit" disabled={loading} className="flex-1 bg-primary-orange text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-primary-orange/90 disabled:opacity-50">{loading?'처리 중...':existing?'수정':'입소 등록'}</button>
@@ -295,7 +321,7 @@ function DischargeModal({ residentId, onClose }: { residentId:string; onClose:()
         <div className="px-5 py-4 border-b"><h2 className="font-bold text-gray-900">퇴소 처리 — {r.name}</h2></div>
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 text-xs text-orange-700">퇴소 처리 시 연계기록지 체크리스트가 자동 생성되며, 미완료 입소 체크리스트는 비활성화됩니다.</div>
-          <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">퇴소일 *</label><input required type="date" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40" value={date} onChange={e=>setDate(e.target.value)}/></div>
+          <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">퇴소일 *</label><DateField className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40" value={date} onChange={v=>setDate(v)} clearable={false}/></div>
           <div className="flex gap-3 pt-2">
             <button type="submit" disabled={loading} className="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-red-600 disabled:opacity-50">{loading?'처리 중...':'퇴소 처리'}</button>
             <button type="button" onClick={onClose} className="flex-1 border border-gray-200 text-gray-700 rounded-xl py-2.5 text-sm">취소</button>

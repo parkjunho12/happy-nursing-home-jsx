@@ -61,12 +61,15 @@ export interface ChecklistItem {
 export interface LtcResident {
   id: string; name: string; birthDate: string; gender: string
   admissionDate: string; dischargeDate?: string; careGradeStartDate: string
+  grade?: string; certEnd?: string
   status: string; memo: string; createdAt: string
 }
 
 export interface LtcStaff {
   id: string; name: string; birthDate: string; gender: string
-  hireDate: string; resignDate?: string; position?: string; status: string; memo: string; createdAt: string
+  hireDate: string; resignDate?: string; position?: string
+  residentNo?: string; address?: string; addressDetail?: string; phone?: string; licenseDate?: string; licenseNo?: string; bankAccount?: string
+  status: string; memo: string; createdAt: string
 }
 
 export interface EvalDomain     { id: string; name: string; color: string; active: boolean }
@@ -158,8 +161,10 @@ function mapR(raw: any): LtcResident {
 }
 function mapS(raw: any): LtcStaff {
   return { id:raw.id, name:raw.name, birthDate:raw.birth_date, gender:raw.gender,
-    hireDate:raw.hire_date, resignDate:raw.resign_date, position:raw.position??undefined, status:raw.status,
-    memo:raw.memo??'', createdAt:raw.created_at??'' }
+    hireDate:raw.hire_date, resignDate:raw.resign_date, position:raw.position??undefined,
+    residentNo:raw.resident_no??undefined, address:raw.address??undefined, addressDetail:raw.address_detail??undefined, phone:raw.phone??undefined,
+    licenseDate:raw.license_date??undefined, licenseNo:raw.license_no??undefined, bankAccount:raw.bank_account??undefined,
+    status:raw.status, memo:raw.memo??'', createdAt:raw.created_at??'' }
 }
 function mapSettings(raw: any): EvalSettings {
   return { facilityName:raw.facility_name, evalYear:raw.eval_year,
@@ -212,6 +217,7 @@ interface LtcState {
   addResident:       (r: Omit<LtcResident,'id'|'createdAt'>) => Promise<void>
   updateResident:    (id: string, u: Partial<LtcResident>) => Promise<void>
   dischargeResident: (id: string, date: string) => Promise<void>
+  deleteResident:    (id: string) => Promise<void>
   addStaff:          (s: Omit<LtcStaff,'id'|'createdAt'>) => Promise<void>
   updateStaff:       (id: string, u: Partial<LtcStaff>) => Promise<void>
   resignStaff:       (id: string, date: string) => Promise<void>
@@ -360,7 +366,7 @@ export const useLtcStore = create<LtcState>((set, get) => ({
   },
 
   addResident: async (r) => {
-    const raw = await evalResidentsAPI.create({ name:r.name, birth_date:r.birthDate, gender:r.gender, admission_date:r.admissionDate, care_grade_start_date:r.careGradeStartDate, memo:r.memo })
+    const raw = await evalResidentsAPI.create({ name:r.name, birth_date:r.birthDate, gender:r.gender, admission_date:r.admissionDate, care_grade_start_date:r.careGradeStartDate, certifications:(r as any).certifications, contract_lines:(r as any).contract_lines, plan_lines:(r as any).plan_lines, eval_lines:(r as any).eval_lines, memo:r.memo })
     const newR = mapR(raw)
     const templates = generateResidentAdmissionChecklists(newR as any)
     const newCls = await evalChecklistAPI.createBulk(templates.map(clPayload as any))
@@ -400,8 +406,20 @@ export const useLtcStore = create<LtcState>((set, get) => ({
       set(s => ({ occurrences: [...s.occurrences.filter(o => !newItemIds.includes(o.checklistItemId)), ...newOccs.map(mapOcc)] }))
   },
 
+  deleteResident: async (id) => {
+    await evalResidentsAPI.delete(id)
+    set(s => ({
+      residents:   s.residents.filter(r => r.id !== id),
+      checklists:  s.checklists.filter(c => c.personId !== id),
+      occurrences: s.occurrences.filter(o => {
+        const cl = s.checklists.find(c => c.id === o.checklistItemId)
+        return cl ? cl.personId !== id : true
+      }),
+    }))
+  },
+
   addStaff: async (s) => {
-    const raw = await evalStaffAPI.create({ name:s.name, birth_date:s.birthDate, gender:s.gender, hire_date:s.hireDate, position:(s as any).position, memo:s.memo })
+    const raw = await evalStaffAPI.create({ name:s.name, birth_date:s.birthDate, gender:s.gender, hire_date:s.hireDate, position:(s as any).position, resident_no:(s as any).residentNo, address:(s as any).address, address_detail:(s as any).addressDetail, phone:(s as any).phone, license_date:(s as any).licenseDate, license_no:(s as any).licenseNo, bank_account:(s as any).bankAccount, memo:s.memo })
     const newS = mapS(raw)
     const templates = generateStaffHireChecklists(newS as any)
     const newCls = await evalChecklistAPI.createBulk(templates.map(clPayload as any))
@@ -418,6 +436,13 @@ export const useLtcStore = create<LtcState>((set, get) => ({
     if (u.gender !== undefined)    p.gender     = u.gender
     if (u.hireDate !== undefined)  p.hire_date  = u.hireDate
     if ((u as any).position !== undefined) p.position = (u as any).position
+    if ((u as any).residentNo !== undefined) p.resident_no = (u as any).residentNo
+    if ((u as any).address !== undefined)    p.address = (u as any).address
+    if ((u as any).addressDetail !== undefined) p.address_detail = (u as any).addressDetail
+    if ((u as any).phone !== undefined)      p.phone = (u as any).phone
+    if ((u as any).licenseDate !== undefined) p.license_date = (u as any).licenseDate
+    if ((u as any).licenseNo !== undefined)  p.license_no = (u as any).licenseNo
+    if ((u as any).bankAccount !== undefined) p.bank_account = (u as any).bankAccount
     if (u.memo !== undefined)      p.memo       = u.memo
     const raw = await evalStaffAPI.update(id, p)
     set(st => ({ staffList: st.staffList.map(s => s.id===id ? mapS(raw) : s) }))

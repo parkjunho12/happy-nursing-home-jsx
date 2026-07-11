@@ -1,3 +1,4 @@
+import DateField from '@/components/ui/DateField'
 import { useState, useEffect } from 'react'
 import { AlertCircle } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
@@ -5,7 +6,6 @@ import { useAuthStore } from '@/store/auth'
 import { apiClient } from '@/api/client'
 import type { ChecklistItem } from '@/utils/period'
 import { RECURRING, EVENT_FREQS, FREQUENCY_LABELS, FREQUENCY_COLORS } from '@/utils/period'
-import { todayKST } from '@/utils/period'
 
 const ic = "w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40"
 
@@ -259,13 +259,10 @@ export default function ChecklistFormModal({ existing, onClose }: Props) {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">기한 날짜 *</label>
-                  <input
-                    type="date"
+                  <DateField
                     className={ic}
                     value={form.dueDate}
-                    min={todayKST()}
-                    onChange={e => setForm({ ...form, dueDate: e.target.value })}
-                    required={isOneTime}
+                    onChange={v => setForm({ ...form, dueDate: v })}
                   />
                 </div>
               </div>

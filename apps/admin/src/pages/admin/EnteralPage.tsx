@@ -1,3 +1,4 @@
+import DateField from '@/components/ui/DateField'
 import { useEffect, useState } from 'react'
 import { enteralAPI, downloadBlob, type EnteralProduct, type EnteralTx, type TxType, type ProductInput, type ResidentCost, type EnteralResident } from '@/api/enteralClient'
 import { Download } from 'lucide-react'
@@ -343,7 +344,7 @@ function TxModal({ products, presetType, lockProduct, onClose, onSaved }: {
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div><label className={labelCls}>수량 *</label><input type="number" min={1} value={quantity} onChange={e => setQuantity(parseInt(e.target.value) || 0)} className={inputCls} /></div>
-          <div><label className={labelCls}>거래일</label><input type="date" value={txDate} onChange={e => setTxDate(e.target.value)} className={inputCls} /></div>
+          <div><label className={labelCls}>거래일</label><DateField value={txDate} onChange={v => setTxDate(v)} className={inputCls} clearable={false} /></div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div><label className={labelCls}>{txType === 'in' ? '매입 단가' : '단가'} (원/1{cur?.unit || '단위'})</label><input type="number" min={0} value={unitPrice} onChange={e => setUnitPrice(parseInt(e.target.value) || 0)} className={inputCls} /></div>

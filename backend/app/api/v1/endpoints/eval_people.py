@@ -33,10 +33,67 @@ def create_ltc_resident(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    r = LtcResident(**payload.model_dump(), status="active")
+    data = payload.model_dump()
+    certifications_in = data.pop("certifications", None)
+    contract_in = data.pop("contract_lines", None)
+    plan_in = data.pop("plan_lines", None)
+    eval_in = data.pop("eval_lines", None)
+    r = LtcResident(**data, status="active")
     db.add(r)
     db.commit()
     db.refresh(r)
+
+    # 어르신 서류 현황 표에 자동 추가 (급여/등급·인정서 기간 포함)
+    try:
+        from app.models.resident_docs import ResidentDocStatus
+        from app.models.staff_hr import to_iso
+        exists = db.query(ResidentDocStatus).filter(ResidentDocStatus.resident_id == r.id).first()
+        if not exists:
+            from app.api.v1.endpoints.resident_docs import _clean_certs, _derive_from_certs
+            # 입력 인정서 날짜를 ISO 정규화
+            raw_certs = []
+            for c in (certifications_in or []):
+                if not isinstance(c, dict):
+                    continue
+                raw_certs.append({
+                    "grade": (c.get("grade") or None),
+                    "cert_no": (c.get("cert_no") or None),
+                    "start": to_iso(c.get("start")),
+                    "end": to_iso(c.get("end")),
+                    "benefits": [
+                        {"type": (b.get("type") or None), "from": to_iso(b.get("from"))}
+                        for b in (c.get("benefits") or []) if isinstance(b, dict)
+                    ],
+                })
+            certs = _clean_certs(raw_certs)
+            periods, grade, cbase = _derive_from_certs(certs)
+            base = cbase or to_iso(getattr(r, "care_grade_start_date", None))
+            def _clean_events(raw):
+                out = []
+                for x in (raw or []):
+                    if not isinstance(x, dict):
+                        continue
+                    d = to_iso(x.get("date"))
+                    mm = (x.get("memo") or "").strip() or None
+                    k = (x.get("kind") or "").strip() or None
+                    if d or mm:
+                        out.append({"date": d, "memo": mm, "kind": k})
+                return out or None
+            db.add(ResidentDocStatus(
+                resident_id=r.id, name=r.name,
+                admission_date=to_iso(getattr(r, "admission_date", None)),
+                base_date=base,
+                grade=grade,
+                cert_periods=(periods or None),
+                certifications=(certs or None),
+                contract_lines=_clean_events(contract_in),
+                plan_lines=_clean_events(plan_in),
+                eval_lines=_clean_events(eval_in),
+            ))
+            db.commit()
+    except Exception:
+        db.rollback()
+
     return ApiResponse(success=True, data=LtcResidentOut.model_validate(r).model_dump())
 
 
@@ -77,6 +134,11 @@ def discharge_ltc_resident(
         raise HTTPException(404, "Not found")
     r.status = "discharged"
     r.discharge_date = payload.discharge_date
+    try:
+        from app.models.resident_docs import ResidentDocStatus
+        db.query(ResidentDocStatus).filter(ResidentDocStatus.resident_id == rid).update({"active": False})
+    except Exception:
+        pass
     # 미완료 입소 체크리스트 비활성화
     db.execute(
         update(ChecklistItem)
@@ -90,11 +152,33 @@ def discharge_ltc_resident(
 
 @residents_router.delete("/{rid}", response_model=ApiResponse)
 def delete_ltc_resident(rid: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """수급자 완전 삭제 — 연관 데이터(체크리스트·수행기록·서류현황)도 함께 정리."""
     r = db.query(LtcResident).filter(LtcResident.id == rid).first()
     if not r:
         raise HTTPException(404, "Not found")
-    db.delete(r)
-    db.commit()
+
+    from app.models.resident_docs import ResidentDocStatus
+    from app.models.eval import ChecklistItem, ChecklistOccurrence, CompletionRecord
+    try:
+        # 1) 어르신 서류 현황 (resident_id 연동분)
+        db.query(ResidentDocStatus).filter(
+            ResidentDocStatus.resident_id == rid
+        ).delete(synchronize_session=False)
+
+        # 2) 개인 체크리스트 및 하위 데이터(수행/발생)
+        item_ids = [i.id for i in db.query(ChecklistItem.id).filter(ChecklistItem.person_id == rid).all()]
+        if item_ids:
+            db.query(ChecklistOccurrence).filter(ChecklistOccurrence.checklist_item_id.in_(item_ids)).delete(synchronize_session=False)
+            db.query(CompletionRecord).filter(CompletionRecord.checklist_id.in_(item_ids)).delete(synchronize_session=False)
+            db.query(ChecklistItem).filter(ChecklistItem.person_id == rid).delete(synchronize_session=False)
+
+        # 3) 수급자 본체
+        db.delete(r)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, f"수급자 삭제 중 오류가 발생했습니다: {e}")
+
     return ApiResponse(success=True, message="Deleted")
 
 

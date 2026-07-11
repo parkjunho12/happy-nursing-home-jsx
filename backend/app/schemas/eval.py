@@ -214,6 +214,10 @@ class LtcResidentCreate(BaseModel):
     gender:                str
     admission_date:        str
     care_grade_start_date: str
+    certifications:        Optional[List[dict]] = None   # 입소 시 장기요양인정서(등급·기간·급여) → 서류현황 seed용
+    contract_lines:        Optional[List[dict]] = None   # 자동 생성된 계약서 일시
+    plan_lines:            Optional[List[dict]] = None   # 자동 생성된 계획서 일시
+    eval_lines:            Optional[List[dict]] = None   # 자동 생성된 평가 일시
     memo:                  str = ""
 
 
@@ -249,34 +253,55 @@ class DischargeRequest(BaseModel):
 # ══════════════════════════════════════════════════════════════════════════════
 
 class LtcStaffCreate(BaseModel):
-    name:       str
-    birth_date: str
-    gender:     str
-    hire_date:  str
-    position:   Optional[str] = None
-    memo:       str = ""
+    name:         str
+    birth_date:   str
+    gender:       str
+    hire_date:    str
+    position:     Optional[str] = None
+    resident_no:  Optional[str] = None
+    address:      Optional[str] = None
+    address_detail: Optional[str] = None
+    phone:        Optional[str] = None
+    license_date: Optional[str] = None
+    license_no:   Optional[str] = None
+    bank_account: Optional[str] = None
+    memo:         str = ""
 
 
 class LtcStaffUpdate(BaseModel):
-    name:       Optional[str] = None
-    birth_date: Optional[str] = None
-    gender:     Optional[str] = None
-    hire_date:  Optional[str] = None
-    position:   Optional[str] = None
-    memo:       Optional[str] = None
+    name:         Optional[str] = None
+    birth_date:   Optional[str] = None
+    gender:       Optional[str] = None
+    hire_date:    Optional[str] = None
+    position:     Optional[str] = None
+    resident_no:  Optional[str] = None
+    address:      Optional[str] = None
+    address_detail: Optional[str] = None
+    phone:        Optional[str] = None
+    license_date: Optional[str] = None
+    license_no:   Optional[str] = None
+    bank_account: Optional[str] = None
+    memo:         Optional[str] = None
 
 
 class LtcStaffOut(BaseModel):
-    id:          str
-    name:        str
-    birth_date:  str
-    gender:      str
-    hire_date:   str
-    resign_date: Optional[str] = None
-    position:    Optional[str] = None
-    status:      str
-    memo:        str
-    created_at:  datetime
+    id:           str
+    name:         str
+    birth_date:   str
+    gender:       str
+    hire_date:    str
+    resign_date:  Optional[str] = None
+    position:     Optional[str] = None
+    resident_no:  Optional[str] = None
+    address:      Optional[str] = None
+    address_detail: Optional[str] = None
+    phone:        Optional[str] = None
+    license_date: Optional[str] = None
+    license_no:   Optional[str] = None
+    bank_account: Optional[str] = None
+    status:       str
+    memo:         str
+    created_at:   datetime
     model_config = ConfigDict(from_attributes=True)
 
 

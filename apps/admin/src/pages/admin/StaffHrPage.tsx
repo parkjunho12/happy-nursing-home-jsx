@@ -1,6 +1,9 @@
+import DateField from '@/components/ui/DateField'
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { FileText, Plus, X, Trash2, Loader2, Check } from 'lucide-react'
 import { hrAPI, DOC_FIELDS, type HrRecord, type HrInput, type DocKey } from '../../api/hrClient'
+import { useLtcStore, type LtcStaff } from '@/store/ltc'
+import { cardKeyAPI, type CardKey, type CardInput } from '../../api/cardKeyClient'
 
 const POSITIONS = ['시설장', '사무국장', '대표', '이사', '사회복지사', '간호사', '간호조무사', '물리치료사', '요양팀장', '요양보호사', '앨범담당']
 
@@ -26,6 +29,9 @@ export default function StaffHrPage() {
   const [incompleteOnly, setIncompleteOnly] = useState(false)
   const [showResigned, setShowResigned] = useState(false)
   const [expandedC, setExpandedC] = useState<Set<string>>(new Set())
+  const [tab, setTab] = useState<'detail' | 'hr' | 'card'>('detail')
+  const { staffList, loaded: ltcLoaded, loadAll } = useLtcStore()
+  useEffect(() => { if (!ltcLoaded) loadAll() }, [ltcLoaded, loadAll])
   const toggleC = (id: string) => setExpandedC(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
 
   const load = useCallback(async () => {
@@ -79,15 +85,28 @@ export default function StaffHrPage() {
         <div className="flex items-center gap-2.5">
           <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center"><FileText className="w-5 h-5 text-indigo-600" /></div>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">근로계약·서류 관리</h1>
-            <p className="text-xs text-gray-400">직원 근로계약서 작성·재계약, 제출 서류 현황을 관리합니다.</p>
+            <h1 className="text-xl font-bold text-gray-900">직원 상세</h1>
+            <p className="text-xs text-gray-400">직원 인적·자격·계좌 정보와 근로계약·서류 현황을 관리합니다.</p>
           </div>
         </div>
-        <button onClick={() => setAddOpen(true)} className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold text-sm shadow-sm">
-          <Plus className="w-4 h-4" /> 직원 추가
-        </button>
+        {tab === 'hr' && (
+          <button onClick={() => setAddOpen(true)} className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold text-sm shadow-sm">
+            <Plus className="w-4 h-4" /> 직원 추가
+          </button>
+        )}
       </div>
 
+      {/* 탭 */}
+      <div className="flex gap-1.5 mb-4">
+        {([['detail', '직원 상세정보'], ['hr', '근로계약·서류'], ['card', '카드키 관리']] as const).map(([k, label]) => (
+          <button key={k} onClick={() => setTab(k)}
+            className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${tab === k ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'hr' && (<>
       {/* 요약 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4">
         <Stat label="총 직원" value={`${stats.total}명`} tone="gray" />
@@ -212,6 +231,11 @@ export default function StaffHrPage() {
         </div>
       )}
       <p className="text-[11px] text-gray-400 mt-2">💡 서류 칸을 클릭하면 제출 → 미제출 → 미입력 순으로 바뀝니다. "작성" 배지도 클릭으로 토글됩니다.</p>
+      </>)}
+
+      {tab === 'detail' && <StaffDetailTable staff={staffList} />}
+
+      {tab === 'card' && <CardKeyTable />}
 
       {(addOpen || editing) && (
         <HrFormModal editing={editing}
@@ -317,7 +341,7 @@ function HrFormModal({ editing, onClose, onSaved }: { editing: HrRecord | null; 
               <datalist id="hr-pos">{POSITIONS.map(p => <option key={p} value={p} />)}</datalist></Field>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <Field label="입사일"><input type="date" value={f.hire_date ?? ''} onChange={e => onHireChange(e.target.value)} className={inp} /></Field>
+            <Field label="입사일"><DateField value={f.hire_date} onChange={v => onHireChange(v)} className={inp} /></Field>
             <Field label="재계약일자 (자동)">
               <div className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-700">
                 {f.renewal_date ? fmtD(f.renewal_date) : '계약 기간 추가 시 자동'}
@@ -329,9 +353,9 @@ function HrFormModal({ editing, onClose, onSaved }: { editing: HrRecord | null; 
             <div className="space-y-2">
               {(f.contracts ?? []).map((c, i) => (
                 <div key={i} className="flex items-center gap-1.5">
-                  <input type="date" value={c.start ?? ''} onChange={e => updateContract(i, 'start', e.target.value)} className={`${inp} flex-1`} />
+                  <DateField value={c.start} onChange={v => updateContract(i, 'start', v)} className={inp} wrapperClassName="flex-1" />
                   <span className="text-gray-400 shrink-0">~</span>
-                  <input type="date" value={c.end ?? ''} onChange={e => updateContract(i, 'end', e.target.value)} className={`${inp} flex-1`} />
+                  <DateField value={c.end} onChange={v => updateContract(i, 'end', v)} className={inp} wrapperClassName="flex-1" />
                   <button type="button" onClick={() => removeContract(i)} className="text-gray-300 hover:text-red-500 shrink-0"><X className="w-4 h-4" /></button>
                 </div>
               ))}
@@ -391,4 +415,254 @@ function HrFormModal({ editing, onClose, onSaved }: { editing: HrRecord | null; 
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <div><label className="text-xs font-semibold text-gray-500 mb-1 block">{label}</label>{children}</div>
+}
+
+// ── 직원 상세정보 표 (인적·자격·계좌 분류) ──────────────────────
+function StaffDetailTable({ staff }: { staff: LtcStaff[] }) {
+  const [q, setQ] = useState('')
+  const [showResigned, setShowResigned] = useState(false)
+  const rows = useMemo(() => staff
+    .filter(s => showResigned || s.status === 'active')
+    .filter(s => !q || s.name.includes(q) || (s.position ?? '').includes(q))
+    .sort((a, b) => (a.hireDate || '9999').localeCompare(b.hireDate || '9999')), [staff, q, showResigned])
+
+  const th = 'px-2.5 py-2 text-[11px] font-bold text-gray-500 whitespace-nowrap text-center border-b border-gray-200'
+  const gh = 'px-2.5 py-1.5 text-[11px] font-extrabold whitespace-nowrap text-center border-b border-gray-200'
+  const td = 'px-2.5 py-2 text-xs whitespace-nowrap text-center border-b border-gray-50 text-gray-600'
+  const val = (v?: string | null) => v ? v : <span className="text-gray-300">-</span>
+
+  return (
+    <>
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="이름·직종 검색"
+          className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-200 w-40" />
+        <label className="inline-flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer">
+          <input type="checkbox" checked={showResigned} onChange={e => setShowResigned(e.target.checked)} className="accent-gray-500" />
+          퇴사 포함
+        </label>
+        <span className="text-xs text-gray-400 ml-auto">입사일 빠른순 · {rows.length}명</span>
+      </div>
+
+      {rows.length === 0 ? (
+        <div className="text-center py-16 text-gray-400 bg-white rounded-2xl border border-gray-100 text-sm">직원이 없습니다.</div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+          <table className="w-full border-collapse min-w-[1100px]">
+            <thead>
+              <tr>
+                <th className={`${gh} sticky left-0 z-20 bg-indigo-50/60 text-indigo-700 border-r border-gray-200`} colSpan={5}>기본정보</th>
+                <th className={`${gh} bg-teal-50/60 text-teal-700`} colSpan={3}>인적사항</th>
+                <th className={`${gh} bg-amber-50/60 text-amber-700`} colSpan={3}>자격 · 계좌</th>
+              </tr>
+              <tr className="bg-gray-50/90">
+                <th className={`${th} sticky left-0 z-20 bg-gray-50 text-left border-r border-gray-200 min-w-[120px]`}>성명</th>
+                <th className={th}>직종</th>
+                <th className={th}>입사일</th>
+                <th className={th}>생년월일</th>
+                <th className={th}>상태</th>
+                <th className={th}>주민번호</th>
+                <th className={th}>연락처</th>
+                <th className={`${th} text-left min-w-[200px]`}>주소</th>
+                <th className={th}>자격증 발급일</th>
+                <th className={th}>자격증 No</th>
+                <th className={th}>통장번호</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(s => (
+                <tr key={s.id} className="hover:bg-indigo-50/30">
+                  <td className={`${td} sticky left-0 z-10 bg-white text-left border-r border-gray-100 font-bold text-gray-800`}>{s.name}</td>
+                  <td className={td}>{val(s.position)}</td>
+                  <td className={td}>{fmtD(s.hireDate)}</td>
+                  <td className={td}>{fmtD(s.birthDate)}</td>
+                  <td className={td}>{s.status === 'active'
+                    ? <span className="text-[10px] font-bold text-green-700 bg-green-50 px-1.5 py-0.5 rounded">재직</span>
+                    : <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">퇴사</span>}</td>
+                  <td className={td}>{val(s.residentNo)}</td>
+                  <td className={td}>{val(s.phone)}</td>
+                  <td className={`${td} text-left whitespace-normal min-w-[200px]`}>
+                    {s.address ? <span>{s.address}{s.addressDetail ? <span className="text-gray-400"> {s.addressDetail}</span> : null}</span> : <span className="text-gray-300">-</span>}
+                  </td>
+                  <td className={td}>{fmtD(s.licenseDate) || <span className="text-gray-300">-</span>}</td>
+                  <td className={td}>{val(s.licenseNo)}</td>
+                  <td className={td}>{val(s.bankAccount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="text-[11px] text-gray-400 mt-2">💡 직원 등록·정보 수정은 <strong>직원 관리</strong>에서 진행합니다.</p>
+    </>
+  )
+}
+
+// ── 카드키 관리 (카드번호·소지자·보증금·반납 현황) ──────────────────
+function CardKeyTable() {
+  const [rows, setRows] = useState<CardKey[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState<CardKey | null>(null)
+  const [addOpen, setAddOpen] = useState(false)
+  const [showReturned, setShowReturned] = useState(true)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try { setRows(await cardKeyAPI.list()) } finally { setLoading(false) }
+  }, [])
+  useEffect(() => { load() }, [load])
+
+  const inUse = rows.filter(r => !r.returned).length
+  const returned = rows.filter(r => r.returned).length
+  const filtered = rows.filter(r => showReturned || !r.returned)
+
+  const th = 'px-2.5 py-2 text-[11px] font-bold text-gray-500 whitespace-nowrap text-center border-b border-gray-200'
+  const td = 'px-2.5 py-2 text-xs whitespace-nowrap text-center border-b border-gray-50 text-gray-600'
+  const val = (v?: string | null) => v ? v : <span className="text-gray-300">-</span>
+
+  const toggleReturn = async (c: CardKey) => {
+    const today = new Date().toISOString().split('T')[0]
+    const next = !c.returned
+    await cardKeyAPI.update(c.id, { returned: next, return_date: next ? (c.return_date || today) : null, returner: next ? (c.returner || c.holder || null) : null })
+    load()
+  }
+  const del = async (c: CardKey) => { if (!confirm('이 카드키 기록을 삭제할까요?')) return; await cardKeyAPI.remove(c.id); load() }
+
+  return (
+    <>
+      <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-4">
+        <Stat label="총 카드" value={`${rows.length}개`} tone="gray" />
+        <Stat label="사용 중" value={`${inUse}개`} tone={inUse ? 'green' : 'gray'} />
+        <Stat label="반납" value={`${returned}개`} tone={returned ? 'amber' : 'gray'} />
+      </div>
+
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <button onClick={() => setAddOpen(true)} className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold text-sm shadow-sm">
+          <Plus className="w-4 h-4" /> 카드 추가
+        </button>
+        <label className="inline-flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer ml-1">
+          <input type="checkbox" checked={showReturned} onChange={e => setShowReturned(e.target.checked)} className="accent-gray-500" />
+          반납 포함
+        </label>
+        <span className="text-xs text-gray-400 ml-auto">{filtered.length} / {rows.length}개</span>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-16"><Loader2 className="animate-spin text-gray-300" /></div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-16 text-gray-400 bg-white rounded-2xl border border-gray-100 text-sm">등록된 카드키가 없습니다.</div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+          <table className="w-full border-collapse min-w-[900px]">
+            <thead>
+              <tr className="bg-gray-50/90">
+                <th className={`${th} w-10`}>#</th>
+                <th className={th}>카드 번호</th>
+                <th className={th}>소지자</th>
+                <th className={th}>보증금 납부일</th>
+                <th className={th}>방법</th>
+                <th className={th}>보증금</th>
+                <th className={th}>반납 현황</th>
+                <th className={`${th} text-left`}>메모</th>
+                <th className={th}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((c, i) => (
+                <tr key={c.id} className={`hover:bg-indigo-50/30 ${c.returned ? 'bg-gray-50/40' : ''}`}>
+                  <td className={`${td} text-gray-300`}>{i + 1}</td>
+                  <td className={`${td} font-bold text-gray-800`}>{val(c.card_number)}</td>
+                  <td className={td}>{val(c.holder)}</td>
+                  <td className={td}>{fmtD(c.deposit_date) || <span className="text-gray-300">-</span>}</td>
+                  <td className={td}>{val(c.deposit_method)}</td>
+                  <td className={td}>{val(c.deposit_amount)}</td>
+                  <td className={td}>
+                    {c.returned ? (
+                      <div className="flex flex-col items-center">
+                        <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">반납완료</span>
+                        <span className="text-[10px] text-gray-400 mt-0.5">{fmtD(c.return_date)}{c.returner ? ` · ${c.returner}` : ''}</span>
+                      </div>
+                    ) : (
+                      <span className="text-[10px] font-bold text-green-700 bg-green-50 px-1.5 py-0.5 rounded">사용중</span>
+                    )}
+                  </td>
+                  <td className={`${td} text-left whitespace-normal max-w-[160px]`}>{val(c.memo)}</td>
+                  <td className={td}>
+                    <div className="flex items-center gap-1 justify-center">
+                      <button onClick={() => toggleReturn(c)} className={`text-[11px] font-semibold px-2 py-1 rounded-lg border ${c.returned ? 'border-gray-200 text-gray-500 hover:bg-gray-50' : 'border-amber-200 text-amber-600 hover:bg-amber-50'}`}>{c.returned ? '반납취소' : '반납처리'}</button>
+                      <button onClick={() => setEditing(c)} className="text-[11px] text-gray-400 hover:text-indigo-600 px-1.5 py-1 rounded hover:bg-indigo-50">수정</button>
+                      <button onClick={() => del(c)} className="text-gray-300 hover:text-red-500 p-1"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {(addOpen || editing) && (
+        <CardFormModal editing={editing} onClose={() => { setAddOpen(false); setEditing(null) }}
+          onSaved={() => { setAddOpen(false); setEditing(null); load() }} />
+      )}
+    </>
+  )
+}
+
+function CardFormModal({ editing, onClose, onSaved }: { editing: CardKey | null; onClose: () => void; onSaved: () => void }) {
+  const isEdit = !!editing
+  const [f, setF] = useState<CardInput>({
+    card_number: editing?.card_number ?? '', holder: editing?.holder ?? '',
+    deposit_date: editing?.deposit_date ?? '', deposit_method: editing?.deposit_method ?? '',
+    deposit_amount: editing?.deposit_amount ?? '',
+    returned: editing?.returned ?? false, return_date: editing?.return_date ?? '', returner: editing?.returner ?? '',
+    memo: editing?.memo ?? '',
+  })
+  const [saving, setSaving] = useState(false)
+  const inp = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-200'
+
+  const submit = async () => {
+    setSaving(true)
+    try {
+      if (isEdit) await cardKeyAPI.update(editing!.id, f); else await cardKeyAPI.create(f)
+      onSaved()
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-md max-h-[92vh] overflow-y-auto shadow-xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
+          <h3 className="font-bold text-gray-900">{isEdit ? '카드키 수정' : '카드키 추가'}</h3>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center"><X className="w-5 h-5 text-gray-400" /></button>
+        </div>
+        <div className="px-5 py-4 space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="카드 번호"><input value={f.card_number ?? ''} onChange={e => setF({ ...f, card_number: e.target.value })} className={inp} autoFocus /></Field>
+            <Field label="소지자"><input value={f.holder ?? ''} onChange={e => setF({ ...f, holder: e.target.value })} className={inp} placeholder="이름" /></Field>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="보증금 납부일"><DateField value={f.deposit_date} onChange={v => setF({ ...f, deposit_date: v })} className={inp} /></Field>
+            <Field label="납부 방법"><input value={f.deposit_method ?? ''} onChange={e => setF({ ...f, deposit_method: e.target.value })} className={inp} placeholder="현금 / 이체 등" /></Field>
+          </div>
+          <Field label="보증금 액수"><input value={f.deposit_amount ?? ''} onChange={e => setF({ ...f, deposit_amount: e.target.value })} className={inp} placeholder="예: 20,000원" /></Field>
+          <div className="border-t border-gray-100 pt-3">
+            <label className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600">
+              <input type="checkbox" checked={!!f.returned} onChange={e => setF({ ...f, returned: e.target.checked })} className="accent-indigo-600" /> 반납 완료
+            </label>
+            {f.returned && (
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <Field label="반납일"><DateField value={f.return_date} onChange={v => setF({ ...f, return_date: v })} className={inp} /></Field>
+                <Field label="반납자"><input value={f.returner ?? ''} onChange={e => setF({ ...f, returner: e.target.value })} className={inp} placeholder="이름" /></Field>
+              </div>
+            )}
+          </div>
+          <Field label="메모"><input value={f.memo ?? ''} onChange={e => setF({ ...f, memo: e.target.value })} className={inp} /></Field>
+        </div>
+        <div className="flex gap-2 px-5 py-4 border-t border-gray-100">
+          <button onClick={submit} disabled={saving} className="flex-1 bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50">{saving ? '저장 중...' : isEdit ? '수정' : '추가'}</button>
+          <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-700 rounded-xl py-2.5 text-sm">취소</button>
+        </div>
+      </div>
+    </div>
+  )
 }

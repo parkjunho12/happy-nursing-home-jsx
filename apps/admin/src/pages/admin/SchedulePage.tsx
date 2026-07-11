@@ -1,11 +1,11 @@
+import DateField from '@/components/ui/DateField'
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   CalendarDays, Plus, ChevronLeft, ChevronRight, X, Trash2, MapPin,
-  Phone, Clock, Briefcase, Loader2, Grid3x3, Columns3, List, UserPlus,
-} from 'lucide-react'
+  Phone, Clock, Briefcase, Loader2, Grid3x3, Columns3, List, UserPlus, ClipboardList } from 'lucide-react'
 import {
-  scheduleAPI, SCHEDULE_CATEGORIES, type ScheduleEvent, type EventInput, type LifecycleEvent, type RenewalEvent,
+  scheduleAPI, SCHEDULE_CATEGORIES, type ScheduleEvent, type EventInput, type LifecycleEvent, type RenewalEvent, type DocCalEvent,
 } from '../../api/scheduleClient'
 import { recruitmentAPI, type Interview } from '../../api/recruitmentClient'
 
@@ -20,7 +20,7 @@ const hmOf = (iso?: string | null) => {
 const startOfWeek = (d: Date) => { const x = new Date(d); x.setDate(x.getDate() - x.getDay()); x.setHours(0, 0, 0, 0); return x }
 
 /* 카테고리 색상 */
-type CatKey = '방문상담' | '외부방문' | '회의' | '행사' | '기타' | '면접' | '입소' | '입사' | '재계약'
+type CatKey = '방문상담' | '외부방문' | '회의' | '행사' | '기타' | '면접' | '입소' | '입사' | '재계약' | '계약서' | '계획서' | '평가'
 const CAT: Record<CatKey, { dot: string; chip: string; bar: string }> = {
   방문상담: { dot: 'bg-blue-500',   chip: 'bg-blue-50 text-blue-700 border-blue-200',       bar: 'border-l-blue-500 bg-blue-50' },
   외부방문: { dot: 'bg-teal-500',   chip: 'bg-teal-50 text-teal-700 border-teal-200',       bar: 'border-l-teal-500 bg-teal-50' },
@@ -31,8 +31,11 @@ const CAT: Record<CatKey, { dot: string; chip: string; bar: string }> = {
   입소:    { dot: 'bg-rose-500',   chip: 'bg-rose-50 text-rose-600 border-rose-200',       bar: 'border-l-rose-500 bg-rose-50' },
   입사:    { dot: 'bg-cyan-500',   chip: 'bg-cyan-50 text-cyan-700 border-cyan-200',       bar: 'border-l-cyan-500 bg-cyan-50' },
   재계약:  { dot: 'bg-amber-500',  chip: 'bg-amber-50 text-amber-700 border-amber-200',     bar: 'border-l-amber-500 bg-amber-50' },
+  계약서:  { dot: 'bg-emerald-500', chip: 'bg-emerald-50 text-emerald-700 border-emerald-200', bar: 'border-l-emerald-500 bg-emerald-50' },
+  계획서:  { dot: 'bg-sky-500',     chip: 'bg-sky-50 text-sky-700 border-sky-200',             bar: 'border-l-sky-500 bg-sky-50' },
+  평가:    { dot: 'bg-fuchsia-500', chip: 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200', bar: 'border-l-fuchsia-500 bg-fuchsia-50' },
 }
-const ALL_CATS: CatKey[] = ['방문상담', '외부방문', '회의', '행사', '기타', '면접', '입소', '입사', '재계약']
+const ALL_CATS: CatKey[] = ['방문상담', '외부방문', '회의', '행사', '기타', '면접', '입소', '입사', '재계약', '계약서', '계획서', '평가']
 
 /* 통합 이벤트 */
 type UEvent = {
@@ -60,6 +63,7 @@ export default function SchedulePage() {
   const [interviews, setInterviews] = useState<Interview[]>([])
   const [lifecycles, setLifecycles] = useState<LifecycleEvent[]>([])
   const [renewals, setRenewals] = useState<RenewalEvent[]>([])
+  const [docs, setDocs] = useState<DocCalEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [active, setActive] = useState<Set<CatKey>>(new Set(ALL_CATS))
   const [addOpen, setAddOpen] = useState(false)
@@ -81,13 +85,14 @@ export default function SchedulePage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [ev, iv, lc, rn] = await Promise.all([
+      const [ev, iv, lc, rn, dc] = await Promise.all([
         scheduleAPI.events({ start_date: rangeStart, end_date: rangeEnd }).catch(() => [] as ScheduleEvent[]),
         recruitmentAPI.interviews({ start_date: rangeStart, end_date: rangeEnd }).catch(() => [] as Interview[]),
         scheduleAPI.lifecycle({ start_date: rangeStart, end_date: rangeEnd }).catch(() => [] as LifecycleEvent[]),
         scheduleAPI.renewals({ start_date: rangeStart, end_date: rangeEnd }).catch(() => [] as RenewalEvent[]),
+        scheduleAPI.docEvents({ start_date: rangeStart, end_date: rangeEnd }).catch(() => [] as DocCalEvent[]),
       ])
-      setEvents(ev); setInterviews(iv); setLifecycles(lc); setRenewals(rn)
+      setEvents(ev); setInterviews(iv); setLifecycles(lc); setRenewals(rn); setDocs(dc)
     } finally { setLoading(false) }
   }, [rangeStart, rangeEnd])
   useEffect(() => { load() }, [load])
@@ -133,8 +138,18 @@ export default function SchedulePage() {
         location: null, contactName: rn.name ?? null, contactPhone: null, memo: null, raw: rn as any,
       })
     }
+    for (const dc of docs) {
+      if (!dc.date) continue
+      const dcat: CatKey = dc.doc_type === 'contract' ? '계약서' : dc.doc_type === 'plan' ? '계획서' : '평가'
+      out.push({
+        key: `d-${dc.id}`, kind: 'lifecycle', category: dcat,
+        title: `${dc.doc_label} · ${dc.name ?? ''}${dc.kind ? ` (${dc.kind})` : ''}`,
+        start: `${dc.date}T00:00`, dateKey: dc.date, time: '',
+        location: null, contactName: dc.name ?? null, contactPhone: null, memo: dc.memo ?? null, raw: dc as any,
+      })
+    }
     return out.sort((a, b) => (a.start! < b.start! ? -1 : 1))
-  }, [events, interviews, lifecycles, renewals])
+  }, [events, interviews, lifecycles, renewals, docs])
 
   const shown = useMemo(() => unified.filter(u => active.has(u.category)), [unified, active])
 
@@ -453,7 +468,7 @@ function AddModal({ presetDate, onClose, onSaved }: { presetDate: string | null;
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${date === c.v ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-gray-500 border-gray-200 hover:border-violet-300'}`}>{c.label}</button>
             ))}
           </div>
-          <input type="date" value={date} onChange={e => setDate(e.target.value)} className="inp" />
+          <DateField value={date} onChange={v => setDate(v)} className="inp" clearable={false} />
         </div>
 
         {/* 시작 시간 */}
@@ -534,12 +549,19 @@ function DetailModal({ ev, onClose, onChanged, onGoRecruit }: { ev: UEvent; onCl
           </div>
         )}
         {ev.kind === 'lifecycle' && (
+          (['계약서', '계획서', '평가'] as CatKey[]).includes(ev.category) ? (
+            <div className="rounded-lg p-3 text-xs flex items-start gap-2 bg-emerald-50 text-emerald-700">
+              <ClipboardList className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>어르신 {ev.category} 예정일입니다. 어르신 서류현황에서 관리됩니다.</span>
+            </div>
+          ) : (
           <div className={`rounded-lg p-3 text-xs flex items-start gap-2 ${ev.category === '입소' ? 'bg-rose-50 text-rose-600' : ev.category === '재계약' ? 'bg-amber-50 text-amber-700' : 'bg-cyan-50 text-cyan-700'}`}>
             <UserPlus className="w-4 h-4 shrink-0 mt-0.5" />
             <span>{ev.category === '입소' ? '수급자 입소일입니다. 입소 정보는 수급자 관리에서 관리됩니다.'
               : ev.category === '재계약' ? '직원 재계약 예정일입니다. 근로계약·서류에서 관리됩니다.'
               : '직원 입사일입니다. 입사 정보는 직원 관리에서 관리됩니다.'}</span>
           </div>
+          )
         )}
       </div>
       <ModalFooter>

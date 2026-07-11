@@ -51,6 +51,17 @@ export interface RenewalEvent {
   date: string          // YYYY-MM-DD
 }
 
+export interface DocCalEvent {
+  id: string
+  resident_id?: string | null
+  name?: string | null
+  doc_type: 'contract' | 'plan' | 'eval'
+  doc_label: string
+  date: string          // YYYY-MM-DD
+  kind?: string | null
+  memo?: string | null
+}
+
 export const scheduleAPI = {
   events: (params?: { start_date?: string; end_date?: string; category?: string }) =>
     apiClient.get(`${BASE}/events`, { params: params ?? {} }).then(unwrap<ScheduleEvent[]>),
@@ -62,4 +73,6 @@ export const scheduleAPI = {
     apiClient.get(`${BASE}/lifecycle`, { params: params ?? {} }).then(unwrap<LifecycleEvent[]>),
   renewals: (params?: { start_date?: string; end_date?: string }) =>
     apiClient.get(`${BASE}/renewals`, { params: params ?? {} }).then(unwrap<RenewalEvent[]>),
+  docEvents: (params?: { start_date?: string; end_date?: string }) =>
+    apiClient.get(`${BASE}/doc-events`, { params: params ?? {} }).then(unwrap<DocCalEvent[]>),
 }

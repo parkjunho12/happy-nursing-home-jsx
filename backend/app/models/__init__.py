@@ -90,6 +90,7 @@ from app.models.album_view import FamilyAlbumView
 from app.models.facility_news import FacilityNews
 from app.models.staff_push import StaffPushToken
 from app.models.staff_hr import StaffHrRecord
+from app.models.resident_docs import ResidentDocStatus
 
 # 경관식 재고
 from app.models.enteral import EnteralProduct, EnteralTransaction
