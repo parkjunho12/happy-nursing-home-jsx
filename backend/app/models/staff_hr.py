@@ -25,6 +25,10 @@ DOC_FIELDS = [
     ("id_copy",   "신분증 사본"),
     ("bankbook",  "통장 사본"),
     ("insurance", "건강보험자격득실확인서"),
+    ("withholding", "원천징수 동의서"),
+    ("subholiday", "대체휴일 합의서"),
+    ("compleave", "보상휴가 합의서"),
+    ("privacy", "개인정보 동의서"),
 ]
 
 
@@ -53,6 +57,10 @@ class StaffHrRecord(Base):
     doc_id_copy = Column(Boolean, nullable=True)
     doc_bankbook = Column(Boolean, nullable=True)
     doc_insurance = Column(Boolean, nullable=True)
+    doc_withholding = Column(Boolean, nullable=True)     # 원천징수 동의서
+    doc_subholiday = Column(Boolean, nullable=True)      # 대체휴일 합의서
+    doc_compleave = Column(Boolean, nullable=True)       # 보상휴가 합의서
+    doc_privacy = Column(Boolean, nullable=True)         # 개인정보 동의서
     doc_note = Column(Text, nullable=True)                # 서류 기타
 
     created_at = Column(DateTime(timezone=True), default=now_kst)
@@ -108,3 +116,23 @@ def contract_end_3m(start_iso):
         return (_date(y2, m2, dd) - _td(days=1)).isoformat()
     except Exception:
         return None
+
+
+class CardKey(Base):
+    """출입 카드키 관리 (카드번호·소지자·보증금·반납 현황)."""
+    __tablename__ = "card_keys"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    seq = Column(Integer, default=0, index=True)
+    card_number = Column(String(50), nullable=True)          # 카드 번호
+    holder = Column(String(100), nullable=True, index=True)  # 소지자
+    staff_id = Column(String, nullable=True, index=True)     # LtcStaffMember 연동(선택)
+    deposit_date = Column(String(20), nullable=True)         # 보증금 납부 일자
+    deposit_method = Column(String(50), nullable=True)       # 납부 방법(현금/이체 등)
+    deposit_amount = Column(String(30), nullable=True)       # 보증금 액수(선택)
+    returned = Column(Boolean, default=False, index=True)    # 반납 여부
+    return_date = Column(String(20), nullable=True)          # 반납 일자
+    returner = Column(String(100), nullable=True)            # 반납자
+    memo = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_kst)
+    updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)

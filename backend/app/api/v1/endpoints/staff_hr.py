@@ -23,8 +23,8 @@ def _require_hr(current_user: User = Depends(get_current_user)) -> User:
     role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
     pos = getattr(current_user, "position", None)
     pos = pos.value if hasattr(pos, "value") else str(pos or "")
-    if role != "ADMIN" and pos != "시설장":
-        raise HTTPException(403, "근로계약·서류 관리 권한이 없습니다. (관리자·시설장)")
+    if role != "ADMIN" and pos not in ("시설장", "대표", "이사"):
+        raise HTTPException(403, "직원 상세 관리 권한이 없습니다. (관리자·시설장·대표·이사)")
     return current_user
 
 
@@ -38,6 +38,8 @@ def _view(r: StaffHrRecord) -> dict:
             "health": r.doc_health, "criminal": r.doc_criminal, "cert": r.doc_cert,
             "resident": r.doc_resident, "family": r.doc_family, "id_copy": r.doc_id_copy,
             "bankbook": r.doc_bankbook, "insurance": r.doc_insurance,
+            "withholding": r.doc_withholding, "subholiday": r.doc_subholiday,
+            "compleave": r.doc_compleave, "privacy": r.doc_privacy,
         },
         "doc_note": r.doc_note,
     }
@@ -104,7 +106,9 @@ def _apply(r: StaffHrRecord, body: HrBody):
     if body.docs is not None:
         m = {"health": "doc_health", "criminal": "doc_criminal", "cert": "doc_cert",
              "resident": "doc_resident", "family": "doc_family", "id_copy": "doc_id_copy",
-             "bankbook": "doc_bankbook", "insurance": "doc_insurance"}
+             "bankbook": "doc_bankbook", "insurance": "doc_insurance",
+             "withholding": "doc_withholding", "subholiday": "doc_subholiday",
+             "compleave": "doc_compleave", "privacy": "doc_privacy"}
         for k, col in m.items():
             if k in body.docs:
                 v = body.docs[k]

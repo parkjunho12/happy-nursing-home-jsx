@@ -109,6 +109,15 @@ function ManagerRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+// 직원 관리·직원 상세 — ADMIN · 시설장 · 대표 · 이사만 접근
+function StaffAdminRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, user } = useAuthStore()
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  const ok = user?.role === 'ADMIN' || ['시설장', '대표', '이사'].includes(user?.position ?? '')
+  if (!ok) return <Navigate to="/eval/checklist" replace />
+  return <>{children}</>
+}
+
 // 일정 캘린더 — 앨범담당 제외 전 직원 접근 가능
 function ScheduleRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuthStore()
@@ -213,7 +222,7 @@ function App() {
             <Route path="schedule"                 element={<ScheduleRoute><SchedulePage /></ScheduleRoute>} />
             <Route path="expense"                  element={<ExpenseRoute><ExpensePage /></ExpenseRoute>} />
             <Route path="facility-news"            element={<SocialWorkerRoute><FacilityNewsPage /></SocialWorkerRoute>} />
-            <Route path="staff-hr"                 element={<ManagerRoute><StaffHrPage /></ManagerRoute>} />
+            <Route path="staff-hr"                 element={<StaffAdminRoute><StaffHrPage /></StaffAdminRoute>} />
             <Route path="resident-docs"            element={<SocialWorkerRoute><ResidentDocsPage /></SocialWorkerRoute>} />
             <Route path="enteral"                  element={<CareInventoryRoute><EnteralPage /></CareInventoryRoute>} />
 
@@ -231,7 +240,7 @@ function App() {
             {/* 사회복지사 + ADMIN — 수급자/직원 관리 */}
             <Route path="eval/blog-ai-writer" element={<BlogWriterRoute><BlogAiWriterPage /></BlogWriterRoute>} />
             <Route path="eval/residents" element={<SocialWorkerRoute><EvalResidentsPage /></SocialWorkerRoute>} />
-            <Route path="eval/staff"     element={<SocialWorkerRoute><EvalStaffPage /></SocialWorkerRoute>} />
+            <Route path="eval/staff"     element={<StaffAdminRoute><EvalStaffPage /></StaffAdminRoute>} />
 
             {/* ADMIN 전용 */}
             <Route path="eval/ai-review" element={<ManagerRoute><EvalAIReviewPage /></ManagerRoute>} />

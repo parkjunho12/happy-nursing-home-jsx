@@ -67,7 +67,9 @@ export interface LtcResident {
 
 export interface LtcStaff {
   id: string; name: string; birthDate: string; gender: string
-  hireDate: string; resignDate?: string; position?: string; status: string; memo: string; createdAt: string
+  hireDate: string; resignDate?: string; position?: string
+  residentNo?: string; address?: string; addressDetail?: string; phone?: string; licenseDate?: string; licenseNo?: string; bankAccount?: string
+  status: string; memo: string; createdAt: string
 }
 
 export interface EvalDomain     { id: string; name: string; color: string; active: boolean }
@@ -159,8 +161,10 @@ function mapR(raw: any): LtcResident {
 }
 function mapS(raw: any): LtcStaff {
   return { id:raw.id, name:raw.name, birthDate:raw.birth_date, gender:raw.gender,
-    hireDate:raw.hire_date, resignDate:raw.resign_date, position:raw.position??undefined, status:raw.status,
-    memo:raw.memo??'', createdAt:raw.created_at??'' }
+    hireDate:raw.hire_date, resignDate:raw.resign_date, position:raw.position??undefined,
+    residentNo:raw.resident_no??undefined, address:raw.address??undefined, addressDetail:raw.address_detail??undefined, phone:raw.phone??undefined,
+    licenseDate:raw.license_date??undefined, licenseNo:raw.license_no??undefined, bankAccount:raw.bank_account??undefined,
+    status:raw.status, memo:raw.memo??'', createdAt:raw.created_at??'' }
 }
 function mapSettings(raw: any): EvalSettings {
   return { facilityName:raw.facility_name, evalYear:raw.eval_year,
@@ -415,7 +419,7 @@ export const useLtcStore = create<LtcState>((set, get) => ({
   },
 
   addStaff: async (s) => {
-    const raw = await evalStaffAPI.create({ name:s.name, birth_date:s.birthDate, gender:s.gender, hire_date:s.hireDate, position:(s as any).position, memo:s.memo })
+    const raw = await evalStaffAPI.create({ name:s.name, birth_date:s.birthDate, gender:s.gender, hire_date:s.hireDate, position:(s as any).position, resident_no:(s as any).residentNo, address:(s as any).address, address_detail:(s as any).addressDetail, phone:(s as any).phone, license_date:(s as any).licenseDate, license_no:(s as any).licenseNo, bank_account:(s as any).bankAccount, memo:s.memo })
     const newS = mapS(raw)
     const templates = generateStaffHireChecklists(newS as any)
     const newCls = await evalChecklistAPI.createBulk(templates.map(clPayload as any))
@@ -432,6 +436,13 @@ export const useLtcStore = create<LtcState>((set, get) => ({
     if (u.gender !== undefined)    p.gender     = u.gender
     if (u.hireDate !== undefined)  p.hire_date  = u.hireDate
     if ((u as any).position !== undefined) p.position = (u as any).position
+    if ((u as any).residentNo !== undefined) p.resident_no = (u as any).residentNo
+    if ((u as any).address !== undefined)    p.address = (u as any).address
+    if ((u as any).addressDetail !== undefined) p.address_detail = (u as any).addressDetail
+    if ((u as any).phone !== undefined)      p.phone = (u as any).phone
+    if ((u as any).licenseDate !== undefined) p.license_date = (u as any).licenseDate
+    if ((u as any).licenseNo !== undefined)  p.license_no = (u as any).licenseNo
+    if ((u as any).bankAccount !== undefined) p.bank_account = (u as any).bankAccount
     if (u.memo !== undefined)      p.memo       = u.memo
     const raw = await evalStaffAPI.update(id, p)
     set(st => ({ staffList: st.staffList.map(s => s.id===id ? mapS(raw) : s) }))

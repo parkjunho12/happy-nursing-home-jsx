@@ -269,6 +269,13 @@ class LtcStaffMember(Base):
     gender = Column(String(10), nullable=False)
     hire_date = Column(String(20), nullable=False)
     position = Column(String(50), nullable=True)  # 직종
+    resident_no = Column(String(20), nullable=True)      # 주민번호
+    address = Column(Text, nullable=True)                # 주소(도로명/지번)
+    address_detail = Column(Text, nullable=True)         # 상세주소
+    phone = Column(String(30), nullable=True)            # 연락처
+    license_date = Column(String(20), nullable=True)     # 자격증 발급일
+    license_no = Column(String(50), nullable=True)       # 자격증 번호
+    bank_account = Column(String(50), nullable=True)     # 통장번호
     resign_date = Column(String(20), nullable=True)
     status = Column(String(20), default="active", index=True)
     memo = Column(Text, default="")

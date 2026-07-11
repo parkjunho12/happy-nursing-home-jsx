@@ -98,7 +98,7 @@ export function getNavConfig(
             { to: '/eval/residents', icon: UserRound, label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined },
             { to: '/resident-docs', icon: ClipboardList, label: '어르신 서류현황' },
             { to: '/eval/staff', icon: UserCog, label: '직원 관리', badge: activeStaff > 0 ? `${activeStaff}명` : undefined },
-            { to: '/staff-hr', icon: FileText, label: '근로계약·서류' },
+            { to: '/staff-hr', icon: FileText, label: '직원 상세' },
             { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
             { to: '/facility-news', icon: Megaphone, label: '시설소식' },
             { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
@@ -159,7 +159,7 @@ export function getNavConfig(
             { to: '/eval/residents', icon: UserRound, label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined },
             { to: '/resident-docs', icon: ClipboardList, label: '어르신 서류현황' },
             { to: '/eval/staff', icon: UserCog, label: '직원 관리', badge: activeStaff > 0 ? `${activeStaff}명` : undefined },
-            { to: '/staff-hr', icon: FileText, label: '근로계약·서류' },
+            { to: '/staff-hr', icon: FileText, label: '직원 상세' },
             { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
             { to: '/facility-news', icon: Megaphone, label: '시설소식' },
             { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
@@ -211,6 +211,10 @@ export function getNavConfig(
     { to: '/facility-news', icon: Megaphone, label: '시설소식' },
     { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
   )
+  if (isManager) operItems.push(
+    { to: '/eval/staff', icon: UserCog, label: '직원 관리', badge: activeStaff > 0 ? `${activeStaff}명` : undefined },
+    { to: '/staff-hr', icon: FileText, label: '직원 상세' },
+  )
   if (canEnteral) operItems.push({ to: '/enteral', icon: Soup, label: '경관식 관리' })
 
   const evalItems: NavItem[] = [
@@ -221,7 +225,6 @@ export function getNavConfig(
     evalItems.push(
       { to: '/eval/residents', icon: UserRound, label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined },
       { to: '/resident-docs', icon: ClipboardList, label: '어르신 서류현황' },
-      { to: '/eval/staff', icon: UserCog, label: '직원 관리', badge: activeStaff > 0 ? `${activeStaff}명` : undefined },
     )
   }
   evalItems.push(
