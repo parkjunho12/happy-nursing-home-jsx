@@ -63,7 +63,7 @@ def _current_caregivers(db: Session) -> list:
             continue
         out.append({"employee_id": s.id, "name": s.name, "hire_date": s.hire_date,
                     "resign_date": s.resign_date, "is_expected_hire": False,
-                    "position": s.position})
+                    "position": s.position, "leaves": s.leaves or []})
     return out
 
 

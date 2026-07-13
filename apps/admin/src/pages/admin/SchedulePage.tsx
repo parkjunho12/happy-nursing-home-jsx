@@ -1,5 +1,5 @@
 import DateField from '@/components/ui/DateField'
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   CalendarDays, Plus, ChevronLeft, ChevronRight, X, Trash2, MapPin,
@@ -58,7 +58,8 @@ const WEEK = ['일', '월', '화', '수', '목', '금', '토']
 export default function SchedulePage() {
   const navigate = useNavigate()
   const [cursor, setCursor] = useState(() => new Date())
-  const [view, setView] = useState<'month' | 'week' | 'agenda'>('month')
+  const [view, setView] = useState<'month' | 'week' | 'agenda'>(
+    () => (typeof window !== 'undefined' && window.innerWidth < 768 ? 'agenda' : 'month'))
   const [events, setEvents] = useState<ScheduleEvent[]>([])
   const [interviews, setInterviews] = useState<Interview[]>([])
   const [lifecycles, setLifecycles] = useState<LifecycleEvent[]>([])
@@ -187,7 +188,20 @@ export default function SchedulePage() {
     return [...map.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))
   }, [shown])
 
+  const agendaRef = useRef<HTMLDivElement>(null)
   const todayKey = ymd(new Date())
+  const firstUpcoming = useMemo(() => groups.find(([dk]) => dk >= todayKey)?.[0], [groups, todayKey])
+  useEffect(() => {
+    if (view !== 'agenda' || loading || groups.length === 0) return
+    const t = setTimeout(() => {
+      const root = agendaRef.current
+      if (!root) return
+      const el = root.querySelector<HTMLElement>(`[data-day="${todayKey}"]`)
+        ?? root.querySelector<HTMLElement>('[data-upcoming="1"]')
+      el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 120)
+    return () => clearTimeout(t)
+  }, [view, loading, groups, todayKey])
   const tomorrowKey = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return ymd(d) })()
   const relBadge = (dk: string) => (dk === todayKey ? '오늘' : dk === tomorrowKey ? '내일' : null)
 
@@ -335,13 +349,13 @@ export default function SchedulePage() {
 
       {/* ── 목록(아젠다) 뷰 ── */}
       {view === 'agenda' && (
-        <div className="space-y-4">
+        <div className="space-y-4" ref={agendaRef}>
           {groups.map(([dk, items]) => {
             const d = new Date(dk + 'T00:00:00')
             const rb = relBadge(dk)
             const dow = d.getDay()
             return (
-              <div key={dk}>
+              <div key={dk} data-day={dk} data-upcoming={dk === firstUpcoming ? '1' : undefined} className="scroll-mt-24">
                 <div className="flex items-center gap-2 mb-1.5 py-1">
                   <span className="text-sm font-bold text-gray-800">{d.getMonth() + 1}월 {d.getDate()}일</span>
                   <span className={`text-xs font-semibold ${dow === 0 ? 'text-red-400' : dow === 6 ? 'text-blue-400' : 'text-gray-400'}`}>({WEEK[dow]})</span>

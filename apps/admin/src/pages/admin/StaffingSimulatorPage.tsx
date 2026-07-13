@@ -33,6 +33,7 @@ export default function StaffingSimulatorPage() {
   const [ratio, setRatio] = useState(2.1)
   const [dailyHours, setDailyHours] = useState(8)
   const [maxHires, setMaxHires] = useState(3)
+  const [fullMonthDay, setFullMonthDay] = useState(4)
   const [ctx, setCtx] = useState<StaffingContext | null>(null)
   const [res, setRes] = useState<StaffingResult | null>(null)
   const [loading, setLoading] = useState(true)
@@ -52,11 +53,11 @@ export default function StaffingSimulatorPage() {
         year, month,
         planned_admissions: planned.filter(p => p.admission_date),
         candidates: candidates.filter(c => c.hire_date || c.available_hours != null),
-        config: { placement_ratio: ratio, daily_hours: dailyHours, max_immediate_hires: maxHires },
+        config: { placement_ratio: ratio, daily_hours: dailyHours, max_immediate_hires: maxHires, full_month_hire_day: fullMonthDay },
       })
       setRes(r)
     } finally { setLoading(false) }
-  }, [year, month, planned, candidates, ratio, dailyHours, maxHires])
+  }, [year, month, planned, candidates, ratio, dailyHours, maxHires, fullMonthDay])
 
   useEffect(() => { const t = setTimeout(run, 350); return () => clearTimeout(t) }, [run])
 
@@ -70,7 +71,7 @@ export default function StaffingSimulatorPage() {
           year, month,
           planned_admissions: Array.from({ length: n }, () => ({ admission_date: base })),
           candidates: candidates.filter(c => c.hire_date || c.available_hours != null),
-          config: { placement_ratio: ratio, daily_hours: dailyHours, max_immediate_hires: maxHires },
+          config: { placement_ratio: ratio, daily_hours: dailyHours, max_immediate_hires: maxHires, full_month_hire_day: fullMonthDay },
         })
         out.push(r)
       }
@@ -223,6 +224,8 @@ export default function StaffingSimulatorPage() {
               <input type="number" value={dailyHours} onChange={e => setDailyHours(+e.target.value || 8)} className="w-full mt-1 px-2.5 py-2 text-sm border border-gray-200 rounded-lg" /></label>
             <label className="text-xs text-gray-600">최대 즉시채용
               <input type="number" value={maxHires} onChange={e => setMaxHires(+e.target.value || 3)} className="w-full mt-1 px-2.5 py-2 text-sm border border-gray-200 rounded-lg" /></label>
+            <label className="text-xs text-gray-600 col-span-3">월초 만근 인정일 <span className="text-gray-400">(이 날짜 이하 입사자는 만근 처리 — 기본 4일)</span>
+              <input type="number" min={1} max={10} value={fullMonthDay} onChange={e => setFullMonthDay(+e.target.value || 4)} className="w-full mt-1 px-2.5 py-2 text-sm border border-gray-200 rounded-lg" /></label>
           </div>
         )}
       </div>
@@ -301,7 +304,7 @@ export default function StaffingSimulatorPage() {
               <div className="bg-gray-50 rounded-lg p-3">
                 <p className="font-semibold text-gray-700 mb-1">인식된 요양보호사 {res.worker_hours_detail.length}명 · 직원별 인정시간 (풀근무·월중입사 비율 예상)</p>
                 {res.worker_hours_detail.length === 0 ? <p className="text-gray-400 text-xs">등록된 요양보호사 없음</p> : res.worker_hours_detail.map((w, i) => (
-                  <p key={i} className="text-xs">· {w.name || `직원${i + 1}`} {w.hours}시간 {w.meets_standard ? <span className="text-green-600">충족</span> : <span className="text-amber-600">미달</span>}{w.is_expected_hire ? ' (예정)' : ''}</p>
+                  <p key={i} className="text-xs">· {w.name || `직원${i + 1}`} {w.hours}시간 {w.meets_standard ? <span className="text-green-600">충족</span> : <span className="text-amber-600">미달</span>}{w.on_leave ? <span className="text-amber-600 font-semibold"> · 휴직 {w.leave_days}일 제외</span> : null}{w.is_expected_hire ? ' (예정)' : ''}</p>
                 ))}
                 <p className="mt-1 font-semibold text-gray-800">확보 예상시간 {res.secured_hours}시간 · 필요 {res.required_hours_after.toLocaleString()}시간 · 부족 {res.shortage_hours}시간</p>
               </div>

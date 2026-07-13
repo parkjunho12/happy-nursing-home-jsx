@@ -13,6 +13,7 @@ export interface StaffingConfig {
   daily_max_recognized_hours: number
   max_immediate_hires: number
   safety_factor: number
+  full_month_hire_day: number
   scan_days: number
 }
 export interface AppliedHoliday { date: string; name: string }
@@ -73,7 +74,7 @@ export interface StaffingResult {
   next_month_required_worker_count: number
   next_month_additional_full_time_workers: number
   next_month_projection: { year: number; month: number; avg: number; required_worker_count: number; additional_full_time_workers: number }
-  worker_hours_detail: { name?: string; hire_date?: string | null; is_expected_hire: boolean; hours: number; meets_standard: boolean }[]
+  worker_hours_detail: { name?: string; hire_date?: string | null; is_expected_hire: boolean; hours: number; meets_standard: boolean; leave_days?: number; on_leave?: boolean }[]
   resident_days: { total_days: number; days_in_month: number; per: { admission_date?: string; discharge_date?: string | null; days: number; planned: boolean }[] }
   is_estimate: boolean
   recommendation: string

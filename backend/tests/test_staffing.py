@@ -95,6 +95,28 @@ def test_10_schedule_infeasible_high_risk():
     assert sched["feasible"] is False
 
 
+def test_12_early_month_hire_full_attendance():
+    """월초(2~4일) 입사자는 만근 처리, 5일 이후는 비례 계산."""
+    hol = set(S.get_korean_holidays(2026).keys())
+    std = S.calculate_monthly_standard_hours(2026, 7, hol, 8)["hours"]
+    for d in ("2026-07-01", "2026-07-02", "2026-07-03", "2026-07-04"):
+        assert S.worker_expected_hours({"hire_date": d}, 2026, 7, hol, 8, std) == std, d
+    later = S.worker_expected_hours({"hire_date": "2026-07-06"}, 2026, 7, hol, 8, std)
+    assert 0 < later < std
+    # 휴직은 만근 처리와 무관하게 차감되어야 함
+    w = {"hire_date": "2026-07-02", "leaves": [{"start": "2026-07-20", "end": "2026-07-31"}]}
+    assert S.worker_expected_hours(w, 2026, 7, hol, 8, std) < std
+
+
+def test_13_leave_excluded():
+    hol = set(S.get_korean_holidays(2026).keys())
+    std = S.calculate_monthly_standard_hours(2026, 7, hol, 8)["hours"]
+    full = {"hire_date": "2025-01-01"}
+    allmonth = {"hire_date": "2025-01-01", "leaves": [{"start": "2026-07-01", "end": "2026-07-31"}]}
+    assert S.worker_expected_hours(full, 2026, 7, hol, 8, std) == std
+    assert S.worker_expected_hours(allmonth, 2026, 7, hol, 8, std) == 0
+
+
 def test_11_integration_simulate():
     # 통합: 실제 simulate 호출 (현재월)
     from datetime import date

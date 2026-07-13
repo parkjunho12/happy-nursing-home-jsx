@@ -69,6 +69,7 @@ export interface LtcStaff {
   id: string; name: string; birthDate: string; gender: string
   hireDate: string; resignDate?: string; position?: string
   residentNo?: string; address?: string; addressDetail?: string; phone?: string; licenseDate?: string; licenseNo?: string; bankAccount?: string
+  leaves?: { start?: string | null; end?: string | null; reason?: string | null }[]
   status: string; memo: string; createdAt: string
 }
 
@@ -164,6 +165,7 @@ function mapS(raw: any): LtcStaff {
     hireDate:raw.hire_date, resignDate:raw.resign_date, position:raw.position??undefined,
     residentNo:raw.resident_no??undefined, address:raw.address??undefined, addressDetail:raw.address_detail??undefined, phone:raw.phone??undefined,
     licenseDate:raw.license_date??undefined, licenseNo:raw.license_no??undefined, bankAccount:raw.bank_account??undefined,
+    leaves:raw.leaves??undefined,
     status:raw.status, memo:raw.memo??'', createdAt:raw.created_at??'' }
 }
 function mapSettings(raw: any): EvalSettings {
@@ -419,7 +421,7 @@ export const useLtcStore = create<LtcState>((set, get) => ({
   },
 
   addStaff: async (s) => {
-    const raw = await evalStaffAPI.create({ name:s.name, birth_date:s.birthDate, gender:s.gender, hire_date:s.hireDate, position:(s as any).position, resident_no:(s as any).residentNo, address:(s as any).address, address_detail:(s as any).addressDetail, phone:(s as any).phone, license_date:(s as any).licenseDate, license_no:(s as any).licenseNo, bank_account:(s as any).bankAccount, memo:s.memo })
+    const raw = await evalStaffAPI.create({ name:s.name, birth_date:s.birthDate, gender:s.gender, hire_date:s.hireDate, position:(s as any).position, resident_no:(s as any).residentNo, address:(s as any).address, address_detail:(s as any).addressDetail, phone:(s as any).phone, license_date:(s as any).licenseDate, license_no:(s as any).licenseNo, bank_account:(s as any).bankAccount, leaves:(s as any).leaves, memo:s.memo })
     const newS = mapS(raw)
     const templates = generateStaffHireChecklists(newS as any)
     const newCls = await evalChecklistAPI.createBulk(templates.map(clPayload as any))
@@ -443,6 +445,7 @@ export const useLtcStore = create<LtcState>((set, get) => ({
     if ((u as any).licenseDate !== undefined) p.license_date = (u as any).licenseDate
     if ((u as any).licenseNo !== undefined)  p.license_no = (u as any).licenseNo
     if ((u as any).bankAccount !== undefined) p.bank_account = (u as any).bankAccount
+    if ((u as any).leaves !== undefined)     p.leaves = (u as any).leaves
     if (u.memo !== undefined)      p.memo       = u.memo
     const raw = await evalStaffAPI.update(id, p)
     set(st => ({ staffList: st.staffList.map(s => s.id===id ? mapS(raw) : s) }))
