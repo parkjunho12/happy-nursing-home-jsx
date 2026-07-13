@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   CalendarDays, Plus, ChevronLeft, ChevronRight, X, Trash2, MapPin,
-  Phone, Clock, Briefcase, Loader2, Grid3x3, Columns3, List, UserPlus, ClipboardList } from 'lucide-react'
+  Phone, Clock, Briefcase, Loader2, Grid3x3, Columns3, List, UserPlus, ClipboardList, Pencil } from 'lucide-react'
 import {
   scheduleAPI, SCHEDULE_CATEGORIES, type ScheduleEvent, type EventInput, type LifecycleEvent, type RenewalEvent, type DocCalEvent,
 } from '../../api/scheduleClient'
@@ -69,6 +69,7 @@ export default function SchedulePage() {
   const [active, setActive] = useState<Set<CatKey>>(new Set(ALL_CATS))
   const [addOpen, setAddOpen] = useState(false)
   const [addDate, setAddDate] = useState<string | null>(null)
+  const [editEvent, setEditEvent] = useState<ScheduleEvent | null>(null)
   const [detail, setDetail] = useState<UEvent | null>(null)
 
   const y = cursor.getFullYear(), m = cursor.getMonth()
@@ -385,7 +386,8 @@ export default function SchedulePage() {
       )}
 
       {addOpen && <AddModal presetDate={addDate} onClose={() => setAddOpen(false)} onSaved={() => { setAddOpen(false); load() }} />}
-      {detail && <DetailModal ev={detail} onClose={() => setDetail(null)} onChanged={() => { setDetail(null); load() }} onGoRecruit={() => navigate('/recruitment')} />}
+      {editEvent && <AddModal presetDate={null} editing={editEvent} onClose={() => setEditEvent(null)} onSaved={() => { setEditEvent(null); load() }} />}
+      {detail && <DetailModal ev={detail} onClose={() => setDetail(null)} onChanged={() => { setDetail(null); load() }} onGoRecruit={() => navigate('/recruitment')} onEdit={(e) => { setDetail(null); setEditEvent(e) }} />}
     </div>
   )
 }
@@ -420,16 +422,24 @@ const addMinutes = (dateStr: string, time: string, min: number) => {
 const dayAfter = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return ymd(d) }
 
 /* ── 추가 모달 ── */
-function AddModal({ presetDate, onClose, onSaved }: { presetDate: string | null; onClose: () => void; onSaved: () => void }) {
-  const [category, setCategory] = useState<string>('방문상담')
-  const [title, setTitle] = useState('')
-  const [date, setDate] = useState(() => presetDate ?? ymd(new Date()))
-  const [time, setTime] = useState('10:00')
-  const [durMin, setDurMin] = useState<number | null>(60)
-  const [location, setLocation] = useState('')
-  const [contactName, setContactName] = useState('')
-  const [contactPhone, setContactPhone] = useState('')
-  const [memo, setMemo] = useState('')
+function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: string | null; editing?: ScheduleEvent | null; onClose: () => void; onSaved: () => void }) {
+  const isEdit = !!editing
+  const eStart = editing?.start_at ? new Date(editing.start_at) : null
+  const [category, setCategory] = useState<string>(editing?.category ?? '방문상담')
+  const [title, setTitle] = useState(editing?.title ?? '')
+  const [date, setDate] = useState(() => (eStart ? ymd(eStart) : presetDate ?? ymd(new Date())))
+  const [time, setTime] = useState(eStart ? hmOf(editing!.start_at!) : '10:00')
+  const [durMin, setDurMin] = useState<number | null>(() => {
+    if (editing?.start_at && editing?.end_at) {
+      const d = (new Date(editing.end_at).getTime() - new Date(editing.start_at).getTime()) / 60000
+      return d > 0 ? d : null
+    }
+    return editing ? null : 60
+  })
+  const [location, setLocation] = useState(editing?.location ?? '')
+  const [contactName, setContactName] = useState(editing?.contact_name ?? '')
+  const [contactPhone, setContactPhone] = useState(editing?.contact_phone ?? '')
+  const [memo, setMemo] = useState(editing?.memo ?? '')
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
 
@@ -452,13 +462,14 @@ function AddModal({ presetDate, onClose, onSaved }: { presetDate: string | null;
         end_at: endPreview, location: location || null,
         contact_name: contactName || null, contact_phone: contactPhone || null, memo: memo || null,
       }
-      await scheduleAPI.createEvent(body)
+      if (isEdit) await scheduleAPI.updateEvent(editing!.id, body)
+      else await scheduleAPI.createEvent(body)
       onSaved()
     } catch (e: any) { setErr(e?.message ?? '저장 실패') } finally { setSaving(false) }
   }
 
   return (
-    <Modal title="일정 추가" onClose={onClose}>
+    <Modal title={isEdit ? '일정 수정' : '일정 추가'} onClose={onClose}>
       <div className="space-y-4">
         {/* 분류 */}
         <div>
@@ -531,7 +542,7 @@ function AddModal({ presetDate, onClose, onSaved }: { presetDate: string | null;
 }
 
 /* ── 상세 모달 ── */
-function DetailModal({ ev, onClose, onChanged, onGoRecruit }: { ev: UEvent; onClose: () => void; onChanged: () => void; onGoRecruit: () => void }) {
+function DetailModal({ ev, onClose, onChanged, onGoRecruit, onEdit }: { ev: UEvent; onClose: () => void; onChanged: () => void; onGoRecruit: () => void; onEdit: (e: ScheduleEvent) => void }) {
   const [busy, setBusy] = useState(false)
   const isEvent = ev.kind === 'event'
   const isInterview = ev.kind === 'interview'
@@ -579,10 +590,18 @@ function DetailModal({ ev, onClose, onChanged, onGoRecruit }: { ev: UEvent; onCl
         )}
       </div>
       <ModalFooter>
-        {isEvent && (
-          <button onClick={del} disabled={busy} className="px-4 py-2 text-sm font-semibold text-red-500 hover:bg-red-50 rounded-lg inline-flex items-center gap-1.5 disabled:opacity-50">
-            <Trash2 className="w-4 h-4" /> 삭제
-          </button>
+        {isEvent && (ev.raw as ScheduleEvent).can_edit && (
+          <>
+            <button onClick={() => onEdit(ev.raw as ScheduleEvent)} className="px-4 py-2 text-sm font-semibold text-indigo-600 hover:bg-indigo-50 rounded-lg inline-flex items-center gap-1.5">
+              <Pencil className="w-4 h-4" /> 수정
+            </button>
+            <button onClick={del} disabled={busy} className="px-4 py-2 text-sm font-semibold text-red-500 hover:bg-red-50 rounded-lg inline-flex items-center gap-1.5 disabled:opacity-50">
+              <Trash2 className="w-4 h-4" /> 삭제
+            </button>
+          </>
+        )}
+        {isEvent && !(ev.raw as ScheduleEvent).can_edit && (
+          <span className="px-2 text-[11px] text-gray-400">본인이 등록한 일정만 수정·삭제할 수 있습니다</span>
         )}
         {isInterview && (
           <button onClick={onGoRecruit} className="px-4 py-2 text-sm font-semibold text-violet-600 hover:bg-violet-50 rounded-lg inline-flex items-center gap-1.5">

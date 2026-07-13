@@ -22,6 +22,8 @@ export interface ScheduleEvent {
   memo?: string | null
   status: string
   created_by?: string | null
+  created_by_id?: string | null
+  can_edit?: boolean
   created_at?: string | null
 }
 export interface EventInput {

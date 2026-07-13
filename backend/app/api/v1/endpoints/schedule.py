@@ -26,6 +26,25 @@ _KST = timezone(timedelta(hours=9))
 CATEGORIES = ["방문상담", "외부방문", "회의", "행사", "기타"]
 
 
+# 모든 일정 수정·삭제 가능(관리자급)
+EVENT_ADMIN_POSITIONS = ("대표", "이사")
+
+
+def _can_edit_event(user: User, e: ScheduleEvent) -> bool:
+    """본인이 만든 일정은 수정 가능 · ADMIN/대표/이사는 전부 수정 가능."""
+    role = user.role.value if hasattr(user.role, "value") else str(user.role)
+    pos = getattr(user, "position", None)
+    pos = pos.value if hasattr(pos, "value") else str(pos or "")
+    if role == "ADMIN" or pos in EVENT_ADMIN_POSITIONS:
+        return True
+    if e.created_by_id and e.created_by_id == user.id:
+        return True
+    # 레거시(작성자 id 미기록) — 이름으로 대체 판정
+    if not e.created_by_id and e.created_by and e.created_by == getattr(user, "name", None):
+        return True
+    return False
+
+
 def _require_manager(current_user: User = Depends(get_current_user)) -> User:
     """일정 캘린더는 앨범담당을 제외한 모든 직원이 사용 가능."""
     pos = getattr(current_user, "position", None)
@@ -58,8 +77,10 @@ def _kst(dt):
     return dt.astimezone(_KST)
 
 
-def _view(e: ScheduleEvent) -> dict:
+def _view(e: ScheduleEvent, user: Optional[User] = None) -> dict:
     return {
+        "can_edit": _can_edit_event(user, e) if user else False,
+        "created_by_id": e.created_by_id,
         "id": e.id, "category": e.category, "title": e.title,
         "start_at": _kst(e.start_at).isoformat() if e.start_at else None,
         "end_at": _kst(e.end_at).isoformat() if e.end_at else None,
@@ -90,7 +111,7 @@ def list_events(
     if category:
         q = q.filter(ScheduleEvent.category == category)
     rows = q.order_by(ScheduleEvent.start_at.asc()).all()
-    return ApiResponse(success=True, data=[_view(e) for e in rows])
+    return ApiResponse(success=True, data=[_view(e, current_user) for e in rows])
 
 
 class EventBody(BaseModel):
@@ -118,9 +139,10 @@ def create_event(body: EventBody, db: Session = Depends(get_db),
         location=body.location, contact_name=body.contact_name,
         contact_phone=(body.contact_phone or "").strip() or None, memo=body.memo,
         created_by=getattr(current_user, "name", None),
+        created_by_id=current_user.id,
     )
     db.add(e); db.commit(); db.refresh(e)
-    return ApiResponse(success=True, data=_view(e))
+    return ApiResponse(success=True, data=_view(e, current_user))
 
 
 class EventUpdate(BaseModel):
@@ -141,6 +163,8 @@ def update_event(eid: str, body: EventUpdate, db: Session = Depends(get_db),
     e = db.query(ScheduleEvent).filter(ScheduleEvent.id == eid).first()
     if not e:
         raise HTTPException(status_code=404, detail="일정을 찾을 수 없습니다.")
+    if not _can_edit_event(current_user, e):
+        raise HTTPException(status_code=403, detail="본인이 등록한 일정만 수정할 수 있습니다.")
     if body.category is not None and body.category in CATEGORIES:
         e.category = body.category
     if body.title is not None and body.title.strip():
@@ -163,7 +187,7 @@ def update_event(eid: str, body: EventUpdate, db: Session = Depends(get_db),
         e.status = body.status
     e.updated_at = now_kst()
     db.commit(); db.refresh(e)
-    return ApiResponse(success=True, data=_view(e))
+    return ApiResponse(success=True, data=_view(e, current_user))
 
 
 @router.delete("/events/{eid}")
@@ -172,6 +196,8 @@ def delete_event(eid: str, db: Session = Depends(get_db),
     e = db.query(ScheduleEvent).filter(ScheduleEvent.id == eid).first()
     if not e:
         raise HTTPException(status_code=404, detail="일정을 찾을 수 없습니다.")
+    if not _can_edit_event(current_user, e):
+        raise HTTPException(status_code=403, detail="본인이 등록한 일정만 삭제할 수 있습니다.")
     db.delete(e); db.commit()
     return ApiResponse(success=True, message="삭제되었습니다.")
 

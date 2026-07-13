@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, LogOut, BookOpen } from 'lucide-react'
+import { LayoutDashboard, LogOut, BookOpen, Compass } from 'lucide-react'
 import { useAuthStore } from '@/store/auth'
 import { useLtcStore } from '@/store/ltc'
 import { getNavConfig, type NavItem as NavItemT } from './navConfig'
@@ -98,7 +98,15 @@ export default function Sidebar({ mobile = false, onNavigate }: SidebarProps) {
         })}
       </nav>
 
-      <div className="px-3 py-2 border-t border-gray-50">
+      <div className="px-3 py-2 border-t border-gray-50 space-y-0.5">
+        <NavLink
+          to="/work-guide"
+          onClick={handleNav}
+          className={({ isActive }) => `${linkBase} ${isActive ? linkActive : linkInactive}`}
+        >
+          <Compass size={16} className="flex-shrink-0" />
+          <span>내 업무 가이드</span>
+        </NavLink>
         <NavLink
           to="/guide"
           onClick={handleNav}

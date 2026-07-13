@@ -24,6 +24,7 @@ class ScheduleEvent(Base):
     contact_phone = Column(String, nullable=True)
     memo          = Column(Text, nullable=True)
     status        = Column(String, nullable=False, default="scheduled")  # scheduled/done/canceled
-    created_by    = Column(String, nullable=True)
+    created_by    = Column(String, nullable=True)          # 작성자 이름(표시용)
+    created_by_id = Column(String, nullable=True, index=True)  # 작성자 user.id (권한 판정)
     created_at    = Column(DateTime(timezone=True), default=now_kst)
     updated_at    = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)
