@@ -5,9 +5,9 @@ import {
   FileSpreadsheet, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp,
   Loader2, History, X, Printer, RefreshCw, Settings,
   Users, CalendarOff, Trash2, Upload, Edit3, Save, Sparkles, Clock, Plus,
-  Zap, XCircle, AlertOctagon,
-} from 'lucide-react'
+  Zap, XCircle, AlertOctagon, RotateCw } from 'lucide-react'
 import { apiClient } from '@/api/client'
+import CareforRowEditor, { type FieldSpec } from '@/components/eval/CareforRowEditor'
 import { useAuthStore } from '@/store/auth'
 
 // ── 권한 타입 ────────────────────────────────────────────────────────────────
@@ -729,6 +729,37 @@ export default function EvalRecordAuditPage() {
 }
 
 // ── 수급자 탭 ────────────────────────────────────────────────────────────────
+const RESIDENT_FIELDS: FieldSpec[] = [
+  { key: 'name', label: '이름', required: true },
+  { key: 'birth_date', label: '생년월일', type: 'date' },
+  { key: 'care_grade', label: '장기요양등급', placeholder: '예: 3등급' },
+  { key: 'admission_date', label: '입소일', type: 'date' },
+  { key: 'discharge_date', label: '퇴소일', type: 'date' },
+  { key: 'room_name', label: '생활실' },
+  { key: 'status', label: '상태', type: 'select', options: ['active', 'discharged'] },
+]
+const LEAVE_FIELDS: FieldSpec[] = [
+  { key: 'resident_name', label: '수급자명', required: true },
+  { key: 'leave_type', label: '구분', type: 'select', options: ['외출', '외박', '병원외출', '기타'] },
+  { key: 'start_date', label: '시작일', type: 'date', required: true },
+  { key: 'start_time', label: '시작시간', type: 'time' },
+  { key: 'end_date', label: '종료일', type: 'date' },
+  { key: 'end_time', label: '종료시간', type: 'time' },
+  { key: 'reason', label: '사유' },
+  { key: 'guardian_name', label: '보호자' },
+]
+const SCHEDULE_FIELDS: FieldSpec[] = [
+  { key: 'staff_name', label: '직원명', required: true },
+  { key: 'work_date', label: '근무일자', type: 'date', required: true },
+  { key: 'shift_code', label: '근무코드', placeholder: 'D / N / E / 휴' },
+  { key: 'shift_label', label: '근무명', placeholder: '주간 / 야간 / 휴무' },
+  { key: 'start_time', label: '시작시간', type: 'time' },
+  { key: 'end_time', label: '종료시간', type: 'time' },
+  { key: 'position', label: '직종' },
+  { key: 'team', label: '조' },
+  { key: 'is_working', label: '근무 여부', type: 'bool' },
+]
+
 function ResidentsTab({
   residents,
   isAdmin,
@@ -740,6 +771,8 @@ function ResidentsTab({
   onRefresh: () => void
   onMsg: (msg: string, warns?: string[]) => void
 }) {
+  const [editRow, setEditRow] = useState<Record<string, any> | null | undefined>(undefined)
+  const [syncing, setSyncing] = useState(false)
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
@@ -770,6 +803,35 @@ function ResidentsTab({
               </button>
             )}
 
+            <button
+              type="button"
+              disabled={syncing}
+              onClick={async () => {
+                if (!confirm('수급자 관리의 현재 수급자 정보로 대체합니다. 진행할까요?')) return
+                setSyncing(true)
+                try {
+                  const res = await apiClient.post('/api/v1/eval/carefor/residents/sync-from-admin?replace=true')
+                  const d = (res.data as any)?.data
+                  onRefresh()
+                  onMsg(`✅ 수급자 관리에서 ${d?.total ?? 0}명을 가져왔습니다 (엑셀 업로드 불필요)`)
+                } catch (e: any) {
+                  onMsg(`❌ ${e?.response?.data?.detail ?? '가져오기 실패'}`)
+                } finally { setSyncing(false) }
+              }}
+              className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-teal-500 hover:bg-teal-600 text-white text-xs font-semibold disabled:opacity-50"
+            >
+              {syncing ? <Loader2 size={13} className="animate-spin" /> : <RotateCw size={13} />}
+              {syncing ? '가져오는 중...' : '수급자 관리에서 가져오기'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setEditRow(null)}
+              className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 hover:bg-gray-50 text-xs font-semibold text-gray-600"
+            >
+              + 직접 추가
+            </button>
+
             <UploadBtn
               label={residents.length > 0 ? '재업로드' : '엑셀 업로드'}
               accept=".xlsx,.xls,.csv"
@@ -783,9 +845,16 @@ function ResidentsTab({
         )}
       </div>
 
-      <p className="text-[11px] text-gray-400 mb-3">
-        권장 열: 수급자명, 생년월일, 장기요양등급, 입소일, 퇴소일, 생활실, 상태
-      </p>
+      <div className="bg-teal-50 border border-teal-100 rounded-xl p-3 mb-3">
+        <p className="text-[11px] font-bold text-teal-700 mb-1">✅ 권장: 엑셀 업로드 없이 바로 가져오기</p>
+        <p className="text-[11px] text-teal-700 leading-relaxed">
+          <b>「수급자 관리에서 가져오기」</b> 버튼을 누르면 Admin에 등록된 수급자(입소일·퇴소일·등급)를 그대로 불러옵니다. 엑셀을 뽑을 필요가 없습니다.
+        </p>
+        <p className="text-[10px] text-teal-500 mt-2 pt-2 border-t border-teal-100">
+          📄 <b>케어포 엑셀로 넣고 싶다면</b>: <b>1-8 수급자 현황 리포트</b> → <b>해당 월 출력</b> → 엑셀로 저장 후 업로드
+          <br /><span className="text-teal-400">권장 열: 수급자명, 생년월일, 장기요양등급, 입소일, 퇴소일, 생활실, 상태</span>
+        </p>
+      </div>
 
       {residents.length === 0 ? (
         <div className="bg-gray-50 rounded-xl py-8 text-center text-sm text-gray-400">
@@ -801,6 +870,7 @@ function ResidentsTab({
                     {h}
                   </th>
                 ))}
+                {isAdmin && <th className="text-right py-2 px-2 font-semibold">관리</th>}
               </tr>
             </thead>
 
@@ -822,6 +892,14 @@ function ResidentsTab({
                       {STATUS_LABEL[r.status] ?? r.status}
                     </span>
                   </td>
+                  {isAdmin && (
+                    <td className="py-2 px-2 text-right">
+                      <button onClick={() => setEditRow(r)}
+                        className="text-[11px] font-semibold text-gray-400 hover:text-primary-orange px-2 py-1 rounded hover:bg-orange-50">
+                        수정
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -833,6 +911,17 @@ function ResidentsTab({
             </p>
           )}
         </div>
+      )}
+
+      {editRow !== undefined && (
+        <CareforRowEditor
+          title="수급자"
+          base="/api/v1/eval/carefor/residents"
+          fields={RESIDENT_FIELDS}
+          row={editRow}
+          onClose={() => setEditRow(undefined)}
+          onSaved={() => { onRefresh(); onMsg('✅ 수급자 정보가 반영되었습니다') }}
+        />
       )}
     </div>
   )
@@ -850,6 +939,11 @@ function LeavesTab({
   onRefresh: () => void
   onMsg: (msg: string, warns?: string[]) => void
 }) {
+  const now = new Date()
+  const [ym, setYm] = useState({ y: now.getFullYear(), m: now.getMonth() + 1 })
+  const [editRow, setEditRow] = useState<Record<string, any> | null | undefined>(undefined)
+  const monthPrefix = `${ym.y}-${String(ym.m).padStart(2, '0')}-`
+  const shown = leaves.filter(l => (l.start_date ?? '').startsWith(monthPrefix))
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
@@ -865,20 +959,29 @@ function LeavesTab({
 
         {canManage && (
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-            {leaves.length > 0 && (
+            {shown.length > 0 && (
               <button
                 type="button"
                 onClick={async () => {
-                  await apiClient.delete('/api/v1/eval/carefor/leave-records')
+                  if (!confirm(`${ym.y}년 ${ym.m}월 외박·외출 기록을 삭제할까요?`)) return
+                  await apiClient.delete(`/api/v1/eval/carefor/leave-records/month/${ym.y}/${ym.m}`)
                   onRefresh()
-                  onMsg('✅ 외박/외출 기록 삭제됨')
+                  onMsg(`✅ ${ym.y}년 ${ym.m}월 외박/외출 기록 삭제됨`)
                 }}
                 className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-red-100 hover:bg-red-50 text-xs font-semibold text-red-500"
               >
                 <Trash2 size={13} />
-                삭제
+                {ym.m}월 삭제
               </button>
             )}
+
+            <button
+              type="button"
+              onClick={() => setEditRow(null)}
+              className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 hover:bg-gray-50 text-xs font-semibold text-gray-600"
+            >
+              + 직접 추가
+            </button>
 
             <UploadBtn
               label={leaves.length > 0 ? '재업로드' : '엑셀 업로드'}
@@ -894,17 +997,34 @@ function LeavesTab({
         )}
       </div>
 
-      <p className="text-[11px] text-gray-400 mb-3">
-        권장 열: 수급자명, 구분, 외박일/외출일, 귀원일, 사유
-      </p>
+      <div className="bg-purple-50 border border-purple-100 rounded-xl p-3 mb-3">
+        <p className="text-[11px] font-bold text-purple-700 mb-1">📄 엑셀 뽑는 방법 (케어포)</p>
+        <p className="text-[11px] text-purple-700 leading-relaxed">
+          <b>1-9 수급자 외출·외박 리포트</b> → 해당 월 <b>1일 ~ 31일</b>로 기간 설정 → <b>조회</b> → <b>엑셀로 저장</b>
+        </p>
+        <p className="text-[10px] text-purple-400 mt-1">권장 열: 수급자명, 구분, 외박일/외출일, 귀원일, 사유</p>
+      </div>
 
-      {leaves.length === 0 ? (
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-xs font-semibold text-gray-500">조회 월</span>
+        <select value={ym.y} onChange={e => setYm({ ...ym, y: +e.target.value })}
+          className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg">
+          {[now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map(y => <option key={y} value={y}>{y}년</option>)}
+        </select>
+        <select value={ym.m} onChange={e => setYm({ ...ym, m: +e.target.value })}
+          className="px-2 py-1.5 text-xs border border-gray-200 rounded-lg">
+          {Array.from({ length: 12 }, (_, i) => i + 1).map(m => <option key={m} value={m}>{m}월</option>)}
+        </select>
+        <span className="text-xs text-gray-400 ml-auto">{shown.length}건 / 전체 {leaves.length}건</span>
+      </div>
+
+      {shown.length === 0 ? (
         <div className="bg-gray-50 rounded-xl py-8 text-center text-sm text-gray-400">
-          등록된 외박/외출 기록이 없습니다
+          {ym.y}년 {ym.m}월 외박/외출 기록이 없습니다
         </div>
       ) : (
         <div className="space-y-1.5 max-h-96 overflow-y-auto">
-          {leaves.slice(0, 100).map((l, i) => (
+          {shown.slice(0, 100).map((l, i) => (
             <div
               key={l.id || i}
               className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 text-xs px-3 py-2 bg-gray-50 rounded-xl"
@@ -932,15 +1052,32 @@ function LeavesTab({
                 {l.end_time ? ` ${l.end_time}` : ''}
               </span>
               {l.reason && <span className="text-gray-400 truncate">{l.reason}</span>}
+              {canManage && (
+                <button onClick={() => setEditRow(l as any)}
+                  className="sm:ml-auto text-[11px] font-semibold text-gray-400 hover:text-purple-600 px-2 py-0.5 rounded hover:bg-purple-50 shrink-0">
+                  수정
+                </button>
+              )}
             </div>
           ))}
 
-          {leaves.length > 100 && (
+          {shown.length > 100 && (
             <p className="text-xs text-center text-gray-400 py-1">
-              외 {leaves.length - 100}건
+              외 {shown.length - 100}건
             </p>
           )}
         </div>
+      )}
+
+      {editRow !== undefined && (
+        <CareforRowEditor
+          title="외박·외출"
+          base="/api/v1/eval/carefor/leave-records"
+          fields={LEAVE_FIELDS}
+          row={editRow}
+          onClose={() => setEditRow(undefined)}
+          onSaved={() => { onRefresh(); onMsg('✅ 외박·외출 기록이 반영되었습니다') }}
+        />
       )}
     </div>
   )
@@ -1532,6 +1669,7 @@ function ScheduleTab({
   const [month, setMonth] = useState(new Date().getMonth() + 1)
   const fileRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
+  const [editRow, setEditRow] = useState<Record<string, any> | null | undefined>(undefined)
 
   const SHIFT_CLS: Record<string, string> = {
     주간: 'bg-blue-100 text-blue-700',
@@ -1595,6 +1733,13 @@ function ScheduleTab({
           <p className="text-xs text-gray-400 mt-0.5">
             근무표 엑셀 업로드 — 행=직원·열=날짜 또는 행=날짜별 기록 지원
           </p>
+          <div className="bg-teal-50 border border-teal-100 rounded-xl p-3 mt-2">
+            <p className="text-[11px] font-bold text-teal-700 mb-1">📄 엑셀 뽑는 방법</p>
+            <p className="text-[11px] text-teal-700 leading-relaxed">
+              Google Sheet <b>「행복한_근무표」</b> → <b>해당 월 근무</b> 시트 → <b>파일 &gt; 다운로드 &gt; Microsoft Excel(.xlsx)</b>
+            </p>
+            <p className="text-[10px] text-teal-400 mt-1">업로드 전 위에서 <b>해당 연·월</b>을 먼저 선택하세요.</p>
+          </div>
         </div>
 
         {isAdmin && (
@@ -1615,6 +1760,14 @@ function ScheduleTab({
                 삭제
               </button>
             )}
+
+            <button
+              type="button"
+              onClick={() => setEditRow(null)}
+              className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 hover:bg-gray-50 text-xs font-semibold text-gray-600"
+            >
+              + 직접 추가
+            </button>
 
             <button
               type="button"
@@ -1735,8 +1888,9 @@ function ScheduleTab({
                       return (
                         <td key={d} className="py-1.5 px-0.5 text-center">
                           <span
-                            className={`inline-block text-[9px] font-bold px-1 py-0.5 rounded ${cls}`}
-                            title={`${sc.start_time || ''}~${sc.end_time || ''}`}
+                            onClick={() => isAdmin && setEditRow(sc as any)}
+                            className={`inline-block text-[9px] font-bold px-1 py-0.5 rounded ${cls} ${isAdmin ? 'cursor-pointer hover:ring-2 hover:ring-teal-300' : ''}`}
+                            title={isAdmin ? `클릭해 수정 · ${sc.start_time || ''}~${sc.end_time || ''}` : `${sc.start_time || ''}~${sc.end_time || ''}`}
                           >
                             {sc.shift_code || lbl}
                           </span>
@@ -1749,6 +1903,21 @@ function ScheduleTab({
             </tbody>
           </table>
         </div>
+      )}
+
+      {isAdmin && (
+        <p className="text-[11px] text-gray-400 mt-2">💡 근무 코드를 클릭하면 해당 근무를 수정·삭제할 수 있습니다.</p>
+      )}
+
+      {editRow !== undefined && (
+        <CareforRowEditor
+          title="근무표"
+          base="/api/v1/eval/carefor/work-schedules"
+          fields={SCHEDULE_FIELDS}
+          row={editRow}
+          onClose={() => setEditRow(undefined)}
+          onSaved={() => { onRefresh(); onMsg('✅ 근무표가 반영되었습니다') }}
+        />
       )}
     </div>
   )

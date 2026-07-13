@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import {
   ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2,
-  RotateCcw, UserPlus, UserMinus, LogIn, LogOut, Users, Clock,
+  RotateCcw, UserPlus, UserMinus, LogIn, LogOut, Users, Clock, Check,
 } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
 import type { ChecklistOccurrence } from '@/store/ltc'
@@ -26,6 +26,23 @@ const PERSON_EVENT_META: Record<PersonEventType, { label:string; icon:React.Elem
 }
 
 type ViewTab = 'checklist' | 'people' | 'all'
+
+const GROUP_TONE: Record<string, { dot: string; text: string; border: string }> = {
+  red:    { dot: 'bg-red-500',    text: 'text-red-600',    border: 'border-red-100' },
+  orange: { dot: 'bg-orange-500', text: 'text-orange-600', border: 'border-orange-100' },
+  amber:  { dot: 'bg-amber-500',  text: 'text-amber-600',  border: 'border-amber-100' },
+  blue:   { dot: 'bg-blue-500',   text: 'text-blue-600',   border: 'border-blue-100' },
+  gray:   { dot: 'bg-gray-300',   text: 'text-gray-500',   border: 'border-gray-100' },
+  green:  { dot: 'bg-green-500',  text: 'text-green-600',  border: 'border-green-100' },
+}
+
+// '2026-07-18' → '7.18(토)'
+const fmtDue = (iso: string) => {
+  try {
+    const d = new Date(iso + 'T00:00:00')
+    return `${d.getMonth() + 1}.${d.getDate()}(${['일','월','화','수','목','금','토'][d.getDay()]})`
+  } catch { return iso }
+}
 
 export default function EvalCalendarPage() {
   const {
@@ -173,6 +190,29 @@ export default function EvalCalendarPage() {
     )
     return rows
   }, [occurrences, itemMap, hasOccurrences, urgentFilter])
+
+  // ── 마감 임박순: 긴급도 구간별 그룹핑 (스캔 가능하게) ──────────────
+  const upcomingGroups = useMemo(() => {
+    if (urgentFilter === 'done') {
+      return upcoming.length ? [{ key: 'done', label: '완료', tone: 'green', rows: upcoming }] : []
+    }
+    const buckets: Record<string, typeof upcoming> = { over: [], today: [], soon: [], week: [], later: [] }
+    upcoming.forEach(u => {
+      const d = u.daysLeft
+      if (d < 0) buckets.over.push(u)
+      else if (d === 0) buckets.today.push(u)
+      else if (d <= 3) buckets.soon.push(u)
+      else if (d <= 7) buckets.week.push(u)
+      else buckets.later.push(u)
+    })
+    return ([
+      { key: 'over',  label: '기한 지남',   tone: 'red',    rows: buckets.over },
+      { key: 'today', label: '오늘 마감',   tone: 'orange', rows: buckets.today },
+      { key: 'soon',  label: '3일 내',      tone: 'amber',  rows: buckets.soon },
+      { key: 'week',  label: '이번 주',     tone: 'blue',   rows: buckets.week },
+      { key: 'later', label: '여유 있음',   tone: 'gray',   rows: buckets.later },
+    ] as const).filter(g => g.rows.length > 0)
+  }, [upcoming, urgentFilter])
 
   const urgentCounts = useMemo(() => {
     const todoSet = new Set<string>(), overdueSet = new Set<string>(), doneSet = new Set<string>()
@@ -451,12 +491,33 @@ export default function EvalCalendarPage() {
             </div>
           </div>
           {upcoming.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-10">해당 항목이 없습니다.</p>
+            <div className="text-center py-12 px-4">
+              <div className="w-12 h-12 rounded-2xl bg-green-50 flex items-center justify-center mx-auto mb-3">
+                <Check size={22} className="text-green-500" />
+              </div>
+              <p className="text-sm font-semibold text-gray-700">
+                {urgentFilter === 'overdue' ? '기한 지난 업무가 없습니다' : urgentFilter === 'done' ? '완료한 업무가 없습니다' : '처리할 업무가 없습니다'}
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                {urgentFilter === 'todo' ? '모든 업무를 마감 전에 처리했습니다 👍' : '다른 탭을 확인해 보세요.'}
+              </p>
+            </div>
           ) : (
-            <div className="p-3 space-y-1.5 max-h-[420px] overflow-y-auto">
-              {upcoming.map(({ occ, item, daysLeft }) => (
-                <UpcomingRow key={occ.id} occ={occ} item={item} daysLeft={daysLeft} toggling={toggling}
-                  onToggle={() => handleToggleOcc(occ)} onDetail={() => item && setSelectedItem(item)} />
+            <div className="max-h-[460px] overflow-y-auto">
+              {upcomingGroups.map(g => (
+                <div key={g.key}>
+                  <div className={`sticky top-0 z-10 flex items-center gap-2 px-4 py-2 border-b backdrop-blur bg-white/90 ${GROUP_TONE[g.tone].border}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${GROUP_TONE[g.tone].dot}`} />
+                    <span className={`text-xs font-bold ${GROUP_TONE[g.tone].text}`}>{g.label}</span>
+                    <span className="text-[11px] font-semibold text-gray-400">{g.rows.length}건</span>
+                  </div>
+                  <div className="p-2.5 space-y-1.5">
+                    {g.rows.map(({ occ, item, daysLeft }) => (
+                      <UpcomingRow key={occ.id} occ={occ} item={item} daysLeft={daysLeft} toggling={toggling}
+                        onToggle={() => handleToggleOcc(occ)} onDetail={() => item && setSelectedItem(item)} />
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           )}
@@ -688,47 +749,59 @@ function UpcomingRow({ occ, item, daysLeft, toggling, onToggle, onDetail }: {
   const done      = occ.status === 'completed'
   const isOverdue = occ.status === 'overdue'
 
-  // D-day 배지
-  let badge: { text: string; cls: string } | null = null
+  // D-day 칩 (색상만이 아니라 텍스트로도 상태를 알 수 있게)
+  let chip: { top: string; bot: string; cls: string }
   if (done) {
-    badge = { text: occ.completedDate ? `${occ.completedDate} 완료` : '완료', cls: 'bg-green-100 text-green-700' }
+    chip = { top: '완료', bot: occ.completedDate ? fmtDue(occ.completedDate) : '', cls: 'bg-green-100 text-green-700' }
   } else if (isOverdue || daysLeft < 0) {
     const over = Math.max(1, -daysLeft)
-    badge = { text: `${over}일 지남`, cls: over >= 14 ? 'bg-red-100 text-red-600' : over >= 7 ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-500' }
+    chip = { top: `+${over}일`, bot: '지남', cls: over >= 7 ? 'bg-red-500 text-white' : 'bg-red-100 text-red-600' }
   } else if (daysLeft === 0) {
-    badge = { text: '오늘 마감', cls: 'bg-red-100 text-red-600' }
+    chip = { top: '오늘', bot: '마감', cls: 'bg-orange-500 text-white' }
   } else {
-    badge = { text: `D-${daysLeft}`, cls: daysLeft <= 3 ? 'bg-orange-100 text-orange-600' : daysLeft <= 7 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500' }
+    chip = { top: `D-${daysLeft}`, bot: fmtDue(occ.dueDate), cls: daysLeft <= 3 ? 'bg-amber-100 text-amber-700' : daysLeft <= 7 ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500' }
   }
 
   return (
-    <div className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${
-      done ? 'bg-green-50 border-green-100' :
-      item?.riskLevel === 'high' ? 'bg-red-50 border-red-100 hover:bg-red-100' :
-      isOverdue ? 'bg-orange-50 border-orange-100 hover:bg-orange-100' :
-      'bg-gray-50 border-gray-100 hover:bg-gray-100'
+    <div className={`group flex items-stretch gap-2.5 p-2.5 rounded-xl border transition-all ${
+      done ? 'bg-white border-gray-100 opacity-70' :
+      isOverdue || daysLeft < 0 ? 'bg-white border-red-100 hover:border-red-200 hover:shadow-sm' :
+      daysLeft === 0 ? 'bg-white border-orange-100 hover:border-orange-200 hover:shadow-sm' :
+      'bg-white border-gray-100 hover:border-gray-200 hover:shadow-sm'
     }`}>
-      <button onClick={e => { e.stopPropagation(); onToggle() }} disabled={toggling===occ.id}
-        className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center disabled:opacity-50 ${
-          done ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-primary-orange'
-        }`}>
-        {done && <div className="w-2 h-2 bg-white rounded-full"/>}
-      </button>
-      <div className="flex-1 min-w-0 cursor-pointer" onClick={onDetail}>
-        <p className={`text-sm font-semibold truncate ${done ? 'line-through text-gray-400' : 'text-gray-800'}`}>
-          {item?.title ?? '(삭제된 항목)'}
-        </p>
-        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${FREQUENCY_COLORS[occ.frequency as any] ?? 'bg-gray-100 text-gray-600'}`}>
+      {/* D-day 칩 — 가장 중요한 정보를 선행 배치 */}
+      <div className={`w-14 shrink-0 rounded-lg flex flex-col items-center justify-center py-1 ${chip.cls}`}>
+        <span className="text-[11px] font-extrabold leading-tight">{chip.top}</span>
+        {chip.bot && <span className="text-[9px] font-semibold opacity-80 leading-tight">{chip.bot}</span>}
+      </div>
+
+      {/* 본문 */}
+      <div className="flex-1 min-w-0 cursor-pointer py-0.5" onClick={onDetail}>
+        <div className="flex items-center gap-1.5">
+          {!done && item?.riskLevel === 'high' && <AlertTriangle size={12} className="text-red-500 shrink-0"/>}
+          <p className={`text-sm font-semibold truncate ${done ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+            {item?.title ?? '(삭제된 항목)'}
+          </p>
+        </div>
+        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${FREQUENCY_COLORS[occ.frequency as any] ?? 'bg-gray-100 text-gray-600'}`}>
             {FREQUENCY_LABELS[occ.frequency as any] ?? occ.frequency}
           </span>
-          <span className="text-[10px] text-gray-400">기한 {occ.dueDate}</span>
+          {!done && <span className="text-[10px] text-gray-400">마감 {fmtDue(occ.dueDate)}</span>}
           {item?.personName && <span className="text-[10px] font-semibold text-purple-600">👤 {item.personName}</span>}
           {item?.assignee && !item.personName && <span className="text-[10px] text-gray-400">{item.assignee}</span>}
         </div>
       </div>
-      {badge && <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${badge.cls}`}>{badge.text}</span>}
-      {!done && item?.riskLevel === 'high' && <AlertTriangle size={13} className="text-red-400 flex-shrink-0"/>}
+
+      {/* 완료 토글 — 큰 탭 영역 */}
+      <button onClick={e => { e.stopPropagation(); onToggle() }} disabled={toggling===occ.id}
+        title={done ? '완료 취소' : '완료 처리'}
+        className={`w-10 shrink-0 rounded-lg flex items-center justify-center transition-colors disabled:opacity-50 ${
+          done ? 'bg-green-500 text-white hover:bg-green-600'
+               : 'bg-gray-50 text-gray-300 hover:bg-primary-orange hover:text-white border border-gray-100'
+        }`}>
+        <Check size={16} strokeWidth={3} />
+      </button>
     </div>
   )
 }
