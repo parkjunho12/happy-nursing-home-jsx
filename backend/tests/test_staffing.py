@@ -76,13 +76,15 @@ def test_8_holiday_weekend_no_double_count():
 
 
 def test_9_midmonth_hire_proportional():
+    """월중 입사자: 월 기준시간 ÷ 월 총일수 × 재직일수 (달력일수 비례)."""
     hol = set(S.get_korean_holidays(2026).keys())
-    std = S.calculate_monthly_standard_hours(2026, 7, hol, 8)["hours"]
-    worker = {"name": "김", "hire_date": "2026-07-20"}
-    h = S.worker_expected_hours(worker, 2026, 7, hol, 8, std)
-    assert 0 < h < std  # 월 기준시간 축소 아님, 실제 확보 가능시간만
-    full = {"name": "박", "hire_date": "2026-06-01"}
-    assert S.worker_expected_hours(full, 2026, 7, hol, 8, std) == std  # 풀근무
+    std = S.calculate_monthly_standard_hours(2026, 7, hol, 8)["hours"]  # 176
+    # 7월 = 31일. 7/20 입사 → 재직 12일 → 176 × 12/31
+    h = S.worker_expected_hours({"hire_date": "2026-07-20"}, 2026, 7, hol, 8, std)
+    assert h == round(std * 12 / 31, 1), h
+    assert 0 < h < std
+    # 풀근무(전월 입사) → 만근
+    assert S.worker_expected_hours({"hire_date": "2026-06-01"}, 2026, 7, hol, 8, std) == std
 
 
 def test_10_schedule_infeasible_high_risk():
@@ -96,25 +98,37 @@ def test_10_schedule_infeasible_high_risk():
 
 
 def test_12_early_month_hire_full_attendance():
-    """월초(2~4일) 입사자는 만근 처리, 5일 이후는 비례 계산."""
+    """월초 1~3일 입사자는 만근, 4일 이후는 달력일수 비례."""
     hol = set(S.get_korean_holidays(2026).keys())
     std = S.calculate_monthly_standard_hours(2026, 7, hol, 8)["hours"]
-    for d in ("2026-07-01", "2026-07-02", "2026-07-03", "2026-07-04"):
+    for d in ("2026-07-01", "2026-07-02", "2026-07-03"):
         assert S.worker_expected_hours({"hire_date": d}, 2026, 7, hol, 8, std) == std, d
-    later = S.worker_expected_hours({"hire_date": "2026-07-06"}, 2026, 7, hol, 8, std)
-    assert 0 < later < std
-    # 휴직은 만근 처리와 무관하게 차감되어야 함
-    w = {"hire_date": "2026-07-02", "leaves": [{"start": "2026-07-20", "end": "2026-07-31"}]}
-    assert S.worker_expected_hours(w, 2026, 7, hol, 8, std) < std
+    # 4일 입사 → 재직 28일 → 비례 (만근 아님)
+    h4 = S.worker_expected_hours({"hire_date": "2026-07-04"}, 2026, 7, hol, 8, std)
+    assert h4 == round(std * 28 / 31, 1)
+    assert h4 < std
+    # 휴직은 만근 처리와 무관하게 재직일수에서 차감
+    w = {"hire_date": "2026-07-01", "leaves": [{"start": "2026-07-16", "end": "2026-07-31"}]}
+    assert S.worker_expected_hours(w, 2026, 7, hol, 8, std) == round(std * 15 / 31, 1)
 
 
 def test_13_leave_excluded():
+    """휴직 기간은 재직일수에서 차감된다."""
     hol = set(S.get_korean_holidays(2026).keys())
     std = S.calculate_monthly_standard_hours(2026, 7, hol, 8)["hours"]
     full = {"hire_date": "2025-01-01"}
     allmonth = {"hire_date": "2025-01-01", "leaves": [{"start": "2026-07-01", "end": "2026-07-31"}]}
     assert S.worker_expected_hours(full, 2026, 7, hol, 8, std) == std
     assert S.worker_expected_hours(allmonth, 2026, 7, hol, 8, std) == 0
+
+
+def test_14_placement_ratio_21():
+    """배치비율 2.1:1 — 경계값 판정."""
+    assert S.DEFAULT_CONFIG["placement_ratio"] == 2.1
+    assert S.calculate_required_worker_count(18.9, 2.1) == 9    # 9 × 2.1 = 18.9 (경계)
+    assert S.calculate_required_worker_count(18.91, 2.1) == 10  # 초과 → 10명
+    assert S.calculate_required_worker_count(21.0, 2.1) == 10   # 10 × 2.1 = 21.0 (경계)
+    assert S.calculate_required_worker_count(21.01, 2.1) == 11
 
 
 def test_11_integration_simulate():

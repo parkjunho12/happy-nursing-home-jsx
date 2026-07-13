@@ -434,7 +434,19 @@ def backfill_occurrences(
     for item_id, period_key in existing_raw:
         existing.setdefault(item_id, set()).add(period_key)
 
+    # 일회성(one_time)은 기한이 수정될 수 있으므로 occurrence 객체를 직접 들고 재동기화한다.
+    one_time_occs = db.query(ChecklistOccurrence).filter(
+        ChecklistOccurrence.checklist_item_id.in_(item_id_list),
+        ChecklistOccurrence.frequency == ONE_TIME_FREQ,
+    ).all()
+    one_time_map: dict[str, ChecklistOccurrence] = {}
+    for o in one_time_occs:
+        prev = one_time_map.get(o.checklist_item_id)
+        if not prev or (o.created_at and prev.created_at and o.created_at > prev.created_at):
+            one_time_map[o.checklist_item_id] = o
+
     created = 0
+    updated = 0
     new_occs: List[ChecklistOccurrence] = []
 
     for item in items:
@@ -443,15 +455,30 @@ def backfill_occurrences(
 
         # ── 일회성 (one_time) ─────────────────────────────────────────
         if freq == ONE_TIME_FREQ:
-            if item_existing:
-                continue  # 이미 생성됨
             # item.due_date가 기한, 없으면 생성일
-            if hasattr(item, 'due_date') and item.due_date:
+            if getattr(item, 'due_date', None):
                 due_date_str = item.due_date
-                due_d = date.fromisoformat(due_date_str)
+                try:
+                    due_d = date.fromisoformat(due_date_str)
+                except ValueError:
+                    due_d = to_kst_date(item.created_at) if item.created_at else today
+                    due_date_str = due_d.isoformat()
             else:
                 due_d = to_kst_date(item.created_at) if item.created_at else today
                 due_date_str = due_d.isoformat()
+
+            # 이미 occurrence 가 있으면 → 기한이 바뀌었을 때 재동기화 (완료건은 건드리지 않음)
+            occ = one_time_map.get(item.id)
+            if occ:
+                if occ.status != 'completed' and occ.due_date != due_date_str:
+                    occ.due_date   = due_date_str
+                    occ.period_key = due_date_str
+                    occ.status     = 'overdue' if due_d < today else 'pending'
+                    updated += 1
+                continue
+            if item_existing:
+                continue  # 다른 형태로 이미 생성됨
+
             created_date = to_kst_date(item.created_at) if item.created_at else today
             period_key   = due_date_str   # 기한 날짜를 period_key로
             status       = 'overdue' if due_d < today else 'pending'
@@ -525,7 +552,8 @@ def backfill_occurrences(
 
     if new_occs:
         db.bulk_save_objects(new_occs)
-        db.flush()
+    if new_occs or updated:
+        db.flush()   # 일회성 기한 재동기화(updated)도 함께 반영
 
     return created
 

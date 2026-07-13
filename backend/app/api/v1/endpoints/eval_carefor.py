@@ -7,6 +7,7 @@ import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Request
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -28,6 +29,62 @@ def _is_social_worker(user: User) -> bool:
     pos = getattr(user, 'position', None)
     role = user.role.value if hasattr(user.role, 'value') else str(user.role)
     return role == "ADMIN" or pos == "사회복지사"
+
+
+def _require_editor(current_user: User = Depends(get_current_user)) -> User:
+    """참고자료(수급자·외출외박·근무표) 수정·삭제 — ADMIN · 사회복지사 · 시설장"""
+    role = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
+    pos = getattr(current_user, 'position', None)
+    pos = pos.value if hasattr(pos, 'value') else str(pos or '')
+    if role != "ADMIN" and pos not in ("사회복지사", "시설장"):
+        raise HTTPException(403, "참고자료 수정 권한이 없습니다. (관리자·사회복지사·시설장)")
+    return current_user
+
+
+def _month_prefix(year: Optional[int], month: Optional[int]) -> Optional[str]:
+    if year and month:
+        return f"{year}-{month:02d}-"
+    return None
+
+
+class ResidentBody(BaseModel):
+    name: Optional[str] = None
+    birth_date: Optional[str] = None
+    care_grade: Optional[str] = None
+    admission_date: Optional[str] = None
+    discharge_date: Optional[str] = None
+    room_name: Optional[str] = None
+    status: Optional[str] = None
+    resident_code: Optional[str] = None
+
+
+class LeaveBody(BaseModel):
+    resident_name: Optional[str] = None
+    leave_type: Optional[str] = None
+    start_date: Optional[str] = None
+    start_time: Optional[str] = None
+    end_date: Optional[str] = None
+    end_time: Optional[str] = None
+    reason: Optional[str] = None
+    guardian_name: Optional[str] = None
+
+
+class ScheduleBody(BaseModel):
+    staff_name: Optional[str] = None
+    position: Optional[str] = None
+    team: Optional[str] = None
+    work_date: Optional[str] = None
+    shift_code: Optional[str] = None
+    shift_label: Optional[str] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    is_working: Optional[bool] = None
+
+
+def _apply_body(obj, body: BaseModel):
+    for k, v in body.model_dump(exclude_unset=True).items():
+        if v is not None:
+            setattr(obj, k, (v.strip() or None) if isinstance(v, str) else v)
 
 
 def _mask_row(row: dict) -> dict:
@@ -191,6 +248,8 @@ async def upload_leave_records(
 # ── 외출·외박 목록 ────────────────────────────────────────────────────────────
 @router.get("/leave-records")
 def list_leave_records(
+    year:          Optional[int] = Query(None),
+    month:         Optional[int] = Query(None),
     resident_name: Optional[str] = Query(None),
     start_date:    Optional[str] = Query(None),
     end_date:      Optional[str] = Query(None),
@@ -198,6 +257,9 @@ def list_leave_records(
     db: Session = Depends(get_db),
 ):
     q = db.query(CareforLeaveRecord)
+    prefix = _month_prefix(year, month)
+    if prefix:
+        q = q.filter(CareforLeaveRecord.start_date.like(f"{prefix}%"))
     if resident_name:
         q = q.filter(CareforLeaveRecord.resident_name.contains(resident_name))
     if start_date:
@@ -421,3 +483,189 @@ def delete_work_schedules(
     q.delete(synchronize_session=False)
     db.commit()
     return ApiResponse(success=True, data=None)
+
+
+# ════════════════════════════════════════════════════════════════════════
+# 참고자료 개별 CRUD (월별 관리 · 수정 · 삭제)
+# 권한: ADMIN · 사회복지사 · 시설장
+# ════════════════════════════════════════════════════════════════════════
+
+# ── 수급자 ──────────────────────────────────────────────────────────────
+@router.post("/residents", status_code=201)
+def create_resident(body: ResidentBody, db: Session = Depends(get_db),
+                    _: User = Depends(_require_editor)):
+    if not (body.name or "").strip():
+        raise HTTPException(400, "성함을 입력해주세요.")
+    r = CareforResident(name=body.name.strip(), status=body.status or "active")
+    _apply_body(r, body)
+    db.add(r); db.commit(); db.refresh(r)
+    return ApiResponse(success=True, data={"id": r.id})
+
+
+@router.patch("/residents/{rid}")
+def update_resident(rid: str, body: ResidentBody, db: Session = Depends(get_db),
+                    _: User = Depends(_require_editor)):
+    r = db.query(CareforResident).filter(CareforResident.id == rid).first()
+    if not r:
+        raise HTTPException(404, "수급자를 찾을 수 없습니다.")
+    _apply_body(r, body)
+    db.commit(); db.refresh(r)
+    return ApiResponse(success=True, data={"id": r.id})
+
+
+@router.delete("/residents/{rid}")
+def delete_resident_one(rid: str, db: Session = Depends(get_db),
+                        _: User = Depends(_require_editor)):
+    r = db.query(CareforResident).filter(CareforResident.id == rid).first()
+    if not r:
+        raise HTTPException(404, "수급자를 찾을 수 없습니다.")
+    db.delete(r); db.commit()
+    return ApiResponse(success=True, message="삭제되었습니다.")
+
+
+# ── 외출·외박 ───────────────────────────────────────────────────────────
+@router.post("/leave-records", status_code=201)
+def create_leave(body: LeaveBody, db: Session = Depends(get_db),
+                 _: User = Depends(_require_editor)):
+    if not (body.resident_name or "").strip():
+        raise HTTPException(400, "수급자 성함을 입력해주세요.")
+    l = CareforLeaveRecord(resident_name=body.resident_name.strip())
+    _apply_body(l, body)
+    db.add(l); db.commit(); db.refresh(l)
+    return ApiResponse(success=True, data={"id": l.id})
+
+
+@router.patch("/leave-records/{lid}")
+def update_leave(lid: str, body: LeaveBody, db: Session = Depends(get_db),
+                 _: User = Depends(_require_editor)):
+    l = db.query(CareforLeaveRecord).filter(CareforLeaveRecord.id == lid).first()
+    if not l:
+        raise HTTPException(404, "외출·외박 기록을 찾을 수 없습니다.")
+    _apply_body(l, body)
+    db.commit(); db.refresh(l)
+    return ApiResponse(success=True, data={"id": l.id})
+
+
+@router.delete("/leave-records/{lid}")
+def delete_leave_one(lid: str, db: Session = Depends(get_db),
+                     _: User = Depends(_require_editor)):
+    l = db.query(CareforLeaveRecord).filter(CareforLeaveRecord.id == lid).first()
+    if not l:
+        raise HTTPException(404, "외출·외박 기록을 찾을 수 없습니다.")
+    db.delete(l); db.commit()
+    return ApiResponse(success=True, message="삭제되었습니다.")
+
+
+@router.delete("/leave-records/month/{year}/{month}")
+def delete_leaves_month(year: int, month: int, db: Session = Depends(get_db),
+                        _: User = Depends(_require_editor)):
+    prefix = f"{year}-{month:02d}-"
+    n = db.query(CareforLeaveRecord).filter(
+        CareforLeaveRecord.start_date.like(f"{prefix}%")
+    ).delete(synchronize_session=False)
+    db.commit()
+    return ApiResponse(success=True, message=f"{year}년 {month}월 {n}건 삭제")
+
+
+# ── 근무표 ──────────────────────────────────────────────────────────────
+@router.post("/work-schedules", status_code=201)
+def create_schedule(body: ScheduleBody, db: Session = Depends(get_db),
+                    _: User = Depends(_require_editor)):
+    if not (body.staff_name or "").strip() or not (body.work_date or "").strip():
+        raise HTTPException(400, "직원명과 근무일자를 입력해주세요.")
+    sc = StaffWorkSchedule(staff_name=body.staff_name.strip(), work_date=body.work_date.strip())
+    _apply_body(sc, body)
+    if body.is_working is None:
+        sc.is_working = (body.shift_code or "").strip() not in ("휴", "휴무", "OFF", "off")
+    db.add(sc); db.commit(); db.refresh(sc)
+    return ApiResponse(success=True, data={"id": sc.id})
+
+
+@router.patch("/work-schedules/{sid}")
+def update_schedule(sid: str, body: ScheduleBody, db: Session = Depends(get_db),
+                    _: User = Depends(_require_editor)):
+    sc = db.query(StaffWorkSchedule).filter(StaffWorkSchedule.id == sid).first()
+    if not sc:
+        raise HTTPException(404, "근무표를 찾을 수 없습니다.")
+    _apply_body(sc, body)
+    if body.shift_code is not None and body.is_working is None:
+        sc.is_working = (body.shift_code or "").strip() not in ("휴", "휴무", "OFF", "off")
+    db.commit(); db.refresh(sc)
+    return ApiResponse(success=True, data={"id": sc.id})
+
+
+@router.delete("/work-schedules/{sid}")
+def delete_schedule_one(sid: str, db: Session = Depends(get_db),
+                        _: User = Depends(_require_editor)):
+    sc = db.query(StaffWorkSchedule).filter(StaffWorkSchedule.id == sid).first()
+    if not sc:
+        raise HTTPException(404, "근무표를 찾을 수 없습니다.")
+    db.delete(sc); db.commit()
+    return ApiResponse(success=True, message="삭제되었습니다.")
+
+
+# ── 수급자 관리(LtcResident) → 검수용 수급자 정보 동기화 ─────────────────
+@router.post("/residents/sync-from-admin")
+def sync_residents_from_admin(
+    replace: bool = Query(True, description="기존 검수용 수급자 정보를 대체할지"),
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_editor),
+):
+    """
+    엑셀 업로드 없이 Admin '수급자 관리'(ltc_residents)의 데이터를 그대로 가져온다.
+    인정서 등급은 어르신 서류현황(resident_doc_status.grade)에서 보완한다.
+    """
+    from app.models.eval import LtcResident
+    try:
+        from app.models.resident_docs import ResidentDocStatus
+        doc_rows = db.query(ResidentDocStatus).all()
+        grade_by_rid = {d.resident_id: (d.grade or None) for d in doc_rows if d.resident_id}
+    except Exception:
+        grade_by_rid = {}
+
+    residents = db.query(LtcResident).all()
+    if not residents:
+        raise HTTPException(400, "수급자 관리에 등록된 수급자가 없습니다.")
+
+    if replace:
+        db.query(CareforResident).delete(synchronize_session=False)
+        db.flush()
+
+    existing = {r.name: r for r in db.query(CareforResident).all()} if not replace else {}
+
+    imported, updated = 0, 0
+    for r in residents:
+        grade = grade_by_rid.get(r.id)
+        # "3/시설" 형태 → "3등급" 로 정리
+        if grade:
+            first = str(grade).split('\n')[0].strip()
+            if '/' in first:
+                lv = first.split('/')[0].strip()
+                grade = f"{lv}등급" if lv.isdigit() else first
+            else:
+                grade = first
+
+        row = existing.get(r.name)
+        if row:
+            row.birth_date     = r.birth_date or row.birth_date
+            row.care_grade     = grade or row.care_grade
+            row.admission_date = r.admission_date or row.admission_date
+            row.discharge_date = r.discharge_date
+            row.status         = r.status or "active"
+            updated += 1
+        else:
+            db.add(CareforResident(
+                name=r.name,
+                birth_date=r.birth_date,
+                gender=r.gender,
+                care_grade=grade,
+                admission_date=r.admission_date,
+                discharge_date=r.discharge_date,
+                status=r.status or "active",
+            ))
+            imported += 1
+
+    db.commit()
+    return ApiResponse(success=True, data={
+        "imported": imported, "updated": updated, "total": imported + updated,
+    }, message=f"수급자 관리에서 {imported + updated}명을 가져왔습니다.")

@@ -33,7 +33,7 @@ export default function StaffingSimulatorPage() {
   const [ratio, setRatio] = useState(2.1)
   const [dailyHours, setDailyHours] = useState(8)
   const [maxHires, setMaxHires] = useState(3)
-  const [fullMonthDay, setFullMonthDay] = useState(4)
+  const [fullMonthDay, setFullMonthDay] = useState(3)
   const [ctx, setCtx] = useState<StaffingContext | null>(null)
   const [res, setRes] = useState<StaffingResult | null>(null)
   const [loading, setLoading] = useState(true)
@@ -160,7 +160,7 @@ export default function StaffingSimulatorPage() {
                 </div>
                 <div className="text-xs text-gray-500">
                   신규 1인 이론상 최대 <b>{res.single_worker_theoretical_max_hours}h</b> · 현실적 권장 <b>{res.single_worker_recommended_max_hours}h</b>
-                  <Tip text={'달력상 근무가능일 × 1일 최대시간이 이론상 최대,\n휴무·근로시간 등을 반영한 값이 현실적 권장입니다.\n(근무표 미도입 시 풀근무 기준 예상값)'} />
+                  <Tip text={'이론상 최대 = 달력상 근무가능일 × 1일 최대시간 (참고 상한)\n현실적 확보 = 월 기준시간 ÷ 월 총일수 × 재직일수\n(월초 1~3일 입사는 만근 처리)'} />
                 </div>
               </div>
               {res.candidate_allocation && res.candidate_detail.length > 0 && (
@@ -224,8 +224,8 @@ export default function StaffingSimulatorPage() {
               <input type="number" value={dailyHours} onChange={e => setDailyHours(+e.target.value || 8)} className="w-full mt-1 px-2.5 py-2 text-sm border border-gray-200 rounded-lg" /></label>
             <label className="text-xs text-gray-600">최대 즉시채용
               <input type="number" value={maxHires} onChange={e => setMaxHires(+e.target.value || 3)} className="w-full mt-1 px-2.5 py-2 text-sm border border-gray-200 rounded-lg" /></label>
-            <label className="text-xs text-gray-600 col-span-3">월초 만근 인정일 <span className="text-gray-400">(이 날짜 이하 입사자는 만근 처리 — 기본 4일)</span>
-              <input type="number" min={1} max={10} value={fullMonthDay} onChange={e => setFullMonthDay(+e.target.value || 4)} className="w-full mt-1 px-2.5 py-2 text-sm border border-gray-200 rounded-lg" /></label>
+            <label className="text-xs text-gray-600 col-span-3">월초 만근 인정일 <span className="text-gray-400">(이 날짜 이하 입사자는 만근 — 기본 3일)</span>
+              <input type="number" min={1} max={10} value={fullMonthDay} onChange={e => setFullMonthDay(+e.target.value || 3)} className="w-full mt-1 px-2.5 py-2 text-sm border border-gray-200 rounded-lg" /></label>
           </div>
         )}
       </div>
@@ -302,7 +302,11 @@ export default function StaffingSimulatorPage() {
                 <p className="text-xs text-gray-400 mt-0.5">현재 요양보호사 {res.current_worker_count}명 × {res.config.placement_ratio} = 최대 {res.max_allowed_avg_resident_count}명까지 관리 가능</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-3">
-                <p className="font-semibold text-gray-700 mb-1">인식된 요양보호사 {res.worker_hours_detail.length}명 · 직원별 인정시간 (풀근무·월중입사 비율 예상)</p>
+                <p className="font-semibold text-gray-700 mb-1">인식된 요양보호사 {res.worker_hours_detail.length}명 · 직원별 인정시간</p>
+                <p className="text-[11px] text-gray-400 mb-1.5 bg-white rounded px-2 py-1 border border-gray-100">
+                  산식: <b>월 기준시간 {res.monthly_standard_hours}h ÷ 월 {res.resident_days.days_in_month}일 × 재직일수</b>
+                  &nbsp;· 월초 <b>1~{res.config.full_month_hire_day}일</b> 입사자는 <b>만근</b> · 휴직일수는 재직일수에서 차감
+                </p>
                 {res.worker_hours_detail.length === 0 ? <p className="text-gray-400 text-xs">등록된 요양보호사 없음</p> : res.worker_hours_detail.map((w, i) => (
                   <p key={i} className="text-xs">· {w.name || `직원${i + 1}`} {w.hours}시간 {w.meets_standard ? <span className="text-green-600">충족</span> : <span className="text-amber-600">미달</span>}{w.on_leave ? <span className="text-amber-600 font-semibold"> · 휴직 {w.leave_days}일 제외</span> : null}{w.is_expected_hire ? ' (예정)' : ''}</p>
                 ))}
