@@ -32,8 +32,9 @@ async def get_stats(db: Session = Depends(get_db), _: str = Depends(get_current_
         LtcResident.status == 'active'
     ).scalar() or 0
 
-    # 재직 중인 직원
-    total_staff = db.query(func.count(LtcStaffMember.id)).filter(
+    # 직원 — 전체 / 재직 구분 (기존 total_staff 가 active 만 세면서 "전체"로 표기되던 문제 수정)
+    total_staff = db.query(func.count(LtcStaffMember.id)).scalar() or 0
+    active_staff = db.query(func.count(LtcStaffMember.id)).filter(
         LtcStaffMember.status == 'active'
     ).scalar() or 0
 
@@ -61,6 +62,7 @@ async def get_stats(db: Session = Depends(get_db), _: str = Depends(get_current_
             "totalResidents":    total_residents,
             "activeResidents":   active_residents,
             "totalStaff":        total_staff,
+            "activeStaff":       active_staff,
             "pendingContacts":   pending_contacts,
             "todayAdmissions":   today_admissions,
             "monthlyAdmissions": monthly_admissions,

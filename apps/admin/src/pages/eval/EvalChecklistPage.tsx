@@ -63,8 +63,6 @@ function checkDone(item: ChecklistItem, _todayStr: string): boolean {
 export default function EvalChecklistPage() {
   const {
     checklists,
-    residents,
-    staffList,
     loaded,
     loadAll,
     toggleComplete,
@@ -84,7 +82,6 @@ export default function EvalChecklistPage() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [quickOpen, setQuickOpen] = useState(false)
   const [activeFreq, setActiveFreq] = useState<string>('all')
-  const [activePerson, setActivePerson] = useState('all')
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'done' | 'todo'>('all')
   const [toggling, setToggling] = useState<string | null>(null)
@@ -164,28 +161,11 @@ export default function EvalChecklistPage() {
     return { item, done, daysLeft, dueStr, inProgress, startedBy }
   }, [todayStr])
 
-  const activeResidents = residents.filter(r => r.status === 'active')
-  const activeStaff = staffList.filter(s => s.status === 'active')
-
-  const personCounts = useMemo(() => {
-    const map: Record<string, { total: number; done: number }> = {}
-
-    checklists
-      .filter(c => c.active && c.personId)
-      .forEach(c => {
-        const pid = c.personId!
-        if (!map[pid]) map[pid] = { total: 0, done: 0 }
-        map[pid].total += 1
-        if (isDone(c)) map[pid].done += 1
-      })
-
-    return map
-  }, [checklists, isDone])
 
 
   const metrics = useMemo(() => {
     let overdue = 0, weekTodo = 0, done = 0, total = 0, todayDue = 0
-    checklists.filter(c => c.active).forEach(c => {
+    checklists.filter(c => c.active && !c.personId).forEach(c => {
       total++
       const d = deadlineOf(c)
       if (d.done) { done++; return }
@@ -199,14 +179,11 @@ export default function EvalChecklistPage() {
   const filtered = useMemo(() => {
     return checklists.filter(c => {
       if (!c.active) return false
+      // 입소·퇴소·입사 자동 생성(인물 연결) 체크리스트는 여기서 제외 —
+      // 수급자 관리 / 직원 관리 카드에서 확인한다.
+      if (c.personId) return false
 
       if (activeFreq !== 'all' && c.frequency !== activeFreq) return false
-
-      if (activePerson === 'facility') {
-        if (c.personId) return false
-      } else if (activePerson !== 'all') {
-        if (c.personId !== activePerson) return false
-      }
 
       const done = isDone(c)
 
@@ -229,7 +206,7 @@ export default function EvalChecklistPage() {
 
       return true
     })
-  }, [checklists, activeFreq, activePerson, filterStatus, search, isDone])
+  }, [checklists, activeFreq, filterStatus, search, isDone])
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
@@ -496,19 +473,6 @@ export default function EvalChecklistPage() {
           </optgroup>
         </select>
 
-        {isAdmin && (
-          <select value={activePerson} onChange={e => setActivePerson(e.target.value)}
-            className="h-9 border border-gray-200 rounded-xl text-sm px-3 bg-white focus:outline-none focus:ring-2 focus:ring-primary-orange/40">
-            <option value="all">대상: 전체</option>
-            <option value="facility">시설 공통</option>
-            <optgroup label={`수급자 ${activeResidents.length}명`}>
-              {activeResidents.map(r => { const c = personCounts[r.id]; return <option key={r.id} value={r.id}>{r.name}{c ? ` (${c.done}/${c.total})` : ''}</option> })}
-            </optgroup>
-            <optgroup label={`직원 ${activeStaff.length}명`}>
-              {activeStaff.map(st => { const c = personCounts[st.id]; return <option key={st.id} value={st.id}>{st.name}{c ? ` (${c.done}/${c.total})` : ''}</option> })}
-            </optgroup>
-          </select>
-        )}
 
         <div className="flex border border-gray-200 rounded-xl overflow-hidden h-9">
           {([['todo', '미완료'], ['done', '완료'], ['all', '전체']] as ['todo' | 'done' | 'all', string][]).map(([v, label]) => (

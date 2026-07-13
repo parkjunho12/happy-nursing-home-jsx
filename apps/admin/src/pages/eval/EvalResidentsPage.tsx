@@ -8,7 +8,7 @@ import { autoDocEvents } from '@/utils/docEvents'
 import { useLtcStore } from '@/store/ltc'
 import type { LtcResident } from '@/store/ltc'
 import type { ChecklistItem } from '@/utils/period'
-import { calcAge, isItemDone } from '@/utils/period'
+import { calcAge, isItemDone, daysFromToday } from '@/utils/period'
 import ChecklistDetailModal from '@/components/eval/ChecklistDetailModal'
 import { adminAlbumAPI } from '@/api/albumClient'
 
@@ -199,9 +199,25 @@ function ResidentCard({ r, expanded, onExpand, onEdit, onDischarge, onDelete, ch
                 <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${isItemDone(cl)?'bg-green-500 border-green-500':'border-gray-300'}`}>
                   {isItemDone(cl) && <div className="w-1.5 h-1.5 bg-white rounded-full"/>}
                 </div>
-                <p className={`text-xs font-semibold flex-1 truncate ${isItemDone(cl)?'line-through text-gray-400':'text-gray-800'}`}>
-                  {cl.title.replace(`[${r.name}] `,'')}
-                </p>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-xs font-semibold truncate ${isItemDone(cl)?'line-through text-gray-400':'text-gray-800'}`}>
+                    {cl.title.replace(`[${r.name}] `,'')}
+                  </p>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${cl.frequency==='on_discharge'?'bg-gray-200 text-gray-600':'bg-teal-100 text-teal-700'}`}>
+                      {cl.frequency==='on_discharge'?'퇴소':'입소'}
+                    </span>
+                    {cl.dueDate && (() => {
+                      const dd = daysFromToday(cl.dueDate)
+                      const done = isItemDone(cl)
+                      return (
+                        <span className={`text-[10px] font-semibold ${done?'text-gray-300':dd<0?'text-red-500':dd<=7?'text-amber-600':'text-gray-400'}`}>
+                          기한 {cl.dueDate.slice(2).replace(/-/g,'.')}{!done && (dd<0?` (${-dd}일 지남)`:dd===0?' (오늘)':` (D-${dd})`)}
+                        </span>
+                      )
+                    })()}
+                  </div>
+                </div>
                 {cl.riskLevel==='high' && !isItemDone(cl) && <AlertTriangle size={11} className="text-red-400 flex-shrink-0"/>}
               </div>
             ))}

@@ -255,7 +255,11 @@ export default function DashboardPage() {
     let total = 0, days = 0
     for (let d = new Date(y, m, 1); d <= now; d.setDate(d.getDate() + 1)) {
       const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-      const cnt = residents.filter(r => r.admissionDate && r.admissionDate <= iso && (!r.dischargeDate || r.dischargeDate >= iso)).length
+      const cnt = residents.filter(r => {
+        if (!r.admissionDate || r.admissionDate > iso) return false
+        if (r.dischargeDate) return r.dischargeDate >= iso
+        return r.status !== 'discharged'   // 퇴소인데 퇴소일 미기재 → 재원으로 세지 않음
+      }).length
       total += cnt; days++
     }
     const avg = days ? total / days : activeResidents
@@ -268,9 +272,13 @@ export default function DashboardPage() {
     const shortfall = Math.max(0, requiredMin - caregivers)
     return { avg, caregivers, requiredExact, requiredMin, shortfall }
   }, [residents, staffList, activeResidents])
-  const totalActive     = checklists.filter(c => c.active).length
+  // 주기별 완료 현황의 분모 → 반복(RECURRING) 항목만. 입소·퇴소·입사·일회성 티켓 제외
+  const totalActive     = checklists.filter(c => c.active && (RECURRING as readonly string[]).includes(c.frequency)).length
   const totalDone       = occurrences.length > 0
-    ? occurrences.filter(o => o.status === 'completed' && o.scheduledDate <= todayStr && o.dueDate >= todayStr).length
+    ? occurrences.filter(o =>
+        o.status === 'completed' &&
+        !['on_admission', 'on_discharge', 'on_hire'].includes(o.frequency) &&
+        o.scheduledDate <= todayStr && o.dueDate >= todayStr).length
     : 0
 
   const [toggling, setToggling] = useState<string | null>(null)

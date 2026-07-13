@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 import { LayoutDashboard, LogOut, BookOpen, Compass } from 'lucide-react'
 import { useAuthStore } from '@/store/auth'
 import { useLtcStore } from '@/store/ltc'
+import { todayKST, isItemDone } from '@/utils/period'
 import { getNavConfig, type NavItem as NavItemT } from './navConfig'
 
 interface SidebarProps {
@@ -20,11 +21,23 @@ export default function Sidebar({ mobile = false, onNavigate }: SidebarProps) {
   const residents = useLtcStore(s => s.residents)
   const staffList = useLtcStore(s => s.staffList)
   const checklists = useLtcStore(s => s.checklists)
+  const occurrences = useLtcStore(s => s.occurrences)
+
+  // 오늘 해야 하는 '일일' 업무 중 미완료 — occurrence(주기) 기준. 없으면 주기 인식 폴백.
+  const todayStr = todayKST()
+  const todayTodo = occurrences.length > 0
+    ? new Set(
+        occurrences
+          .filter(o =>
+            (o.status === 'pending' || o.status === 'overdue') &&
+            o.frequency === 'daily' &&
+            o.scheduledDate <= todayStr && o.dueDate >= todayStr)
+          .map(o => o.checklistItemId)
+      ).size
+    : checklists.filter(c => c.active && c.frequency === 'daily' && !isItemDone(c)).length
 
   const counts = {
-    todayTodo: checklists.filter(
-      c => c.active && !c.completed && c.frequency === 'daily'
-    ).length,
+    todayTodo,
     activeResidents: residents.filter(r => r.status === 'active').length,
     activeStaff: staffList.filter(s => s.status === 'active').length,
   }
