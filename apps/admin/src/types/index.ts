@@ -113,6 +113,7 @@ export interface DashboardStats {
   totalResidents: number
   activeResidents: number
   totalStaff: number
+  activeStaff?: number
   pendingContacts: number
   todayAdmissions: number
   monthlyAdmissions: number

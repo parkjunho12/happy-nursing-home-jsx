@@ -2,6 +2,16 @@ import { generateId } from '../utils/period'
 
 const today = () => new Date().toISOString().split('T')[0]
 
+// 생성일로부터 N개월 뒤 (입소·퇴소 체크리스트 기한)
+const plusMonths = (iso: string, n: number) => {
+  const [y, m, d] = iso.split('-').map(Number)
+  const dt = new Date(y, (m - 1) + n, 1)
+  const last = new Date(dt.getFullYear(), dt.getMonth() + 1, 0).getDate()
+  dt.setDate(Math.min(d, last))
+  const p = (x: number) => String(x).padStart(2, '0')
+  return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}`
+}
+
 // 입소 시 자동 생성 템플릿 (12건)
 const ADMISSION_TEMPLATES = [
   { templateId:'tpl_adm_01', title:'폭언·폭행·성희롱 예방 안내 문자 발송', description:'입소 시 보호자에게 폭언·폭행·성희롱 예방 및 상호존중 내용 문자 안내', evidenceRequired:'문자 발송 이력', storageLocation:'입소파일 > 입소 안내', howTo:'입소 당일 보호자 연락처로 안내 문자 발송. 발송 이력 저장', evalNote:'미발송 시 수급자의 권리(3점) 감점', riskLevel:'medium', relatedIndicatorId:'si15', relatedCategoryId:'cat3', relatedDomainId:'dom2' },
@@ -59,14 +69,18 @@ function makeItem(tpl: any, personId: string, personName: string, personType: 'r
 }
 
 export function generateResidentAdmissionChecklists(resident: { id: string; name: string; admissionDate: string }) {
+  // 기한: 생성일(오늘)로부터 1개월
+  const due = plusMonths(today(), 1)
   return ADMISSION_TEMPLATES.map(tpl =>
-    makeItem(tpl, resident.id, resident.name, 'resident', resident.admissionDate, 'on_admission')
+    makeItem(tpl, resident.id, resident.name, 'resident', due, 'on_admission')
   )
 }
 
-export function generateResidentDischargeChecklists(resident: { id: string; name: string }, dischargeDate: string) {
+export function generateResidentDischargeChecklists(resident: { id: string; name: string }, _dischargeDate: string) {
+  // 기한: 생성일(오늘)로부터 1개월
+  const due = plusMonths(today(), 1)
   return DISCHARGE_TEMPLATES.map(tpl =>
-    makeItem(tpl, resident.id, resident.name, 'resident', dischargeDate, 'on_discharge')
+    makeItem(tpl, resident.id, resident.name, 'resident', due, 'on_discharge')
   )
 }
 
