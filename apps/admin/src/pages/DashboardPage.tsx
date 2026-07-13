@@ -260,7 +260,9 @@ export default function DashboardPage() {
     }
     const avg = days ? total / days : activeResidents
     const isCg = (p?: string) => { const q = (p ?? '').replace(/\s/g, ''); return q === '요양보호사' || q === '요양팀장' || q === '요양보호원' || q.includes('요양보호') }
-    const caregivers = staffList.filter(s => s.status === 'active' && isCg(s.position)).length
+    const tISO = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+    const onLeaveNow = (st: any) => (st.leaves ?? []).some((l: any) => l.start && l.start <= tISO && (!l.end || l.end >= tISO))
+    const caregivers = staffList.filter(s => s.status === 'active' && isCg(s.position) && !onLeaveNow(s)).length
     const requiredExact = avg / CAREGIVER_RATIO
     const requiredMin = Math.ceil(requiredExact - 1e-9)
     const shortfall = Math.max(0, requiredMin - caregivers)

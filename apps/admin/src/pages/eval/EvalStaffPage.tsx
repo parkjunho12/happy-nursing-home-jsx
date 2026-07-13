@@ -1,7 +1,7 @@
 import DateField from '@/components/ui/DateField'
 import StickyToolbar from '../../components/common/StickyToolbar'
 import { useState, useMemo, useEffect } from 'react'
-import { UserPlus, UserMinus, Edit2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw } from 'lucide-react'
+import { UserPlus, UserMinus, Edit2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw, CalendarOff, X } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
 import type { LtcStaff } from '@/store/ltc'
 import type { ChecklistItem } from '@/utils/period'
@@ -9,6 +9,10 @@ import { calcAge, isItemDone } from '@/utils/period'
 import ChecklistDetailModal from '@/components/eval/ChecklistDetailModal'
 
 type Tab = 'active' | 'resigned' | 'all'
+
+const todayISO = () => new Date().toISOString().split('T')[0]
+export const isOnLeave = (s: LtcStaff, on = todayISO()) =>
+  (s.leaves ?? []).some(l => l.start && l.start <= on && (!l.end || l.end >= on))
 
 export default function EvalStaffPage() {
   const { staffList, checklists, loaded, loadAll } = useLtcStore()
@@ -20,6 +24,7 @@ export default function EvalStaffPage() {
   const [selectedCl, setSelectedCl] = useState<ChecklistItem | null>(null)
   const [search, setSearch] = useState('')
   const [posFilter, setPosFilter] = useState('')
+  const [leaveFor, setLeaveFor] = useState<string | null>(null)
 
   useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
 
@@ -112,6 +117,7 @@ export default function EvalStaffPage() {
               onExpand={() => setExpandedId(expandedId===s.id ? null : s.id)}
               onEdit={() => setEditingId(s.id)}
               onResign={() => setShowResign(s.id)}
+              onLeave={() => setLeaveFor(s.id)}
               checklists={staffCls[s.id]??[]}
               onClClick={setSelectedCl} />
           ))}
@@ -120,14 +126,15 @@ export default function EvalStaffPage() {
 
       {showAdd     && <StaffForm onClose={() => setShowAdd(false)} />}
       {editingId   && <StaffForm existing={staffList.find(s=>s.id===editingId)} onClose={() => setEditingId(null)} />}
+      {leaveFor    && <LeaveModal staffId={leaveFor} onClose={() => setLeaveFor(null)} />}
       {showResign  && <ResignModal staffId={showResign} onClose={() => setShowResign(null)} />}
       {selectedCl  && <ChecklistDetailModal item={selectedCl} onClose={() => setSelectedCl(null)} />}
     </div>
   )
 }
 
-function StaffCard({ s, expanded, onExpand, onEdit, onResign, checklists, onClClick }: {
-  s: LtcStaff; expanded:boolean; onExpand:()=>void; onEdit:()=>void; onResign:()=>void;
+function StaffCard({ s, expanded, onExpand, onEdit, onResign, onLeave, checklists, onClClick }: {
+  s: LtcStaff; expanded:boolean; onExpand:()=>void; onEdit:()=>void; onResign:()=>void; onLeave:()=>void;
   checklists: ChecklistItem[]; onClClick:(c:ChecklistItem)=>void;
 }) {
   const age = calcAge(s.birthDate)
@@ -150,6 +157,7 @@ function StaffCard({ s, expanded, onExpand, onEdit, onResign, checklists, onClCl
             <span className="font-bold text-gray-900">{s.name}</span>
             <span className="text-xs text-gray-500">{s.gender==='female'?'여':'남'} · {age}세</span>
             <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${s.status==='active'?'bg-green-100 text-green-700':'bg-gray-100 text-gray-500'}`}>{s.status==='active'?'재직 중':'퇴사'}</span>
+            {isOnLeave(s) && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">휴직 중</span>}
             {s.memo && <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{s.memo}</span>}
           </div>
           <p className="text-xs text-gray-400 mt-0.5">{s.birthDate} · 입사 {s.hireDate} · 근속 {workYears}{s.resignDate&&` · 퇴사 ${s.resignDate}`}</p>
@@ -166,6 +174,7 @@ function StaffCard({ s, expanded, onExpand, onEdit, onResign, checklists, onClCl
           {s.status==='active' && (
             <>
               <button onClick={e=>{e.stopPropagation();onEdit()}} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"><Edit2 size={14}/></button>
+              <button onClick={e=>{e.stopPropagation();onLeave()}} className="flex items-center gap-1 text-xs font-medium text-amber-600 border border-amber-200 px-2.5 py-1.5 rounded-xl hover:bg-amber-50"><CalendarOff size={12}/>휴직</button>
               <button onClick={e=>{e.stopPropagation();onResign()}} className="flex items-center gap-1 text-xs font-medium text-orange-500 border border-orange-200 px-2.5 py-1.5 rounded-xl hover:bg-orange-50"><UserMinus size={12}/>퇴사</button>
             </>
           )}
@@ -299,6 +308,62 @@ function ResignModal({ staffId, onClose }: { staffId:string; onClose:()=>void })
             <button type="button" onClick={onClose} className="flex-1 border border-gray-200 text-gray-700 rounded-xl py-2.5 text-sm">취소</button>
           </div>
         </form>
+      </div>
+    </div>
+  )
+}
+
+// ── 휴직 관리 (기간별) ──────────────────────────────────────
+function LeaveModal({ staffId, onClose }: { staffId: string; onClose: () => void }) {
+  const { staffList, updateStaff } = useLtcStore()
+  const s = staffList.find(x => x.id === staffId)
+  const [rows, setRows] = useState<{ start?: string | null; end?: string | null; reason?: string | null }[]>(
+    (s?.leaves ?? []).map(l => ({ ...l }))
+  )
+  const [saving, setSaving] = useState(false)
+  const inp = 'px-2.5 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-200'
+
+  if (!s) return null
+  const patch = (i: number, p: any) => setRows(a => a.map((x, xi) => xi === i ? { ...x, ...p } : x))
+  const add = () => setRows(a => [...a, { start: new Date().toISOString().split('T')[0], end: '', reason: '' }])
+  const rm = (i: number) => setRows(a => a.filter((_, xi) => xi !== i))
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      const leaves = rows.filter(r => r.start).map(r => ({ start: r.start, end: r.end || null, reason: r.reason || null }))
+      await updateStaff(staffId, { leaves } as any)
+      onClose()
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b sticky top-0 bg-white">
+          <h3 className="font-bold text-gray-900">휴직 관리 — {s.name}</h3>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center"><X className="w-5 h-5 text-gray-400" /></button>
+        </div>
+        <div className="px-5 py-4 space-y-3">
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700">
+            휴직 기간은 <b>인력배치 시뮬레이터의 근무시간에서 자동 제외</b>됩니다. 복직일이 미정이면 종료일을 비워두세요(해당 월 말까지 휴직으로 계산).
+          </div>
+          {rows.length === 0 && <p className="text-sm text-gray-400 text-center py-4">등록된 휴직 기간이 없습니다.</p>}
+          {rows.map((r, i) => (
+            <div key={i} className="flex flex-wrap items-center gap-1.5 border border-gray-100 rounded-xl p-2">
+              <DateField value={r.start} onChange={v => patch(i, { start: v })} className={inp} wrapperClassName="flex-1 min-w-[8rem]" placeholder="휴직 시작일" clearable={false} />
+              <span className="text-gray-400">~</span>
+              <DateField value={r.end} onChange={v => patch(i, { end: v })} className={inp} wrapperClassName="flex-1 min-w-[8rem]" placeholder="복직일(미정 가능)" />
+              <input value={r.reason ?? ''} onChange={e => patch(i, { reason: e.target.value })} placeholder="사유(선택)" className={`${inp} flex-1 min-w-[7rem]`} />
+              <button type="button" onClick={() => rm(i)} className="text-gray-300 hover:text-red-500 shrink-0"><X className="w-4 h-4" /></button>
+            </div>
+          ))}
+          <button type="button" onClick={add} className="text-xs font-semibold text-amber-600 hover:underline">+ 휴직 기간 추가</button>
+        </div>
+        <div className="flex gap-2 px-5 py-4 border-t">
+          <button onClick={save} disabled={saving} className="flex-1 bg-amber-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-amber-600 disabled:opacity-50">{saving ? '저장 중...' : '저장'}</button>
+          <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-700 rounded-xl py-2.5 text-sm">취소</button>
+        </div>
       </div>
     </div>
   )

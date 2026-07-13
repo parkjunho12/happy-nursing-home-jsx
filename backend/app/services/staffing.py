@@ -22,6 +22,7 @@ DEFAULT_CONFIG = {
     "daily_max_recognized_hours": 8, # 1일 최대 인정시간
     "max_immediate_hires": 3,        # 최대 즉시채용 가능인원
     "safety_factor": 1.0,            # 현실적 권장시간 = 이론상 × safety_factor (근무표 없으므로 기본 1.0)
+    "full_month_hire_day": 4,        # 이 날짜 이하 월초 입사자는 만근 처리 (예: 2~4일 입사 → 만근)
     "scan_days": 60,                 # 안전 입소일 탐색 범위(±)
 }
 
@@ -216,9 +217,32 @@ def calculate_required_hours(count: int, standard_hours: float) -> float:
 
 
 # ── 직원별 확보(인정) 시간 ──────────────────────────────────
+def leave_dates_in_month(worker: dict, year: int, month: int) -> set:
+    """휴직 기간(leaves: [{start,end}])이 해당 월과 겹치는 날짜 집합."""
+    start, end = month_bounds(year, month)
+    out = set()
+    for lv in (worker.get("leaves") or []):
+        if not isinstance(lv, dict):
+            continue
+        ls = _d(lv.get("start"))
+        le = _d(lv.get("end"))
+        if not ls and not le:
+            continue
+        a = max(ls, start) if ls else start
+        b = min(le, end) if le else end   # 종료일 미정 = 월말까지 휴직
+        d = a
+        while d <= b:
+            out.add(d.isoformat())
+            d += timedelta(days=1)
+    return out
+
+
 def worker_expected_hours(worker: dict, year: int, month: int, holidays: set,
-                          daily_hours: float, standard_hours: float) -> float:
-    """실제+예정 우선. 없으면 재직기간(풀근무)·월중입사 비율로 산정."""
+                          daily_hours: float, standard_hours: float,
+                          full_month_hire_day: int = 4) -> float:
+    """실제+예정 우선. 없으면 재직기간(풀근무)·월중입사 비율로 산정.
+    - 월초(기본 4일 이내) 입사자는 만근(월 기준시간) 처리
+    - 휴직 기간은 근무일에서 제외"""
     actual = worker.get("actual_work_hours")
     expected = worker.get("expected_work_hours")
     if actual is not None or expected is not None:
@@ -229,22 +253,30 @@ def worker_expected_hours(worker: dict, year: int, month: int, holidays: set,
     start, end = month_bounds(year, month)
     hire = _d(worker.get("hire_date"))
     resign = _d(worker.get("resign_date") or worker.get("resignation_date"))
-    s = max(hire, start) if hire else start
+    # 월초 입사자(1~full_month_hire_day일)는 만근으로 간주 → 월초부터 근무한 것으로 계산
+    eff_hire = hire
+    if hire and hire.year == year and hire.month == month and hire.day <= int(full_month_hire_day):
+        eff_hire = start
+    s = max(eff_hire, start) if eff_hire else start
     e = min(resign, end) if resign else end
-    if hire and hire <= start and (not resign or resign >= end):
-        return standard_hours  # 풀근무
-    wd = workdays_in_range(s, e, holidays)
+    leaves = leave_dates_in_month(worker, year, month)
+    excluded = set(holidays) | leaves
+    if eff_hire and eff_hire <= start and (not resign or resign >= end) and not leaves:
+        return standard_hours  # 만근
+    wd = workdays_in_range(s, e, excluded)
     return wd * daily_hours
 
 
 def calculate_expected_recognized_hours(workers: list, year: int, month: int, holidays: set,
-                                        daily_hours: float, standard_hours: float) -> dict:
+                                        daily_hours: float, standard_hours: float,
+                                        full_month_hire_day: int = 4) -> dict:
     total = 0.0
     per = []
     for w in workers:
-        h = worker_expected_hours(w, year, month, holidays, daily_hours, standard_hours)
+        h = worker_expected_hours(w, year, month, holidays, daily_hours, standard_hours, full_month_hire_day)
         total += h
         meets = h + EPS >= standard_hours
+        lv = leave_dates_in_month(w, year, month)
         per.append({
             "name": w.get("employee_name") or w.get("name"),
             "hire_date": _iso(_d(w.get("hire_date"))),
@@ -253,6 +285,8 @@ def calculate_expected_recognized_hours(workers: list, year: int, month: int, ho
             "expected_work_hours": w.get("expected_work_hours"),
             "hours": round(h, 1),
             "meets_standard": meets,
+            "leave_days": len(lv),
+            "on_leave": len(lv) > 0,
         })
     return {"total": total, "per": per}
 
@@ -392,7 +426,8 @@ def _shortage_for_admission(base_residents: list, planned: list, admission_date:
     avg = calculate_average_resident_count(residents, y, m)
     req = calculate_required_worker_count(avg, config["placement_ratio"])
     req_total = calculate_required_hours(req, std)
-    secured = calculate_expected_recognized_hours(workers, y, m, holset, config["daily_hours"], std)["total"]
+    secured = calculate_expected_recognized_hours(workers, y, m, holset, config["daily_hours"], std,
+                                                  config.get("full_month_hire_day", 4))["total"]
     secured += sum(float(h) for h in candidate_hours if h)
     shortage = calculate_shortage_hours(req_total, secured)
     return {"year": y, "month": m, "avg": avg, "required": req, "shortage": shortage, "standard": std}
@@ -501,9 +536,10 @@ def simulate(payload: dict, holiday_table: Optional[list] = None) -> dict:
     worker_increased = after_req > before_req
 
     # 확보 예상시간 (기존 직원 풀근무/월중입사 비율)
-    sec = calculate_expected_recognized_hours(workers, year, month, holset, cfg["daily_hours"], std)
+    sec = calculate_expected_recognized_hours(workers, year, month, holset, cfg["daily_hours"], std,
+                                              cfg.get("full_month_hire_day", 4))
     secured = sec["total"]
-    current_worker_count = len([w for w in workers if not w.get("is_expected_hire")])
+    current_worker_count = len([w for w in sec["per"] if not w["is_expected_hire"] and w["hours"] > 0])
     max_allowed_avg = current_worker_count * cfg["placement_ratio"]
 
     req_total_before = calculate_required_hours(before_req, std)

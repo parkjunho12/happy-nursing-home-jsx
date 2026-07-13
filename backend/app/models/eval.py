@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Boolean, Text, DateTime, ForeignKey
+from sqlalchemy import Column, String, Integer, Boolean, Text, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -276,6 +276,7 @@ class LtcStaffMember(Base):
     license_date = Column(String(20), nullable=True)     # 자격증 발급일
     license_no = Column(String(50), nullable=True)       # 자격증 번호
     bank_account = Column(String(50), nullable=True)     # 통장번호
+    leaves = Column(JSON, nullable=True)                 # 휴직 기간 [{start,end,reason}]
     resign_date = Column(String(20), nullable=True)
     status = Column(String(20), default="active", index=True)
     memo = Column(Text, default="")

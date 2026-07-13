@@ -265,6 +265,7 @@ class LtcStaffCreate(BaseModel):
     license_date: Optional[str] = None
     license_no:   Optional[str] = None
     bank_account: Optional[str] = None
+    leaves:       Optional[List[dict]] = None
     memo:         str = ""
 
 
@@ -281,6 +282,7 @@ class LtcStaffUpdate(BaseModel):
     license_date: Optional[str] = None
     license_no:   Optional[str] = None
     bank_account: Optional[str] = None
+    leaves:       Optional[List[dict]] = None
     memo:         Optional[str] = None
 
 
@@ -299,6 +301,7 @@ class LtcStaffOut(BaseModel):
     license_date: Optional[str] = None
     license_no:   Optional[str] = None
     bank_account: Optional[str] = None
+    leaves:       Optional[List[dict]] = None
     status:       str
     memo:         str
     created_at:   datetime
