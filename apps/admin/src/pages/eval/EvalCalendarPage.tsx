@@ -28,7 +28,20 @@ const PERSON_EVENT_META: Record<PersonEventType, { label:string; icon:React.Elem
 type ViewTab = 'checklist' | 'people' | 'all'
 
 export default function EvalCalendarPage() {
-  const { checklists, occurrences, residents, staffList, loaded, loadAll, completeOccurrence, uncompleteOccurrence, toggleComplete } = useLtcStore()
+  const {
+    checklists: allChecklists, occurrences: allOccurrences,
+    residents, staffList, loaded, loadAll, completeOccurrence, uncompleteOccurrence, toggleComplete,
+  } = useLtcStore()
+
+  // 입소·퇴소·입사 자동 생성(인물 연결) 체크리스트는 평가 캘린더에서 제외한다.
+  // → 수급자 관리 / 직원 관리에서 해당 인물을 클릭해 확인한다.
+  const checklists = useMemo(() => allChecklists.filter(c => !c.personId), [allChecklists])
+  const personItemIds = useMemo(
+    () => new Set(allChecklists.filter(c => c.personId).map(c => c.id)),
+    [allChecklists])
+  const occurrences = useMemo(
+    () => allOccurrences.filter(o => !personItemIds.has(o.checklistItemId)),
+    [allOccurrences, personItemIds])
   const [currentDate, setCurrentDate] = useState(todayDateKST())
   const [selectedItem, setSelectedItem] = useState<ChecklistItem | null>(null)
   const [selectedDay, setSelectedDay] = useState<Date | null>(todayDateKST())
