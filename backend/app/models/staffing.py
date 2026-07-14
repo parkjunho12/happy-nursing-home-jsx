@@ -41,3 +41,20 @@ class StaffMonthlyHours(Base):
 
     created_at = Column(DateTime(timezone=True), default=now_kst)
     updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)
+
+
+class InternalNotice(Base):
+    """내부 공지사항 (직원용) — 대시보드 상단 노출. 보호자용 시설소식과 별개."""
+    __tablename__ = "internal_notices"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    title = Column(String(200), nullable=False)
+    content = Column(Text, nullable=True)
+    level = Column(String(20), default="info")     # info | important | urgent
+    pinned = Column(Boolean, default=False, index=True)
+    active = Column(Boolean, default=True, index=True)
+    author_id = Column(String, nullable=True)
+    author_name = Column(String(100), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), default=now_kst)
+    updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)

@@ -56,6 +56,10 @@ export default function DocEventsEditor({ type, value, onChange, addLabel = '+ �
             </select>
             <DateField value={it.date} onChange={v => patch(i, { date: v })} className={inp} wrapperClassName="flex-1 min-w-[8rem]" placeholder="날짜(선택)" />
             <input value={it.memo ?? ''} onChange={e => patch(i, { memo: e.target.value })} placeholder="메모(선택)" className={`${inp} flex-1 min-w-[7rem]`} />
+            <label title="작성 완료" className={`shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1.5 rounded-lg border cursor-pointer ${it.done ? 'bg-green-50 border-green-200 text-green-700' : 'bg-white border-gray-200 text-gray-400'}`}>
+              <input type="checkbox" checked={!!it.done} onChange={e => patch(i, { done: e.target.checked })} className="accent-green-600" />
+              완료
+            </label>
             <button type="button" onClick={() => rm(i)} className="text-gray-300 hover:text-red-500 shrink-0"><X className="w-4 h-4" /></button>
           </div>
         )

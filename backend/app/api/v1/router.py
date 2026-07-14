@@ -20,6 +20,7 @@ from app.api.v1.endpoints.staff_hr import router as staff_hr_router
 from app.api.v1.endpoints.card_keys import router as card_keys_router
 from app.api.v1.endpoints.staffing import router as staffing_router
 from app.api.v1.endpoints.work_guide import router as work_guide_router
+from app.api.v1.endpoints.notices import router as notices_router
 from app.api.v1.endpoints.resident_docs import router as resident_docs_router
 api_router = APIRouter()
 
@@ -122,4 +123,5 @@ api_router.include_router(staff_hr_router, prefix="/admin/staff-hr", tags=["admi
 api_router.include_router(card_keys_router, prefix="/admin/card-keys", tags=["admin-card-keys"])
 api_router.include_router(staffing_router, prefix="/admin/staffing", tags=["admin-staffing"])
 api_router.include_router(work_guide_router, prefix="/admin/work-guide", tags=["admin-work-guide"])
+api_router.include_router(notices_router, prefix="/admin/notices", tags=["admin-notices"])
 api_router.include_router(resident_docs_router, prefix="/admin/resident-docs", tags=["admin-resident-docs"])

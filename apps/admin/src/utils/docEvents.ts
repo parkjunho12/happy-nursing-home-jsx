@@ -1,5 +1,5 @@
 // 어르신 서류 일시(계약서·급여제공계획서·결과평가) — 구조화 이벤트
-export interface DocEvent { date?: string | null; memo?: string | null; kind?: string | null }
+export interface DocEvent { date?: string | null; memo?: string | null; kind?: string | null; done?: boolean }
 export type DocType = 'contract' | 'plan' | 'eval'
 
 export interface KindMeta { v: string; label: string; text: string; dot: string }
