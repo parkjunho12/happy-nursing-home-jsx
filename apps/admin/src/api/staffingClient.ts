@@ -24,7 +24,8 @@ export interface StaffingContext {
   year: number; month: number
   config: StaffingConfig
   residents: { name?: string; admission_date: string; discharge_date?: string | null; status?: string }[]
-  workers: { name?: string; hire_date?: string | null; resign_date?: string | null; is_expected_hire?: boolean; position?: string }[]
+  workers: { employee_id?: string; name?: string; hire_date?: string | null; resign_date?: string | null; is_expected_hire?: boolean; position?: string; leaves?: any[] }[]
+  hour_overrides?: Record<string, number>
   caregiver_count: number
   resident_count: number
   monthly_standard_detail: MonthlyStandard
@@ -74,7 +75,7 @@ export interface StaffingResult {
   next_month_required_worker_count: number
   next_month_additional_full_time_workers: number
   next_month_projection: { year: number; month: number; avg: number; required_worker_count: number; additional_full_time_workers: number }
-  worker_hours_detail: { name?: string; hire_date?: string | null; is_expected_hire: boolean; hours: number; meets_standard: boolean; leave_days?: number; on_leave?: boolean }[]
+  worker_hours_detail: { employee_id?: string; name?: string; hire_date?: string | null; is_expected_hire: boolean; overridden?: boolean; hours: number; meets_standard: boolean; leave_days?: number; on_leave?: boolean }[]
   resident_days: { total_days: number; days_in_month: number; per: { admission_date?: string; discharge_date?: string | null; days: number; planned: boolean }[] }
   is_estimate: boolean
   recommendation: string
@@ -98,6 +99,14 @@ export const staffingAPI = {
     apiClient.get(`${BASE}/context`, { params: { year, month } }).then(unwrap<StaffingContext>),
   simulate: (body: SimulateInput) =>
     apiClient.post(`${BASE}/simulate`, body).then(unwrap<StaffingResult>),
+
+  // 직원별 월간 인정시간 수동 조정 (저장형)
+  listHours: (year: number, month: number) =>
+    apiClient.get(`${BASE}/hours`, { params: { year, month } }).then(unwrap<Record<string, number>>),
+  saveHours: (staff_id: string, year: number, month: number, hours: number) =>
+    apiClient.put(`${BASE}/hours`, { staff_id, year, month, hours }).then(r => r.data),
+  resetHours: (staff_id: string, year: number, month: number) =>
+    apiClient.delete(`${BASE}/hours/${staff_id}`, { params: { year, month } }).then(r => r.data),
 }
 
 // 상태/등급 한글 표시
