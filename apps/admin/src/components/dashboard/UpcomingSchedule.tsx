@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { CalendarDays, ChevronRight, Loader2 } from 'lucide-react'
 import {
   scheduleAPI,
-  type ScheduleEvent, type LifecycleEvent, type RenewalEvent, type DocCalEvent,
+  type ScheduleEvent, type LifecycleEvent, type RenewalEvent, type DocCalEvent, type EduCalEvent,
 } from '@/api/scheduleClient'
 import { recruitmentAPI, type Interview } from '@/api/recruitmentClient'
 
@@ -12,6 +12,7 @@ const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.ge
 const WEEK = ['일', '월', '화', '수', '목', '금', '토']
 
 const CAT: Record<string, string> = {
+  교육: 'bg-orange-50 text-orange-700 border-orange-200',
   방문상담: 'bg-blue-50 text-blue-700 border-blue-200',
   외부방문: 'bg-teal-50 text-teal-700 border-teal-200',
   회의:    'bg-indigo-50 text-indigo-700 border-indigo-200',
@@ -45,7 +46,8 @@ export default function UpcomingSchedule({ limit = 6, days = 45 }: { limit?: num
       scheduleAPI.lifecycle({ start_date: s, end_date: e }),
       scheduleAPI.renewals({ start_date: s, end_date: e }),
       scheduleAPI.docEvents({ start_date: s, end_date: e }),
-    ]).then(([ev, iv, lc, rn, dc]) => {
+      scheduleAPI.eduEvents({ start_date: s, end_date: e }),
+    ]).then(([ev, iv, lc, rn, dc, ed]) => {
       const out: Row[] = []
       const hm = (iso?: string | null) => {
         if (!iso) return undefined
@@ -78,6 +80,12 @@ export default function UpcomingSchedule({ limit = 6, days = 45 }: { limit?: num
         const c = x.doc_type === 'contract' ? '계약서' : x.doc_type === 'plan' ? '계획서' : '평가'
         out.push({ key: `d-${x.id}`, date: x.date, category: c,
                    title: `${x.doc_label} · ${x.name ?? ''}${x.kind ? ` (${x.kind})` : ''}` })
+      })
+      // 의무교육 — 이미 실시한 건은 '다가오는 일정'에서 제외
+      if (ed.status === 'fulfilled') (ed.value as EduCalEvent[]).forEach(x => {
+        if (!x.date || x.done) return
+        out.push({ key: `edu-${x.id}`, date: x.date, category: '교육',
+                   title: x.title, location: x.org })
       })
 
       const todayStr = ymd(today)

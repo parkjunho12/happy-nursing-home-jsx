@@ -43,6 +43,7 @@ import ExpensePage from './pages/admin/ExpensePage'
 import FacilityNewsPage from './pages/admin/FacilityNewsPage'
 import StaffHrPage from './pages/admin/StaffHrPage'
 import ResidentDocsPage from './pages/admin/ResidentDocsPage'
+import StaffEducationPage from './pages/StaffEducationPage'
 import WorkGuidePage from './pages/WorkGuidePage'
 import GuidePage from './pages/GuidePage'
 import EnteralPage from './pages/admin/EnteralPage'
@@ -75,22 +76,24 @@ function RoleRedirect({ children }: { children: React.ReactNode }) {
     return <>{children}</>
   }
 
+  // 요양보호사 접근 허용 경로 — 사이드바(navConfig)에 노출되는 메뉴와 일치해야 한다.
   const isCaregiverOnly = user?.role === 'STAFF' && user?.position === '요양보호사'
   const caregiverAllowed = [
+    '/',                 // 대시보드
     '/eval/albums',
     '/eval/checklist',
     '/eval/calendar',
+    '/schedule',
+    '/education',        // 직원 의무교육
     '/guide',
     '/work-guide',
-    '/schedule',
-    '/expense',
   ]
   const isAllowed =
     caregiverAllowed.includes(location.pathname) ||
     location.pathname.startsWith('/eval/albums/')
 
   if (isCaregiverOnly && !isAllowed) {
-    return <Navigate to="/eval/albums" replace />
+    return <Navigate to="/" replace />
   }
 
   return <>{children}</>
@@ -129,11 +132,12 @@ function ScheduleRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-// 지출결의 — 앨범담당 제외 전 직원 접근 가능
+// 지출결의 — 앨범담당 · 요양보호사 제외
 function ExpenseRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
   if (user?.position === '앨범담당') return <Navigate to="/eval/albums" replace />
+  if (user?.role === 'STAFF' && user?.position === '요양보호사') return <Navigate to="/" replace />
   return <>{children}</>
 }
 
@@ -228,6 +232,7 @@ function App() {
             <Route path="staff-hr"                 element={<StaffAdminRoute><StaffHrPage /></StaffAdminRoute>} />
             <Route path="staffing"                 element={<ManagerRoute><StaffingSimulatorPage /></ManagerRoute>} />
             <Route path="resident-docs"            element={<SocialWorkerRoute><ResidentDocsPage /></SocialWorkerRoute>} />
+            <Route path="education"                element={<StaffEducationPage />} />
             <Route path="enteral"                  element={<CareInventoryRoute><EnteralPage /></CareInventoryRoute>} />
 
             {/* 평가 관리 — 공통 (role 필터는 백엔드에서) */}

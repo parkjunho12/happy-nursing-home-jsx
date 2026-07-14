@@ -104,7 +104,7 @@ const LoginPage = () => {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="admin@nursing-home.com"
+                    placeholder="이메일을 입력하세요"
                     autoComplete="email"
                     required
                     aria-invalid={hasError ? true : undefined}
@@ -163,16 +163,6 @@ const LoginPage = () => {
                 )}
               </button>
             </form>
-
-            {/* 테스트 계정 */}
-            <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <p className="text-sm font-semibold text-slate-900 mb-1">테스트 계정</p>
-              <p className="text-sm text-slate-700">
-                이메일: <span className="font-medium">admin@nursing-home.com</span>
-                <br />
-                비밀번호: <span className="font-medium">admin123</span>
-              </p>
-            </div>
           </div>
 
           {/* 카드 하단 얇은 라인 */}

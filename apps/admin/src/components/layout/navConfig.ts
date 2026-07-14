@@ -2,7 +2,7 @@ import {
   LayoutDashboard, UserCog, MessageSquare, FileText,
   Star, Settings, ClipboardList, ClipboardCheck, CalendarDays,
   UserRound, ShieldCheck, Sparkles, FileSearch,
-  Image as ImageIcon, Users, BookOpen, PenLine, Megaphone, HeartHandshake, Briefcase, Soup, Receipt,
+  Image as ImageIcon, Users, BookOpen, PenLine, Megaphone, HeartHandshake, Briefcase, Soup, Receipt, GraduationCap,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -63,14 +63,15 @@ export function getNavConfig(
       showDashboard: false,
       sections: [
         { label: '앨범', items: [{ to: '/eval/albums', icon: ImageIcon, label: '보호자 앨범 관리' }] },
+        { label: '교육', items: [{ to: '/education', icon: GraduationCap, label: '직원 교육' }] },
       ],
     }
   }
 
-  // 요양보호사 — 업무 · 회계 · 앨범
+  // 요양보호사 — 업무 · 앨범 (지출결의 없음)
   if (isCaregiverOnly) {
     return {
-      showDashboard: false,
+      showDashboard: true,
       sections: [
         {
           label: '업무',
@@ -78,9 +79,9 @@ export function getNavConfig(
             checklistItem,
             { to: '/eval/calendar', icon: CalendarDays, label: '체크 캘린더' },
             { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
+            { to: '/education', icon: GraduationCap, label: '직원 교육' },
           ],
         },
-        { label: '회계', items: [{ to: '/expense', icon: Receipt, label: '지출결의' }] },
         { label: '앨범', items: [{ to: '/eval/albums', icon: ImageIcon, label: '보호자 앨범 관리' }] },
       ],
     }
@@ -112,6 +113,7 @@ export function getNavConfig(
           items: [
             checklistItem,
             { to: '/eval/calendar', icon: CalendarDays, label: '평가 캘린더' },
+            { to: '/education', icon: GraduationCap, label: '직원 교육' },
             { to: '/eval/workload', icon: ClipboardCheck, label: '담당자별 현황' },
             { to: '/eval/record-audit', icon: FileSearch, label: '제공기록지 검수' },
             { to: '/eval/record-guide', icon: BookOpen, label: '검수 기준' },
@@ -174,6 +176,7 @@ export function getNavConfig(
           items: [
             checklistItem,
             { to: '/eval/calendar', icon: CalendarDays, label: '평가 캘린더' },
+            { to: '/education', icon: GraduationCap, label: '직원 교육' },
             { to: '/eval/workload', icon: ClipboardCheck, label: '담당자별 현황' },
             { to: '/eval/record-audit', icon: FileSearch, label: '제공기록지 검수' },
             { to: '/eval/record-guide', icon: BookOpen, label: '검수 기준' },
@@ -222,6 +225,7 @@ export function getNavConfig(
   const evalItems: NavItem[] = [
     checklistItem,
     { to: '/eval/calendar', icon: CalendarDays, label: '평가 캘린더' },
+    { to: '/education', icon: GraduationCap, label: '직원 교육' },
   ]
   if (isSocialWorker) {
     evalItems.push(

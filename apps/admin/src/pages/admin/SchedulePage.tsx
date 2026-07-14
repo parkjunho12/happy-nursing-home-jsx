@@ -5,7 +5,7 @@ import {
   CalendarDays, Plus, ChevronLeft, ChevronRight, X, Trash2, MapPin,
   Phone, Clock, Briefcase, Loader2, Grid3x3, Columns3, List, UserPlus, ClipboardList, Pencil } from 'lucide-react'
 import {
-  scheduleAPI, SCHEDULE_CATEGORIES, type ScheduleEvent, type EventInput, type LifecycleEvent, type RenewalEvent, type DocCalEvent,
+  scheduleAPI, SCHEDULE_CATEGORIES, type ScheduleEvent, type EventInput, type LifecycleEvent, type RenewalEvent, type DocCalEvent, type EduCalEvent,
 } from '../../api/scheduleClient'
 import { recruitmentAPI, type Interview } from '../../api/recruitmentClient'
 
@@ -20,7 +20,7 @@ const hmOf = (iso?: string | null) => {
 const startOfWeek = (d: Date) => { const x = new Date(d); x.setDate(x.getDate() - x.getDay()); x.setHours(0, 0, 0, 0); return x }
 
 /* 카테고리 색상 */
-type CatKey = '방문상담' | '외부방문' | '회의' | '행사' | '기타' | '면접' | '입소' | '입사' | '재계약' | '계약서' | '계획서' | '평가'
+type CatKey = '방문상담' | '외부방문' | '회의' | '행사' | '기타' | '면접' | '입소' | '입사' | '재계약' | '계약서' | '계획서' | '평가' | '교육'
 const CAT: Record<CatKey, { dot: string; chip: string; bar: string }> = {
   방문상담: { dot: 'bg-blue-500',   chip: 'bg-blue-50 text-blue-700 border-blue-200',       bar: 'border-l-blue-500 bg-blue-50' },
   외부방문: { dot: 'bg-teal-500',   chip: 'bg-teal-50 text-teal-700 border-teal-200',       bar: 'border-l-teal-500 bg-teal-50' },
@@ -34,8 +34,9 @@ const CAT: Record<CatKey, { dot: string; chip: string; bar: string }> = {
   계약서:  { dot: 'bg-emerald-500', chip: 'bg-emerald-50 text-emerald-700 border-emerald-200', bar: 'border-l-emerald-500 bg-emerald-50' },
   계획서:  { dot: 'bg-sky-500',     chip: 'bg-sky-50 text-sky-700 border-sky-200',             bar: 'border-l-sky-500 bg-sky-50' },
   평가:    { dot: 'bg-fuchsia-500', chip: 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200', bar: 'border-l-fuchsia-500 bg-fuchsia-50' },
+  교육:    { dot: 'bg-orange-500',  chip: 'bg-orange-50 text-orange-700 border-orange-200',     bar: 'border-l-orange-500 bg-orange-50' },
 }
-const ALL_CATS: CatKey[] = ['방문상담', '외부방문', '회의', '행사', '기타', '면접', '입소', '입사', '재계약', '계약서', '계획서', '평가']
+const ALL_CATS: CatKey[] = ['방문상담', '외부방문', '회의', '행사', '기타', '면접', '입소', '입사', '재계약', '계약서', '계획서', '평가', '교육']
 
 /* 통합 이벤트 */
 type UEvent = {
@@ -65,6 +66,7 @@ export default function SchedulePage() {
   const [lifecycles, setLifecycles] = useState<LifecycleEvent[]>([])
   const [renewals, setRenewals] = useState<RenewalEvent[]>([])
   const [docs, setDocs] = useState<DocCalEvent[]>([])
+  const [edus, setEdus] = useState<EduCalEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [active, setActive] = useState<Set<CatKey>>(new Set(ALL_CATS))
   const [addOpen, setAddOpen] = useState(false)
@@ -87,14 +89,15 @@ export default function SchedulePage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [ev, iv, lc, rn, dc] = await Promise.all([
+      const [ev, iv, lc, rn, dc, ed] = await Promise.all([
         scheduleAPI.events({ start_date: rangeStart, end_date: rangeEnd }).catch(() => [] as ScheduleEvent[]),
         recruitmentAPI.interviews({ start_date: rangeStart, end_date: rangeEnd }).catch(() => [] as Interview[]),
         scheduleAPI.lifecycle({ start_date: rangeStart, end_date: rangeEnd }).catch(() => [] as LifecycleEvent[]),
         scheduleAPI.renewals({ start_date: rangeStart, end_date: rangeEnd }).catch(() => [] as RenewalEvent[]),
         scheduleAPI.docEvents({ start_date: rangeStart, end_date: rangeEnd }).catch(() => [] as DocCalEvent[]),
+        scheduleAPI.eduEvents({ start_date: rangeStart, end_date: rangeEnd }).catch(() => [] as EduCalEvent[]),
       ])
-      setEvents(ev); setInterviews(iv); setLifecycles(lc); setRenewals(rn); setDocs(dc)
+      setEvents(ev); setInterviews(iv); setLifecycles(lc); setRenewals(rn); setDocs(dc); setEdus(ed)
     } finally { setLoading(false) }
   }, [rangeStart, rangeEnd])
   useEffect(() => { load() }, [load])
@@ -150,8 +153,18 @@ export default function SchedulePage() {
         location: null, contactName: dc.name ?? null, contactPhone: null, memo: dc.memo ?? null, raw: dc as any,
       })
     }
+    for (const ed of edus) {
+      if (!ed.date) continue
+      out.push({
+        key: `edu-${ed.id}`, kind: 'lifecycle', category: '교육',
+        title: `${ed.done ? '✓ ' : ''}교육 · ${ed.title}`,
+        start: `${ed.date}T00:00`, dateKey: ed.date, time: '',
+        location: ed.org ?? null, contactName: null, contactPhone: null,
+        memo: ed.eval_no ?? null, raw: ed as any,
+      })
+    }
     return out.sort((a, b) => (a.start! < b.start! ? -1 : 1))
-  }, [events, interviews, lifecycles, renewals, docs])
+  }, [events, interviews, lifecycles, renewals, docs, edus])
 
   const shown = useMemo(() => unified.filter(u => active.has(u.category)), [unified, active])
 
