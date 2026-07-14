@@ -294,6 +294,8 @@ def doc_events(
             for it in (getter(r) or []):
                 if not isinstance(it, dict):
                     continue
+                if it.get("done"):
+                    continue   # 완료 처리된 일시는 캘린더에 표시하지 않음
                 d = (it.get("date") or "").strip() if it.get("date") else None
                 if not d:
                     continue

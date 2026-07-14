@@ -166,8 +166,9 @@ def _apply(r: ResidentDocStatus, b: DocBody):
                     d = (x.get("date") or "").strip() or None
                     mm = (x.get("memo") or "").strip() or None
                     k = (x.get("kind") or "").strip() or None
+                    done = bool(x.get("done"))
                     if d or mm:
-                        cleaned.append({"date": d, "memo": mm, "kind": k})
+                        cleaned.append({"date": d, "memo": mm, "kind": k, "done": done})
                 elif isinstance(x, str) and x.strip():
                     cleaned.append({"date": None, "memo": x.strip(), "kind": None})
             setattr(r, col, cleaned)

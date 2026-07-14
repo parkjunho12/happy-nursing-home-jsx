@@ -93,8 +93,12 @@ export default function ResidentDocsPage() {
       const meta = kindMeta(type, e.kind) ?? KINDS[type][0]
       return (
         <div key={rk} className="whitespace-nowrap flex items-center gap-1">
-          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${meta.dot} ${dim ? 'opacity-40' : ''}`} />
-          <span className={`font-semibold ${dim ? 'text-gray-400' : meta.text}`}>{e.date ? fmtYMD(e.date) : '미정'}</span>
+          {e.done
+            ? <Check className="w-3 h-3 shrink-0 text-green-600" strokeWidth={3} />
+            : <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${meta.dot} ${dim ? 'opacity-40' : ''}`} />}
+          <span className={`font-semibold ${e.done ? 'line-through text-gray-400' : dim ? 'text-gray-400' : meta.text}`}>
+            {e.date ? fmtYMD(e.date) : '미정'}
+          </span>
           {e.memo && <span className="text-[11px] text-gray-400 truncate max-w-[7rem]">· {e.memo}</span>}
         </div>
       )

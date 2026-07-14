@@ -161,19 +161,57 @@ export default function StaffingSimulatorPage() {
             </div>
           </div>
 
-          {/* 경계 초과 경고 */}
-          {res.worker_count_increased && (
-            <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
-              <div className="flex items-start gap-3">
-                <AlertTriangle className="w-6 h-6 text-red-500 shrink-0" />
-                <div className="text-sm text-red-700">
-                  <p className="font-bold">당월 인력기준 충족 위험 — 필요 요양보호사 증가</p>
-                  <p className="mt-1">이번 입소로 예상 월평균 입소자가 <b>{res.after_avg_resident_count}명</b>이 되어, 현재 요양보호사가 관리 가능한 <b>{res.max_allowed_avg_resident_count}명</b>을 초과합니다.</p>
-                  <p className="mt-0.5">필요 요양보호사: <b>{res.before_required_worker_count}명 → {res.after_required_worker_count}명</b> · 추가 필요시간 <b>{res.shortage_hours}시간</b> · 최소 즉시 투입 <b>{res.minimum_new_worker_count ?? '-'}명</b></p>
+          {/* 인력 위험 경고 — '필요 인원 증가'와 '실제 인력 부족'을 구분한다 */}
+          {(() => {
+            const shortage = res.shortage_hours > 0
+            const overCapacity = res.after_avg_resident_count > res.max_allowed_avg_resident_count
+            const increased = res.worker_count_increased
+
+            // ① 실제 부족 → 빨간 경고
+            if (shortage) {
+              return (
+                <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-6 h-6 text-red-500 shrink-0" />
+                    <div className="text-sm text-red-700">
+                      <p className="font-bold">당월 인력기준 충족 위험 — 근무시간 부족</p>
+                      {overCapacity ? (
+                        <p className="mt-1">예상 월평균 입소자 <b>{res.after_avg_resident_count}명</b>이 현재 요양보호사 {res.current_worker_count}명이 관리 가능한 <b>{res.max_allowed_avg_resident_count}명</b>을 초과합니다.</p>
+                      ) : (
+                        <p className="mt-1">인원수는 충족하나 <b>확보 근무시간이 부족</b>합니다 (확보 {res.secured_hours}h / 필요 {res.required_hours_after.toLocaleString()}h).</p>
+                      )}
+                      <p className="mt-0.5">
+                        필요 요양보호사 <b>{res.before_required_worker_count}명 → {res.after_required_worker_count}명</b>
+                        {' · '}부족 <b>{res.shortage_hours}시간</b>
+                        {' · '}최소 즉시 투입 <b>{res.minimum_new_worker_count ?? '-'}명</b>
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          )}
+              )
+            }
+
+            // ② 필요 인원은 늘었지만 현재 인력으로 충족 → 정보성 안내(빨강 아님)
+            if (increased) {
+              return (
+                <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <Info className="w-6 h-6 text-blue-500 shrink-0" />
+                    <div className="text-sm text-blue-700">
+                      <p className="font-bold">필요 요양보호사가 늘어나지만 현재 인력으로 충족됩니다</p>
+                      <p className="mt-1">
+                        예상 월평균 입소자 <b>{res.after_avg_resident_count}명</b> → 필요 <b>{res.before_required_worker_count}명 → {res.after_required_worker_count}명</b>.
+                        현재 요양보호사 <b>{res.current_worker_count}명</b>이 관리 가능한 범위는 <b>{res.max_allowed_avg_resident_count}명</b>이며,
+                        확보 근무시간 <b>{res.secured_hours}h</b> ≥ 필요 <b>{res.required_hours_after.toLocaleString()}h</b> 이므로 <b>부족시간 0</b>입니다.
+                      </p>
+                      <p className="mt-0.5 text-blue-500">추가 채용 없이 입소 가능합니다.</p>
+                    </div>
+                  </div>
+                </div>
+              )
+            }
+            return null
+          })()}
 
           {/* 핵심 카드 6종 */}
           <div className="grid grid-cols-2 lg:grid-cols-6 gap-2 sm:gap-3">
