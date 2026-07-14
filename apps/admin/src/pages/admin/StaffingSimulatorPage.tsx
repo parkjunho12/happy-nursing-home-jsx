@@ -43,8 +43,18 @@ export default function StaffingSimulatorPage() {
   const [manual, setManual] = useState(false)
   const [scenarios, setScenarios] = useState<StaffingResult[] | null>(null)
   const [scenLoading, setScenLoading] = useState(false)
+  // 직원별 근무시간 수동 조정 (employee_id → 시간). 값이 없으면 자동 계산.
+  const [hourOverrides, setHourOverrides] = useState<Record<string, number>>({})
+  const [autoHours, setAutoHours] = useState<Record<string, number>>({})   // 자동 계산 스냅샷(비교용)
+  const [showWorkers, setShowWorkers] = useState(false)
 
   useEffect(() => { staffingAPI.context(year, month).then(setCtx).catch(() => {}) }, [year, month])
+  // 저장된 직원별 근무시간 조정값 로드 (DB 영속)
+  useEffect(() => {
+    staffingAPI.listHours(year, month)
+      .then(setHourOverrides)
+      .catch(() => setHourOverrides({}))
+  }, [year, month])
 
   const run = useCallback(async () => {
     setLoading(true)
@@ -56,10 +66,35 @@ export default function StaffingSimulatorPage() {
         config: { placement_ratio: ratio, daily_hours: dailyHours, max_immediate_hires: maxHires, full_month_hire_day: fullMonthDay },
       })
       setRes(r)
+      // 조정값이 없는 직원의 결과 = 자동 계산값 → 비교용 스냅샷 갱신
+      setAutoHours(prev => {
+        const snap = { ...prev }
+        r.worker_hours_detail.forEach(w => {
+          if (w.employee_id && !w.overridden) snap[w.employee_id] = w.hours
+        })
+        return snap
+      })
     } finally { setLoading(false) }
-  }, [year, month, planned, candidates, ratio, dailyHours, maxHires, fullMonthDay])
+  }, [year, month, planned, candidates, ratio, dailyHours, maxHires, fullMonthDay, hourOverrides])
 
   useEffect(() => { const t = setTimeout(run, 350); return () => clearTimeout(t) }, [run])
+
+  // 직원별 근무시간 저장 (DB 영속)
+  const [savingId, setSavingId] = useState<string | null>(null)
+  const saveHours = async (staffId: string, hours: number) => {
+    setSavingId(staffId)
+    try {
+      await staffingAPI.saveHours(staffId, year, month, hours)
+      setHourOverrides(prev => ({ ...prev, [staffId]: hours }))
+    } finally { setSavingId(null) }
+  }
+  const resetHours = async (staffId: string) => {
+    setSavingId(staffId)
+    try {
+      await staffingAPI.resetHours(staffId, year, month)
+      setHourOverrides(prev => { const n = { ...prev }; delete n[staffId]; return n })
+    } finally { setSavingId(null) }
+  }
 
   const runScenarios = async () => {
     setScenLoading(true)
@@ -209,6 +244,104 @@ export default function StaffingSimulatorPage() {
           <button onClick={() => setCandidates(a => [...a, { name: '', hire_date: today, confirmed: false }])} className="text-xs font-semibold text-indigo-600 hover:underline">+ 신규 후보 추가</button>
         </div>
       </div>
+
+      {/* 직원별 근무시간 조정 */}
+      {res && res.worker_hours_detail.length > 0 && (
+        <div className={card}>
+          <button onClick={() => setShowWorkers(v => !v)} className="w-full flex items-center justify-between text-sm font-bold text-gray-700">
+            <span className="flex items-center gap-1.5">
+              <Users className="w-4 h-4 text-indigo-600" />
+              직원별 근무시간 조정
+              <span className="text-xs font-normal text-gray-400">
+                ({Object.keys(hourOverrides).length > 0 ? `${Object.keys(hourOverrides).length}명 저장된 조정값 적용 중` : '전원 자동 계산'})
+              </span>
+            </span>
+            {showWorkers ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+
+          {showWorkers && (
+            <div className="mt-3">
+              <p className="text-[11px] text-gray-400 mb-2 bg-gray-50 rounded-lg px-2.5 py-1.5">
+                기본은 <b>월 기준시간 {res.monthly_standard_hours}h ÷ 월 {res.resident_days.days_in_month}일 × 재직일수</b>로 자동 계산됩니다.
+                실제 근무시간이 다르면 아래에서 <b>직접 입력</b>하세요. 입력값은 <b>{year}년 {month}월 기준으로 저장</b>되어 다음에 열어도 유지됩니다. "자동"을 누르면 자동 계산으로 되돌아갑니다.
+              </p>
+
+              <div className="space-y-1.5">
+                {res.worker_hours_detail.map((w, i) => {
+                  const id = w.employee_id ?? ''
+                  const ov = id ? hourOverrides[id] : undefined
+                  const isOv = ov != null
+                  const auto = id ? autoHours[id] : undefined
+                  return (
+                    <div key={id || i} className={`flex flex-wrap items-center gap-2 rounded-xl border p-2.5 ${isOv ? 'border-indigo-200 bg-indigo-50/40' : 'border-gray-100'}`}>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 truncate">
+                          {w.name || `직원${i + 1}`}
+                          {w.on_leave && <span className="ml-1.5 text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">휴직 {w.leave_days}일</span>}
+                        </p>
+                        <p className="text-[11px] text-gray-400">
+                          입사 {w.hire_date ? fmtD(w.hire_date) : '-'}
+                          {auto != null && <> · 자동 계산 <b className="text-gray-500">{auto}h</b></>}
+                          {isOv && <span className="ml-1 text-indigo-600 font-semibold">→ 수동 {ov}h</span>}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number" min={0} step={0.5}
+                          defaultValue={ov ?? ''}
+                          key={`${id}-${ov ?? 'auto'}`}
+                          placeholder={String(auto ?? w.hours)}
+                          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                          onBlur={e => {
+                            const v = e.target.value.trim()
+                            if (!id) return
+                            if (v === '') { if (isOv) resetHours(id); return }
+                            const n = Math.max(0, +v)
+                            if (!isNaN(n) && n !== ov) saveHours(id, n)
+                          }}
+                          disabled={!id || savingId === id}
+                          className="w-24 px-2.5 py-1.5 text-sm text-right border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:opacity-50"
+                        />
+                        <span className="text-xs text-gray-400 w-8">시간</span>
+                        {savingId === id ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                        ) : isOv ? (
+                          <button onClick={() => resetHours(id)}
+                            className="text-[11px] font-semibold text-gray-400 hover:text-indigo-600 px-1.5 py-1 rounded hover:bg-indigo-50">
+                            자동
+                          </button>
+                        ) : (
+                          <span className={`text-[11px] font-bold w-14 text-right ${w.meets_standard ? 'text-green-600' : 'text-amber-600'}`}>
+                            {w.hours}h
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {Object.keys(hourOverrides).length > 0 && (
+                <button onClick={async () => {
+                    if (!confirm(`${year}년 ${month}월 저장된 조정값을 모두 삭제하고 자동 계산으로 되돌릴까요?`)) return
+                    for (const sid of Object.keys(hourOverrides)) await staffingAPI.resetHours(sid, year, month)
+                    setHourOverrides({})
+                  }}
+                  className="mt-2 text-xs font-semibold text-gray-400 hover:text-indigo-600">
+                  전체 자동 계산으로 되돌리기
+                </button>
+              )}
+
+              <p className="mt-2 text-[11px] font-semibold text-gray-600">
+                확보 예상시간 합계 <span className="text-indigo-600">{res.secured_hours}h</span>
+                {' · '}필요 {res.required_hours_after.toLocaleString()}h
+                {' · '}부족 <span className={res.shortage_hours > 0 ? 'text-red-600' : 'text-green-600'}>{res.shortage_hours}h</span>
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 설정 */}
       <div className={card}>

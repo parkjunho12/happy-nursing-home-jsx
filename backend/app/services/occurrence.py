@@ -372,11 +372,49 @@ def get_or_create_occurrence(
     """
     특정 날짜 기준 occurrence 조회, 없으면 생성. 멱등.
     """
-    if target_date is None:
-        target_date = today_kst()
-
     cfg = cfg_from_item(item)
     freq = canon_freq(item.frequency)
+    today = today_kst()
+
+    # ── 일회성(one_time): 마감일 = item.due_date ────────────────────────
+    # get_period_bounds 에 one_time 케이스가 없어 (d, d) 로 떨어지므로,
+    # target_date 를 넘기지 않은 호출(생성 시)에서 마감이 '오늘'이 되는 문제를 여기서 차단한다.
+    if freq == ONE_TIME_FREQ:
+        due_d: Optional[date] = target_date
+        if due_d is None and getattr(item, 'due_date', None):
+            try:
+                due_d = date.fromisoformat(item.due_date)
+            except (TypeError, ValueError):
+                due_d = None
+        created_d = to_kst_date(item.created_at) if getattr(item, 'created_at', None) else today
+        if due_d is None:
+            due_d = created_d
+        scheduled_d = created_d if created_d <= due_d else due_d
+
+        period_key = due_d.isoformat()
+        occ = db.query(ChecklistOccurrence).filter(
+            ChecklistOccurrence.checklist_item_id == item.id,
+            ChecklistOccurrence.period_key == period_key,
+        ).first()
+        if occ:
+            return occ
+
+        occ = ChecklistOccurrence(
+            id=str(uuid.uuid4()),
+            checklist_item_id=item.id,
+            period_key=period_key,
+            frequency=freq,
+            scheduled_date=scheduled_d.isoformat(),
+            due_date=due_d.isoformat(),
+            status='overdue' if due_d < today else 'pending',
+        )
+        db.add(occ)
+        db.flush()
+        return occ
+
+    if target_date is None:
+        target_date = today
+
     period_key = get_period_key(freq, target_date, cfg)
     scheduled, due = get_period_bounds(freq, target_date, cfg)
 

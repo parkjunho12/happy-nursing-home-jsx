@@ -298,9 +298,13 @@ def calculate_expected_recognized_hours(workers: list, year: int, month: int, ho
         total += h
         meets = h + EPS >= standard_hours
         lv = leave_dates_in_month(w, year, month)
+        overridden = any(w.get(k) is not None for k in
+                         ("actual_work_hours", "expected_work_hours", "recognized_work_hours"))
         per.append({
+            "employee_id": w.get("employee_id"),
             "name": w.get("employee_name") or w.get("name"),
             "hire_date": _iso(_d(w.get("hire_date"))),
+            "overridden": overridden,
             "is_expected_hire": bool(w.get("is_expected_hire")),
             "actual_work_hours": w.get("actual_work_hours"),
             "expected_work_hours": w.get("expected_work_hours"),
