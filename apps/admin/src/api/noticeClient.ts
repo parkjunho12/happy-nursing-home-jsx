@@ -25,7 +25,17 @@ export interface NoticeInput {
   level?: NoticeLevel
   pinned?: boolean
   active?: boolean
+  push?: boolean            // 등록 시 직원앱 푸시 발송 (기본 true)
 }
+/** 푸시 발송 결과 */
+export interface PushResult {
+  tokens: number
+  recipients: number
+  sent: number
+  failed: number
+  error?: string
+}
+export type CreatedNotice = InternalNotice & { push?: PushResult | null }
 
 export const NOTICE_LEVEL: Record<NoticeLevel, { label: string; cls: string; dot: string }> = {
   info:      { label: '안내', cls: 'bg-gray-50 text-gray-600 border-gray-200',       dot: 'bg-gray-400' },
@@ -35,7 +45,8 @@ export const NOTICE_LEVEL: Record<NoticeLevel, { label: string; cls: string; dot
 
 export const noticeAPI = {
   list: (limit = 20) => apiClient.get(BASE, { params: { limit } }).then(unwrap<InternalNotice[]>),
-  create: (b: NoticeInput) => apiClient.post(BASE, b).then(unwrap<InternalNotice>),
+  create: (b: NoticeInput) => apiClient.post(BASE, b).then(unwrap<CreatedNotice>),
   update: (id: string, b: NoticeInput) => apiClient.patch(`${BASE}/${id}`, b).then(unwrap<InternalNotice>),
   remove: (id: string) => apiClient.delete(`${BASE}/${id}`).then(r => r.data),
+  push: (id: string) => apiClient.post(`${BASE}/${id}/push`).then(unwrap<PushResult>),
 }

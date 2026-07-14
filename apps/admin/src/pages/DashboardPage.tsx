@@ -15,6 +15,7 @@ import UpcomingDocs from '@/components/dashboard/UpcomingDocs'
 import UpcomingSchedule from '@/components/dashboard/UpcomingSchedule'
 import ResidentTrendChart from '@/components/dashboard/ResidentTrendChart'
 import { useIsMobile } from '@/hooks/useMediaQuery'
+import { getNavConfig } from '@/components/layout/navConfig'
 import type { DashboardStats } from '@/types'
 import { RECURRING, FREQUENCY_LABELS, getPeriodEnd, todayKST, todayDateKST, getCurrentPeriodKey, daysFromToday } from '@/utils/period'
 
@@ -40,6 +41,20 @@ const todayStr = todayKST()
 export default function DashboardPage() {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
+
+  // ── 대시보드 위젯 노출 = 그 사람이 실제로 가진 메뉴 기준
+  //    사이드바와 같은 getNavConfig 를 쓰므로 메뉴/대시보드가 어긋날 수 없다.
+  const { user: authUser } = useAuthStore()
+  const allowed = useMemo(() => {
+    const cfg = getNavConfig(authUser ?? null)
+    const set = new Set<string>()
+    cfg.sections.forEach(sec => sec.items.forEach(it => set.add(it.to)))
+    return set
+  }, [authUser])
+  const can = (route: string) => allowed.has(route)
+  const canResidents = can('/eval/residents')
+  const canStaffList = can('/eval/staff')
+  const canChecklist = can('/eval/checklist')
   const [siteStats, setSiteStats] = useState<DashboardStats | null>(null)
   const [loadingSite, setLoadingSite] = useState(true)
   const [pending, setPending] = useState<{ expense: number; album: number }>({ expense: 0, album: 0 })
@@ -47,7 +62,7 @@ export default function DashboardPage() {
 
   const { checklists, occurrences, residents, staffList, loaded, loadAll, toggleComplete, completeOccurrence } = useLtcStore()
 
-  useEffect(() => { loadSiteStats() }, [])
+  useEffect(() => { if (canResidents || canStaffList || can('/contacts')) loadSiteStats() }, [canResidents, canStaffList])
   useEffect(() => { loadPending() }, [])
   useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
 
@@ -63,9 +78,12 @@ export default function DashboardPage() {
   // 크로스 기능 '처리 대기' 카운트 — 권한 없으면 0으로 폴백(대시보드에 영향 없음)
   const loadPending = async () => {
     const [exp, alb, news] = await Promise.all([
-      expenseAPI.list({ status: 'pending' }).then(r => r.length).catch(() => 0),
-      apiClient.get('/api/v1/admin/pending-media').then((r: any) => (r.data?.data ?? []).length).catch(() => 0),
-      newsAPI.list().then(rows => rows.filter(n => n.is_published).slice(0, 3)).catch(() => [] as FacilityNews[]),
+      can('/expense')
+        ? expenseAPI.list({ status: 'pending' }).then(r => r.length).catch(() => 0) : Promise.resolve(0),
+      can('/eval/albums')
+        ? apiClient.get('/api/v1/admin/pending-media').then((r: any) => (r.data?.data ?? []).length).catch(() => 0) : Promise.resolve(0),
+      can('/facility-news')
+        ? newsAPI.list().then(rows => rows.filter(n => n.is_published).slice(0, 3)).catch(() => [] as FacilityNews[]) : Promise.resolve([] as FacilityNews[]),
     ])
     setPending({ expense: exp, album: alb })
     setRecentNews(news)
@@ -248,8 +266,7 @@ export default function DashboardPage() {
   const activeStaff     = staffList.filter(s => s.status === 'active').length
 
   // 요양보호사 배치기준(2.1:1) — ADMIN·시설장 전용
-  const { user } = useAuthStore()
-  const isManagerView = user?.role === 'ADMIN' || user?.position === '시설장'
+  const isManagerView = authUser?.role === 'ADMIN' || authUser?.position === '시설장'
   const CAREGIVER_RATIO = 2.1
   const staffing = useMemo(() => {
     const pad = (n: number) => String(n).padStart(2, '0')
@@ -298,9 +315,9 @@ export default function DashboardPage() {
 
   // ── 처리 대기 항목 (결재·확인)
   const pendingItems = [
-    { show: pending.expense > 0, label: '지출결의 승인 대기', value: pending.expense, unit: '건', to: '/expense', icon: Receipt, tone: 'emerald' as const },
-    { show: pending.album > 0, label: '앨범 사진 승인 대기', value: pending.album, unit: '장', to: '/eval/albums', icon: ImageIcon, tone: 'blue' as const },
-    { show: (siteStats?.pendingContacts ?? 0) > 0, label: '대기 중인 상담', value: siteStats?.pendingContacts ?? 0, unit: '건', to: '/contacts', icon: MessageSquare, tone: 'orange' as const },
+    { show: can('/expense') && pending.expense > 0, label: '지출결의 승인 대기', value: pending.expense, unit: '건', to: '/expense', icon: Receipt, tone: 'emerald' as const },
+    { show: can('/eval/albums') && pending.album > 0, label: '앨범 사진 승인 대기', value: pending.album, unit: '장', to: '/eval/albums', icon: ImageIcon, tone: 'blue' as const },
+    { show: can('/contacts') && (siteStats?.pendingContacts ?? 0) > 0, label: '대기 중인 상담', value: siteStats?.pendingContacts ?? 0, unit: '건', to: '/contacts', icon: MessageSquare, tone: 'orange' as const },
   ].filter(i => i.show)
 
   const runningTasks = todayTasks.filter(t => t.inProgress).slice(0, 2)
@@ -341,26 +358,27 @@ export default function DashboardPage() {
   // 현황 뱃지 — 모바일 2×2 그리드 / 데스크톱 한 줄
   const secBadges = (
     <div className="grid grid-cols-2 gap-1.5 md:flex md:items-center md:flex-wrap">
-      <StatBadge label="오늘 미완료" value={todayTasks.length}
+      {canChecklist && <StatBadge label="오늘 미완료" value={todayTasks.length}
         tone={urgentTasks.length > 0 ? 'red' : todayTasks.length > 0 ? 'orange' : 'green'}
         extra={urgentTasks.length > 0 ? `위험 ${urgentTasks.length}` : undefined}
-        icon={<ClipboardList size={12}/>} onClick={() => navigate('/eval/checklist')}/>
-      <StatBadge label="입소 수급자" value={activeResidents} unit="명" tone="teal"
+        icon={<ClipboardList size={12}/>} onClick={() => navigate('/eval/checklist')}/>}
+      {canResidents && <StatBadge label="입소 수급자" value={activeResidents} unit="명" tone="teal"
         extra={siteStats ? `전체 ${siteStats.totalResidents}` : undefined}
-        icon={<Users size={12}/>} onClick={() => navigate('/eval/residents')}/>
-      <StatBadge label="재직 직원" value={activeStaff} unit="명" tone="indigo"
+        icon={<Users size={12}/>} onClick={() => navigate('/eval/residents')}/>}
+      {canStaffList && <StatBadge label="재직 직원" value={activeStaff} unit="명" tone="indigo"
         extra={loadingSite ? undefined : `전체 ${siteStats?.totalStaff ?? 0}`}
-        icon={<UserCog size={12}/>} onClick={() => navigate('/eval/staff')}/>
-      <StatBadge label="이번 달 입소" value={siteStats?.monthlyAdmissions ?? 0} unit="명" tone="purple"
-        icon={<UserPlus size={12}/>} onClick={() => navigate('/eval/residents')}/>
+        icon={<UserCog size={12}/>} onClick={() => navigate('/eval/staff')}/>}
+      {canResidents && <StatBadge label="이번 달 입소" value={siteStats?.monthlyAdmissions ?? 0} unit="명" tone="purple"
+        icon={<UserPlus size={12}/>} onClick={() => navigate('/eval/residents')}/>}
     </div>
   )
 
   // 다가오는 일정 — 모바일은 4건(엄지 한 스크롤 내 유지), 데스크톱 6건
-  const secSchedule = <UpcomingSchedule limit={isMobile ? 4 : 6} days={45} />
+  const secSchedule = can('/schedule') ? <UpcomingSchedule limit={isMobile ? 4 : 6} days={45} /> : null
 
   // 처리 대기 — 모바일은 비었을 때 렌더하지 않음(빈 카드로 화면 낭비 방지)
-  const secPending = (isMobile && pendingItems.length === 0) ? null : (
+  const hasPendingScope = can('/expense') || can('/eval/albums') || can('/contacts')
+  const secPending = (!hasPendingScope || (isMobile && pendingItems.length === 0)) ? null : (
     <section>
       <div className="flex items-center gap-2 mb-2">
         <Inbox size={15} className="text-gray-500" />
@@ -380,7 +398,7 @@ export default function DashboardPage() {
   )
 
   // 진행 중인 업무 (착수 건만, 최대 2건)
-  const secRunning = runningTasks.length === 0 ? null : (
+  const secRunning = (!canChecklist || runningTasks.length === 0) ? null : (
     <section className="space-y-2">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
@@ -434,10 +452,10 @@ export default function DashboardPage() {
   )
 
   const secNotices = <NoticeBoard />
-  const secDocs = <UpcomingDocs />
+  const secDocs = can('/resident-docs') ? <UpcomingDocs /> : null
 
   // 일일 업무 체크 — 모바일 최우선 액션
-  const secDaily = (
+  const secDaily = !canChecklist ? null : (
     <section className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
       <div className="flex items-center justify-between px-4 md:px-5 py-3 md:py-3.5 border-b border-gray-50">
         <div className="flex items-center gap-2 min-w-0">
@@ -482,7 +500,7 @@ export default function DashboardPage() {
   )
 
   // 정기 업무
-  const secPeriodic = nonDailyTasks.length === 0 ? null : (
+  const secPeriodic = (!canChecklist || nonDailyTasks.length === 0) ? null : (
     <section className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
       <div className="flex items-center justify-between px-4 md:px-5 py-3 md:py-3.5 border-b border-gray-50">
         <div className="flex items-center gap-2 min-w-0">
@@ -536,7 +554,7 @@ export default function DashboardPage() {
   )
 
   // 이벤트 미완료 누적
-  const secEvents = eventPendingTasks.length === 0 ? null : (
+  const secEvents = (!canChecklist || eventPendingTasks.length === 0) ? null : (
     <section className="bg-white rounded-2xl border border-purple-100 shadow-sm overflow-hidden">
       <div className="flex items-center justify-between px-4 md:px-5 py-3 md:py-3.5 border-b border-purple-50 bg-purple-50/50">
         <div className="flex items-center gap-2 min-w-0">
@@ -565,7 +583,7 @@ export default function DashboardPage() {
   )
 
   // 최근 시설소식
-  const secNews = recentNews.length === 0 ? null : (
+  const secNews = (!can('/facility-news') || recentNews.length === 0) ? null : (
     <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
@@ -591,7 +609,7 @@ export default function DashboardPage() {
   )
 
   // 주기별 완료 현황
-  const secProgress = (
+  const secProgress = !canChecklist ? null : (
     <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
       <div className="flex items-center gap-2 mb-3">
         <TrendingUp size={14} className="text-primary-orange"/>
@@ -636,7 +654,7 @@ export default function DashboardPage() {
   )
 
   // 운영 현황
-  const secOps = (
+  const secOps = !(canResidents || canStaffList) ? null : (
     <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
       <div className="flex items-center gap-2 mb-3">
         <Calendar size={14} className="text-primary-orange"/>
@@ -689,7 +707,7 @@ export default function DashboardPage() {
     </button>
   )
 
-  const secChart = <ResidentTrendChart residents={residents} months={isMobile ? 6 : 12} />
+  const secChart = canResidents ? <ResidentTrendChart residents={residents} months={isMobile ? 6 : 12} /> : null
 
   /* ══════════════════ 모바일 레이아웃 (< md) ══════════════════
      인사말 → 현황 → 다가오는 일정(4건) → 진행 중 → 처리 대기 → 내부 공지 → 어르신 서류

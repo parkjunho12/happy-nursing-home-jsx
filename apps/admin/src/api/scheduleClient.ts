@@ -64,6 +64,16 @@ export interface DocCalEvent {
   memo?: string | null
 }
 
+export interface EduCalEvent {
+  id: string
+  date: string          // YYYY-MM-DD (완료면 실시일, 미완료면 예정일)
+  title: string
+  division: '평가' | '법정' | '기타'
+  eval_no?: string | null
+  org?: string | null
+  done: boolean
+}
+
 export const scheduleAPI = {
   events: (params?: { start_date?: string; end_date?: string; category?: string }) =>
     apiClient.get(`${BASE}/events`, { params: params ?? {} }).then(unwrap<ScheduleEvent[]>),
@@ -77,4 +87,6 @@ export const scheduleAPI = {
     apiClient.get(`${BASE}/renewals`, { params: params ?? {} }).then(unwrap<RenewalEvent[]>),
   docEvents: (params?: { start_date?: string; end_date?: string }) =>
     apiClient.get(`${BASE}/doc-events`, { params: params ?? {} }).then(unwrap<DocCalEvent[]>),
+  eduEvents: (params?: { start_date?: string; end_date?: string }) =>
+    apiClient.get(`${BASE}/edu-events`, { params: params ?? {} }).then(unwrap<EduCalEvent[]>),
 }

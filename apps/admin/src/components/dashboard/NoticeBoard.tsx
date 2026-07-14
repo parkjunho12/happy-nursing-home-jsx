@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Megaphone, Pin, Plus, X, Loader2, Pencil, Trash2 } from 'lucide-react'
+import { Megaphone, Pin, Plus, X, Loader2, Pencil, Trash2, Send } from 'lucide-react'
 import { useAuthStore } from '@/store/auth'
 import { noticeAPI, NOTICE_LEVEL, type InternalNotice, type NoticeLevel } from '@/api/noticeClient'
 
@@ -77,6 +77,18 @@ export default function NoticeBoard() {
                     </div>
                     {canWrite && open && (
                       <div className="flex items-center gap-0.5 shrink-0" onClick={e => e.stopPropagation()}>
+                        <button
+                          onClick={async () => {
+                            if (!confirm('이 공지를 직원앱에 다시 발송할까요?')) return
+                            try {
+                              const r = await noticeAPI.push(n.id)
+                              alert(r.tokens === 0
+                                ? '직원앱에 등록된 기기가 없어 발송되지 않았습니다.'
+                                : `직원 ${r.recipients}명(${r.sent}대 기기)에게 발송했습니다.`)
+                            } catch (e: any) { alert(e?.message ?? '발송 실패') }
+                          }}
+                          aria-label="푸시 재발송" title="직원앱에 다시 발송"
+                          className="p-2.5 md:p-1 text-gray-300 hover:text-primary-orange rounded"><Send size={13} /></button>
                         <button onClick={() => setEditing(n)} aria-label="수정" className="p-2.5 md:p-1 text-gray-300 hover:text-gray-600 rounded"><Pencil size={13} /></button>
                         <button onClick={async () => { if (confirm('이 공지를 삭제할까요?')) { await noticeAPI.remove(n.id); load() } }}
                           aria-label="삭제" className="p-2.5 md:p-1 text-gray-300 hover:text-red-500 rounded"><Trash2 size={13} /></button>
@@ -103,6 +115,7 @@ function NoticeModal({ notice, onClose, onSaved }: { notice: InternalNotice | nu
   const [content, setContent] = useState(notice?.content ?? '')
   const [level, setLevel] = useState<NoticeLevel>(notice?.level ?? 'info')
   const [pinned, setPinned] = useState(!!notice?.pinned)
+  const [push, setPush] = useState(true)          // 신규 등록 시 기본 발송
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
 
@@ -113,8 +126,18 @@ function NoticeModal({ notice, onClose, onSaved }: { notice: InternalNotice | nu
     setSaving(true); setErr('')
     try {
       const body = { title: title.trim(), content: content.trim() || null, level, pinned }
-      if (isEdit) await noticeAPI.update(notice!.id, body)
-      else await noticeAPI.create(body)
+      if (isEdit) {
+        await noticeAPI.update(notice!.id, body)
+      } else {
+        const created = await noticeAPI.create({ ...body, push })
+        // 푸시를 켰는데 보낼 기기가 없거나 실패한 경우 사실대로 알림
+        if (push) {
+          const p = created.push
+          if (!p || p.error) alert('공지는 등록됐지만 푸시 발송에 실패했습니다.' + (p?.error ? `\n(${p.error})` : ''))
+          else if (p.tokens === 0) alert('공지가 등록됐습니다.\n다만 직원앱에 등록된 기기가 없어 푸시는 발송되지 않았습니다.')
+          else alert(`공지가 등록되고 직원 ${p.recipients}명(${p.sent}대 기기)에게 푸시를 발송했습니다.`)
+        }
+      }
       onSaved()
     } catch (e: any) { setErr(e?.message ?? '저장 실패') } finally { setSaving(false) }
   }
@@ -150,6 +173,16 @@ function NoticeModal({ notice, onClose, onSaved }: { notice: InternalNotice | nu
             <input type="checkbox" checked={pinned} onChange={e => setPinned(e.target.checked)} className="accent-primary-orange" />
             상단 고정 (핀)
           </label>
+
+          {!isEdit && (
+            <label className="flex items-start gap-2 text-sm text-gray-600 rounded-xl border border-gray-100 bg-gray-50/70 p-2.5 cursor-pointer">
+              <input type="checkbox" checked={push} onChange={e => setPush(e.target.checked)} className="accent-primary-orange mt-0.5" />
+              <span>
+                <span className="font-semibold text-gray-700 flex items-center gap-1"><Send size={12} /> 직원앱에 푸시 알림 발송</span>
+                <span className="block text-[11px] text-gray-400 mt-0.5">등록 즉시 전 직원 휴대폰으로 알림이 갑니다. (작성자 본인 제외)</span>
+              </span>
+            </label>
+          )}
           {err && <p className="text-xs text-red-500">{err}</p>}
         </div>
         <div className="flex gap-2 px-5 py-4 border-t">

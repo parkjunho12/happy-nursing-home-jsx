@@ -18,6 +18,7 @@ from app.models.schedule import ScheduleEvent, now_kst
 from app.models.eval import LtcResident, LtcStaffMember
 from app.models.staff_hr import StaffHrRecord
 from app.models.resident_docs import ResidentDocStatus
+from app.models.staff_education import StaffEducation
 from app.schemas.response import ApiResponse
 
 router = APIRouter()
@@ -313,4 +314,35 @@ def doc_events(
                     "kind": it.get("kind"),
                     "memo": it.get("memo"),
                 })
+    return ApiResponse(success=True, data=out)
+
+
+@router.get("/edu-events")
+def edu_events(
+    start_date: Optional[str] = Query(None),  # YYYY-MM-DD
+    end_date: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),   # 교육 일정은 전 직원이 봐야 함
+):
+    """직원 의무교육(예정일·실시일)을 캘린더 이벤트로 반환."""
+    out = []
+    rows = db.query(StaffEducation).filter(StaffEducation.active == True).all()  # noqa: E712
+    for e in rows:
+        # 완료면 실시일, 미완료면 예정일 — 날짜가 없으면 캘린더에 띄우지 않는다
+        d = (e.done_date if e.done else e.plan_date) or None
+        if not d:
+            continue
+        if start_date and d < start_date:
+            continue
+        if end_date and d > end_date:
+            continue
+        out.append({
+            "id": e.id,
+            "date": d,
+            "title": e.title,
+            "division": e.division or "기타",
+            "eval_no": e.eval_no,
+            "org": e.org,
+            "done": bool(e.done),
+        })
     return ApiResponse(success=True, data=out)

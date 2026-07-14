@@ -10,9 +10,24 @@ from app.core.security import get_current_user
 from app.models.user import User
 from app.models.staffing import InternalNotice
 from app.schemas.response import ApiResponse
+from app.services.staff_notify import notify_all_staff
 
 router = APIRouter()
 LEVELS = ("info", "important", "urgent")
+LEVEL_PREFIX = {"urgent": "[긴급] ", "important": "[중요] ", "info": ""}
+
+
+def _push_notice(db: Session, n: InternalNotice, author_id: Optional[str]) -> dict:
+    """공지를 직원앱에 푸시. 본문이 없으면 제목만 보낸다."""
+    title = f"{LEVEL_PREFIX.get(n.level or 'info', '')}공지 · {n.title}".strip()
+    body = (n.content or "").strip() or "새 공지가 등록되었습니다. 앱에서 확인해주세요."
+    if len(body) > 120:
+        body = body[:119] + "…"
+    return notify_all_staff(
+        db, title, body,
+        data={"type": "notice", "notice_id": n.id, "level": n.level or "info"},
+        exclude_user_id=author_id,
+    )
 
 
 def _can_write(current_user: User = Depends(get_current_user)) -> User:
@@ -39,6 +54,7 @@ class NoticeBody(BaseModel):
     level: Optional[str] = None
     pinned: Optional[bool] = None
     active: Optional[bool] = None
+    push: Optional[bool] = True     # 등록 시 직원앱 푸시 발송 여부
 
 
 @router.get("")
@@ -66,7 +82,26 @@ def create_notice(body: NoticeBody, db: Session = Depends(get_db),
         author_name=getattr(current_user, "name", None),
     )
     db.add(n); db.commit(); db.refresh(n)
-    return ApiResponse(success=True, data=_view(n))
+
+    # 푸시는 실패해도 공지 등록은 성공 처리 (notify_all_staff 내부에서 예외 흡수)
+    push = _push_notice(db, n, current_user.id) if (body.push is not False) else None
+
+    data = _view(n)
+    data["push"] = push
+    return ApiResponse(success=True, data=data)
+
+
+@router.post("/{nid}/push")
+def push_notice(nid: str, db: Session = Depends(get_db),
+                current_user: User = Depends(_can_write)):
+    """등록된 공지를 직원앱에 재발송."""
+    n = db.query(InternalNotice).filter(InternalNotice.id == nid).first()
+    if not n:
+        raise HTTPException(404, "공지를 찾을 수 없습니다.")
+    if not n.active:
+        raise HTTPException(400, "비활성 공지는 발송할 수 없습니다.")
+    result = _push_notice(db, n, None)   # 재발송은 작성자 포함 전원
+    return ApiResponse(success=True, data=result, message=f"{result.get('sent', 0)}건 발송")
 
 
 @router.patch("/{nid}")
