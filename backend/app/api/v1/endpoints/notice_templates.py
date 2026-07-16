@@ -27,7 +27,8 @@ def _can_write(current_user: User = Depends(get_current_user)) -> User:
 def _view(t: NoticeTemplate) -> dict:
     return {
         "id": t.id, "name": t.name, "level": t.level or "info",
-        "title": t.title, "content": t.content, "sort_order": t.sort_order or 0,
+        "title": t.title, "content": t.content, "image_url": getattr(t, "image_url", None),
+        "sort_order": t.sort_order or 0,
     }
 
 
@@ -36,6 +37,7 @@ class TemplateBody(BaseModel):
     level: Optional[str] = None
     title: Optional[str] = None
     content: Optional[str] = None
+    image_url: Optional[str] = None
     sort_order: Optional[int] = None
 
 
@@ -56,6 +58,7 @@ def create_template(body: TemplateBody, db: Session = Depends(get_db), _: User =
         level=body.level if body.level in LEVELS else "info",
         title=(body.title or "").strip() or None,
         content=(body.content or "").strip() or None,
+        image_url=(body.image_url or None),
         sort_order=body.sort_order or 0,
     )
     db.add(t); db.commit(); db.refresh(t)
@@ -75,6 +78,8 @@ def update_template(tid: str, body: TemplateBody, db: Session = Depends(get_db),
         t.title = body.title.strip() or None
     if body.content is not None:
         t.content = body.content.strip() or None
+    if body.image_url is not None:
+        t.image_url = body.image_url.strip() or None
     if body.sort_order is not None:
         t.sort_order = int(body.sort_order)
     db.commit(); db.refresh(t)

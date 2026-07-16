@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Megaphone, Pin, Plus, Loader2, Pencil, Trash2, Send, MessageCircle } from 'lucide-react'
 import { useAuthStore } from '@/store/auth'
-import { noticeAPI, NOTICE_LEVEL, type InternalNotice } from '@/api/noticeClient'
+import { noticeAPI, NOTICE_LEVEL, noticeImageUrl, type InternalNotice } from '@/api/noticeClient'
 import { isKakaoShareEnabled, shareNotice } from '@/lib/kakaoShare'
 import NoticeModal from '@/components/notices/NoticeModal'
 
@@ -86,7 +86,7 @@ export default function NoticeBoard() {
                         {isKakaoShareEnabled() && (
                           <button
                             onClick={async () => {
-                              try { await shareNotice({ title: n.title, content: n.content, level: n.level, link: n.public ? `${WEB}/notice/${n.id}` : undefined }) }
+                              try { await shareNotice({ title: n.title, content: n.content, level: n.level, link: n.public ? `${WEB}/notice/${n.id}` : undefined, image: noticeImageUrl(n.image_url) }) }
                               catch (e: any) { alert(e?.message ?? '카카오 공유를 열 수 없습니다. PC에서는 모바일 카카오톡에서 시도해주세요.') }
                             }}
                             aria-label="카카오톡으로 공유" title="카카오톡 오픈채팅방에 공유"

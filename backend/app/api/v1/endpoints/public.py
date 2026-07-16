@@ -406,6 +406,7 @@ def get_public_notice(nid: str, db: Session = Depends(get_db)):
         "title": n.title,
         "content": n.content,
         "level": n.level or "info",
+        "image_url": getattr(n, "image_url", None),
         "author_name": n.author_name,
         "created_at": n.created_at.isoformat() if n.created_at else None,
     })

@@ -57,6 +57,7 @@ export interface ShareNoticeInput {
   content?: string | null
   level?: 'info' | 'important' | 'urgent'
   link?: string          // 카드 클릭 시 열 URL (기본 SHARE_LINK)
+  image?: string | null  // 공지 첨부 이미지(절대 URL) — 있으면 카드 썸네일로 사용
 }
 
 const LEVEL_EMOJI: Record<string, string> = { urgent: '🚨', important: '📢', info: '💬' }
@@ -84,16 +85,37 @@ export async function shareNotice(n: ShareNoticeInput): Promise<void> {
   const title = `${LEVEL_EMOJI[lv]} ${LEVEL_LABEL[lv]} · ${n.title}`.trim()
   // 설명: 본문 요약 + 시설명 꼬리표(신뢰감)
   const description = `${summarize(n.content)}\n— ${FACILITY}`
+  // 카카오는 HTTPS 공개 이미지만 표시 → http/로컬이면 배너로 폴백(빈 카드 방지)
+  const cardImage = (n.image && /^https:\/\//.test(n.image)) ? n.image : `${WEB}/notice-card.png`
 
   window.Kakao.Share.sendDefault({
     objectType: 'feed',
     content: {
       title,
       description,
-      imageUrl: `${WEB}/notice-card.png`,
+      imageUrl: cardImage,
       link: { mobileWebUrl: url, webUrl: url },
     },
     buttons: [{ title: '공지 확인하기', link: { mobileWebUrl: url, webUrl: url } }],
+  })
+}
+
+/**
+ * 공지를 '텍스트' 형식으로 공유 (카드 없이 글자만, 최대 200자).
+ * 카카오 텍스트 타입도 링크는 필수 → 공개 공지면 그 페이지, 아니면 시설 홈으로 넣는다.
+ */
+export async function shareNoticeText(n: ShareNoticeInput): Promise<void> {
+  await ensureKakao()
+  const lv = n.level ?? 'info'
+  const head = `${LEVEL_EMOJI[lv]} ${LEVEL_LABEL[lv]} · ${n.title}`.trim()
+  const body = (n.content || '').trim()
+  let text = body ? `${head}\n\n${body}` : head
+  if (text.length > 200) text = text.slice(0, 199) + '…'   // 카카오 텍스트 최대 200자
+  const url = n.link || `${WEB}/`
+  window.Kakao.Share.sendDefault({
+    objectType: 'text',
+    text,
+    link: { mobileWebUrl: url, webUrl: url },
   })
 }
 
