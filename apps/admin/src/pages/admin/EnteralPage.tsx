@@ -495,3 +495,4 @@ function FragmentRow({ r, open, toggle }: { r: ResidentCost; open: boolean; togg
     </>
   )
 }
+
