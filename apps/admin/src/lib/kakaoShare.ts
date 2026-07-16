@@ -93,3 +93,4 @@ export async function shareText(text: string, link?: string): Promise<void> {
     link: { mobileWebUrl: url, webUrl: url },
   })
 }
+
