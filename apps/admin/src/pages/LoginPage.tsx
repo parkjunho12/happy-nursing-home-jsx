@@ -170,7 +170,7 @@ const LoginPage = () => {
 
           <div className="px-7 py-4 text-center">
             <p className="text-xs text-gray-500">
-              © 2024 행복한요양원. All rights reserved.
+              © 2026 행복한요양원. All rights reserved.
             </p>
           </div>
         </div>
