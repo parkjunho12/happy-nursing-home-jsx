@@ -14,6 +14,7 @@ export interface NoticeTemplate {
   level: NoticeLevel
   title?: string | null
   content?: string | null
+  image_url?: string | null
   sort_order: number
 }
 export interface TemplateInput {
@@ -21,6 +22,7 @@ export interface TemplateInput {
   level?: NoticeLevel
   title?: string | null
   content?: string | null
+  image_url?: string | null
   sort_order?: number
 }
 

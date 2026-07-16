@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { X, Plus, Trash2, Loader2 } from 'lucide-react'
 import { templateAPI, type NoticeTemplate, type TemplateInput } from '@/api/templateClient'
 import { NOTICE_LEVEL, type NoticeLevel } from '@/api/noticeClient'
+import ImageUploader from '@/components/notices/ImageUploader'
 
-const EMPTY: TemplateInput = { name: '', level: 'info', title: '', content: '' }
+const EMPTY: TemplateInput = { name: '', level: 'info', title: '', content: '', image_url: null }
 
 export default function TemplateManagerModal({ onClose }: { onClose: () => void }) {
   const [list, setList] = useState<NoticeTemplate[]>([])
@@ -19,7 +20,7 @@ export default function TemplateManagerModal({ onClose }: { onClose: () => void 
   useEffect(() => { load() }, [])
 
   const pick = (t: NoticeTemplate) => {
-    setSel(t.id); setForm({ name: t.name, level: t.level, title: t.title ?? '', content: t.content ?? '' })
+    setSel(t.id); setForm({ name: t.name, level: t.level, title: t.title ?? '', content: t.content ?? '', image_url: t.image_url ?? null })
   }
   const reset = () => { setSel(null); setForm(EMPTY) }
 
@@ -103,6 +104,10 @@ export default function TemplateManagerModal({ onClose }: { onClose: () => void 
             <div>
               <label className="text-xs font-semibold text-gray-500 mb-1 block">기본 내용</label>
               <textarea rows={6} value={form.content ?? ''} onChange={e => setForm(f => ({ ...f, content: e.target.value }))} className={`${inp} resize-none`} placeholder="공지 내용 기본값 (○ 자리에 실제 값을 채워 쓰세요)" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 mb-1 block">기본 이미지</label>
+              <ImageUploader value={form.image_url} onChange={(url) => setForm(f => ({ ...f, image_url: url }))} />
             </div>
             <div className="flex gap-2 pt-1">
               {sel && <button onClick={reset} className="flex-1 border border-gray-200 text-gray-600 rounded-xl py-2.5 text-sm font-semibold">새로 작성</button>}

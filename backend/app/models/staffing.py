@@ -54,6 +54,7 @@ class InternalNotice(Base):
     pinned = Column(Boolean, default=False, index=True)
     active = Column(Boolean, default=True, index=True)
     public = Column(Boolean, default=False, index=True)  # True=로그인 없이 링크로 열람 가능
+    image_url = Column(String, nullable=True)            # 공유 카드·상세 이미지
     author_id = Column(String, nullable=True)
     author_name = Column(String(100), nullable=True)
 
@@ -70,6 +71,7 @@ class NoticeTemplate(Base):
     level = Column(String(20), default="info")          # info | important | urgent
     title = Column(String(200), nullable=True)          # 공지 제목 기본값
     content = Column(Text, nullable=True)               # 공지 내용 기본값
+    image_url = Column(String, nullable=True)           # 공지 이미지 기본값
     sort_order = Column(Integer, default=0, index=True)
     created_at = Column(DateTime(timezone=True), default=now_kst)
     updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)

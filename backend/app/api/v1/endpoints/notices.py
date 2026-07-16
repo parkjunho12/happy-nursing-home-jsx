@@ -1,7 +1,9 @@
 """내부 공지사항 (직원용) — 읽기: 전 직원 / 쓰기: ADMIN · 시설장"""
 from __future__ import annotations
+import os
+import uuid
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -14,6 +16,9 @@ from app.services.staff_notify import notify_all_staff
 
 router = APIRouter()
 LEVELS = ("info", "important", "urgent")
+UPLOAD_SUBDIR = "uploads/notices"
+MAX_SIZE = 10 * 1024 * 1024
+ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"}
 LEVEL_PREFIX = {"urgent": "[긴급] ", "important": "[중요] ", "info": ""}
 
 
@@ -44,6 +49,7 @@ def _view(n: InternalNotice) -> dict:
         "id": n.id, "title": n.title, "content": n.content,
         "level": n.level or "info", "pinned": bool(n.pinned), "active": bool(n.active),
         "public": bool(getattr(n, "public", False)),
+        "image_url": getattr(n, "image_url", None),
         "author_name": n.author_name,
         "created_at": n.created_at.isoformat() if n.created_at else None,
     }
@@ -56,6 +62,7 @@ class NoticeBody(BaseModel):
     pinned: Optional[bool] = None
     active: Optional[bool] = None
     public: Optional[bool] = None   # True=로그인 없이 링크로 열람 가능(공개 공지)
+    image_url: Optional[str] = None # 공유 카드·상세 이미지 (upload-image로 받은 경로)
     push: Optional[bool] = True     # 등록 시 직원앱 푸시 발송 여부
 
 
@@ -81,6 +88,7 @@ def create_notice(body: NoticeBody, db: Session = Depends(get_db),
         pinned=bool(body.pinned),
         active=True,
         public=bool(body.public),
+        image_url=(body.image_url or None),
         author_id=current_user.id,
         author_name=getattr(current_user, "name", None),
     )
@@ -125,6 +133,8 @@ def update_notice(nid: str, body: NoticeBody, db: Session = Depends(get_db),
         n.active = bool(body.active)
     if body.public is not None:
         n.public = bool(body.public)
+    if body.image_url is not None:
+        n.image_url = body.image_url.strip() or None
     db.commit(); db.refresh(n)
     return ApiResponse(success=True, data=_view(n))
 
@@ -136,3 +146,19 @@ def delete_notice(nid: str, db: Session = Depends(get_db), _: User = Depends(_ca
         raise HTTPException(404, "공지를 찾을 수 없습니다.")
     db.delete(n); db.commit()
     return ApiResponse(success=True, message="삭제되었습니다.")
+
+
+@router.post("/upload-image")
+def upload_notice_image(file: UploadFile = File(...), _: User = Depends(_can_write)):
+    """공지·템플릿용 이미지 업로드 → 저장 경로(/uploads/notices/..) 반환."""
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in ALLOWED_EXT:
+        raise HTTPException(400, f"허용되지 않는 이미지 형식입니다: {ext}")
+    data = file.file.read()
+    if len(data) > MAX_SIZE:
+        raise HTTPException(400, "이미지가 너무 큽니다(최대 10MB).")
+    os.makedirs(UPLOAD_SUBDIR, exist_ok=True)
+    disk = f"{uuid.uuid4()}{ext}"
+    with open(os.path.join(UPLOAD_SUBDIR, disk), "wb") as out:
+        out.write(data)
+    return ApiResponse(success=True, data={"url": f"/uploads/notices/{disk}"})

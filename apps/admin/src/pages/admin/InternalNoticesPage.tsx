@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { Megaphone, Plus, Pin, Loader2, Pencil, Trash2, Send, MessageCircle, Link2, Search, Eye, LayoutTemplate } from 'lucide-react'
 import { useAuthStore } from '@/store/auth'
-import { noticeAPI, NOTICE_LEVEL, type InternalNotice, type NoticeLevel } from '@/api/noticeClient'
+import { noticeAPI, NOTICE_LEVEL, noticeImageUrl, type InternalNotice, type NoticeLevel } from '@/api/noticeClient'
 import { isKakaoShareEnabled, shareNotice } from '@/lib/kakaoShare'
 import NoticeModal from '@/components/notices/NoticeModal'
 import NoticeDetailModal from '@/components/notices/NoticeDetailModal'
@@ -169,7 +169,7 @@ export default function InternalNoticesPage() {
                         className="p-2 text-gray-300 hover:text-primary-orange rounded"><Eye size={14} /></button>
                       {n.public && isKakaoShareEnabled() && (
                         <button onClick={async () => {
-                          try { await shareNotice({ title: n.title, content: n.content, level: n.level, link: `${WEB}/notice/${n.id}` }) }
+                          try { await shareNotice({ title: n.title, content: n.content, level: n.level, link: `${WEB}/notice/${n.id}`, image: noticeImageUrl(n.image_url) }) }
                           catch (e: any) { alert(e?.message ?? '카카오 공유를 열 수 없습니다. 모바일 카카오톡에서 시도해주세요.') }
                         }} title="카카오톡 공유"
                           className="p-2 text-gray-300 hover:text-[#3A1D1D] hover:bg-[#FEE500] rounded"><MessageCircle size={14} /></button>

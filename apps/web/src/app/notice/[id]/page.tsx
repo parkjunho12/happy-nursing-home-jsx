@@ -10,6 +10,7 @@ type Notice = {
   title: string
   content: string | null
   level: 'info' | 'important' | 'urgent'
+  image_url: string | null
   author_name: string | null
   created_at: string | null
 }
@@ -31,6 +32,8 @@ async function fetchNotice(id: string): Promise<Notice | null> {
     return null
   }
 }
+
+const imgAbs = (u: string | null) => (!u ? null : u.startsWith('http') ? u : `${API_BASE_URL}${u}`)
 
 function fmtDate(s: string | null) {
   if (!s) return ''
@@ -73,7 +76,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
     title,
     description: desc,
     robots: { index: false, follow: false },
-    openGraph: { title, description: desc, images: ['/assets/logo/logo.png'], type: 'article' },
+    openGraph: { title, description: desc, images: [imgAbs(n?.image_url ?? null) || '/assets/logo/logo.png'], type: 'article' },
   }
 }
 
@@ -135,6 +138,10 @@ export default async function PublicNoticePage({ params }: { params: { id: strin
               </span>
               {n.author_name ?? '행복한요양원'}
             </div>
+
+            {imgAbs(n.image_url) && (
+              <img src={imgAbs(n.image_url)!} alt="공지 이미지" className="w-full rounded-xl border border-gray-100 mt-4" />
+            )}
 
             {n.content && (
               <>

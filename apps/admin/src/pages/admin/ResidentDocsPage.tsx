@@ -215,24 +215,30 @@ export default function ResidentDocsPage() {
                   <td className={`${td} text-gray-500`}>
                     {r.certifications && r.certifications.length > 0 ? (() => {
                       const certs = r.certifications!
-                      const cur = currentCert(certs)!
+                      // 추가된(현재) 인정서 = 편집기의 '· 현재'(마지막 항목) — 항상 보이게, 나머지는 더보기
+                      const cur = certs[certs.length - 1]
+                      const others = certs.filter(c => c !== cur)
                       const st = certState(cur)
                       const badge = st.status === 'expired' ? { t: '만료 지남', c: 'bg-red-100 text-red-600' }
                         : st.status === 'renew' ? { t: `갱신대상 D-${Math.max(0, st.daysToEnd ?? 0)}`, c: 'bg-amber-100 text-amber-700' } : null
                       const key = `${r.id}|cert`, open = exp.has(key)
-                      const sorted = [...certs].sort((a, b) => (a.end || '').localeCompare(b.end || ''))
                       const line = (c: typeof cur) => `${gradeLabel(c)}${benefitLabel(c) ? ' · ' + benefitLabel(c) : ''}`
                       return (
                         <button onClick={() => toggleExp(key)} className="text-left">
                           {open ? (
                             <div className="space-y-0.5">
-                              {sorted.map((c, i) => <div key={i} className={`whitespace-nowrap ${c === cur ? 'font-semibold text-gray-700' : 'text-gray-400'}`}><span className="text-teal-600">{line(c)}</span> {fmtD(c.start) || '?'}~{fmtD(c.end) || '진행'}</div>)}
+                              {[cur, ...others].map((c, i) => (
+                                <div key={i} className={`whitespace-nowrap ${c === cur ? 'font-semibold text-gray-700' : 'text-gray-400'}`}>
+                                  <span className="text-teal-600">{line(c)}</span> {fmtD(c.start) || '?'}~{fmtD(c.end) || '진행'}
+                                  {c === cur && <span className="text-[10px] text-primary-orange ml-1">· 현재</span>}
+                                </div>
+                              ))}
                               <span className="text-[10px] text-indigo-500">접기 ▴</span>
                             </div>
                           ) : (
                             <div className="whitespace-nowrap">
                               <span className="font-semibold text-gray-700"><span className="text-teal-600">{line(cur)}</span> {fmtD(cur.start) || '?'}~{fmtD(cur.end) || '진행'}</span>
-                              {certs.length > 1 && <span className="text-[10px] text-indigo-500 ml-1">외 {certs.length - 1}건 ▾</span>}
+                              {others.length > 0 && <span className="text-[10px] text-indigo-500 ml-1">외 {others.length}건 ▾</span>}
                             </div>
                           )}
                           {cur.end && <div className="text-[10px] text-gray-400 mt-0.5">갱신기준 {renewalDue(cur.end)}</div>}

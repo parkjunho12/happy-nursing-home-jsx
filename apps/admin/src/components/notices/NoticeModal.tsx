@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { X, Send, LayoutTemplate, BookmarkPlus } from 'lucide-react'
 import { noticeAPI, NOTICE_LEVEL, type InternalNotice, type NoticeLevel } from '@/api/noticeClient'
 import { templateAPI, type NoticeTemplate } from '@/api/templateClient'
+import ImageUploader from '@/components/notices/ImageUploader'
 import { isKakaoShareEnabled } from '@/lib/kakaoShare'
 
 export default function NoticeModal({ notice, onClose, onSaved }: { notice: InternalNotice | null; onClose: () => void; onSaved: () => void }) {
@@ -11,6 +12,7 @@ export default function NoticeModal({ notice, onClose, onSaved }: { notice: Inte
   const [level, setLevel] = useState<NoticeLevel>(notice?.level ?? 'info')
   const [pinned, setPinned] = useState(!!notice?.pinned)
   const [pub, setPub] = useState(!!notice?.public)
+  const [image, setImage] = useState<string | null>(notice?.image_url ?? null)
   const [push, setPush] = useState(true)          // 신규 등록 시 기본 발송
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
@@ -23,13 +25,14 @@ export default function NoticeModal({ notice, onClose, onSaved }: { notice: Inte
     setLevel(t.level ?? 'info')
     setTitle(t.title ?? '')
     setContent(t.content ?? '')
+    setImage(t.image_url ?? null)
   }
 
   const saveAsTemplate = async () => {
     const name = prompt('템플릿 이름을 입력하세요', (title.trim() || '새 템플릿'))
     if (!name || !name.trim()) return
     try {
-      await templateAPI.create({ name: name.trim(), level, title: title.trim() || null, content: content.trim() || null })
+      await templateAPI.create({ name: name.trim(), level, title: title.trim() || null, content: content.trim() || null, image_url: image })
       setTemplates(await templateAPI.list())
       alert('템플릿으로 저장했습니다.')
     } catch (e: any) { alert(e?.message ?? '템플릿 저장 실패') }
@@ -41,7 +44,7 @@ export default function NoticeModal({ notice, onClose, onSaved }: { notice: Inte
     if (!title.trim()) { setErr('제목을 입력해주세요.'); return }
     setSaving(true); setErr('')
     try {
-      const body = { title: title.trim(), content: content.trim() || null, level, pinned, public: pub }
+      const body = { title: title.trim(), content: content.trim() || null, level, pinned, public: pub, image_url: image }
       if (isEdit) {
         await noticeAPI.update(notice!.id, body)
       } else {
@@ -64,12 +67,12 @@ export default function NoticeModal({ notice, onClose, onSaved }: { notice: Inte
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
           <h3 className="font-bold text-gray-900">{isEdit ? '공지 수정' : '내부 공지 등록'}</h3>
           <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center"><X className="w-5 h-5 text-gray-400" /></button>
         </div>
-        <div className="px-5 py-4 space-y-3">
+        <div className="px-5 py-4 space-y-3 overflow-y-auto flex-1 min-h-0">
           <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-2.5">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-xs font-semibold text-gray-500 flex items-center gap-1"><LayoutTemplate size={13} /> 템플릿</span>
@@ -111,6 +114,11 @@ export default function NoticeModal({ notice, onClose, onSaved }: { notice: Inte
             <label className="text-xs font-semibold text-gray-500 mb-1 block">내용</label>
             <textarea rows={4} value={content} onChange={e => setContent(e.target.value)} className={`${inp} resize-none`} placeholder="직원에게 전달할 내용을 입력하세요" />
           </div>
+          <div>
+            <label className="text-xs font-semibold text-gray-500 mb-1 block">이미지</label>
+            <ImageUploader value={image} onChange={setImage} />
+            <p className="text-[11px] text-gray-400 mt-1">카카오 공유 카드와 공개 상세 페이지에 함께 표시됩니다.</p>
+          </div>
           <label className="inline-flex items-center gap-2 text-sm text-gray-600">
             <input type="checkbox" checked={pinned} onChange={e => setPinned(e.target.checked)} className="accent-primary-orange" />
             상단 고정 (핀)
@@ -146,7 +154,7 @@ export default function NoticeModal({ notice, onClose, onSaved }: { notice: Inte
           )}
           {err && <p className="text-xs text-red-500">{err}</p>}
         </div>
-        <div className="flex gap-2 px-5 py-4 border-t">
+        <div className="flex gap-2 px-5 py-4 border-t shrink-0">
           <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-700 rounded-xl py-2.5 text-sm font-semibold">취소</button>
           <button onClick={save} disabled={saving}
             className="flex-1 bg-primary-orange hover:bg-primary-orange/90 text-white rounded-xl py-2.5 text-sm font-semibold disabled:opacity-50">
