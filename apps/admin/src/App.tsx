@@ -43,6 +43,7 @@ import ExpensePage from './pages/admin/ExpensePage'
 import FacilityNewsPage from './pages/admin/FacilityNewsPage'
 import StaffHrPage from './pages/admin/StaffHrPage'
 import ResidentDocsPage from './pages/admin/ResidentDocsPage'
+import InternalNoticesPage from './pages/admin/InternalNoticesPage'
 import StaffEducationPage from './pages/StaffEducationPage'
 import WorkGuidePage from './pages/WorkGuidePage'
 import GuidePage from './pages/GuidePage'
@@ -229,6 +230,7 @@ function App() {
             <Route path="schedule"                 element={<ScheduleRoute><SchedulePage /></ScheduleRoute>} />
             <Route path="expense"                  element={<ExpenseRoute><ExpensePage /></ExpenseRoute>} />
             <Route path="facility-news"            element={<SocialWorkerRoute><FacilityNewsPage /></SocialWorkerRoute>} />
+            <Route path="notices"                  element={<ManagerRoute><InternalNoticesPage /></ManagerRoute>} />
             <Route path="staff-hr"                 element={<StaffAdminRoute><StaffHrPage /></StaffAdminRoute>} />
             <Route path="staffing"                 element={<ManagerRoute><StaffingSimulatorPage /></ManagerRoute>} />
             <Route path="resident-docs"            element={<SocialWorkerRoute><ResidentDocsPage /></SocialWorkerRoute>} />

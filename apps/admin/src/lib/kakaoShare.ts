@@ -59,7 +59,18 @@ export interface ShareNoticeInput {
   link?: string          // 카드 클릭 시 열 URL (기본 SHARE_LINK)
 }
 
-const LEVEL_PREFIX: Record<string, string> = { urgent: '[긴급] ', important: '[중요] ', info: '' }
+const LEVEL_EMOJI: Record<string, string> = { urgent: '🚨', important: '📢', info: '💬' }
+const LEVEL_LABEL: Record<string, string> = { urgent: '긴급 공지', important: '중요 공지', info: '공지' }
+const FACILITY = '양주 행복한요양원 녹양역점'
+// 공개 웹 도메인 — 공유 카드 배너 이미지(2:1) 위치
+const WEB = (import.meta.env.VITE_PUBLIC_WEB_URL || 'https://www.xn--p80bu1t60gba47bg6abm347gsla.com').replace(/\/$/, '')
+
+/** 본문을 카드용 한 줄 요약으로 — 줄바꿈·중복 공백 제거 후 길이 제한 */
+function summarize(text?: string | null, max = 90): string {
+  const t = (text || '').replace(/\s+/g, ' ').trim()
+  if (!t) return '내용을 눌러 확인해 주세요.'
+  return t.length <= max ? t : t.slice(0, max - 1).trimEnd() + '…'
+}
 
 /**
  * 공지를 카카오톡 공유창으로 띄운다. (사용자가 오픈채팅방을 선택해 전송)
@@ -68,18 +79,21 @@ const LEVEL_PREFIX: Record<string, string> = { urgent: '[긴급] ', important: '
 export async function shareNotice(n: ShareNoticeInput): Promise<void> {
   await ensureKakao()
   const url = n.link || SHARE_LINK
-  const title = `${LEVEL_PREFIX[n.level ?? 'info'] ?? ''}공지 · ${n.title}`.trim()
-  const desc = (n.content || '').trim() || '행복한요양원 공지사항입니다.'
+  const lv = n.level ?? 'info'
+  // 제목: [이모지][라벨] · 제목  → 오픈채팅방 목록에서 한눈에 성격이 보이게
+  const title = `${LEVEL_EMOJI[lv]} ${LEVEL_LABEL[lv]} · ${n.title}`.trim()
+  // 설명: 본문 요약 + 시설명 꼬리표(신뢰감)
+  const description = `${summarize(n.content)}\n— ${FACILITY}`
 
   window.Kakao.Share.sendDefault({
     objectType: 'feed',
     content: {
       title,
-      description: desc.length > 400 ? desc.slice(0, 399) + '…' : desc,
-      imageUrl: (() => { try { return new URL('/assets/logo/logo.png', url).toString() } catch { return `${SHARE_LINK.replace(/\/$/, '')}/assets/logo/logo.png` } })(),
+      description,
+      imageUrl: `${WEB}/notice-card.png`,
       link: { mobileWebUrl: url, webUrl: url },
     },
-    buttons: [{ title: '자세히 보기', link: { mobileWebUrl: url, webUrl: url } }],
+    buttons: [{ title: '공지 확인하기', link: { mobileWebUrl: url, webUrl: url } }],
   })
 }
 

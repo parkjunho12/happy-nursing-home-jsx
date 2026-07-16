@@ -2,7 +2,7 @@ import {
   LayoutDashboard, UserCog, MessageSquare, FileText,
   Star, Settings, ClipboardList, ClipboardCheck, CalendarDays,
   UserRound, ShieldCheck, Sparkles, FileSearch,
-  Image as ImageIcon, Users, BookOpen, PenLine, Megaphone, HeartHandshake, Briefcase, Soup, Receipt, GraduationCap,
+  Image as ImageIcon, Users, BookOpen, PenLine, Megaphone, Bell, HeartHandshake, Briefcase, Soup, Receipt, GraduationCap,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -103,6 +103,7 @@ export function getNavConfig(
             { to: '/staffing', icon: Users, label: '인력배치 시뮬레이터' },
             { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
             { to: '/facility-news', icon: Megaphone, label: '시설소식' },
+            { to: '/notices', icon: Bell, label: '내부 공지 관리' },
             { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
             { to: '/recruitment', icon: Briefcase, label: '채용 관리' },
             { to: '/enteral', icon: Soup, label: '경관식 관리' },
@@ -166,6 +167,7 @@ export function getNavConfig(
             { to: '/staffing', icon: Users, label: '인력배치 시뮬레이터' },
             { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
             { to: '/facility-news', icon: Megaphone, label: '시설소식' },
+            { to: '/notices', icon: Bell, label: '내부 공지 관리' },
             { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
             { to: '/recruitment', icon: Briefcase, label: '채용 관리' },
             { to: '/enteral', icon: Soup, label: '경관식 관리' },
