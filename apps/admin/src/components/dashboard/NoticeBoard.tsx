@@ -4,6 +4,9 @@ import { useAuthStore } from '@/store/auth'
 import { noticeAPI, NOTICE_LEVEL, type InternalNotice, type NoticeLevel } from '@/api/noticeClient'
 import { isKakaoShareEnabled, shareNotice } from '@/lib/kakaoShare'
 
+// 공개 공지 상세가 열리는 공개 웹 도메인 (카카오 공유 링크에 사용)
+const WEB = (import.meta.env.VITE_PUBLIC_WEB_URL || 'https://www.xn--p80bu1t60gba47bg6abm347gsla.com').replace(/\/$/, '')
+
 const rel = (iso?: string | null) => {
   if (!iso) return ''
   const d = new Date(iso)
@@ -67,6 +70,7 @@ export default function NoticeBoard() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-800 flex items-center gap-1">
                         {n.pinned && <Pin size={11} className="text-primary-orange shrink-0" />}
+                        {n.public && <span className="shrink-0 text-[9px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1 py-0.5 rounded">공개</span>}
                         <span className={open ? '' : 'truncate'}>{n.title}</span>
                       </p>
                       {open && n.content && (
@@ -81,7 +85,7 @@ export default function NoticeBoard() {
                         {isKakaoShareEnabled() && (
                           <button
                             onClick={async () => {
-                              try { await shareNotice({ title: n.title, content: n.content, level: n.level }) }
+                              try { await shareNotice({ title: n.title, content: n.content, level: n.level, link: n.public ? `${WEB}/notice/${n.id}` : undefined }) }
                               catch (e: any) { alert(e?.message ?? '카카오 공유를 열 수 없습니다. PC에서는 모바일 카카오톡에서 시도해주세요.') }
                             }}
                             aria-label="카카오톡으로 공유" title="카카오톡 오픈채팅방에 공유"
@@ -129,6 +133,7 @@ function NoticeModal({ notice, onClose, onSaved }: { notice: InternalNotice | nu
   const [content, setContent] = useState(notice?.content ?? '')
   const [level, setLevel] = useState<NoticeLevel>(notice?.level ?? 'info')
   const [pinned, setPinned] = useState(!!notice?.pinned)
+  const [pub, setPub] = useState(!!notice?.public)
   const [push, setPush] = useState(true)          // 신규 등록 시 기본 발송
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
@@ -139,7 +144,7 @@ function NoticeModal({ notice, onClose, onSaved }: { notice: InternalNotice | nu
     if (!title.trim()) { setErr('제목을 입력해주세요.'); return }
     setSaving(true); setErr('')
     try {
-      const body = { title: title.trim(), content: content.trim() || null, level, pinned }
+      const body = { title: title.trim(), content: content.trim() || null, level, pinned, public: pub }
       if (isEdit) {
         await noticeAPI.update(notice!.id, body)
       } else {
@@ -191,6 +196,25 @@ function NoticeModal({ notice, onClose, onSaved }: { notice: InternalNotice | nu
             <input type="checkbox" checked={pinned} onChange={e => setPinned(e.target.checked)} className="accent-primary-orange" />
             상단 고정 (핀)
           </label>
+
+          <div>
+            <label className="text-xs font-semibold text-gray-500 mb-1 block">공개 범위</label>
+            <div className="flex gap-1.5">
+              <button type="button" onClick={() => setPub(false)}
+                className={`flex-1 px-3 py-2 rounded-lg text-xs font-bold border transition-all ${!pub ? 'bg-gray-100 text-gray-700 border-gray-300 ring-2 ring-offset-1 ring-gray-200' : 'bg-white text-gray-400 border-gray-200'}`}>
+                🔒 내부 (로그인 필요)
+              </button>
+              <button type="button" onClick={() => setPub(true)}
+                className={`flex-1 px-3 py-2 rounded-lg text-xs font-bold border transition-all ${pub ? 'bg-emerald-50 text-emerald-700 border-emerald-300 ring-2 ring-offset-1 ring-emerald-200' : 'bg-white text-gray-400 border-gray-200'}`}>
+                🔗 공개 (링크 열람)
+              </button>
+            </div>
+            <p className="text-[11px] text-gray-400 mt-1">
+              {pub
+                ? '카카오톡 공유 링크를 누구나 로그인 없이 열 수 있습니다. 민감한 내용은 피하세요.'
+                : '어드민 로그인한 직원만 볼 수 있습니다. 카카오 공유 링크는 로그인 화면으로 연결됩니다.'}
+            </p>
+          </div>
 
           {!isEdit && (
             <label className="flex items-start gap-2 text-sm text-gray-600 rounded-xl border border-gray-100 bg-gray-50/70 p-2.5 cursor-pointer">

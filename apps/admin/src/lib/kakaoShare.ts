@@ -76,7 +76,7 @@ export async function shareNotice(n: ShareNoticeInput): Promise<void> {
     content: {
       title,
       description: desc.length > 400 ? desc.slice(0, 399) + '…' : desc,
-      imageUrl: `${SHARE_LINK.replace(/\/$/, '')}/logo.png`,
+      imageUrl: (() => { try { return new URL('/assets/logo/logo.png', url).toString() } catch { return `${SHARE_LINK.replace(/\/$/, '')}/assets/logo/logo.png` } })(),
       link: { mobileWebUrl: url, webUrl: url },
     },
     buttons: [{ title: '자세히 보기', link: { mobileWebUrl: url, webUrl: url } }],

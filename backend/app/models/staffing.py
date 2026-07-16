@@ -53,6 +53,7 @@ class InternalNotice(Base):
     level = Column(String(20), default="info")     # info | important | urgent
     pinned = Column(Boolean, default=False, index=True)
     active = Column(Boolean, default=True, index=True)
+    public = Column(Boolean, default=False, index=True)  # True=로그인 없이 링크로 열람 가능
     author_id = Column(String, nullable=True)
     author_name = Column(String(100), nullable=True)
 

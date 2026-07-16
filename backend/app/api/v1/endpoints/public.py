@@ -26,6 +26,8 @@ from app.models.public import (
 )
 
 from app.models.history import History, HistoryCategory
+from app.models.staffing import InternalNotice
+from app.schemas.response import ApiResponse
 
 from app.schemas.public import (
     ContactFormRequest,
@@ -379,3 +381,31 @@ def get_public_info(db: Session = Depends(get_db)):
     )
 
     return PublicApiResponse(success=True, data=out)
+
+
+# ============================================================
+# 공개 내부 공지 (로그인 없이 링크로 열람) — public=True 인 것만
+# 카카오톡 공유 링크가 여는 페이지가 사용한다.
+# ============================================================
+@router.get("/notices/{nid}")
+def get_public_notice(nid: str, db: Session = Depends(get_db)):
+    n = (
+        db.query(InternalNotice)
+        .filter(
+            InternalNotice.id == nid,
+            InternalNotice.active == True,   # noqa: E712
+            InternalNotice.public == True,   # noqa: E712
+        )
+        .first()
+    )
+    if not n:
+        # 비공개/삭제/없음 모두 404로 통일 (존재 여부 노출 방지)
+        raise HTTPException(status_code=404, detail="공개된 공지를 찾을 수 없습니다.")
+    return ApiResponse(success=True, data={
+        "id": n.id,
+        "title": n.title,
+        "content": n.content,
+        "level": n.level or "info",
+        "author_name": n.author_name,
+        "created_at": n.created_at.isoformat() if n.created_at else None,
+    })

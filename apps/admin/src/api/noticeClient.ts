@@ -16,6 +16,7 @@ export interface InternalNotice {
   level: NoticeLevel
   pinned: boolean
   active: boolean
+  public: boolean            // true=로그인 없이 링크로 열람 가능(공개 공지)
   author_name?: string | null
   created_at?: string | null
 }
@@ -25,6 +26,7 @@ export interface NoticeInput {
   level?: NoticeLevel
   pinned?: boolean
   active?: boolean
+  public?: boolean          // 공개(로그인 불필요) 여부
   push?: boolean            // 등록 시 직원앱 푸시 발송 (기본 true)
 }
 /** 푸시 발송 결과 */
