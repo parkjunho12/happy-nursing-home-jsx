@@ -59,3 +59,17 @@ class InternalNotice(Base):
 
     created_at = Column(DateTime(timezone=True), default=now_kst)
     updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)
+
+
+class NoticeTemplate(Base):
+    """내부 공지 작성 템플릿 (공용) — 자주 쓰는 공지 양식을 저장·재사용."""
+    __tablename__ = "notice_templates"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    name = Column(String(100), nullable=False)          # 템플릿 이름 (예: 정전 안내)
+    level = Column(String(20), default="info")          # info | important | urgent
+    title = Column(String(200), nullable=True)          # 공지 제목 기본값
+    content = Column(Text, nullable=True)               # 공지 내용 기본값
+    sort_order = Column(Integer, default=0, index=True)
+    created_at = Column(DateTime(timezone=True), default=now_kst)
+    updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)
