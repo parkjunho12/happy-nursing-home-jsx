@@ -43,6 +43,7 @@ def _view(n: InternalNotice) -> dict:
     return {
         "id": n.id, "title": n.title, "content": n.content,
         "level": n.level or "info", "pinned": bool(n.pinned), "active": bool(n.active),
+        "public": bool(getattr(n, "public", False)),
         "author_name": n.author_name,
         "created_at": n.created_at.isoformat() if n.created_at else None,
     }
@@ -54,6 +55,7 @@ class NoticeBody(BaseModel):
     level: Optional[str] = None
     pinned: Optional[bool] = None
     active: Optional[bool] = None
+    public: Optional[bool] = None   # True=로그인 없이 링크로 열람 가능(공개 공지)
     push: Optional[bool] = True     # 등록 시 직원앱 푸시 발송 여부
 
 
@@ -78,6 +80,7 @@ def create_notice(body: NoticeBody, db: Session = Depends(get_db),
         level=body.level if body.level in LEVELS else "info",
         pinned=bool(body.pinned),
         active=True,
+        public=bool(body.public),
         author_id=current_user.id,
         author_name=getattr(current_user, "name", None),
     )
@@ -120,6 +123,8 @@ def update_notice(nid: str, body: NoticeBody, db: Session = Depends(get_db),
         n.pinned = bool(body.pinned)
     if body.active is not None:
         n.active = bool(body.active)
+    if body.public is not None:
+        n.public = bool(body.public)
     db.commit(); db.refresh(n)
     return ApiResponse(success=True, data=_view(n))
 
