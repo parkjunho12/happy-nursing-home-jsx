@@ -74,43 +74,7 @@ export default function FamilyAlbumsPage() {
 
   useEffect(() => { load() }, [load])
 
-  // 앱(WebView)일 때 FCM 토큰을 서버에 등록 (브릿지가 있을 때만)
-  const registerPush = useCallback(async () => {
-    const native = (window as any).HappyCareNative
-    if (!native || typeof native.getFcmToken !== 'function') return
-    const token = native.getFcmToken()
-    const jwt = localStorage.getItem('family_token')
-    if (!token || !jwt) return
-    try {
-      await fetch(`${resolveApiBase()}/api/v1/family/push/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
-        body: JSON.stringify({ token, platform: native.getPlatform?.() ?? 'android' }),
-      })
-    } catch { /* 등록 실패는 조용히 무시 */ }
-  }, [])
-
-  useEffect(() => {
-    registerPush()
-    const t = setTimeout(registerPush, 2000)   // 토큰 준비 지연 대비 1회 재시도
-    return () => clearTimeout(t)
-  }, [registerPush])
-
-  // 안드로이드 앱(WebView) 안에서 실행 중이면 FCM 토큰을 백엔드에 등록
-  useEffect(() => {
-    const bridge = (window as any).NativeBridge
-    const token = typeof window !== 'undefined' ? localStorage.getItem('family_token') : null
-    if (!bridge?.getFcmToken || !token) return
-    try {
-      const fcm: string = bridge.getFcmToken()
-      if (!fcm) return
-      fetch(`${resolveApiBase()}/api/v1/family/push/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ token: fcm, platform: 'android' }),
-      }).catch(() => {})
-    } catch { /* 앱 밖이면 무시 */ }
-  }, [])
+  // FCM 토큰 등록은 공통 컴포넌트(FamilyPushRegistrar, family/layout)에서 처리한다.
 
   const logout = () => {
     localStorage.removeItem('family_token')

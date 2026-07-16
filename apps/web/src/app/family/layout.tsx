@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import FamilyPushRegistrar from '@/components/family/FamilyPushRegistrar'
 
 export const metadata: Metadata = {
   title: '보호자 앨범 | 행복한요양원',
@@ -7,5 +8,10 @@ export const metadata: Metadata = {
 }
 
 export default function FamilyLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>
+  return (
+    <>
+      {children}
+      <FamilyPushRegistrar />
+    </>
+  )
 }

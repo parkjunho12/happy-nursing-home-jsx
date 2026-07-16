@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Megaphone, Pin, Plus, X, Loader2, Pencil, Trash2, Send } from 'lucide-react'
+import { Megaphone, Pin, Plus, X, Loader2, Pencil, Trash2, Send, MessageCircle } from 'lucide-react'
 import { useAuthStore } from '@/store/auth'
 import { noticeAPI, NOTICE_LEVEL, type InternalNotice, type NoticeLevel } from '@/api/noticeClient'
+import { isKakaoShareEnabled, shareNotice } from '@/lib/kakaoShare'
 
 const rel = (iso?: string | null) => {
   if (!iso) return ''
@@ -75,8 +76,20 @@ export default function NoticeBoard() {
                         {n.author_name ?? '관리자'} · {rel(n.created_at)}
                       </p>
                     </div>
-                    {canWrite && open && (
+                    {open && (
                       <div className="flex items-center gap-0.5 shrink-0" onClick={e => e.stopPropagation()}>
+                        {isKakaoShareEnabled() && (
+                          <button
+                            onClick={async () => {
+                              try { await shareNotice({ title: n.title, content: n.content, level: n.level }) }
+                              catch (e: any) { alert(e?.message ?? '카카오 공유를 열 수 없습니다. PC에서는 모바일 카카오톡에서 시도해주세요.') }
+                            }}
+                            aria-label="카카오톡으로 공유" title="카카오톡 오픈채팅방에 공유"
+                            className="p-2.5 md:p-1 text-gray-300 hover:text-[#3A1D1D] hover:bg-[#FEE500] rounded transition-colors">
+                            <MessageCircle size={13} />
+                          </button>
+                        )}
+                        {canWrite && (<>
                         <button
                           onClick={async () => {
                             if (!confirm('이 공지를 직원앱에 다시 발송할까요?')) return
@@ -92,6 +105,7 @@ export default function NoticeBoard() {
                         <button onClick={() => setEditing(n)} aria-label="수정" className="p-2.5 md:p-1 text-gray-300 hover:text-gray-600 rounded"><Pencil size={13} /></button>
                         <button onClick={async () => { if (confirm('이 공지를 삭제할까요?')) { await noticeAPI.remove(n.id); load() } }}
                           aria-label="삭제" className="p-2.5 md:p-1 text-gray-300 hover:text-red-500 rounded"><Trash2 size={13} /></button>
+                        </>)}
                       </div>
                     )}
                   </div>
@@ -136,6 +150,10 @@ function NoticeModal({ notice, onClose, onSaved }: { notice: InternalNotice | nu
           if (!p || p.error) alert('공지는 등록됐지만 푸시 발송에 실패했습니다.' + (p?.error ? `\n(${p.error})` : ''))
           else if (p.tokens === 0) alert('공지가 등록됐습니다.\n다만 직원앱에 등록된 기기가 없어 푸시는 발송되지 않았습니다.')
           else alert(`공지가 등록되고 직원 ${p.recipients}명(${p.sent}대 기기)에게 푸시를 발송했습니다.`)
+        }
+        if (isKakaoShareEnabled()) {
+          // 공유창은 사용자 클릭에서 열어야 안정적 → 자동 실행 대신 목록의 카카오 버튼으로 안내
+          setTimeout(() => alert('카카오톡 오픈채팅방에도 올리려면, 공지를 눌러 펼친 뒤 노란 카카오 버튼을 누르세요.'), 100)
         }
       }
       onSaved()
