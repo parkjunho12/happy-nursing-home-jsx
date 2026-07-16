@@ -560,6 +560,15 @@ function DetailModal({ ev, onClose, onChanged, onGoRecruit, onEdit }: { ev: UEve
   const isEvent = ev.kind === 'event'
   const isInterview = ev.kind === 'interview'
 
+  // 면접 시간·장소 인라인 편집
+  const ivRaw = isInterview ? (ev.raw as Interview) : null
+  const [editIv, setEditIv] = useState(false)
+  const [ivDate, setIvDate] = useState(ev.dateKey)
+  const [ivTime, setIvTime] = useState(ev.time || '10:00')
+  const [ivLoc, setIvLoc] = useState(ivRaw?.location ?? '')
+  const [ivNote, setIvNote] = useState(ivRaw?.note ?? '')
+  const [ivErr, setIvErr] = useState('')
+
   const del = async () => {
     if (!isEvent) return
     if (!confirm('이 일정을 삭제할까요?')) return
@@ -567,24 +576,74 @@ function DetailModal({ ev, onClose, onChanged, onGoRecruit, onEdit }: { ev: UEve
     try { await scheduleAPI.deleteEvent((ev.raw as ScheduleEvent).id); onChanged() } finally { setBusy(false) }
   }
 
+  const saveIv = async () => {
+    if (!ivRaw) return
+    if (!ivDate || !ivTime) { setIvErr('날짜와 시간을 입력해주세요.'); return }
+    setBusy(true); setIvErr('')
+    try {
+      await recruitmentAPI.updateInterview(ivRaw.id, {
+        interview_at: `${ivDate}T${ivTime}:00`,
+        location: ivLoc.trim() || null,
+        note: ivNote.trim() || null,
+      })
+      onChanged()
+    } catch (e: any) { setIvErr(e?.message ?? '저장 실패'); setBusy(false) }
+  }
+
   return (
-    <Modal title="일정 상세" onClose={onClose}>
+    <Modal title={isInterview && editIv ? '면접 일정 수정' : '일정 상세'} onClose={onClose}>
       <div className="space-y-3">
         <div className="flex items-center gap-2">
           <span className={`text-[11px] px-2 py-0.5 rounded-full border font-semibold ${CAT[ev.category].chip}`}>{ev.category}</span>
           <p className="text-base font-bold text-gray-900">{ev.title}</p>
         </div>
-        <div className="space-y-1.5 text-sm text-gray-600">
-          <p className="flex items-center gap-2"><Clock className="w-4 h-4 text-gray-400" /> {ev.dateKey}{ev.time ? ` ${ev.time}` : ""}</p>
-          {ev.location && <p className="flex items-center gap-2"><MapPin className="w-4 h-4 text-gray-400" /> {ev.location}</p>}
-          {ev.contactPhone && <p className="flex items-center gap-2"><Phone className="w-4 h-4 text-gray-400" /> {ev.contactName ? `${ev.contactName} · ` : ''}{ev.contactPhone}</p>}
-          {ev.memo && <p className="text-gray-500 bg-gray-50 rounded-lg p-2.5 whitespace-pre-wrap">{ev.memo}</p>}
-        </div>
-        {isInterview && (
-          <div className="bg-violet-50 rounded-lg p-3 text-xs text-violet-700 flex items-start gap-2">
-            <Briefcase className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>채용 면접 일정입니다. 상태·결과·통보 관리는 채용 관리에서 진행하세요.</span>
+
+        {isInterview && editIv ? (
+          /* ── 면접 시간·장소 수정 폼 ── */
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-semibold text-gray-500 mb-1.5 block">면접 날짜</label>
+              <DateField value={ivDate} onChange={setIvDate} className="inp" clearable={false} />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 mb-1.5 block">면접 시간</label>
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {QUICK_TIMES.map(t => (
+                  <button key={t} onClick={() => setIvTime(t)}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${ivTime === t ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-gray-500 border-gray-200 hover:border-violet-300'}`}>{t}</button>
+                ))}
+              </div>
+              <input type="time" value={ivTime} onChange={e => setIvTime(e.target.value)}
+                className="inp w-full px-3 py-2 text-sm border border-gray-200 rounded-lg" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 mb-1.5 block">장소</label>
+              <input value={ivLoc} onChange={e => setIvLoc(e.target.value)}
+                className="inp w-full px-3 py-2 text-sm border border-gray-200 rounded-lg" placeholder="예: 1층 상담실" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 mb-1.5 block">메모</label>
+              <textarea rows={2} value={ivNote} onChange={e => setIvNote(e.target.value)}
+                className="inp w-full px-3 py-2 text-sm border border-gray-200 rounded-lg resize-none" />
+            </div>
+            {ivErr && <p className="text-xs text-red-500">{ivErr}</p>}
+            <p className="text-[11px] text-gray-400">지원자 이름·상태·합격 결과 등은 채용 관리에서 수정합니다.</p>
           </div>
+        ) : (
+          <>
+            <div className="space-y-1.5 text-sm text-gray-600">
+              <p className="flex items-center gap-2"><Clock className="w-4 h-4 text-gray-400" /> {ev.dateKey}{ev.time ? ` ${ev.time}` : ""}</p>
+              {ev.location && <p className="flex items-center gap-2"><MapPin className="w-4 h-4 text-gray-400" /> {ev.location}</p>}
+              {ev.contactPhone && <p className="flex items-center gap-2"><Phone className="w-4 h-4 text-gray-400" /> {ev.contactName ? `${ev.contactName} · ` : ''}{ev.contactPhone}</p>}
+              {ev.memo && <p className="text-gray-500 bg-gray-50 rounded-lg p-2.5 whitespace-pre-wrap">{ev.memo}</p>}
+            </div>
+            {isInterview && (
+              <div className="bg-violet-50 rounded-lg p-3 text-xs text-violet-700 flex items-start gap-2">
+                <Briefcase className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>채용 면접 일정입니다. 시간·장소는 여기서, 상태·결과·통보는 채용 관리에서 관리하세요.</span>
+              </div>
+            )}
+          </>
         )}
         {ev.kind === 'lifecycle' && (
           (['계약서', '계획서', '평가'] as CatKey[]).includes(ev.category) ? (
@@ -616,12 +675,29 @@ function DetailModal({ ev, onClose, onChanged, onGoRecruit, onEdit }: { ev: UEve
         {isEvent && !(ev.raw as ScheduleEvent).can_edit && (
           <span className="px-2 text-[11px] text-gray-400">본인이 등록한 일정만 수정·삭제할 수 있습니다</span>
         )}
-        {isInterview && (
-          <button onClick={onGoRecruit} className="px-4 py-2 text-sm font-semibold text-violet-600 hover:bg-violet-50 rounded-lg inline-flex items-center gap-1.5">
-            <Briefcase className="w-4 h-4" /> 채용 관리에서 열기
-          </button>
+        {isInterview && editIv && (
+          <>
+            <button onClick={() => { setEditIv(false); setIvErr('') }} disabled={busy}
+              className="px-4 py-2 text-sm font-semibold text-gray-500 hover:bg-gray-100 rounded-lg disabled:opacity-50">취소</button>
+            <button onClick={saveIv} disabled={busy}
+              className="px-4 py-2 text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 rounded-lg inline-flex items-center gap-1.5 disabled:opacity-50">
+              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pencil className="w-4 h-4" />} 저장
+            </button>
+          </>
         )}
-        <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-white bg-gray-800 hover:bg-gray-900 rounded-lg">닫기</button>
+        {isInterview && !editIv && (
+          <>
+            <button onClick={() => setEditIv(true)} className="px-4 py-2 text-sm font-semibold text-violet-600 hover:bg-violet-50 rounded-lg inline-flex items-center gap-1.5">
+              <Clock className="w-4 h-4" /> 시간·장소 수정
+            </button>
+            <button onClick={onGoRecruit} className="px-4 py-2 text-sm font-semibold text-gray-500 hover:bg-gray-100 rounded-lg inline-flex items-center gap-1.5">
+              <Briefcase className="w-4 h-4" /> 채용 관리
+            </button>
+          </>
+        )}
+        {!editIv && (
+          <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-white bg-gray-800 hover:bg-gray-900 rounded-lg">닫기</button>
+        )}
       </ModalFooter>
     </Modal>
   )
