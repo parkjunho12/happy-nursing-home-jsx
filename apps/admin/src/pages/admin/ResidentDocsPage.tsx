@@ -42,6 +42,7 @@ export default function ResidentDocsPage() {
   const [showDischarged, setShowDischarged] = useState(false)
   const [search, setSearch] = useState('')
   const [fee, setFee] = useState('')
+  const [floorF, setFloorF] = useState('')
   const [quick, setQuick] = useState<'all' | 'cert' | 'month'>('all')
   const [sopOpen, setSopOpen] = useState(false)
   const { residents, loaded: ltcLoaded, loadAll } = useLtcStore()
@@ -68,14 +69,16 @@ export default function ResidentDocsPage() {
     rows.forEach(r => { const i = docInfo(r); if (i.st.status === 'expired' || i.st.status === 'renew') cert++; if (i.renew) month++ })
     return { total: rows.length, cert, month }
   }, [rows])
+  const floors = useMemo(() => Array.from(new Set(rows.map(r => (r as any).floor).filter(Boolean))).sort() as string[], [rows])
   const filtered = useMemo(() => rows.filter(r => {
     if (search && !(r.name ?? '').includes(search)) return false
     if (fee && !(r.grade ?? '').includes(fee)) return false
+    if (floorF && (r as any).floor !== floorF) return false
     const i = docInfo(r)
     if (quick === 'cert' && !(i.st.status === 'expired' || i.st.status === 'renew')) return false
     if (quick === 'month' && !i.renew) return false
     return true
-  }), [rows, search, fee, quick])
+  }), [rows, search, fee, floorF, quick])
 
   const th = 'px-2.5 py-2 text-[11px] font-bold text-gray-500 whitespace-nowrap text-center border-b border-gray-200'
   const td = 'px-2.5 py-2 text-xs align-top border-b border-gray-50'
@@ -177,6 +180,13 @@ export default function ResidentDocsPage() {
           <option value="재가">재가</option>
           <option value="등급외">등급외</option>
         </select>
+        {floors.length > 0 && (
+          <select value={floorF} onChange={e => setFloorF(e.target.value)}
+            className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-200">
+            <option value="">전체 층</option>
+            {floors.map(f => <option key={f} value={f}>{f}</option>)}
+          </select>
+        )}
         <label className="inline-flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer ml-1">
           <input type="checkbox" checked={showDischarged} onChange={e => setShowDischarged(e.target.checked)} className="accent-teal-600" /> 퇴소 포함
         </label>
@@ -352,9 +362,14 @@ function DocFormModal({ editing, residents = [], docByResident = new Map<string,
               </div>
             )
           })()}
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <Field label="성함 *"><input value={f.name ?? ''} onChange={e => setF({ ...f, name: e.target.value })} className={inp} autoFocus /></Field>
             <Field label="입소일"><DateField value={f.admission_date} onChange={v => setF({ ...f, admission_date: v })} className={inp} /></Field>
+            <Field label="생활 층">
+              <select value={f.floor ?? '2층'} onChange={e => setF({ ...f, floor: e.target.value })} className={inp}>
+                {['1층','2층','3층','4층','5층'].map(fl => <option key={fl} value={fl}>{fl}</option>)}
+              </select>
+            </Field>
           </div>
           <div>
             <label className="text-xs font-semibold text-gray-500 mb-1.5 block">장기요양인정서 <span className="text-gray-400 font-normal">— 등급·유효기간(2/3/4년)·급여(재가↔시설). 종료 90일 전 갱신</span></label>

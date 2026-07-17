@@ -81,6 +81,7 @@ def create_ltc_resident(
                 return out or None
             db.add(ResidentDocStatus(
                 resident_id=r.id, name=r.name,
+                floor=(getattr(r, "floor", None) or "2층"),
                 admission_date=to_iso(getattr(r, "admission_date", None)),
                 base_date=base,
                 grade=grade,
@@ -119,6 +120,14 @@ def update_ltc_resident(
         setattr(r, k, v)
     db.commit()
     db.refresh(r)
+    # 층 변경 시 연동된 서류현황에도 반영
+    if payload.floor is not None:
+        try:
+            from app.models.resident_docs import ResidentDocStatus
+            db.query(ResidentDocStatus).filter(ResidentDocStatus.resident_id == rid).update({"floor": payload.floor})
+            db.commit()
+        except Exception:
+            db.rollback()
     return ApiResponse(success=True, data=LtcResidentOut.model_validate(r).model_dump())
 
 

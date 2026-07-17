@@ -214,6 +214,7 @@ class LtcResidentCreate(BaseModel):
     gender:                str
     admission_date:        str
     care_grade_start_date: str
+    floor:                 Optional[str] = None
     certifications:        Optional[List[dict]] = None   # 입소 시 장기요양인정서(등급·기간·급여) → 서류현황 seed용
     contract_lines:        Optional[List[dict]] = None   # 자동 생성된 계약서 일시
     plan_lines:            Optional[List[dict]] = None   # 자동 생성된 계획서 일시
@@ -227,6 +228,7 @@ class LtcResidentUpdate(BaseModel):
     gender:                Optional[str] = None
     admission_date:        Optional[str] = None
     care_grade_start_date: Optional[str] = None
+    floor:                 Optional[str] = None
     memo:                  Optional[str] = None
 
 
@@ -238,6 +240,7 @@ class LtcResidentOut(BaseModel):
     admission_date:        str
     discharge_date:        Optional[str] = None
     care_grade_start_date: str
+    floor:                 Optional[str] = None
     status:                str
     memo:                  str
     created_at:            datetime
