@@ -11,6 +11,7 @@ type Notice = {
   content: string | null
   level: 'info' | 'important' | 'urgent'
   image_url: string | null
+  content_images: string[] | null
   author_name: string | null
   created_at: string | null
 }
@@ -150,6 +151,14 @@ export default async function PublicNoticePage({ params }: { params: { id: strin
                   {renderContent(n.content)}
                 </div>
               </>
+            )}
+
+            {(n.content_images ?? []).length > 0 && (
+              <div className="mt-5 space-y-3">
+                {(n.content_images ?? []).map((u, i) => (
+                  <img key={i} src={imgAbs(u)!} alt={`본문 이미지 ${i + 1}`} className="w-full rounded-xl border border-gray-100" />
+                ))}
+              </div>
             )}
           </div>
         </article>

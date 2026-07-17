@@ -3,6 +3,7 @@ import { X, Send, LayoutTemplate, BookmarkPlus } from 'lucide-react'
 import { noticeAPI, NOTICE_LEVEL, type InternalNotice, type NoticeLevel } from '@/api/noticeClient'
 import { templateAPI, type NoticeTemplate } from '@/api/templateClient'
 import ImageUploader from '@/components/notices/ImageUploader'
+import ContentImagesUploader from '@/components/notices/ContentImagesUploader'
 import { isKakaoShareEnabled } from '@/lib/kakaoShare'
 
 export default function NoticeModal({ notice, onClose, onSaved }: { notice: InternalNotice | null; onClose: () => void; onSaved: () => void }) {
@@ -13,6 +14,7 @@ export default function NoticeModal({ notice, onClose, onSaved }: { notice: Inte
   const [pinned, setPinned] = useState(!!notice?.pinned)
   const [pub, setPub] = useState(!!notice?.public)
   const [image, setImage] = useState<string | null>(notice?.image_url ?? null)
+  const [contentImages, setContentImages] = useState<string[]>(notice?.content_images ?? [])
   const [push, setPush] = useState(true)          // 신규 등록 시 기본 발송
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
@@ -44,7 +46,7 @@ export default function NoticeModal({ notice, onClose, onSaved }: { notice: Inte
     if (!title.trim()) { setErr('제목을 입력해주세요.'); return }
     setSaving(true); setErr('')
     try {
-      const body = { title: title.trim(), content: content.trim() || null, level, pinned, public: pub, image_url: image }
+      const body = { title: title.trim(), content: content.trim() || null, level, pinned, public: pub, image_url: image, content_images: contentImages }
       if (isEdit) {
         await noticeAPI.update(notice!.id, body)
       } else {
@@ -118,6 +120,11 @@ export default function NoticeModal({ notice, onClose, onSaved }: { notice: Inte
             <label className="text-xs font-semibold text-gray-500 mb-1 block">이미지</label>
             <ImageUploader value={image} onChange={setImage} />
             <p className="text-[11px] text-gray-400 mt-1">카카오 공유 카드와 공개 상세 페이지에 함께 표시됩니다.</p>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-gray-500 mb-1 block">본문 이미지 (선택)</label>
+            <ContentImagesUploader value={contentImages} onChange={setContentImages} />
+            <p className="text-[11px] text-gray-400 mt-1">본문 글 아래에 순서대로 표시됩니다.</p>
           </div>
           <label className="inline-flex items-center gap-2 text-sm text-gray-600">
             <input type="checkbox" checked={pinned} onChange={e => setPinned(e.target.checked)} className="accent-primary-orange" />

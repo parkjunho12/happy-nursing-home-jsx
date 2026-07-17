@@ -50,6 +50,7 @@ def _view(n: InternalNotice) -> dict:
         "level": n.level or "info", "pinned": bool(n.pinned), "active": bool(n.active),
         "public": bool(getattr(n, "public", False)),
         "image_url": getattr(n, "image_url", None),
+        "content_images": getattr(n, "content_images", None) or [],
         "author_name": n.author_name,
         "created_at": n.created_at.isoformat() if n.created_at else None,
     }
@@ -63,6 +64,7 @@ class NoticeBody(BaseModel):
     active: Optional[bool] = None
     public: Optional[bool] = None   # True=로그인 없이 링크로 열람 가능(공개 공지)
     image_url: Optional[str] = None # 공유 카드·상세 이미지 (upload-image로 받은 경로)
+    content_images: Optional[List[str]] = None  # 본문 아래 갤러리 이미지 경로 배열
     push: Optional[bool] = True     # 등록 시 직원앱 푸시 발송 여부
 
 
@@ -89,6 +91,7 @@ def create_notice(body: NoticeBody, db: Session = Depends(get_db),
         active=True,
         public=bool(body.public),
         image_url=(body.image_url or None),
+        content_images=(body.content_images or None),
         author_id=current_user.id,
         author_name=getattr(current_user, "name", None),
     )
@@ -135,6 +138,8 @@ def update_notice(nid: str, body: NoticeBody, db: Session = Depends(get_db),
         n.public = bool(body.public)
     if body.image_url is not None:
         n.image_url = body.image_url.strip() or None
+    if body.content_images is not None:
+        n.content_images = body.content_images or None
     db.commit(); db.refresh(n)
     return ApiResponse(success=True, data=_view(n))
 

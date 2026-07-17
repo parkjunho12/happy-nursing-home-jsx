@@ -72,6 +72,13 @@ export default function NoticeDetailModal({
           {n.content
             ? <div className="text-[15px] text-gray-700 leading-[1.8] whitespace-pre-wrap break-words">{renderContent(n.content)}</div>
             : <p className="text-sm text-gray-300 italic">내용이 없습니다.</p>}
+          {(n.content_images ?? []).length > 0 && (
+            <div className="mt-3 space-y-2">
+              {(n.content_images ?? []).map((u, i) => (
+                <img key={i} src={noticeImageUrl(u)!} alt={`본문 이미지 ${i + 1}`} className="w-full rounded-xl border border-gray-100" />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* 공개 공지 안내 */}

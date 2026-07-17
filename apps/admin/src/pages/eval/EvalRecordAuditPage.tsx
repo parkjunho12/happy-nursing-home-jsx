@@ -303,6 +303,10 @@ export default function EvalRecordAuditPage() {
 
   useEffect(() => {
     loadAll()
+    // 저장된 검수 이력을 진입 시 바로 표시
+    apiClient.get('/api/v1/eval/record-audit/history')
+      .then(r => setHistory((r.data as any)?.data ?? []))
+      .catch(() => {})
   }, [])
 
   useEffect(() => {
