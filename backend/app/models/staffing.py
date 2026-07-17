@@ -1,7 +1,7 @@
 """인력배치 시뮬레이터 — 공휴일/제외일 보정용 테이블(음력·대체·관리자 지정)."""
 import uuid
 from datetime import datetime, timezone, timedelta
-from sqlalchemy import Column, String, Boolean, DateTime, Integer, Float, Text, UniqueConstraint
+from sqlalchemy import Column, String, Boolean, DateTime, Integer, Float, Text, JSON, UniqueConstraint
 from app.core.database import Base
 
 KST = timezone(timedelta(hours=9))
@@ -54,7 +54,8 @@ class InternalNotice(Base):
     pinned = Column(Boolean, default=False, index=True)
     active = Column(Boolean, default=True, index=True)
     public = Column(Boolean, default=False, index=True)  # True=로그인 없이 링크로 열람 가능
-    image_url = Column(String, nullable=True)            # 공유 카드·상세 이미지
+    image_url = Column(String, nullable=True)            # 공유 카드·상세 이미지(대표)
+    content_images = Column(JSON, nullable=True)         # 본문 아래 갤러리 이미지 URL 배열
     author_id = Column(String, nullable=True)
     author_name = Column(String(100), nullable=True)
 

@@ -23,6 +23,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_user, get_current_admin_user
 from app.models.user import User
+from app.models.record_audit import RecordAudit
 from app.models.carefor import CareforResident, CareforLeaveRecord, StaffWorkSchedule
 from app.schemas.response import ApiResponse
 from app.services.carefor_import.rule_engine import run_rules, calculate_score, get_grade
@@ -40,7 +41,6 @@ from app.services.record_audit.carefor_fixed_row_parser import parse_carefor_xls
 router = APIRouter()
 logger = logging.getLogger(__name__)
 KST = timezone(timedelta(hours=9))
-_HISTORY: list = []
 
 MAX_ISSUES_RETURN = 200
 RECORD_CHAR_LIMIT = 12000
@@ -714,30 +714,41 @@ async def upload_and_audit(
         },
     }
 
-    record = {
-        "id":         str(uuid.uuid4()),
-        "filename":   filename,
-        "auditor":    current_user.name,
-        "result":     result,
-        "created_at": datetime.now(KST).isoformat(),
-        "context": {
+    audit = RecordAudit(
+        filename=filename,
+        auditor=current_user.name,
+        result=result,
+        context={
             "residents_count":  len(residents_db),
             "leaves_count":     len(leaves_all),
             "schedules_count":  len(schedules_all),
             "rule_applied":     bool(rule_content),
         },
+    )
+    db.add(audit); db.commit(); db.refresh(audit)
+    return ApiResponse(success=True, data=_audit_view(audit))
+
+
+def _audit_view(a: RecordAudit) -> dict:
+    return {
+        "id":         a.id,
+        "filename":   a.filename,
+        "auditor":    a.auditor,
+        "result":     a.result,
+        "created_at": a.created_at.isoformat() if a.created_at else None,
+        "context":    a.context,
     }
-    _HISTORY.insert(0, record)
-    if len(_HISTORY) > 50: _HISTORY.pop()
-    return ApiResponse(success=True, data=record)
 
 
 @router.get("/history")
-def get_history(_: User = Depends(get_current_user)):
-    return ApiResponse(success=True, data=_HISTORY[:20])
+def get_history(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    rows = (db.query(RecordAudit)
+            .order_by(RecordAudit.created_at.desc())
+            .limit(20).all())
+    return ApiResponse(success=True, data=[_audit_view(r) for r in rows])
 
 @router.get("/history/{record_id}")
-def get_history_item(record_id: str, _: User = Depends(get_current_user)):
-    item = next((r for r in _HISTORY if r["id"] == record_id), None)
-    if not item: raise HTTPException(404, "검수 기록을 찾을 수 없습니다")
-    return ApiResponse(success=True, data=item)
+def get_history_item(record_id: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    row = db.query(RecordAudit).filter(RecordAudit.id == record_id).first()
+    if not row: raise HTTPException(404, "검수 기록을 찾을 수 없습니다")
+    return ApiResponse(success=True, data=_audit_view(row))

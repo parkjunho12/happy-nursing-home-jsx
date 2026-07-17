@@ -20,6 +20,7 @@ export interface InternalNotice {
   active: boolean
   public: boolean            // true=로그인 없이 링크로 열람 가능(공개 공지)
   image_url?: string | null
+  content_images?: string[] | null
   author_name?: string | null
   created_at?: string | null
 }
@@ -31,6 +32,7 @@ export interface NoticeInput {
   active?: boolean
   public?: boolean          // 공개(로그인 불필요) 여부
   image_url?: string | null // 공유 카드·상세 이미지 경로
+  content_images?: string[] | null // 본문 갤러리 이미지 경로 배열
   push?: boolean            // 등록 시 직원앱 푸시 발송 (기본 true)
 }
 /** 푸시 발송 결과 */
