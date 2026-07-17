@@ -17,6 +17,7 @@ type Tab = 'active' | 'discharged' | 'all'
 export default function EvalResidentsPage() {
   const { residents, checklists, loaded, loadAll, deleteResident } = useLtcStore()
   const [tab, setTab] = useState<Tab>('active')
+  const [floorF, setFloorF] = useState('')
   const [showAdd, setShowAdd] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -31,7 +32,10 @@ export default function EvalResidentsPage() {
     try { await deleteResident(r.id) } catch (e: any) { alert(e?.message ?? '삭제 실패') }
   }
 
-  const filtered = residents.filter(r => tab === 'all' ? true : tab === 'active' ? r.status === 'active' : r.status === 'discharged')
+  const floors = Array.from(new Set(residents.map(r => r.floor).filter(Boolean))).sort() as string[]
+  const filtered = residents
+    .filter(r => tab === 'all' ? true : tab === 'active' ? r.status === 'active' : r.status === 'discharged')
+    .filter(r => !floorF || r.floor === floorF)
   const resCls = useMemo(() => {
     const map: Record<string, ChecklistItem[]> = {}
     checklists.filter(c => c.personType === 'resident' && c.active).forEach(c => {
@@ -90,6 +94,13 @@ export default function EvalResidentsPage() {
             {t==='active'?`입소 중 (${residents.filter(r=>r.status==='active').length})`:t==='discharged'?`퇴소 (${residents.filter(r=>r.status==='discharged').length})`:`전체 (${residents.length})`}
           </button>
         ))}
+        {floors.length > 0 && (
+          <select value={floorF} onChange={e => setFloorF(e.target.value)}
+            className="ml-1 px-3 py-2 rounded-xl text-sm border border-gray-200 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-primary-orange/40">
+            <option value="">전체 층</option>
+            {floors.map(f => <option key={f} value={f}>{f}</option>)}
+          </select>
+        )}
       </div>
       </StickyToolbar>
 
@@ -263,7 +274,7 @@ function BirthDateSelect({ value, onChange }: { value: string; onChange: (v: str
 function ResidentForm({ existing, onClose }: { existing?: LtcResident; onClose:()=>void }) {
   const { addResident, updateResident } = useLtcStore()
   const today = new Date().toISOString().split('T')[0]
-  const [form, setForm] = useState({ name:existing?.name??'', birthDate:existing?.birthDate??'1930-01-01', gender:existing?.gender??'female', admissionDate:existing?.admissionDate??today, careGradeStartDate:existing?.careGradeStartDate??today, memo:existing?.memo??'' })
+  const [form, setForm] = useState({ name:existing?.name??'', birthDate:existing?.birthDate??'1930-01-01', gender:existing?.gender??'female', admissionDate:existing?.admissionDate??today, careGradeStartDate:existing?.careGradeStartDate??today, floor:existing?.floor??'2층', memo:existing?.memo??'' })
   const [certs, setCerts] = useState<Certification[]>([
     { grade:'3', cert_no:'', start: today, end: endFromStart(today, 2), benefits:[{ type:'시설', from: today }] },
   ])
@@ -301,6 +312,12 @@ function ResidentForm({ existing, onClose }: { existing?: LtcResident; onClose:(
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">성별</label>
             <select className={ic} value={form.gender} onChange={e=>setForm({...form,gender:e.target.value})}><option value="female">여</option><option value="male">남</option></select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">생활 층</label>
+            <select className={ic} value={form.floor} onChange={e=>setForm({...form,floor:e.target.value})}>
+              {['1층','2층','3층','4층','5층'].map(f => <option key={f} value={f}>{f}</option>)}
+            </select>
           </div>
           <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">입소일 *</label><DateField className={ic} value={form.admissionDate} onChange={v=>setForm({...form,admissionDate:v})} clearable={false}/></div>
           {!existing && <div>

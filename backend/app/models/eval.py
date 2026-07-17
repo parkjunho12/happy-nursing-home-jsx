@@ -255,6 +255,7 @@ class LtcResident(Base):
     admission_date = Column(String(20), nullable=False)
     discharge_date = Column(String(20), nullable=True)
     care_grade_start_date = Column(String(20), nullable=False)
+    floor = Column(String(20), nullable=True, index=True)   # 어르신 생활 층
     status = Column(String(20), default="active", index=True)
     memo = Column(Text, default="")
     created_at = Column(DateTime(timezone=True), server_default=func.now())

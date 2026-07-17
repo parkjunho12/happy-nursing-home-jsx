@@ -62,6 +62,7 @@ export interface LtcResident {
   id: string; name: string; birthDate: string; gender: string
   admissionDate: string; dischargeDate?: string; careGradeStartDate: string
   grade?: string; certEnd?: string
+  floor?: string
   status: string; memo: string; createdAt: string
 }
 
@@ -157,7 +158,7 @@ function mapCL(raw: any): ChecklistItem {
 function mapR(raw: any): LtcResident {
   return { id:raw.id, name:raw.name, birthDate:raw.birth_date, gender:raw.gender,
     admissionDate:raw.admission_date, dischargeDate:raw.discharge_date,
-    careGradeStartDate:raw.care_grade_start_date, status:raw.status,
+    careGradeStartDate:raw.care_grade_start_date, floor:raw.floor??undefined, status:raw.status,
     memo:raw.memo??'', createdAt:raw.created_at??'' }
 }
 function mapS(raw: any): LtcStaff {
@@ -368,7 +369,7 @@ export const useLtcStore = create<LtcState>((set, get) => ({
   },
 
   addResident: async (r) => {
-    const raw = await evalResidentsAPI.create({ name:r.name, birth_date:r.birthDate, gender:r.gender, admission_date:r.admissionDate, care_grade_start_date:r.careGradeStartDate, certifications:(r as any).certifications, contract_lines:(r as any).contract_lines, plan_lines:(r as any).plan_lines, eval_lines:(r as any).eval_lines, memo:r.memo })
+    const raw = await evalResidentsAPI.create({ name:r.name, birth_date:r.birthDate, gender:r.gender, admission_date:r.admissionDate, care_grade_start_date:r.careGradeStartDate, floor:r.floor, certifications:(r as any).certifications, contract_lines:(r as any).contract_lines, plan_lines:(r as any).plan_lines, eval_lines:(r as any).eval_lines, memo:r.memo })
     const newR = mapR(raw)
     const templates = generateResidentAdmissionChecklists(newR as any)
     const newCls = await evalChecklistAPI.createBulk(templates.map(clPayload as any))
@@ -386,6 +387,7 @@ export const useLtcStore = create<LtcState>((set, get) => ({
     if (u.gender !== undefined)             p.gender                = u.gender
     if (u.admissionDate !== undefined)      p.admission_date        = u.admissionDate
     if (u.careGradeStartDate !== undefined) p.care_grade_start_date = u.careGradeStartDate
+    if (u.floor !== undefined)              p.floor                 = u.floor
     if (u.memo !== undefined)               p.memo                  = u.memo
     const raw = await evalResidentsAPI.update(id, p)
     set(s => ({ residents: s.residents.map(r => r.id===id ? mapR(raw) : r) }))
