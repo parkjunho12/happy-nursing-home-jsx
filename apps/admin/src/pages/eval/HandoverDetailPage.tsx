@@ -40,7 +40,7 @@ export default function HandoverDetailPage() {
   const entries = useMemo(() => [...(rep?.entries ?? [])].sort((a, b) => (a.time || '').localeCompare(b.time || '')), [rep])
   const byResident = useMemo(() => {
     const m = new Map<string, any[]>()
-    entries.forEach(e => { const k = e.resident || '기타'; if (!m.has(k)) m.set(k, []); m.get(k)!.push(e) })
+    entries.forEach(e => { const k = e.resident_matched || e.resident || '기타'; if (!m.has(k)) m.set(k, []); m.get(k)!.push(e) })
     return Array.from(m.entries())
   }, [entries])
 
@@ -150,6 +150,12 @@ export default function HandoverDetailPage() {
                 <span className="w-8 h-8 rounded-full bg-violet-100 text-violet-700 text-[14px] font-bold flex items-center justify-center">{name.slice(0, 1)}</span>
                 <span className="font-bold text-gray-900 text-[16px]">{name}</span>
                 <span className="text-[13px] text-gray-400">{list.length}건</span>
+                {list[0]?.match === 'none' && (
+                  <span className="text-[11px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded">명단에 없음</span>
+                )}
+                {list[0]?.match === 'ambiguous' && (
+                  <span className="text-[11px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded">확인 필요</span>
+                )}
               </div>
               <ul className="divide-y divide-gray-50">
                 {list.map((e: any, i: number) => {
@@ -161,7 +167,13 @@ export default function HandoverDetailPage() {
                         {e.time && <span className="text-[13px] text-gray-400 flex items-center gap-1"><Clock size={12} />{e.time}</span>}
                         {e.writer && <span className="text-[13px] text-gray-400 flex items-center gap-1"><User2 size={12} />{e.writer}</span>}
                       </div>
-                      <p className="text-[16px] text-gray-800 leading-[1.7]">{e.content}</p>
+                      {e.resident_matched && e.resident && e.resident_matched !== e.resident && (
+                        <p className="text-[12px] text-gray-400 mb-0.5">기록지 표기: {e.resident}</p>
+                      )}
+                      {e.match === 'ambiguous' && (e.match_candidates?.length ?? 0) > 0 && (
+                        <p className="text-[12px] text-amber-600 mb-0.5">누구인지 확인 필요 — 후보: {e.match_candidates!.join(', ')}</p>
+                      )}
+                      <p className="text-[16px] text-gray-800 leading-[1.7] whitespace-pre-line">{e.content}</p>
                       {e.vitals && <p className="text-[14px] text-teal-600 mt-1">활력징후 {e.vitals}</p>}
                       {e.confidence === 'low' && <p className="text-[13px] text-amber-600 mt-1">※ 글씨 판독이 불확실합니다. 원본을 확인해 주세요.</p>}
                     </li>

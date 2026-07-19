@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ClipboardList, Upload, Loader2, Sparkles, AlertTriangle, Send, MessageCircle,
-  Printer, History, Trash2, X, Check, ShieldCheck, Camera, ScanLine,
+  Printer, History, Trash2, X, Check, ShieldCheck, Camera, ScanLine, RefreshCw,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth'
-import { handoverAPI, handoverImageUrl, type HandoverRecord, type AccessRow } from '@/api/handoverClient'
+import { handoverAPI, handoverImageUrl, type HandoverRecord, type AccessRow, type HandoverEntry } from '@/api/handoverClient'
 import { isKakaoShareEnabled, shareText } from '@/lib/kakaoShare'
+import { useLtcStore } from '@/store/ltc'
+import { useIsMobile } from '@/hooks/useMediaQuery'
+import ResidentPickerModal from '@/components/handover/ResidentPickerModal'
 import { scanDocument } from '@/utils/docScan'
 
 const URG = {
@@ -32,12 +35,19 @@ export default function HandoverAiPage() {
   const [err, setErr] = useState('')
   const [rec, setRec] = useState<HandoverRecord | null>(null)
   const [picked, setPicked] = useState<Set<number>>(new Set())
+  const [created, setCreated] = useState<Set<number>>(new Set())
+  const [regen, setRegen] = useState(false)
   const [hist, setHist] = useState<HandoverRecord[]>([])
   const [showHist, setShowHist] = useState(false)
   const [accessOpen, setAccessOpen] = useState(false)
   const [denied, setDenied] = useState(false)
-  const [scanMode, setScanMode] = useState(true)   // 문서 스캔 보정
+  const [picking, setPicking] = useState<number | null>(null)   // 명단 선택 중인 항목 index
+  const { residents, loaded: ltcLoaded, loadAll: loadLtc } = useLtcStore()
+  const isMobile = useIsMobile()
+  const [scanMode, setScanMode] = useState(true)   // 기본 켬 — 회전·그림자 보정으로 판독 도움
   const [scanning, setScanning] = useState(false)
+
+  useEffect(() => { if (!ltcLoaded) loadLtc() }, [ltcLoaded, loadLtc])
 
   useEffect(() => {
     handoverAPI.history().then(setHist)
@@ -74,7 +84,7 @@ export default function HandoverAiPage() {
     setBusy(true); setErr('')
     try {
       const r = await handoverAPI.analyze(files)
-      setRec(r); setPicked(new Set())
+      setRec(r); setPicked(new Set()); setCreated(new Set())
       if (r.report?.error) setErr(r.report.error)
       setHist(await handoverAPI.history().catch(() => hist))
     } catch (e: any) {
@@ -94,9 +104,29 @@ export default function HandoverAiPage() {
     }))
     try {
       await handoverAPI.createChecklists(rec.id, items)
-      alert(`체크리스트 ${items.length}건을 생성했습니다.`)
+      setCreated(prev => new Set([...prev, ...Array.from(picked)]))   // 중복 생성 방지
       setPicked(new Set())
+      alert(`체크리스트 ${items.length}건을 생성했습니다.`)
     } catch (e: any) { alert(e?.response?.data?.detail ?? '생성 실패') }
+  }
+
+  const confirmMatch = async (entryIndex: number, cand: { id: string; name: string } | null) => {
+    if (!rec) return
+    try { setRec(await handoverAPI.confirmMatch(rec.id, entryIndex, cand)) }
+    catch (e: any) { alert(e?.response?.data?.detail ?? '확정에 실패했습니다.') }
+    finally { setPicking(null) }
+  }
+
+  const doRegenerate = async () => {
+    if (!rec) return
+    if (!confirm('확정한 어르신 이름으로 요약·주의사항·후속조치를 다시 만들까요?\n기존 요약은 대체됩니다.')) return
+    setRegen(true)
+    try {
+      setRec(await handoverAPI.regenerate(rec.id))
+      setCreated(new Set()); setPicked(new Set())   // 제안 목록이 새로 생성됨
+      setHist(await handoverAPI.history().catch(() => hist))
+    } catch (e: any) { alert(e?.response?.data?.detail ?? '재생성에 실패했습니다.') }
+    finally { setRegen(false) }
   }
 
   const push = async () => {
@@ -131,9 +161,29 @@ export default function HandoverAiPage() {
     catch (e: any) { alert(e?.message ?? '카카오 공유를 열 수 없습니다.') }
   }
 
-  const sorted = useMemo(() => [...(rep?.entries ?? [])].sort((a, b) => (a.time || '').localeCompare(b.time || '')), [rep])
+  // 야간 근무는 자정을 넘는다(22:00 → 23:51 → 00:45 → 07:19).
+  // 시간 문자열로 정렬하면 아침 기록이 맨 앞으로 와 근무 흐름이 뒤집힌다.
+  const sorted = useMemo(() => {
+    const es = [...(rep?.entries ?? [])]
+    const mins = (t?: string) => {
+      const m = /(\d{1,2})\s*[:.]\s*(\d{2})/.exec(t || '')
+      return m ? Number(m[1]) * 60 + Number(m[2]) : null
+    }
+    const vals = es.map(e => mins(e.time)).filter((v): v is number => v !== null)
+    // 저녁(18시~)과 오전(~12시)이 함께 있으면 자정을 넘긴 야간 근무로 본다
+    const overnight = vals.some(v => v >= 18 * 60) && vals.some(v => v < 12 * 60)
+    const key = (e: HandoverEntry) => {
+      const v = mins(e.time)
+      if (v === null) return Number.MAX_SAFE_INTEGER          // 시간 없는 항목은 맨 뒤
+      return overnight && v < 12 * 60 ? v + 24 * 60 : v       // 새벽·아침은 다음 날로
+    }
+    return es.sort((a, b) => key(a) - key(b))
+  }, [rep])
   const urgentCount = useMemo(() => sorted.filter(e => e.urgency === 'high').length, [sorted])
   const residentCount = useMemo(() => new Set(sorted.map(e => e.resident).filter(Boolean)).size, [sorted])
+  // 표는 시간순 정렬본을 쓰지만, 저장은 원본 entries 인덱스 기준이다.
+  // 정렬본의 i 를 그대로 보내면 다른 행이 확정되므로 반드시 원본 인덱스로 변환한다.
+  const origIndex = (e: HandoverEntry) => rep?.entries?.indexOf(e) ?? -1
 
   if (denied) return (
     <div className="p-6 max-w-md mx-auto text-center py-24">
@@ -205,8 +255,8 @@ export default function HandoverAiPage() {
         </div>
         <label className="flex items-center gap-2 mt-3 cursor-pointer select-none">
           <input type="checkbox" checked={scanMode} onChange={e => setScanMode(e.target.checked)} className="w-4 h-4 accent-violet-600" />
-          <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-gray-700"><ScanLine size={14} className="text-violet-600" /> 문서 스캔 보정</span>
-          <span className="text-[11px] text-gray-400">촬영한 사진을 또렷하게 정리해 판독률을 높입니다</span>
+          <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-gray-700"><ScanLine size={14} className="text-violet-600" /> 사진 보정 (선택)</span>
+          <span className="text-[11px] text-gray-400">기울기·그림자를 정리해 AI가 읽기 쉽게 만듭니다. 결과가 이상하면 꺼보세요</span>
           {scanning && <span className="inline-flex items-center gap-1 text-[11px] text-violet-600 font-bold"><Loader2 size={12} className="animate-spin" /> 보정 중...</span>}
         </label>
         <p className="text-[11px] text-gray-400 mt-2">※ 어르신 성함·건강정보가 포함됩니다. 판독을 위해 이미지가 AI로 전송되며, 결과는 반드시 담당자가 확인·수정해 주세요.</p>
@@ -216,10 +266,32 @@ export default function HandoverAiPage() {
       {/* 결과 */}
       {rep && (
         <div className="print-area space-y-4">
+          {(rep.alerts ?? []).length > 0 && (
+            <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-4">
+              <h2 className="font-bold text-red-700 text-[15px] flex items-center gap-1.5 mb-2">
+                <AlertTriangle size={17} /> 주의 필요 {rep.alerts.length}건
+              </h2>
+              <div className="space-y-2">
+                {rep.alerts.map((a, i) => (
+                  <div key={i} className="bg-white rounded-xl px-3 py-2 border border-red-100">
+                    <p className="text-sm font-bold text-gray-800">{a.resident || '—'} · {a.issue}</p>
+                    {a.action && <p className="text-xs text-gray-500 mt-0.5">→ {a.action}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
             <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
               <h2 className="font-bold text-gray-900">요약</h2>
               <div className="no-print flex items-center gap-1.5">
+                <button onClick={doRegenerate} disabled={regen}
+                  title="확정한 이름으로 요약을 다시 만듭니다"
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold border border-violet-200 text-violet-700 bg-violet-50 rounded-lg hover:bg-violet-100 disabled:opacity-50">
+                  {regen ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                  {regen ? '생성 중...' : '요약 다시 만들기'}
+                </button>
                 <button onClick={() => window.print()} className="p-2 text-gray-300 hover:text-violet-600 rounded" title="인쇄"><Printer size={15} /></button>
                 <button onClick={push} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold border border-gray-200 rounded-lg text-gray-600 hover:text-violet-600"><Send size={13} /> 직원앱 발송</button>
                 {isKakaoShareEnabled() && (
@@ -255,26 +327,90 @@ export default function HandoverAiPage() {
                 </ul>
               </div>
             )}
-            <p className="text-[11px] text-gray-300 mt-3">{rec?.model ? `판독 모델: ${rec.model}` : ''} {rec?.created_at ? `· ${fmt(rec.created_at)}` : ''}</p>
-          </div>
-
-          {(rep.alerts ?? []).length > 0 && (
-            <div className="bg-red-50 border border-red-100 rounded-2xl p-4">
-              <h2 className="font-bold text-red-700 text-sm flex items-center gap-1.5 mb-2"><AlertTriangle size={15} /> 주의 필요</h2>
-              <div className="space-y-2">
-                {rep.alerts.map((a, i) => (
-                  <div key={i} className="bg-white rounded-xl px-3 py-2 border border-red-100">
-                    <p className="text-sm font-bold text-gray-800">{a.resident || '—'} · {a.issue}</p>
-                    {a.action && <p className="text-xs text-gray-500 mt-0.5">→ {a.action}</p>}
-                  </div>
-                ))}
-              </div>
+            <div className="flex items-center gap-1.5 flex-wrap mt-3">
+              {rep.pipeline && (
+                <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                  GPT 전사 {rep.pipeline.gpt_calls}회{rep.pipeline.claude_calls > 0 ? ' + Claude 검증 1회' : ''}
+                </span>
+              )}
+              {rep.pipeline?.claude_error && (
+                <span className="text-[10px] font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded"
+                  title={rep.pipeline.claude_error}>
+                  Claude 검증 미적용 — {rep.pipeline.claude_error.slice(0, 40)}
+                </span>
+              )}
+              {(rep.pipeline?.corrections ?? 0) > 0 && (
+                <span className="text-[10px] font-bold text-violet-700 bg-violet-50 px-2 py-0.5 rounded">
+                  Claude 교정 {rep.pipeline!.corrections}건
+                </span>
+              )}
+              {(rep.matching?.matched ?? 0) < (rep.matching?.total ?? 0) && (
+                <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">
+                  이름 확정 후 «요약 다시 만들기» 를 누르면 요약에도 반영됩니다
+                </span>
+              )}
+              {(rep.pipeline?.low_confidence ?? 0) > 0 && (
+                <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded">
+                  판독 불확실 {rep.pipeline!.low_confidence}건 — 원본 확인 권장
+                </span>
+              )}
+              <span className="text-[11px] text-gray-300">{rec?.model ?? ''} {rec?.created_at ? `· ${fmt(rec.created_at)}` : ''}</span>
             </div>
-          )}
+          </div>
 
           {sorted.length > 0 && (
             <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
-              <h2 className="font-bold text-gray-900 px-5 pt-4 pb-2">판독 내역 <span className="text-xs font-normal text-gray-400">{sorted.length}건</span></h2>
+              <h2 className="font-bold text-gray-900 px-5 pt-4 pb-2 flex items-center gap-2 flex-wrap">
+                판독 내역 <span className="text-xs font-normal text-gray-400">{sorted.length}건</span>
+                {rep.matching && (
+                  <span className="text-[11px] font-bold text-violet-700 bg-violet-50 px-2 py-0.5 rounded">
+                    수급자 매칭 {rep.matching.matched}/{rep.matching.total}
+                  </span>
+                )}
+                {(rep.matching?.unmatched_names?.length ?? 0) > 0 && (
+                  <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">
+                    미매칭: {rep.matching!.unmatched_names.slice(0, 3).join(', ')}
+                  </span>
+                )}
+              </h2>
+              {isMobile ? (
+                <ul className="divide-y divide-gray-50">
+                  {sorted.map((e, i) => {
+                    const u = URG[e.urgency] ?? URG.low
+                    const unresolved = e.match === 'none' || e.match === 'ambiguous'
+                    return (
+                      <li key={i} className="px-4 py-3">
+                        <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${u.cls}`}>{u.label}</span>
+                          <span className="text-[12px] text-gray-400">{e.time || '-'}</span>
+                          <button onClick={() => setPicking(origIndex(e))}
+                            className={`text-[14px] font-bold rounded px-1.5 py-0.5 ${
+                              unresolved ? 'bg-amber-50 border border-amber-300 text-amber-900' : 'text-gray-800 border border-transparent'}`}>
+                            {e.resident_matched || e.resident || '-'}{unresolved && ' ✎'}
+                          </button>
+                          {e.writer && <span className="text-[12px] text-gray-400 ml-auto">{e.writer}</span>}
+                        </div>
+                        {e.resident_matched && e.resident && e.resident_matched !== e.resident && (
+                          <p className="text-[11px] text-gray-400 mb-0.5">기록지: {e.resident}</p>
+                        )}
+                        <p className="text-[14px] text-gray-700 leading-relaxed whitespace-pre-line">{e.content}</p>
+                        {e.vitals && <p className="text-[12px] text-teal-600 mt-0.5">활력징후 {e.vitals}</p>}
+                        {e.confidence === 'low' && <p className="text-[11px] text-amber-600 mt-0.5">※ 판독 불확실 — 원본 확인</p>}
+                        {(e.match_suggest?.length ?? 0) > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {e.match_suggest!.map(c => (
+                              <button key={c.id} onClick={() => confirmMatch(origIndex(e), c)}
+                                className="text-[11px] font-bold text-violet-700 bg-violet-50 border border-violet-200 px-2 py-1 rounded">
+                                {c.name}로 확정
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead><tr className="bg-gray-50 text-[11px] text-gray-500">
@@ -287,10 +423,45 @@ export default function HandoverAiPage() {
                       return (
                         <tr key={i} className="border-t border-gray-50 align-top">
                           <td className="px-3 py-2 whitespace-nowrap text-gray-500 text-xs">{e.time || '-'}</td>
-                          <td className="px-3 py-2 whitespace-nowrap font-semibold text-gray-800">{e.resident || '-'}</td>
+                          <td className="px-3 py-2 whitespace-nowrap font-semibold text-gray-800">
+                            <button onClick={() => setPicking(origIndex(e))} title="눌러서 명단에서 선택"
+                              className={`text-left rounded px-1.5 py-0.5 -mx-1 ${
+                                e.match === 'none' || e.match === 'ambiguous'
+                                  ? 'bg-amber-50 border border-amber-300 text-amber-900 hover:bg-amber-100'
+                                  : 'hover:bg-gray-100 border border-transparent'}`}>
+                              {e.resident_matched || e.resident || '-'}
+                              {(e.match === 'none' || e.match === 'ambiguous') && <span className="ml-1 text-[10px]">✎</span>}
+                            </button>
+                            {e.resident_matched && e.resident && e.resident_matched !== e.resident && (
+                              <span className="block text-[10px] font-normal text-gray-400">기록지: {e.resident}</span>
+                            )}
+                            {(e.match === 'none' || e.match === 'ambiguous') && e.resident && (
+                              <span className="block text-[10px] font-bold text-amber-600 mt-0.5">
+                                {e.match === 'ambiguous' ? '확인 필요' : '명단에 없음'}
+                              </span>
+                            )}
+                            {(e.match_suggest?.length ?? 0) > 0 && (
+                              <span className="flex flex-wrap gap-1 mt-1">
+                                {e.match_suggest!.map(c => (
+                                  <button key={c.id} onClick={() => confirmMatch(origIndex(e), c)}
+                                    title={`유사도 ${c.score}`}
+                                    className="text-[10px] font-bold text-violet-700 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded hover:bg-violet-100">
+                                    {c.name}로 확정
+                                  </button>
+                                ))}
+                                <button onClick={() => confirmMatch(origIndex(e), null)}
+                                  className="text-[10px] text-gray-400 border border-gray-200 px-1.5 py-0.5 rounded hover:bg-gray-50">
+                                  명단에 없음
+                                </button>
+                              </span>
+                            )}
+                            {e.match === 'confirmed' && (
+                              <span className="block text-[10px] font-bold text-emerald-600 mt-0.5">확정됨</span>
+                            )}
+                          </td>
                           <td className="px-3 py-2 text-gray-700">
                             <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded border mr-1.5 ${u.cls}`}>{u.label}</span>
-                            {e.content}
+                            <span className="whitespace-pre-line">{e.content}</span>
                             {e.vitals && <span className="block text-[11px] text-teal-600 mt-0.5">V/S {e.vitals}</span>}
                             {e.confidence === 'low' && <span className="block text-[10px] text-amber-500 mt-0.5">※ 판독 불확실 — 확인 필요</span>}
                           </td>
@@ -301,7 +472,15 @@ export default function HandoverAiPage() {
                   </tbody>
                 </table>
               </div>
-              {rep.unreadable_notes && <p className="text-[11px] text-amber-600 px-5 py-2 bg-amber-50">판독 참고: {rep.unreadable_notes}</p>}
+              )}
+              {rep.unreadable_notes && (
+                <details className="px-5 py-2 bg-amber-50 border-t border-amber-100">
+                  <summary className="text-[11px] font-bold text-amber-700 cursor-pointer select-none">
+                    판독 참고 — 확인이 필요한 부분 보기
+                  </summary>
+                  <p className="text-[11px] text-amber-700 mt-1.5 leading-relaxed whitespace-pre-wrap">{rep.unreadable_notes}</p>
+                </details>
+              )}
             </div>
           )}
 
@@ -311,10 +490,17 @@ export default function HandoverAiPage() {
               <p className="text-xs text-gray-400 mb-3">필요한 항목만 선택해 체크리스트로 만드세요.</p>
               <div className="space-y-2">
                 {suggestions.map((s, i) => (
-                  <label key={i} className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-colors ${picked.has(i) ? 'border-violet-300 bg-violet-50' : 'border-gray-100 hover:bg-gray-50'}`}>
-                    <input type="checkbox" checked={picked.has(i)} onChange={() => toggle(i)} className="mt-0.5 accent-violet-600" />
+                  <label key={i} className={`flex items-start gap-2.5 p-3 rounded-xl border transition-colors ${
+                    created.has(i) ? 'border-emerald-200 bg-emerald-50/60 cursor-default'
+                    : picked.has(i) ? 'border-violet-300 bg-violet-50 cursor-pointer'
+                    : 'border-gray-100 hover:bg-gray-50 cursor-pointer'}`}>
+                    <input type="checkbox" checked={created.has(i) || picked.has(i)} disabled={created.has(i)}
+                      onChange={() => toggle(i)} className="mt-0.5 accent-violet-600 disabled:opacity-60" />
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-gray-800">{s.title}</p>
+                      <p className={`text-sm font-semibold ${created.has(i) ? 'text-emerald-800' : 'text-gray-800'}`}>
+                        {s.title}
+                        {created.has(i) && <span className="ml-1.5 text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">✓ 생성됨</span>}
+                      </p>
                       <p className="text-[11px] text-gray-400 mt-0.5 flex items-center gap-1.5 flex-wrap">
                         {s.due_label && (
                           <span className={`font-bold px-1.5 py-0.5 rounded ${(s.due_days ?? 9) <= 0 ? 'bg-red-100 text-red-700' : (s.due_days ?? 9) <= 2 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
@@ -329,7 +515,7 @@ export default function HandoverAiPage() {
               </div>
               <button onClick={createChecklists} disabled={picked.size === 0}
                 className="mt-3 w-full inline-flex items-center justify-center gap-1.5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-semibold disabled:opacity-40">
-                <Check size={15} /> 선택한 {picked.size}건 체크리스트 생성
+                <Check size={15} /> {picked.size > 0 ? `선택한 ${picked.size}건 체크리스트 생성` : '만들 항목을 선택하세요'}
               </button>
             </div>
           )}
@@ -365,6 +551,16 @@ export default function HandoverAiPage() {
             </ul>
           )}
         </div>
+      )}
+
+      {picking !== null && rep && (
+        <ResidentPickerModal
+          rawName={rep.entries?.[picking]?.resident ?? ''}
+          residents={residents}
+          currentId={rep.entries?.[picking]?.resident_id ?? null}
+          onPick={(r) => confirmMatch(picking, r)}
+          onClose={() => setPicking(null)}
+        />
       )}
 
       {accessOpen && <AccessModal onClose={() => setAccessOpen(false)} />}
