@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Enum
+from sqlalchemy import Column, String, DateTime, Enum, Boolean
 from sqlalchemy.sql import func
 import enum
 import uuid
@@ -40,5 +40,6 @@ class User(Base):
         nullable=True
     )
 
+    handover_access = Column(Boolean, default=False)   # 인수인계 AI 페이지 지정 접근 허용
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

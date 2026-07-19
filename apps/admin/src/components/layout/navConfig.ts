@@ -2,7 +2,7 @@ import {
   LayoutDashboard, UserCog, MessageSquare, FileText,
   Star, Settings, ClipboardList, ClipboardCheck, CalendarDays,
   UserRound, ShieldCheck, Sparkles, FileSearch,
-  Image as ImageIcon, Users, BookOpen, PenLine, Megaphone, Bell, HeartHandshake, Briefcase, Soup, Receipt, GraduationCap,
+  Image as ImageIcon, Users, BookOpen, PenLine, Megaphone, Bell, CalendarClock, HeartHandshake, Briefcase, Soup, Receipt, GraduationCap,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -102,6 +102,8 @@ export function getNavConfig(
             { to: '/staff-hr', icon: FileText, label: '직원 상세' },
             { to: '/staffing', icon: Users, label: '인력배치 시뮬레이터' },
             { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
+            { to: '/work-schedule', icon: CalendarClock, label: '근무표' },
+            { to: '/handover', icon: ClipboardCheck, label: '인수인계 AI' },
             { to: '/facility-news', icon: Megaphone, label: '시설소식' },
             { to: '/notices', icon: Bell, label: '내부 공지 관리' },
             { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
@@ -166,6 +168,8 @@ export function getNavConfig(
             { to: '/staff-hr', icon: FileText, label: '직원 상세' },
             { to: '/staffing', icon: Users, label: '인력배치 시뮬레이터' },
             { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
+            { to: '/work-schedule', icon: CalendarClock, label: '근무표' },
+            { to: '/handover', icon: ClipboardCheck, label: '인수인계 AI' },
             { to: '/facility-news', icon: Megaphone, label: '시설소식' },
             { to: '/notices', icon: Bell, label: '내부 공지 관리' },
             { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
@@ -223,6 +227,8 @@ export function getNavConfig(
     { to: '/staff-hr', icon: FileText, label: '직원 상세' },
   )
   if (canEnteral) operItems.push({ to: '/enteral', icon: Soup, label: '경관식 관리' })
+  const canHandover = ['사회복지사', '간호사', '간호조무사', '시설장'].includes(user?.position ?? '')
+  if (canHandover) operItems.push({ to: '/handover', icon: ClipboardCheck, label: '인수인계 AI' })
 
   const evalItems: NavItem[] = [
     checklistItem,

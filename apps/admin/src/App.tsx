@@ -26,6 +26,9 @@ import EvalCalendarPage     from './pages/eval/EvalCalendarPage'
 import EvalResidentsPage    from './pages/eval/EvalResidentsPage'
 import EvalStaffPage        from './pages/eval/EvalStaffPage'
 import StaffingSimulatorPage from './pages/admin/StaffingSimulatorPage'
+import WorkSchedulePage from './pages/eval/WorkSchedulePage'
+import HandoverAiPage from './pages/eval/HandoverAiPage'
+import HandoverDetailPage from './pages/eval/HandoverDetailPage'
 import EvalAIReviewPage     from './pages/eval/EvalAIReviewPage'
 import EvalRecordAuditPage  from './pages/eval/EvalRecordAuditPage'
 import EvalRecordAuditDetailPage from './pages/eval/EvalRecordAuditDetailPage'
@@ -233,6 +236,9 @@ function App() {
             <Route path="notices"                  element={<ManagerRoute><InternalNoticesPage /></ManagerRoute>} />
             <Route path="staff-hr"                 element={<StaffAdminRoute><StaffHrPage /></StaffAdminRoute>} />
             <Route path="staffing"                 element={<ManagerRoute><StaffingSimulatorPage /></ManagerRoute>} />
+            <Route path="work-schedule"           element={<ManagerRoute><WorkSchedulePage /></ManagerRoute>} />
+            <Route path="handover"                 element={<HandoverAiPage />} />
+            <Route path="handover/:id"             element={<HandoverDetailPage />} />
             <Route path="resident-docs"            element={<SocialWorkerRoute><ResidentDocsPage /></SocialWorkerRoute>} />
             <Route path="education"                element={<StaffEducationPage />} />
             <Route path="enteral"                  element={<CareInventoryRoute><EnteralPage /></CareInventoryRoute>} />

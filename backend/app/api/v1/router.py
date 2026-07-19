@@ -22,6 +22,8 @@ from app.api.v1.endpoints.staffing import router as staffing_router
 from app.api.v1.endpoints.work_guide import router as work_guide_router
 from app.api.v1.endpoints.notices import router as notices_router
 from app.api.v1.endpoints.notice_templates import router as notice_templates_router
+from app.api.v1.endpoints.work_schedule import router as work_schedule_router
+from app.api.v1.endpoints.handover import router as handover_router
 from app.api.v1.endpoints.resident_docs import router as resident_docs_router
 from app.api.v1.endpoints.staff_education import router as staff_education_router
 api_router = APIRouter()
@@ -127,5 +129,7 @@ api_router.include_router(staffing_router, prefix="/admin/staffing", tags=["admi
 api_router.include_router(work_guide_router, prefix="/admin/work-guide", tags=["admin-work-guide"])
 api_router.include_router(notices_router, prefix="/admin/notices", tags=["admin-notices"])
 api_router.include_router(notice_templates_router, prefix="/admin/notice-templates", tags=["admin-notice-templates"])
+api_router.include_router(work_schedule_router, prefix="/admin/work-schedule", tags=["admin-work-schedule"])
+api_router.include_router(handover_router, prefix="/admin/handover", tags=["admin-handover"])
 api_router.include_router(resident_docs_router, prefix="/admin/resident-docs", tags=["admin-resident-docs"])
 api_router.include_router(staff_education_router, prefix="/admin/educations", tags=["admin-educations"])
