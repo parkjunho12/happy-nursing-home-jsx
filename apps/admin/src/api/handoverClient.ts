@@ -8,11 +8,18 @@ function unwrap<T>(res: any): T {
 }
 
 export type Urgency = 'high' | 'medium' | 'low'
+export type MatchKind = 'exact' | 'masked' | 'fuzzy' | 'confirmed' | 'ambiguous' | 'none'
 export interface HandoverEntry {
   date: string; time: string; resident: string; content: string; writer: string
   vitals: string; category: string; urgency: Urgency; confidence: string
+  resident_id?: string | null          // 매칭된 수급자 id
+  resident_matched?: string | null     // 명단에서 확정된 정식 이름
+  match?: MatchKind
+  match_score?: number
+  match_candidates?: string[]
+  match_suggest?: { id: string; name: string; score: number }[]
 }
-export interface HandoverAlert { resident: string; issue: string; action: string }
+export interface HandoverAlert { resident: string; issue: string; action: string; resident_matched?: string | null; match?: MatchKind }
 export interface SuggestedChecklist {
   title: string; frequency: string; person_name: string; reason: string
   due_days?: number; due_date?: string; due_label?: string
@@ -21,6 +28,8 @@ export interface HandoverReportBody {
   entries: HandoverEntry[]; summary: string; key_points: string[]
   alerts: HandoverAlert[]; suggested_checklists: SuggestedChecklist[]
   unreadable_notes: string; model?: string | null; error?: string
+  matching?: { total: number; matched: number; ambiguous: number; unmatched_names: string[]; roster_size: number }
+  pipeline?: { gpt_calls: number; claude_calls: number; rows: number; low_confidence?: number; corrections?: number; claude_error?: string; regenerated?: boolean }
 }
 export interface HandoverRecord {
   id: string; images: string[]; report: HandoverReportBody
@@ -44,6 +53,14 @@ export const handoverAPI = {
   push: (id: string) => apiClient.post(`${BASE}/history/${id}/push`).then(unwrap<{ tokens: number; recipients: number; sent: number; failed: number }>),
   createChecklists: (id: string, items: { title: string; frequency: string; person_name?: string | null; due_date?: string | null }[]) =>
     apiClient.post(`${BASE}/history/${id}/checklists`, items).then(r => r.data),
+  regenerate: (id: string) =>
+    apiClient.post(`${BASE}/history/${id}/regenerate`, {}, { timeout: 180000 }).then(unwrap<HandoverRecord>),
+  confirmMatch: (id: string, entryIndex: number, resident: { id: string; name: string } | null) =>
+    apiClient.patch(`${BASE}/history/${id}/match`, {
+      entry_index: entryIndex,
+      resident_id: resident?.id ?? null,
+      resident_name: resident?.name ?? null,
+    }).then(unwrap<HandoverRecord>),
   accessList: () => apiClient.get(`${BASE}/access`).then(unwrap<AccessRow[]>),
   setAccess: (userId: string, granted: boolean) =>
     apiClient.patch(`${BASE}/access/${userId}`, { granted }).then(r => r.data),
