@@ -219,6 +219,7 @@ export function getNavConfig(
     { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
   ]
   if (isSocialWorker) operItems.push(
+    { to: '/notices', icon: Bell, label: '내부 공지 관리' },
     { to: '/facility-news', icon: Megaphone, label: '시설소식' },
     { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
   )
