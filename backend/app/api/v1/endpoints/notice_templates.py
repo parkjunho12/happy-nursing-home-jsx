@@ -19,8 +19,8 @@ def _can_write(current_user: User = Depends(get_current_user)) -> User:
     role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
     pos = getattr(current_user, "position", None)
     pos = pos.value if hasattr(pos, "value") else str(pos or "")
-    if role != "ADMIN" and pos != "시설장":
-        raise HTTPException(403, "템플릿 편집 권한이 없습니다. (관리자·시설장)")
+    if role != "ADMIN" and pos not in ("시설장", "사회복지사"):
+        raise HTTPException(403, "템플릿 편집 권한이 없습니다. (관리자·시설장·사회복지사)")
     return current_user
 
 
