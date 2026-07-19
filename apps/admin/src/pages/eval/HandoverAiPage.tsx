@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ClipboardList, Upload, Loader2, Sparkles, AlertTriangle, Send, MessageCircle,
-  Printer, History, Trash2, X, Check, ShieldCheck, Camera, ScanLine, RefreshCw,
+  Printer, History, Trash2, X, Check, ShieldCheck, Camera, ScanLine, RefreshCw, Search,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth'
 import { handoverAPI, handoverImageUrl, type HandoverRecord, type AccessRow, type HandoverEntry } from '@/api/handoverClient'
@@ -17,6 +17,21 @@ const URG = {
   low: { label: '일반', cls: 'bg-gray-100 text-gray-500 border-gray-200' },
 } as const
 const FREQ_LABEL: Record<string, string> = { one_time: '일회성', daily: '매일', weekly: '주간', monthly: '월간', quarterly: '분기', 'half-yearly': '반기', yearly: '연간' }
+const kstDay = (v: string) => new Date(v).toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })
+const hhmm = (iso?: string | null) => !iso ? '' :
+  new Date(iso).toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hour12: false })
+/** '오늘 · 7월 19일(일)' 형태의 그룹 제목 */
+const dayLabel = (day: string) => {
+  const today = kstDay(new Date().toISOString())
+  const y = new Date(Date.now() - 86400000).toISOString()
+  const d = new Date(day + 'T00:00:00')
+  const w = ['일','월','화','수','목','금','토'][d.getDay()]
+  const base = `${d.getMonth() + 1}월 ${d.getDate()}일(${w})`
+  if (day === today) return `오늘 · ${base}`
+  if (day === kstDay(y)) return `어제 · ${base}`
+  return base
+}
+
 const fmt = (iso?: string | null) => {
   if (!iso) return ''
   const d = new Date(iso)
@@ -39,6 +54,7 @@ export default function HandoverAiPage() {
   const [regen, setRegen] = useState(false)
   const [hist, setHist] = useState<HandoverRecord[]>([])
   const [showHist, setShowHist] = useState(false)
+  const [histQ, setHistQ] = useState('')
   const [accessOpen, setAccessOpen] = useState(false)
   const [denied, setDenied] = useState(false)
   const [picking, setPicking] = useState<number | null>(null)   // 명단 선택 중인 항목 index
@@ -523,35 +539,90 @@ export default function HandoverAiPage() {
       )}
 
       {/* 이력 */}
-      {showHist && (
-        <div className="no-print mt-4 bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
-          <h2 className="font-bold text-gray-900 px-5 pt-4 pb-2">판독 이력</h2>
-          {hist.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-10">저장된 리포트가 없습니다.</p>
-          ) : (
-            <ul className="divide-y divide-gray-50">
-              {hist.map(h => (
-                <li key={h.id} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50">
-                  <button onClick={() => { setRec(h); setPicked(new Set()); setShowHist(false); window.scrollTo({ top: 0, behavior: 'smooth' }) }} className="flex-1 min-w-0 text-left">
-                    <p className="text-sm font-semibold text-gray-800 truncate">{h.report?.summary || '(요약 없음)'}</p>
-                    <p className="text-[11px] text-gray-400 mt-0.5">
-                      {fmt(h.created_at)} · {h.author ?? '-'} · 사진 {h.images?.length ?? 0}장
-                      {(h.report?.alerts?.length ?? 0) > 0 && <span className="text-red-500 ml-1">· 주의 {h.report.alerts.length}건</span>}
-                    </p>
-                  </button>
-                  {(h.images ?? []).slice(0, 2).map((u, i) => (
-                    <img key={i} src={handoverImageUrl(u)!} alt="" className="w-10 h-10 object-cover rounded border border-gray-200" />
-                  ))}
-                  {isAdmin && (
-                    <button onClick={async () => { if (confirm('이 리포트를 삭제할까요?')) { await handoverAPI.remove(h.id); setHist(await handoverAPI.history()) } }}
-                      className="p-2 text-gray-300 hover:text-red-500"><Trash2 size={14} /></button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+      {showHist && (() => {
+        const kw = histQ.trim()
+        const filtered = hist.filter(h => {
+          if (!kw) return true
+          const names = (h.report?.entries ?? []).map(e => e.resident_matched || e.resident).join(' ')
+          return `${h.report?.summary ?? ''} ${names} ${h.author ?? ''}`.includes(kw)
+        })
+        // 날짜별 그룹
+        const groups = new Map<string, HandoverRecord[]>()
+        filtered.forEach(h => {
+          const d = h.created_at ? kstDay(h.created_at) : '기타'
+          if (!groups.has(d)) groups.set(d, [])
+          groups.get(d)!.push(h)
+        })
+
+        return (
+          <div className="no-print mt-4 bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between gap-2 px-5 pt-4 pb-3 flex-wrap">
+              <h2 className="font-bold text-gray-900">판독 이력 <span className="text-xs font-normal text-gray-400">{filtered.length}건</span></h2>
+              <div className="relative">
+                <Search className="w-4 h-4 text-gray-300 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input value={histQ} onChange={e => setHistQ(e.target.value)} placeholder="어르신·내용 검색"
+                  className="pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg w-44 focus:outline-none focus:ring-2 focus:ring-violet-200" />
+              </div>
+            </div>
+
+            {filtered.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-12">{kw ? '검색 결과가 없습니다.' : '저장된 리포트가 없습니다.'}</p>
+            ) : (
+              <div className="max-h-[520px] overflow-y-auto">
+                {Array.from(groups.entries()).map(([day, items]) => (
+                  <div key={day}>
+                    <div className="sticky top-0 z-10 bg-gray-50 border-y border-gray-100 px-5 py-1.5">
+                      <span className="text-[12px] font-bold text-gray-600">{day === '기타' ? '날짜 미상' : dayLabel(day)}</span>
+                      <span className="text-[11px] text-gray-400 ml-2">{items.length}건</span>
+                    </div>
+                    <ul className="divide-y divide-gray-50">
+                      {items.map(h => {
+                        const r = h.report
+                        const alerts = r?.alerts?.length ?? 0
+                        const rows = r?.entries?.length ?? 0
+                        const people = new Set((r?.entries ?? []).map(e => e.resident_matched || e.resident).filter(Boolean)).size
+                        const unmatched = r?.matching ? r.matching.total - r.matching.matched : 0
+                        return (
+                          <li key={h.id} className="flex items-start gap-3 px-5 py-3 hover:bg-gray-50">
+                            {h.images?.[0]
+                              ? <img src={handoverImageUrl(h.images[0])!} alt="" className="w-12 h-12 object-cover rounded-lg border border-gray-200 shrink-0" />
+                              : <div className="w-12 h-12 rounded-lg bg-gray-100 shrink-0" />}
+                            <button onClick={() => { setRec(h); setPicked(new Set()); setCreated(new Set()); setShowHist(false); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                              className="flex-1 min-w-0 text-left">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[15px] font-bold text-gray-900 tabular-nums">{hhmm(h.created_at)}</span>
+                                {alerts > 0 && (
+                                  <span className="text-[10px] font-bold text-red-700 bg-red-100 px-1.5 py-0.5 rounded">주의 {alerts}</span>
+                                )}
+                                {unmatched > 0 && (
+                                  <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">이름 미확정 {unmatched}</span>
+                                )}
+                                {r?.pipeline?.regenerated && (
+                                  <span className="text-[10px] font-bold text-violet-600 bg-violet-50 px-1.5 py-0.5 rounded">요약 갱신됨</span>
+                                )}
+                              </div>
+                              <p className="text-[13px] text-gray-600 mt-1 line-clamp-2 leading-relaxed">
+                                {r?.summary || '(요약 없음)'}
+                              </p>
+                              <p className="text-[11px] text-gray-400 mt-1">
+                                어르신 {people}명 · 기록 {rows}건 · 사진 {h.images?.length ?? 0}장 · {h.author ?? '-'}
+                              </p>
+                            </button>
+                            {isAdmin && (
+                              <button onClick={async () => { if (confirm('이 리포트를 삭제할까요?')) { await handoverAPI.remove(h.id); setHist(await handoverAPI.history()) } }}
+                                title="삭제" className="p-2 text-gray-300 hover:text-red-500 shrink-0"><Trash2 size={14} /></button>
+                            )}
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {picking !== null && rep && (
         <ResidentPickerModal
