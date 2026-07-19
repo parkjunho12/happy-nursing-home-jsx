@@ -125,7 +125,7 @@ export async function shareText(text: string, link?: string): Promise<void> {
   const url = link || SHARE_LINK
   window.Kakao.Share.sendDefault({
     objectType: 'text',
-    text: text.length > 190 ? text.slice(0, 189) + '…' : text,
+    text: text.length > 200 ? text.slice(0, 199) + '…' : text,   // 카카오 텍스트 최대 200자
     link: { mobileWebUrl: url, webUrl: url },
   })
 }

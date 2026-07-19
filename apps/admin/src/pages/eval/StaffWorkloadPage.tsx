@@ -30,8 +30,10 @@ export default function StaffWorkloadPage() {
       // 지연(dl<0) 또는 앞으로 horizon일 이내(dl<=horizon). 기한없음(dl=null, 이벤트성)은 항상 포함
       if (dl != null && dl > horizon) return
 
-      const key = c.assigned_user_id || c.assignee || '__unassigned__'
-      const name = c.assignee || (key === '__unassigned__' ? '미배정' : key)
+      // 담당자 식별: 이름(assignee) 우선 → 예전(id 없음)·신규 데이터를 한 사람으로 병합
+      const nm = (c.assignee || '').trim()
+      const key = nm || c.assigned_user_id || '__unassigned__'
+      const name = nm || '미배정'
       const late = dl != null && dl < 0
       const r = (map[key] ||= { key, name, overdue: 0, soon: 0, items: [] })
       if (late) r.overdue++; else r.soon++
@@ -55,7 +57,7 @@ export default function StaffWorkloadPage() {
   const perAssignee = useMemo(() => {
     const m: Record<string, { total: number; done: number }> = {}
     scopeItems.forEach(c => {
-      const key = c.assigned_user_id || c.assignee || '__unassigned__'
+      const key = (c.assignee || '').trim() || c.assigned_user_id || '__unassigned__'
       const r = (m[key] ||= { total: 0, done: 0 })
       r.total++; if (checkDone(c)) r.done++
     })
