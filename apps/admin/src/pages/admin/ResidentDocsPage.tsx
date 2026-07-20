@@ -7,7 +7,7 @@ import DocEventsEditor from '@/components/eval/DocEventsEditor'
 import DocChangesModal from '@/components/eval/DocChangesModal'
 import { CARE_TYPES, careMeta, deriveCare, needsFacilityApply, APPLY_STAGES, stageMeta, stageProgress } from '@/utils/careType'
 import { currentCert, certState, renewalDue, gradeLabel, benefitLabel } from '@/utils/cert'
-import { type DocEvent, type DocType, KINDS, kindMeta, asEvent, fmtYMD, fmtMD, autoDocEvents, todayISO, STATUSES, statusMeta, effStatus, isAlert, isExplicitDone, isImplicitDone } from '@/utils/docEvents'
+import { type DocEvent, type DocType, KINDS, kindMeta, asEvent, fmtYMD, fmtMD, autoDocEvents, appendAuto, todayISO, STATUSES, statusMeta, effStatus, isAlert, isExplicitDone, isImplicitDone } from '@/utils/docEvents'
 import { useLtcStore, type LtcResident } from '@/store/ltc'
 
 const fmtD = (s?: string | null) => {
@@ -463,8 +463,16 @@ function DocFormModal({ editing, residents = [], docByResident = new Map<string,
   }
   const autoFill = () => {
     const a = autoDocEvents(f.certifications ?? [], f.admission_date)
-    // 기존 일시는 모두 지우고 현재/추가된 인정서 기준으로 새로 생성
-    setF(p => ({ ...p, contract_lines: a.contract, plan_lines: a.plan, eval_lines: a.eval }))
+    // 기존 일시는 건드리지 않고, 없는 날짜만 새로 더한다.
+    // 갱신 인정서를 추가했을 때 이미 적어둔 기록이 사라지면 안 되기 때문.
+    const c = appendAuto(f.contract_lines, a.contract)
+    const pl = appendAuto(f.plan_lines, a.plan)
+    const ev = appendAuto(f.eval_lines, a.eval)
+    const total = c.added + pl.added + ev.added
+    setF(p => ({ ...p, contract_lines: c.next, plan_lines: pl.next, eval_lines: ev.next }))
+    alert(total === 0
+      ? '새로 추가할 일시가 없습니다. (이미 모두 등록되어 있습니다)'
+      : `일시 ${total}건을 추가했습니다.\n계약서 ${c.added} · 계획서 ${pl.added} · 평가 ${ev.added}건\n\n기존 기록은 그대로 두었습니다.`)
   }
   const del = async () => { if (!isEdit || !confirm('이 기록을 삭제할까요?')) return; setSaving(true); try { await residentDocAPI.remove(editing!.id); onSaved() } finally { setSaving(false) } }
 
@@ -558,7 +566,7 @@ function DocFormModal({ editing, residents = [], docByResident = new Map<string,
             <CertificationEditor value={f.certifications ?? []} onChange={cs => setF({ ...f, certifications: cs })} />
           </div>
           <button type="button" onClick={autoFill} className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-teal-200 bg-teal-50 text-teal-700 text-xs font-bold hover:bg-teal-100">
-            <RefreshCw className="w-3.5 h-3.5" /> 인정서 기준으로 일시 자동 생성 <span className="font-normal text-teal-500">(변화만 수동 추가)</span>
+            <RefreshCw className="w-3.5 h-3.5" /> 인정서 기준으로 일시 추가 <span className="font-normal text-teal-500">(기존 기록은 유지)</span>
           </button>
           <Field label="계약서 일시"><DocEventsEditor type="contract" value={f.contract_lines} onChange={v => setF({ ...f, contract_lines: v })} defaultAddKind="변경" addLabel="+ 변경(변화) 추가" /></Field>
           <Field label="급여제공계획서 일시"><DocEventsEditor type="plan" value={f.plan_lines} onChange={v => setF({ ...f, plan_lines: v })} defaultAddKind="변화" addLabel="+ 변화 추가" /></Field>
