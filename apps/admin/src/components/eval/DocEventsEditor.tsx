@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { X, GripVertical, ArrowDownUp } from 'lucide-react'
 import DateField from '@/components/ui/DateField'
-import { type DocEvent, type DocType, KINDS, defaultKind, asEvent } from '@/utils/docEvents'
+import { type DocEvent, type DocType, KINDS, defaultKind, asEvent , STATUSES, statusMeta, effStatus, type EventStatus } from '@/utils/docEvents'
 
 /**
  * 서류 일시 편집기 — 계약서/급여제공계획서/결과평가 공용.
@@ -56,10 +56,23 @@ export default function DocEventsEditor({ type, value, onChange, addLabel = '+ �
             </select>
             <DateField value={it.date} onChange={v => patch(i, { date: v })} className={inp} wrapperClassName="flex-1 min-w-[8rem]" placeholder="날짜(선택)" />
             <input value={it.memo ?? ''} onChange={e => patch(i, { memo: e.target.value })} placeholder="메모(선택)" className={`${inp} flex-1 min-w-[7rem]`} />
-            <label title="작성 완료" className={`shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1.5 rounded-lg border cursor-pointer ${it.done ? 'bg-green-50 border-green-200 text-green-700' : 'bg-white border-gray-200 text-gray-400'}`}>
-              <input type="checkbox" checked={!!it.done} onChange={e => patch(i, { done: e.target.checked })} className="accent-green-600" />
-              완료
-            </label>
+            {(() => {
+              const cur = effStatus(it)
+              const sm = statusMeta(cur)
+              return (
+                <select
+                  title="서류 상태"
+                  value={cur ?? ''}
+                  onChange={e => {
+                    const v = (e.target.value || null) as EventStatus | null
+                    patch(i, { status: v, done: v === '완료' })
+                  }}
+                  className={`shrink-0 text-[11px] font-bold px-2 py-1.5 rounded-lg border cursor-pointer focus:outline-none ${sm ? sm.chip : 'bg-white border-gray-200 text-gray-400'}`}>
+                  <option value="">상태 없음</option>
+                  {STATUSES.map(st => <option key={st.v} value={st.v}>{st.label}</option>)}
+                </select>
+              )
+            })()}
             <button type="button" onClick={() => rm(i)} className="text-gray-300 hover:text-red-500 shrink-0"><X className="w-4 h-4" /></button>
           </div>
         )
