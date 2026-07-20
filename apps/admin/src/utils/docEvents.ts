@@ -183,6 +183,19 @@ export function autoDocEvents(certs: Certification[], admissionDate?: string | n
   }
 }
 
+/**
+ * 자동 생성분을 기존 목록에 '더하기만' 한다.
+ * 갱신 인정서를 추가했을 때 이미 적어둔 일시를 지우거나 고치면 안 되므로,
+ * 같은 날짜가 이미 있으면 건너뛰고 없는 날짜만 새로 넣는다.
+ */
+export function appendAuto(existing: DocEvent[] | undefined, auto: DocEvent[]): { next: DocEvent[]; added: number } {
+  const cur = (existing ?? []).map(asEvent)
+  const have = new Set(cur.filter(e => e.date).map(e => e.date as string))
+  const add = auto.filter(e => e.date && !have.has(e.date as string))
+  const next = [...cur, ...add].sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'))
+  return { next, added: add.length }
+}
+
 // 자동 생성분과 기존 수동(변화·퇴소) 항목 병합 (routine은 새로 대체, 수동은 보존)
 export function mergeAuto(existing: DocEvent[] | undefined, auto: DocEvent[], keepKinds: string[]): DocEvent[] {
   const manual = (existing ?? []).map(asEvent).filter(e => (e.kind && keepKinds.includes(e.kind)) || (!e.kind && (e.memo || e.date)))

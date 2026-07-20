@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { X, GripVertical, ArrowDownUp } from 'lucide-react'
+import { X, GripVertical, ArrowDownUp, History } from 'lucide-react'
 import DateField from '@/components/ui/DateField'
-import { type DocEvent, type DocType, KINDS, defaultKind, asEvent , STATUSES, statusMeta, effStatus, type EventStatus } from '@/utils/docEvents'
+import { type DocEvent, type DocType, KINDS, defaultKind, asEvent, todayISO, STATUSES, statusMeta, effStatus, type EventStatus } from '@/utils/docEvents'
 
 /**
  * 서류 일시 편집기 — 계약서/급여제공계획서/결과평가 공용.
@@ -22,6 +22,11 @@ export default function DocEventsEditor({ type, value, onChange, addLabel = '+ �
   const kinds = KINDS[type]
   const [dragI, setDragI] = useState<number | null>(null)
   const [overI, setOverI] = useState<number | null>(null)
+  // 지난 일시는 기본으로 접는다 — 수정할 일은 대개 앞으로의 일정이다
+  const [showPast, setShowPast] = useState(false)
+  const today = todayISO()
+  const isPast = (e: DocEvent) => !!e.date && e.date < today
+  const pastCount = items.filter(isPast).length
 
   const patch = (i: number, p: Partial<DocEvent>) => onChange(items.map((x, xi) => xi === i ? { ...x, ...p } : x))
   const add = () => onChange([...items, { date: '', memo: '', kind: defaultAddKind ?? defaultKind(type) }])
@@ -38,7 +43,7 @@ export default function DocEventsEditor({ type, value, onChange, addLabel = '+ �
 
   return (
     <div className="space-y-1.5">
-      {items.map((it, i) => {
+      {items.map((it, i) => ({ it, i })).filter(({ it }) => showPast || !isPast(it)).map(({ it, i }) => {
         const meta = kinds.find(k => k.v === it.kind) ?? kinds[0]
         return (
           <div key={i}
@@ -77,6 +82,13 @@ export default function DocEventsEditor({ type, value, onChange, addLabel = '+ �
           </div>
         )
       })}
+      {pastCount > 0 && (
+        <button type="button" onClick={() => setShowPast(v => !v)}
+          className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-400 hover:text-gray-600">
+          <History className="w-3 h-3" />
+          {showPast ? `이전 기록 ${pastCount}건 접기 ▴` : `이전 기록 ${pastCount}건 더보기 ▾`}
+        </button>
+      )}
       <div className="flex items-center gap-3">
         <button type="button" onClick={add} className="text-xs font-semibold text-teal-600 hover:underline">{addLabel}</button>
         {items.length > 1 && (
