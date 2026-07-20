@@ -18,7 +18,7 @@ export default function MobileTabBar({ onMore }: { onMore: () => void }) {
     to === '/' ? pathname === '/' : (pathname === to || pathname.startsWith(to + '/'))
 
   return (
-    <nav
+    <nav data-print="off"
       className="fixed bottom-0 inset-x-0 z-40 md:hidden bg-white border-t border-gray-200 shadow-[0_-1px_8px_rgba(0,0,0,0.04)]"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       aria-label="주요 메뉴"

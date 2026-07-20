@@ -92,6 +92,24 @@ export const isAutoManaged = (raw?: string | null): boolean => {
 /** 직접 입력한 시간대 칸인지 */
 export const isCustomTime = (raw?: string | null): boolean => extraHoursOf(raw) > 0
 
+/**
+ * 시간대 표기를 두 줄로 나눈다. '0850~1600' → ['0850','1600']
+ * 한 칸이 8mm 남짓이라 한 줄로는 절반이 잘린다.
+ */
+export function splitTimeRange(raw?: string | null): [string, string] | null {
+  const v = (raw ?? '').trim()
+  if (!isCustomTime(v)) return null
+  const m = /^(.+?)\s*[-~\s]\s*(.+)$/.exec(v.replace(/\n/g, ' '))
+  return m ? [m[1].trim(), m[2].trim()] : null
+}
+
+/** 좁은 칸(인쇄)용 짧은 표기 — 세 글자 코드는 두 글자로 */
+export const SHORT_CODE: Record<string, string> = { '초과휴': '초휴', 'AD반': 'AD반', '반PD': '반PD' }
+export const shortOf = (raw?: string | null): string => {
+  const v = (raw ?? '').trim()
+  return SHORT_CODE[v] ?? v
+}
+
 export const meta = (raw?: string | null): ShiftCode | null => CODE_MAP[(raw ?? '').trim()] ?? null
 
 /** D/N 갯수 집계 — 정규 코드만 센다 (시간 직접 입력 칸은 제외) */

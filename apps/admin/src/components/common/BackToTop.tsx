@@ -34,7 +34,7 @@ export default function BackToTop({
   if (!show) return null
 
   return (
-    <button
+    <button data-print="off"
       onClick={toTop}
       aria-label="맨 위로 이동"
       className={`fixed right-4 ${bottomClass} z-30 w-11 h-11 rounded-full bg-white border border-gray-200 shadow-lg flex items-center justify-center text-gray-600 hover:text-primary-orange hover:border-primary-orange active:scale-95 transition-all`}
