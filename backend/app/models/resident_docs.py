@@ -21,6 +21,13 @@ class ResidentDocStatus(Base):
     id = Column(String, primary_key=True, default=_uuid)
     resident_id = Column(String, nullable=True, index=True)   # LtcResident 연동
     floor = Column(String(20), nullable=True, default="2층")
+    # 구분: 시설(재원) | 재가 | 신청예정(등급외이나 시설급여 신청 예정)
+    care_type = Column(String(20), nullable=True, default="시설", index=True)
+    followup_date = Column(String(20), nullable=True)         # 다음 확인일 ISO — 재가·신청예정 어르신 놓침 방지
+    # 시설급여 신청 진행 단계: 예정 | 신청 | 조사 | 판정 | 완료
+    apply_stage = Column(String(20), nullable=True)
+    apply_note = Column(Text, nullable=True)                  # 진행 메모(예: 의사소견서 제출 필요)
+    guardian_notified_at = Column(String(20), nullable=True)  # 보호자에게 마지막으로 안내한 날 ISO
     seq = Column(Integer, default=0)
 
     name = Column(String(100), nullable=True, index=True)     # 어르신 성함
@@ -39,3 +46,17 @@ class ResidentDocStatus(Base):
 
     created_at = Column(DateTime(timezone=True), default=now_kst)
     updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)
+
+
+class ResidentDocChange(Base):
+    """어르신 서류 수정 이력 — 저장할 때마다 바뀐 항목만 기록한다."""
+    __tablename__ = "resident_doc_changes"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    doc_id = Column(String, nullable=False, index=True)        # ResidentDocStatus.id
+    resident_name = Column(String(100), nullable=True)         # 당시 성함(기록 삭제돼도 남도록 비정규화)
+    action = Column(String(20), default="update")              # create | update | delete
+    changes = Column(JSON, nullable=True)                      # [{field,label,before,after} | {field,label,added,removed}]
+    user_id = Column(String, nullable=True, index=True)
+    user_name = Column(String(100), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_kst, index=True)

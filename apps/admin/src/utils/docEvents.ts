@@ -1,6 +1,71 @@
+export const todayISO = (): string => {
+  const d = new Date(); const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
 // 어르신 서류 일시(계약서·급여제공계획서·결과평가) — 구조화 이벤트
-export interface DocEvent { date?: string | null; memo?: string | null; kind?: string | null; done?: boolean }
+export interface DocEvent {
+  date?: string | null
+  memo?: string | null
+  kind?: string | null
+  done?: boolean                 // (레거시) 완료 여부 — status와 자동 동기화된다
+  status?: EventStatus | null    // 서류 상태 — 기존 시트의 셀 색상 범례
+}
 export type DocType = 'contract' | 'plan' | 'eval'
+
+// ── 서류 상태 ────────────────────────────────────────────────
+// 기존 엑셀 시트에서 셀 색으로 표시하던 4가지를 그대로 옮긴 것.
+export type EventStatus = '완료' | '미비' | '서명미비' | '챙길것'
+
+export interface StatusMeta {
+  v: EventStatus
+  label: string          // 편집기 선택지
+  short: string          // 표 배지
+  text: string           // 글자색
+  chip: string           // 배지/범례 색
+  dot: string
+  alert: boolean         // 조치가 필요한 상태인지 (집계 대상)
+}
+
+export const STATUSES: StatusMeta[] = [
+  { v: '완료',     label: '완료 서류',        short: '완료',   alert: false,
+    text: 'text-gray-400',    chip: 'bg-green-100 text-green-700 border-green-200',    dot: 'bg-green-500' },
+  { v: '미비',     label: '미비 서류',        short: '미비',   alert: true,
+    text: 'text-red-600',     chip: 'bg-red-100 text-red-700 border-red-200',          dot: 'bg-red-500' },
+  { v: '서명미비', label: '보호자 서명 미비',  short: '서명',   alert: true,
+    text: 'text-orange-600',  chip: 'bg-orange-100 text-orange-700 border-orange-200', dot: 'bg-orange-500' },
+  { v: '챙길것',   label: '챙겨야 하는 서류',  short: '챙길것', alert: true,
+    text: 'text-yellow-700',  chip: 'bg-yellow-100 text-yellow-800 border-yellow-200', dot: 'bg-yellow-400' },
+]
+
+export const statusMeta = (v?: string | null): StatusMeta | null =>
+  STATUSES.find(s => s.v === v) ?? null
+
+/** 사용자가 직접 '완료'로 표시했는지 */
+export const isExplicitDone = (e: DocEvent): boolean => e.status === '완료' || (!e.status && !!e.done)
+
+/**
+ * 상태 해석.
+ * 기존 시트에서는 날짜가 지난 칸은 '이미 작성한 기록'이고, 문제가 있는 것만 색을 칠했다.
+ * 그래서 여기서도 날짜가 지났는데 아무 표시가 없으면 완료로 본다.
+ * 안 된 것은 미비·서명미비·챙길것으로 명시해야 한다.
+ */
+export const effStatus = (e: DocEvent): EventStatus | null => {
+  if (e.status) return e.status
+  if (e.done) return '완료'
+  if (e.date && e.date < todayISO()) return '완료'   // 지난 기록 = 작성 완료로 간주
+  return null
+}
+
+/** 지난 날짜라서 완료로 간주된 것 (직접 체크한 건 아님) */
+export const isImplicitDone = (e: DocEvent): boolean =>
+  !e.status && !e.done && !!e.date && e.date < todayISO()
+
+/** 조치가 필요한 항목인지 (미비·서명미비·챙길것) */
+export const isAlert = (e: DocEvent): boolean => {
+  const m = statusMeta(effStatus(e))
+  return !!m?.alert
+}
 
 export interface KindMeta { v: string; label: string; text: string; dot: string }
 
@@ -33,13 +98,13 @@ export const kindMeta = (type: DocType, kind?: string | null): KindMeta | null =
 export const defaultKind = (type: DocType): string => KINDS[type][0].v
 
 // 문자열/객체 혼재(레거시) → DocEvent 정규화
-export const asEvent = (x: any): DocEvent =>
-  typeof x === 'string' ? { date: null, memo: x, kind: null } : (x ?? {})
-
-export const todayISO = (): string => {
-  const d = new Date(); const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+export const asEvent = (x: any): DocEvent => {
+  const e: DocEvent = typeof x === 'string' ? { date: null, memo: x, kind: null } : (x ?? {})
+  // 레거시 done만 있는 기록도 '완료'로 읽히도록
+  if (!e.status && e.done) return { ...e, status: '완료' }
+  return e
 }
+
 // 'YY.MM.DD'
 export const fmtYMD = (s?: string | null): string => {
   if (!s) return ''
@@ -78,9 +143,12 @@ export function autoDocEvents(certs: Certification[], admissionDate?: string | n
   const admDate = admissionDate || earliest?.start || cur?.start || null
 
   // 입소: 인정서와 무관하게 입소일 기준으로 항상 생성 (검정)
+  // 입소일에 작성하는 서류는 입소 절차에서 이미 받으므로 완료로 둔다.
+  // 단 입소일이 아직 오지 않았다면(입소 예정자) 완료로 볼 수 없다.
   if (admDate) {
-    contract.push({ date: admDate, kind: '입소', memo: null })
-    plan.push({ date: admDate, kind: '입소', memo: null })
+    const doneIfPast: Partial<DocEvent> = admDate <= todayISO() ? { status: '완료', done: true } : {}
+    contract.push({ date: admDate, kind: '입소', memo: null, ...doneIfPast })
+    plan.push({ date: admDate, kind: '입소', memo: null, ...doneIfPast })
   }
 
   // 그 외 정기 일시는 현재(최신) 인정서 기준으로만 생성. 이전 인정서는 사용 안 함.

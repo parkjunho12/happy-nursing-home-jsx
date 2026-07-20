@@ -1,11 +1,13 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { ClipboardList, Plus, X, Trash2, Loader2, Check, BookOpen, RefreshCw } from 'lucide-react'
+import { ClipboardList, Plus, X, Trash2, Loader2, Check, BookOpen, RefreshCw, History, HelpCircle } from 'lucide-react'
 import DateField from '@/components/ui/DateField'
 import { residentDocAPI, type ResidentDoc, type DocInput } from '../../api/residentDocClient'
 import CertificationEditor from '@/components/eval/CertificationEditor'
 import DocEventsEditor from '@/components/eval/DocEventsEditor'
+import DocChangesModal from '@/components/eval/DocChangesModal'
+import { CARE_TYPES, careMeta, deriveCare, needsFacilityApply, APPLY_STAGES, stageMeta, stageProgress } from '@/utils/careType'
 import { currentCert, certState, renewalDue, gradeLabel, benefitLabel } from '@/utils/cert'
-import { type DocEvent, type DocType, KINDS, kindMeta, asEvent, fmtYMD, fmtMD, autoDocEvents } from '@/utils/docEvents'
+import { type DocEvent, type DocType, KINDS, kindMeta, asEvent, fmtYMD, fmtMD, autoDocEvents, todayISO, STATUSES, statusMeta, effStatus, isAlert, isExplicitDone, isImplicitDone } from '@/utils/docEvents'
 import { useLtcStore, type LtcResident } from '@/store/ltc'
 
 const fmtD = (s?: string | null) => {
@@ -32,6 +34,16 @@ const SOP = `▶ 서류(인정서, 개장기) 사진찍어 복지톡에 업로�
 * 갱신기준일자에 맞춰 급여제공계획서 작성 후 보호자 서명받아 철하기
 * 갱신기준일자에 맞춰 급여제공평가 등 각종 평가 작성
 * 국민건강보험공단에 갱신 등록`
+// 기존 엑셀 시트 '예시' 행에 적혀 있던 열별 작성 규칙 — 화면에서도 켜서 볼 수 있게 옮겨왔다
+const COL_RULES: Record<string, string[]> = {
+  cert:     ['재가도 인정서 작성', '등급외는 1년으로 기재'],
+  grade:    ['입소(갱신) 시점 자격 기재'],
+  base:     ['인정서 시작일자가 기준일', '(괄호)는 6개월 뒤 일자'],
+  contract: ['입소 때 작성', '매년 1월 1일 작성', '갱신 때 작성'],
+  plan:     ['입소 때 작성', '6개월마다 작성', '변화 시 작성'],
+  eval:     ['6개월마다 작성', '변화 시 작성', '퇴소 시 작성'],
+}
+
 const SMS = `안녕하세요. 행복한요양원 복지팀 000입니다. 어르신 인정서 갱신서류가 우편으로 도착했습니다. 원 방문 시 계약 서류 작성 부탁드립니다 ^^`
 
 export default function ResidentDocsPage() {
@@ -43,8 +55,12 @@ export default function ResidentDocsPage() {
   const [search, setSearch] = useState('')
   const [fee, setFee] = useState('')
   const [floorF, setFloorF] = useState('')
-  const [quick, setQuick] = useState<'all' | 'cert' | 'month'>('all')
+  const [careF, setCareF] = useState('')
+  const [rulesOn, setRulesOn] = useState(false)   // 작성 기준 안내 행
+  const [quick, setQuick] = useState<'all' | 'cert' | 'month' | 'alert'>('all')
   const [sopOpen, setSopOpen] = useState(false)
+  // 수정 이력 모달 — null=닫힘, {}=전체 최근, {id,name}=해당 어르신
+  const [histOpen, setHistOpen] = useState<{ id?: string; name?: string } | null>(null)
   const { residents, loaded: ltcLoaded, loadAll } = useLtcStore()
   useEffect(() => { if (!ltcLoaded) loadAll() }, [ltcLoaded, loadAll])
   const [exp, setExp] = useState<Set<string>>(new Set())
@@ -64,60 +80,109 @@ export default function ResidentDocsPage() {
     const rm = r.base_date ? (() => { const m = Number(r.base_date!.split('-')[1]); return m ? [m, ((m - 1 + 6) % 12) + 1] : [] })() : []
     return { cur, st, renew: rm.includes(nowMonth) }
   }
+  /** 조치가 필요한 일시(미비·서명미비·챙길것) 건수 */
+  const alertCount = (r: ResidentDoc) =>
+    [...(r.contract_lines ?? []), ...(r.plan_lines ?? []), ...(r.eval_lines ?? [])].map(asEvent).filter(isAlert).length
+  /** 서류가 통째로 비어 있는 어르신 — 신규 입소 직후라 챙겨야 한다 */
+  const isEmpty = (r: ResidentDoc) =>
+    !(r.certifications?.length) && !(r.contract_lines?.length) && !(r.plan_lines?.length) && !(r.eval_lines?.length)
+
   const summary = useMemo(() => {
-    let cert = 0, month = 0
-    rows.forEach(r => { const i = docInfo(r); if (i.st.status === 'expired' || i.st.status === 'renew') cert++; if (i.renew) month++ })
-    return { total: rows.length, cert, month }
+    let cert = 0, month = 0, alerts = 0, empty = 0
+    rows.forEach(r => {
+      const i = docInfo(r)
+      if (i.st.status === 'expired' || i.st.status === 'renew') cert++
+      if (i.renew) month++
+      alerts += alertCount(r)
+      if (isEmpty(r)) empty++
+    })
+    return { total: rows.length, cert, month, alerts, empty }
   }, [rows])
   const floors = useMemo(() => Array.from(new Set(rows.map(r => (r as any).floor).filter(Boolean))).sort() as string[], [rows])
   const filtered = useMemo(() => rows.filter(r => {
     if (search && !(r.name ?? '').includes(search)) return false
     if (fee && !(r.grade ?? '').includes(fee)) return false
     if (floorF && (r as any).floor !== floorF) return false
+    if (careF && deriveCare(r.certifications) !== careF) return false
     const i = docInfo(r)
     if (quick === 'cert' && !(i.st.status === 'expired' || i.st.status === 'renew')) return false
     if (quick === 'month' && !i.renew) return false
+    if (quick === 'alert' && alertCount(r) === 0 && !isEmpty(r)) return false
     return true
   }), [rows, search, fee, floorF, quick])
 
   const th = 'px-2.5 py-2 text-[11px] font-bold text-gray-500 whitespace-nowrap text-center border-b border-gray-200'
   const td = 'px-2.5 py-2 text-xs align-top border-b border-gray-50'
 
+  /**
+   * 서류 일시 셀 — '다음에 할 일'이 먼저 보이도록 구성한다.
+   * 시트에서는 전부 나열하고 눈으로 훑었지만, 화면에서는 위에서 5건만 보이면
+   * 정작 다음 예정이 접힌 채 숨는다. 그래서 다음 예정 → 미정 → 직전 기록 순으로 세운다.
+   */
   const DocCell = ({ id, type, items, admission }: { id: string; type: DocType; items?: DocEvent[]; admission?: string | null }) => {
     const evs = (items ?? []).map(asEvent).filter(e => e.date || e.memo).filter(e => !admission || !e.date || e.date >= admission)
     if (!evs.length) return <span className="text-gray-300">-</span>
+    const today = todayISO()
     const byDate = (a: DocEvent, b: DocEvent) => (a.date || '9999').localeCompare(b.date || '9999')
-    const sorted = [...evs].sort(byDate)
-    // 입소일부터 시간순으로 가까운 5개까지 노출 (입소 포함)
-    const visible = sorted.slice(0, 5)
-    const history = sorted.slice(5)
+
+    const dated = evs.filter(e => e.date).sort(byDate)
+    const undated = evs.filter(e => !e.date)                       // '시설급여 나온시점'처럼 날짜 미정
+    const isDone = (e: DocEvent) => effStatus(e) === '완료'
+    const upcoming = dated.filter(e => !isDone(e) && e.date! >= today)
+    const overdue = dated.filter(e => !isDone(e) && e.date! < today)
+    const past = dated.filter(e => isDone(e) || e.date! < today)
+
+    const next = overdue[0] ?? upcoming[0] ?? null                 // 지난 미완료가 가장 급하다
+    const lastDone = [...past].reverse().find(e => e !== next) ?? null
     const key = `${id}|${type}`, open = exp.has(key)
-    const row = (e: DocEvent, rk: string, dim = false) => {
+
+    const dnum = (iso: string) =>
+      Math.round((new Date(iso + 'T00:00:00').getTime() - new Date(today + 'T00:00:00').getTime()) / 86400000)
+
+    const row = (e: DocEvent, rk: string, mode: 'next' | 'dim' | 'plain' = 'plain') => {
       const meta = kindMeta(type, e.kind) ?? KINDS[type][0]
+      const st = statusMeta(effStatus(e))          // 상태(완료·미비·서명미비·챙길것)가 색을 결정
+      const done = st?.v === '완료'
+      const marked = isExplicitDone(e)             // 직접 완료 체크한 것만 체크표시/취소선
+      const implicit = isImplicitDone(e)           // 날짜가 지나 완료로 본 것 — 흐리게만
+      const late = !done && !!e.date && e.date < today
       return (
         <div key={rk} className="whitespace-nowrap flex items-center gap-1">
-          {e.done
+          {marked
             ? <Check className="w-3 h-3 shrink-0 text-green-600" strokeWidth={3} />
-            : <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${meta.dot} ${dim ? 'opacity-40' : ''}`} />}
-          <span className={`font-semibold ${e.done ? 'line-through text-gray-400' : dim ? 'text-gray-400' : meta.text}`}>
+            : <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${st && !implicit ? st.dot : meta.dot} ${mode === 'dim' || implicit ? 'opacity-40' : ''}`} />}
+          <span className={`font-semibold ${marked ? 'line-through text-gray-400' : implicit ? 'text-gray-400' : st ? st.text : mode === 'dim' ? 'text-gray-400' : late ? 'text-red-600' : meta.text} ${mode === 'next' ? 'text-[13px]' : ''}`}>
             {e.date ? fmtYMD(e.date) : '미정'}
           </span>
+          {st && st.alert && <span className={`text-[9px] font-bold px-1 py-0.5 rounded border ${st.chip}`}>{st.short}</span>}
+          {e.kind && e.kind !== '기준' && <span className="text-[10px] text-gray-400">({e.kind})</span>}
           {e.memo && <span className="text-[11px] text-gray-400 truncate max-w-[7rem]">· {e.memo}</span>}
+          {mode === 'next' && e.date && (
+            <span className={`text-[10px] font-extrabold px-1 py-0.5 rounded ${late ? 'bg-red-500 text-white' : dnum(e.date) <= 7 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
+              {late ? `지연 ${-dnum(e.date)}일` : dnum(e.date) === 0 ? '오늘' : `D-${dnum(e.date)}`}
+            </span>
+          )}
         </div>
       )
     }
+
+    if (open) {
+      return (
+        <div className="space-y-0.5">
+          {[...dated, ...undated].map((e, i) => row(e, `a${i}`, e === next ? 'next' : (e.done || (!!e.date && e.date < today)) && e !== next ? 'dim' : 'plain'))}
+          <button onClick={() => toggleExp(key)} className="text-[10px] text-indigo-500">접기 ▴</button>
+        </div>
+      )
+    }
+    const hiddenCount = evs.length - (next ? 1 : 0) - undated.length - (lastDone ? 1 : 0)
     return (
       <div className="space-y-0.5">
-        {visible.length ? visible.map((e, i) => row(e, `v${i}`)) : <span className="text-[11px] text-gray-300">예정 없음</span>}
-        {history.length > 0 && (open ? (
-          <>
-            <div className="border-t border-dashed border-gray-100 my-0.5" />
-            {history.map((e, i) => row(e, `h${i}`, true))}
-            <button onClick={() => toggleExp(key)} className="text-[10px] text-indigo-500">접기 ▴</button>
-          </>
-        ) : (
-          <button onClick={() => toggleExp(key)} className="text-[10px] text-indigo-500">그 외 {history.length}건 ▾</button>
-        ))}
+        {next ? row(next, 'next', 'next') : <span className="text-[11px] text-gray-300">예정 없음</span>}
+        {undated.map((e, i) => row(e, `u${i}`))}
+        {lastDone && row(lastDone, 'last', 'dim')}
+        {hiddenCount > 0 && (
+          <button onClick={() => toggleExp(key)} className="text-[10px] text-indigo-500">전체 {evs.length}건 ▾</button>
+        )}
       </div>
     )
   }
@@ -133,6 +198,13 @@ export default function ResidentDocsPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setRulesOn(v => !v)}
+            className={`inline-flex items-center gap-1.5 px-3 py-2.5 border rounded-xl text-sm font-semibold ${rulesOn ? 'bg-amber-50 border-amber-300 text-amber-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+            <HelpCircle className="w-4 h-4" /> 작성 기준
+          </button>
+          <button onClick={() => setHistOpen({})} className="inline-flex items-center gap-1.5 px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">
+            <History className="w-4 h-4" /> 수정 이력
+          </button>
           <button onClick={() => setSopOpen(v => !v)} className="inline-flex items-center gap-1.5 px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">
             <BookOpen className="w-4 h-4" /> 서류 절차 안내
           </button>
@@ -152,7 +224,7 @@ export default function ResidentDocsPage() {
       )}
 
       {/* 요약 알림 — 클릭하면 필터 */}
-      <div className="grid grid-cols-3 gap-2 mb-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
         <button onClick={() => setQuick('all')}
           className={`rounded-xl p-3 text-left border transition-colors ${quick === 'all' ? 'bg-teal-50 border-teal-300' : 'bg-white border-gray-100 hover:border-gray-200'}`}>
           <p className="text-[11px] font-semibold text-gray-500">전체 어르신</p>
@@ -168,11 +240,33 @@ export default function ResidentDocsPage() {
           <p className="text-[11px] font-semibold text-blue-600">이번 달 갱신 기준일</p>
           <p className={`text-xl font-extrabold ${summary.month > 0 ? 'text-blue-700' : 'text-gray-300'}`}>{summary.month}<span className="text-sm font-bold text-gray-400">명</span></p>
         </button>
+        <button onClick={() => setQuick(quick === 'alert' ? 'all' : 'alert')}
+          className={`rounded-xl p-3 text-left border transition-colors ${quick === 'alert' ? 'bg-red-100 border-red-300' : (summary.alerts + summary.empty) > 0 ? 'bg-red-50 border-red-100 hover:border-red-200' : 'bg-white border-gray-100'}`}>
+          <p className="text-[11px] font-semibold text-red-600">챙겨야 할 서류</p>
+          <p className={`text-xl font-extrabold ${(summary.alerts + summary.empty) > 0 ? 'text-red-700' : 'text-gray-300'}`}>
+            {summary.alerts}<span className="text-sm font-bold text-gray-400">건</span>
+            {summary.empty > 0 && <span className="text-[11px] font-bold text-red-500 ml-1">· 미등록 {summary.empty}명</span>}
+          </p>
+        </button>
+      </div>
+
+      <div className="flex items-center gap-2.5 mb-2 flex-wrap px-0.5">
+        <span className="text-[11px] font-semibold text-gray-400">서류 상태</span>
+        {STATUSES.map(st => (
+          <span key={st.v} className="inline-flex items-center gap-1 text-[11px] text-gray-500">
+            <span className={`w-2 h-2 rounded-full ${st.dot}`} /> {st.label}
+          </span>
+        ))}
       </div>
 
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="어르신 성함 검색"
           className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-200 w-40" />
+        <select value={careF} onChange={e => setCareF(e.target.value)}
+          className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-200">
+          <option value="">전체 구분</option>
+          {CARE_TYPES.map(c => <option key={c.v} value={c.v}>{c.label}</option>)}
+        </select>
         <select value={fee} onChange={e => setFee(e.target.value)}
           className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-200">
           <option value="">전체 급여</option>
@@ -210,6 +304,24 @@ export default function ResidentDocsPage() {
                 <th className={`${th} text-left`}>결과평가 일시</th>
                 <th className={th}></th>
               </tr>
+              {rulesOn && (() => {
+                const rc = 'px-2.5 py-1.5 text-[10.5px] leading-snug text-amber-800 align-top border-b border-amber-200 bg-amber-50/70'
+                const cell = (k: string) => (
+                  <td className={rc}>
+                    {(COL_RULES[k] ?? []).map((t, i) => <div key={i} className="whitespace-nowrap">· {t}</div>)}
+                  </td>
+                )
+                return (
+                  <tr>
+                    <td className={`${rc} sticky left-0 z-20 bg-amber-50 border-r border-amber-200`}>
+                      <div className="whitespace-nowrap">· ㄱㄴㄷ순 정렬</div>
+                    </td>
+                    <td className={rc} />
+                    {cell('cert')}{cell('grade')}{cell('base')}{cell('contract')}{cell('plan')}{cell('eval')}
+                    <td className={rc} />
+                  </tr>
+                )
+              })()}
             </thead>
             <tbody>
               {filtered.map(r => (
@@ -219,7 +331,32 @@ export default function ResidentDocsPage() {
                       <span className="text-[10px] text-gray-300">{rankById.get(r.id)}</span>
                       <span className="text-sm font-bold text-gray-800">{r.name || '-'}</span>
                       {r.active === false && <span className="text-[9px] font-bold text-white bg-gray-400 px-1 py-0.5 rounded">퇴소</span>}
+                      {isEmpty(r) && <span className="text-[9px] font-bold text-red-600 bg-red-50 border border-red-200 px-1 py-0.5 rounded">서류 미등록</span>}
+                      {deriveCare(r.certifications) !== '시설' && (
+                        <span className={`text-[9px] font-bold px-1 py-0.5 rounded border ${careMeta(deriveCare(r.certifications)).cls}`}>{careMeta(deriveCare(r.certifications)).short}</span>
+                      )}
                     </div>
+                    {needsFacilityApply(r.certifications) && r.apply_stage && (() => {
+                      const st = stageMeta(r.apply_stage)!
+                      return (
+                        <div className="mt-1 flex items-center gap-1">
+                          <div className="w-14 h-1 rounded-full bg-gray-100 overflow-hidden">
+                            <div className={`h-full ${st.bar}`} style={{ width: `${Math.max(8, stageProgress(r.apply_stage))}%` }} />
+                          </div>
+                          <span className="text-[9px] font-bold text-gray-500">{st.label}</span>
+                        </div>
+                      )
+                    })()}
+                    {needsFacilityApply(r.certifications) && (() => {
+                      const f = r.followup_date
+                      const d = f ? Math.round((new Date(f + 'T00:00:00').getTime() - new Date().setHours(0, 0, 0, 0)) / 86400000) : null
+                      const due = d !== null && d <= 0
+                      return (
+                        <div className={`text-[10px] mt-0.5 font-semibold ${!f || due ? 'text-red-500' : 'text-gray-400'}`}>
+                          {!f ? '확인일 미정' : due ? `확인일 지남 (${fmtD(f)})` : `확인 ${fmtD(f)} (D-${d})`}
+                        </div>
+                      )
+                    })()}
                   </td>
                   <td className={`${td} text-gray-500 text-center whitespace-nowrap`}>{fmtD(r.admission_date)}</td>
                   <td className={`${td} text-gray-500`}>
@@ -270,8 +407,12 @@ export default function ResidentDocsPage() {
                   <td className={`${td} text-gray-500`}><DocCell id={r.id} type="contract" items={r.contract_lines} admission={r.admission_date} /></td>
                   <td className={`${td} text-gray-500`}><DocCell id={r.id} type="plan" items={r.plan_lines} admission={r.admission_date} /></td>
                   <td className={`${td} text-gray-500`}><DocCell id={r.id} type="eval" items={r.eval_lines} admission={r.admission_date} /></td>
-                  <td className={`${td} text-center`}>
+                  <td className={`${td} text-center whitespace-nowrap`}>
                     <button onClick={() => setEditing(r)} className="text-[11px] text-gray-400 hover:text-teal-600 px-1.5 py-0.5 rounded hover:bg-teal-50">수정</button>
+                    <button onClick={() => setHistOpen({ id: r.id, name: r.name || '' })} title="이 어르신의 수정 이력"
+                      aria-label="수정 이력" className="ml-0.5 p-1 text-gray-300 hover:text-teal-600 rounded hover:bg-teal-50 align-middle">
+                      <History className="w-3.5 h-3.5" />
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -280,7 +421,11 @@ export default function ResidentDocsPage() {
           </table>
         </div>
       )}
-      <p className="text-[11px] text-gray-400 mt-2">💡 계약서·계획서·평가 칸을 클릭하면 전체 이력이 펼쳐집니다. 기준일 옆 (6개월 …)은 반기 갱신 기준일입니다.</p>
+      <p className="text-[11px] text-gray-400 mt-2">💡 계약서·계획서·평가 칸에는 <b className="text-gray-500">다음에 할 일</b>이 D-day와 함께 맨 위에 옵니다. 「전체 N건」을 누르면 지난 기록까지 펼쳐집니다. 열별 작성 규칙은 상단 「작성 기준」 버튼으로 켜세요.</p>
+
+      {histOpen && (
+        <DocChangesModal docId={histOpen.id} name={histOpen.name} onClose={() => setHistOpen(null)} />
+      )}
 
       {(addOpen || editing) && (
         <DocFormModal editing={editing} residents={residents} docByResident={new Map(rows.filter(r => r.resident_id).map(r => [r.resident_id as string, r]))} onClose={() => { setAddOpen(false); setEditing(null) }} onSaved={() => { setAddOpen(false); setEditing(null); load() }} />
@@ -297,6 +442,8 @@ function DocFormModal({ editing, residents = [], docByResident = new Map<string,
   const isEdit = !!editing
   const [f, setF] = useState<DocInput>({
     resident_id: editing?.resident_id ?? null, name: editing?.name ?? '', admission_date: editing?.admission_date ?? '', floor: editing?.floor ?? '2층',
+    followup_date: editing?.followup_date ?? '',
+    apply_stage: editing?.apply_stage ?? null, apply_note: editing?.apply_note ?? '', guardian_notified_at: editing?.guardian_notified_at ?? '',
     certifications: editing?.certifications ? editing.certifications.map(c => ({ ...c, benefits: (c.benefits ?? []).map(b => ({ ...b })) })) : [],
     contract_lines: editing?.contract_lines ?? [], plan_lines: editing?.plan_lines ?? [], eval_lines: editing?.eval_lines ?? [],
     memo: editing?.memo ?? '', active: editing?.active ?? true,
@@ -371,6 +518,41 @@ function DocFormModal({ editing, residents = [], docByResident = new Map<string,
               </select>
             </Field>
           </div>
+          <div className="flex items-center gap-2 flex-wrap rounded-xl border border-gray-100 bg-gray-50/70 px-3 py-2">
+            <span className="text-xs font-semibold text-gray-500">구분</span>
+            <span className={`text-[11px] font-bold px-2 py-0.5 rounded border ${careMeta(deriveCare(f.certifications)).cls}`}>
+              {careMeta(deriveCare(f.certifications)).label}
+            </span>
+            <span className="text-[11px] text-gray-400">아래 인정서의 급여에서 자동으로 정해집니다</span>
+          </div>
+          {needsFacilityApply(f.certifications) && (
+            <div className="rounded-xl border border-violet-100 bg-violet-50/60 p-2.5 space-y-2">
+              <p className="text-[11px] font-bold text-violet-700">시설급여 신청 진행</p>
+              <div className="flex gap-1.5 flex-wrap">
+                {APPLY_STAGES.map(st => (
+                  <button key={st.v} type="button" onClick={() => setF({ ...f, apply_stage: st.v })}
+                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold border transition-all ${f.apply_stage === st.v ? st.cls + ' ring-2 ring-offset-1 ring-violet-200' : 'bg-white text-gray-400 border-gray-200'}`}>
+                    {st.label}
+                  </button>
+                ))}
+              </div>
+              {f.apply_stage && (
+                <p className="text-[11px] text-violet-700">↳ {stageMeta(f.apply_stage)?.guide}</p>
+              )}
+              <div className="grid grid-cols-3 gap-2">
+                <Field label="다음 확인일">
+                  <DateField value={f.followup_date} onChange={v => setF({ ...f, followup_date: v })} className={inp} />
+                </Field>
+                <Field label="보호자 안내일">
+                  <DateField value={f.guardian_notified_at} onChange={v => setF({ ...f, guardian_notified_at: v })} className={inp} />
+                </Field>
+                <Field label="진행 메모">
+                  <input value={f.apply_note ?? ''} onChange={e => setF({ ...f, apply_note: e.target.value })} className={inp} placeholder="예: 의사소견서 제출 대기" />
+                </Field>
+              </div>
+              <p className="text-[11px] text-violet-500">보호자에게 마지막으로 설명한 날을 적어두면, 오래됐을 때 대시보드가 알려줍니다.</p>
+            </div>
+          )}
           <div>
             <label className="text-xs font-semibold text-gray-500 mb-1.5 block">장기요양인정서 <span className="text-gray-400 font-normal">— 등급·유효기간(2/3/4년)·급여(재가↔시설). 종료 90일 전 갱신</span></label>
             <CertificationEditor value={f.certifications ?? []} onChange={cs => setF({ ...f, certifications: cs })} />
