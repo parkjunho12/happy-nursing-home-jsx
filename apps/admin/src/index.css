@@ -59,3 +59,46 @@
     @apply w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-orange-400;
   }
 }
+
+
+/* ──────────────────────────────────────────────────────────────
+   인쇄 공통 규칙
+
+   근무표처럼 종이로 나가는 화면은 앱 껍데기(사이드바·헤더·하단 탭바·
+   플로팅 버튼)가 같이 찍히면 종이만 버린다. 화면 구성 요소는 전부 걷어내고
+   본문만 남긴다. 페이지별 세부 조판은 각 화면에서 따로 잡는다.
+   ────────────────────────────────────────────────────────────── */
+@media print {
+  /* 앱 껍데기 제거 */
+  aside,
+  header,
+  .app-tabbar,
+  .app-drawer,
+  .app-backtotop,
+  [data-print="off"] {
+    display: none !important;
+  }
+
+  /* 본문 영역을 지면 전체로 */
+  html, body, #root {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+  /* 데스크톱 레이아웃의 h-screen/overflow-hidden 해제 */
+  .h-screen { height: auto !important; }
+  .overflow-hidden { overflow: visible !important; }
+
+  /* 링크 URL이 뒤에 붙는 브라우저 기본 동작 차단 */
+  a[href]:after { content: none !important; }
+
+  /* 안전망: 인쇄 시 모바일 전용 영역은 무조건 제외.
+     (인쇄 미디어에서는 md 브레이크포인트가 화면과 다르게 평가될 수 있다) */
+  .md\:hidden { display: none !important; }
+}

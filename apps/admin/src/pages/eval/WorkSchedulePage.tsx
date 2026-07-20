@@ -7,7 +7,7 @@ import ScheduleHistoryModal from '@/components/schedule/ScheduleHistoryModal'
 import { planDayShift, interleaveByPosition } from '@/utils/dayShiftPlan'
 import { planMembersMonths, type MonthContext, type MemberMonthPlan } from '@/utils/shiftBalance'
 import { calcBase as calcBaseFor } from '@/utils/baseHours'
-import { SHIFT_CODES, CODE_MAP, hoursOf, extraHoursOf, countAsOf, meta, isAutoManaged, TEAMS, DAY_TEAM, DEFAULT_TEAM_OFFSET, ROTATION, rotationFor, rotationPreview } from '@/utils/shiftCodes'
+import { SHIFT_CODES, CODE_MAP, hoursOf, extraHoursOf, countAsOf, meta, isAutoManaged, splitTimeRange, shortOf, TEAMS, DAY_TEAM, DEFAULT_TEAM_OFFSET, ROTATION, rotationFor, rotationPreview } from '@/utils/shiftCodes'
 import { auditSchedule, type Issue } from '@/utils/scheduleAudit'
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
@@ -18,11 +18,7 @@ const shiftMonth = (ym: string, delta: number) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 const todayISO = () => { const d = new Date(); const p = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}` }
-const asOfLabel = (iso?: string | null) => {
-  if (!iso) return ''
-  const [, m, d] = iso.split('-')
-  return `( ${+m}월 ${+d}일 현재 )`
-}
+
 
 /** 직종 표시 순서 — 편성표 양식과 동일 */
 const POS_ORDER = ['시설장', '사회복지사', '간호사', '간호조무사', '요양보호사', '조리원', '위생원', '사무원']
@@ -58,6 +54,12 @@ export default function WorkSchedulePage() {
   const [auditOpen, setAuditOpen] = useState(true)
   const [histOpen, setHistOpen] = useState(false)
   const [building, setBuilding] = useState(false)
+  // 인쇄는 '집계 열 없이'가 기본이다. 총시간·초과휴 같은 숫자가 벽에 붙으면
+  // '왜 저 사람은 나보다 많지?' 같은 오해가 생긴다.
+  // 브라우저 인쇄(Ctrl+P)로 바로 뽑아도 빠지도록 CSS로 처리하고,
+  // 결재·보관이 필요할 때만 '관리용' 버튼으로 되살린다.
+  const [fullPrint, setFullPrint] = useState(false)
+  const [wantPrint, setWantPrint] = useState(false)
   const [rowsFrom, setRowsFrom] = useState<string | null>(null)
   // 남은 잔고를 수당으로 줄 때 얼마인지 — 시설마다 달라 입력받는다
   const [wage, setWage] = useState<string>(() => localStorage.getItem('ws.wage') ?? '')
@@ -76,10 +78,21 @@ export default function WorkSchedulePage() {
 
   useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
 
+  /**
+   * 월을 바꿀 때마다 요청에 번호를 매긴다.
+   *
+   * 번호가 없으면 이런 일이 생긴다: 7월을 불러오는 중에 8월로 넘기면 두 요청이 함께 뜨고,
+   * 7월 응답이 늦게 도착하면 8월 화면 위에 7월 데이터가 덮어써진다.
+   * 제목만 8월이고 표는 7월인 상태가 되어, 그대로 인쇄하면 7월 근무표가 나온다.
+   */
+  const loadSeq = useRef(0)
+
   useEffect(() => {
+    const seq = ++loadSeq.current
     setLoading(true)
     workScheduleAPI.get(ym)
       .then(doc => {
+        if (seq !== loadSeq.current) return          // 더 최신 요청이 있으면 이 응답은 버린다
         setData(doc.data || {}); setRows(doc.rows || [])
         setRowsFrom(doc.rows_from ?? null)
         // 저장된 기준시간이 있으면 그 값을 쓰고(수동), 없으면 자동 계산에 맡긴다.
@@ -91,13 +104,48 @@ export default function WorkSchedulePage() {
         setOffsets({ ...DEFAULT_TEAM_OFFSET, ...(doc.team_offsets || {}) })
         setUpdatedBy(doc.updated_by ?? null); setDirty(false)
       })
-      .catch(() => { setData({}); setRows([]); setUpdatedBy(null) })
-      .finally(() => setLoading(false))
+      .catch(() => {
+        if (seq !== loadSeq.current) return
+        setData({}); setRows([]); setUpdatedBy(null)
+      })
+      .finally(() => { if (seq === loadSeq.current) setLoading(false) })
+  }, [ym])
+
+  const holSeq = useRef(0)
+  useEffect(() => {
+    const seq = ++holSeq.current
+    workScheduleAPI.holidays(ym)
+      .then(h => { if (seq === holSeq.current) setHolidays(h) })
+      .catch(() => { if (seq === holSeq.current) setHolidays({}) })
   }, [ym])
 
   useEffect(() => {
-    workScheduleAPI.holidays(ym).then(setHolidays).catch(() => setHolidays({}))
-  }, [ym])
+    const after = () => setFullPrint(false)
+    window.addEventListener('afterprint', after)
+    return () => window.removeEventListener('afterprint', after)
+  }, [])
+
+  /**
+   * 인쇄는 '화면이 실제로 그려진 뒤'에 띄운다.
+   *
+   * 주의: 여기서 setWantPrint(false)를 먼저 부르면 의존성이 바뀌어 정리 함수가 돌고,
+   * 예약해 둔 requestAnimationFrame이 취소되어 인쇄가 안 되거나 이전 화면이 찍힌다.
+   * 그래서 상태 초기화는 print()를 부른 다음에 한다.
+   * 또 월을 막 바꿔 아직 불러오는 중이면 빈 표나 지난달 화면이 찍히므로 기다린다.
+   */
+  useEffect(() => {
+    if (!wantPrint || loading) return
+    const id = requestAnimationFrame(() => {
+      window.print()
+      setWantPrint(false)
+    })
+    return () => cancelAnimationFrame(id)
+  }, [wantPrint, fullPrint, loading, ym])
+
+  const printAs = (full: boolean) => {
+    if (dirty && !confirm('저장하지 않은 변경이 있습니다. 저장한 내용이 아닌 현재 화면 그대로 인쇄됩니다.\n계속할까요?')) return
+    setFullPrint(full); setWantPrint(true)
+  }
 
   useEffect(() => {
     const up = () => { painting.current = false }
@@ -360,7 +408,7 @@ export default function WorkSchedulePage() {
   const td = 'border border-gray-200 px-1 py-0.5 text-[11px] text-center whitespace-nowrap'
 
   return (
-    <div className="p-4 md:p-6 max-w-full">
+    <div className={`p-4 md:p-6 max-w-full ${fullPrint ? 'ws-full' : ''}`}>
       {/* 화면용 도구 — 인쇄 시 숨김 */}
       <div className="print:hidden">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
@@ -385,9 +433,16 @@ export default function WorkSchedulePage() {
             <button onClick={() => setHistOpen(true)} className="inline-flex items-center gap-1.5 px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">
               <History className="w-4 h-4" /> 저장 이력
             </button>
-            <button onClick={() => window.print()} className="inline-flex items-center gap-1.5 px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">
-              <Printer className="w-4 h-4" /> 인쇄
-            </button>
+            <div className="inline-flex rounded-xl border border-gray-200 overflow-hidden">
+              <button onClick={() => printAs(false)} title="시간 집계를 빼고 근무만 크게 — 벽에 붙이는 용도"
+                className="inline-flex items-center gap-1.5 px-3 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+                <Printer className="w-4 h-4" /> 게시용 인쇄
+              </button>
+              <button onClick={() => printAs(true)} title="총시간·대휴·초과휴까지 — 결재·보관용"
+                className="px-3 py-2.5 text-sm font-semibold text-gray-500 border-l border-gray-200 hover:bg-gray-50">
+                관리용
+              </button>
+            </div>
             <button onClick={save} disabled={saving || !dirty} className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-40 text-white rounded-xl text-sm font-semibold shadow-sm">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} 저장
             </button>
@@ -531,7 +586,7 @@ export default function WorkSchedulePage() {
 
         {/* 교대조 정산 결과 — 왜 이 근무가 나왔는지 근거를 남긴다 */}
         {lastPlans.length > 0 && (
-          <div className="mb-3 rounded-2xl border border-indigo-100 bg-indigo-50/50 px-3 py-2.5">
+          <div className="mb-3 rounded-2xl border border-indigo-100 bg-indigo-50/50 px-3 py-2.5 print:hidden">
             <div className="flex items-center gap-2 mb-1.5">
               <Sparkles size={13} className="text-indigo-600" />
               <span className="text-xs font-bold text-indigo-800">교대조 근무시간 맞추기 <span className="font-normal text-indigo-500">(입사일 기준 개인별)</span></span>
@@ -659,16 +714,41 @@ export default function WorkSchedulePage() {
         </div>
       </div>
 
+      {/* 인쇄 머리말 — 결재란은 인쇄물에만 */}
+      <div className="hidden print:flex items-start justify-between mb-1">
+        <div />
+        <table className="print-approve">
+          <tbody>
+            <tr>
+              <td rowSpan={2} className="pa-label">결<br />재</td>
+              <td className="pa-role">담당</td><td className="pa-role">팀장</td><td className="pa-role">시설장</td>
+            </tr>
+            <tr><td className="pa-sign" /><td className="pa-sign" /><td className="pa-sign" /></tr>
+          </tbody>
+        </table>
+      </div>
+
       {/* 편성표 본체 */}
-      <h2 className="text-center text-base md:text-lg font-bold text-gray-900 mb-2">
-        {y}년 {m}월 행복한 요양원 근무 편성표 <span className="text-sm font-semibold text-gray-500">{asOfLabel(asOf)}</span>
+      <h2 className="text-center text-base md:text-lg font-bold text-gray-900 mb-2 print:mb-1">
+        행복한 요양원 <span className="text-teal-700">{y}년 {m}월</span> 근무 편성표
+        <span className="block text-xs font-semibold text-gray-500 print:text-[9pt] print:mt-0.5">
+          작성 기준 {asOf ? `${Number(asOf.slice(5, 7))}월 ${Number(asOf.slice(8, 10))}일` : '-'}
+          <span className="hidden print:inline"> · 월 기준 {baseHours}시간 / {baseDays}일</span>
+        </span>
       </h2>
 
       {loading ? (
         <div className="flex justify-center py-16"><Loader2 className="animate-spin text-gray-300" size={22} /></div>
       ) : (
-        <div className="overflow-x-auto border border-gray-200 rounded-xl bg-white outline-none" tabIndex={0} onKeyDown={onKey}>
-          <table className="border-collapse" style={{ minWidth: 1400 }}>
+        <div className="ws-wrap overflow-x-auto border border-gray-200 rounded-xl bg-white outline-none" tabIndex={0} onKeyDown={onKey}>
+          <table className="ws-table border-collapse" style={{ minWidth: 1400 }}>
+            <colgroup>
+              <col className="c-pos" /><col className="c-team" /><col className="c-name" />
+              {days.map(({ day }) => <col key={day} />)}
+              <col className="c-agg c-sum" /><col className="c-agg c-cnt" /><col className="c-agg c-cnt" />
+              <col className="c-agg c-off" /><col className="c-agg c-off" /><col className="c-agg c-comp" />
+              <col className="c-agg c-ext" /><col className="c-agg c-memo" />
+            </colgroup>
             <thead>
               <tr>
                 <th className={`${th} sticky left-0 z-20`}>직종</th>
@@ -683,14 +763,14 @@ export default function WorkSchedulePage() {
                     </th>
                   )
                 })}
-                <th className={th} title="한 달 동안 일한 시간 전부 (추가근무 포함). 기준에 못 미치면 빨갛게 표시됩니다">총시간<br /><span className="font-normal text-gray-400">(추가근무 포함)</span></th>
-                <th className={th}>D</th>
-                <th className={th}>N</th>
-                <th className={th}>연차</th>
-                <th className={th} title="공휴일에 근무해서 대신 쉬는 날">대체<br />휴무</th>
-                <th className={th} title="초과근무한 시간만큼 쉬는 날 (법률 용어: 보상휴가·근로기준법 제57조)">초과근무<br />휴가</th>
-                <th className={th} title="모자란 시간을 채우려고 더 나온 근무 (0850~ 형식)">추가<br />근무</th>
-                <th className={th}>비고</th>
+                <th className={`${th} ws-agg`} title="한 달 동안 일한 시간 전부 (추가근무 포함)">총시간<br /><span className="font-normal text-gray-400">(추가근무 포함)</span></th>
+                <th className={`${th} ws-agg`}>D</th>
+                <th className={`${th} ws-agg`}>N</th>
+                <th className={`${th} ws-agg`}>연차</th>
+                <th className={`${th} ws-agg`} title="공휴일에 근무해서 대신 쉬는 날">대체<br />휴무</th>
+                <th className={`${th} ws-agg`} title="초과근무한 시간만큼 쉬는 날">초과근무<br />휴가</th>
+                <th className={`${th} ws-agg`} title="모자란 시간을 채우려고 더 나온 근무">추가<br />근무</th>
+                <th className={`${th} ws-agg`}>비고</th>
               </tr>
               <tr>
                 <th className={th} colSpan={3}>{baseHours}시간 / {baseDays}일 기준</th>
@@ -704,7 +784,7 @@ export default function WorkSchedulePage() {
                     </th>
                   )
                 })}
-                <th className={th} colSpan={8} />
+                <th className={`${th} ws-agg`} colSpan={8} />
               </tr>
             </thead>
             <tbody>
@@ -720,7 +800,7 @@ export default function WorkSchedulePage() {
                       {s.pos || '-'}
                     </td>
                     <td className={`${td} text-gray-500`}>{s.team || ''}</td>
-                    <td className={`${td} sticky left-0 z-10 bg-white font-bold text-gray-800`}>{s.name}</td>
+                    <td className={`${td} ws-name sticky left-0 z-10 bg-white font-bold text-gray-800`}>{s.name}</td>
                     {days.map(({ day, dow }, di) => {
                       const v = data[s.id]?.[String(day)] ?? ''
                       const mt = meta(v)
@@ -736,31 +816,37 @@ export default function WorkSchedulePage() {
                             if (t !== null) setCell(s.id, day, t.trim())
                           }}
                           title={mt ? `${mt.label}${mt.time ? ` ${mt.time}` : ''}` : v}
-                          className={`${td} cursor-pointer select-none ${mt ? mt.cls : v ? 'bg-yellow-50 text-gray-700 text-[9px] leading-tight' : dayTone(day, dow) === 'red' ? 'bg-red-50/70' : dayTone(day, dow) === 'blue' ? 'bg-blue-50/70' : dayTone(day, dow) === 'paid' ? 'bg-violet-50/60' : ''} ${day === todayCol ? 'ring-1 ring-inset ring-indigo-200' : ''} ${lit ? 'outline outline-2 outline-amber-400' : ''} ${picked ? 'ring-2 ring-inset ring-gray-800' : ''}`}>
-                          {v}
+                          data-code={v}
+                          className={`${td} ws-cell cursor-pointer select-none ${mt ? mt.cls : v ? 'bg-yellow-50 text-gray-700 text-[9px] leading-tight' : dayTone(day, dow) === 'red' ? 'bg-red-50/70' : dayTone(day, dow) === 'blue' ? 'bg-blue-50/70' : dayTone(day, dow) === 'paid' ? 'bg-violet-50/60' : ''} ${day === todayCol ? 'ring-1 ring-inset ring-indigo-200' : ''} ${lit ? 'outline outline-2 outline-amber-400' : ''} ${picked ? 'ring-2 ring-inset ring-gray-800' : ''}`}>
+                          {(() => {
+                            const tr = splitTimeRange(v)
+                            // 시간대는 좁은 칸에 한 줄로 안 들어가 잘린다 → 시작/끝을 두 줄로
+                            if (tr) return <span className="ws-time">{tr[0]}<br />{tr[1]}</span>
+                            return <span className="ws-code">{shortOf(v)}</span>
+                          })()}
                         </td>
                       )
                     })}
-                    <td className={`${td} font-bold ${short ? 'text-red-600' : over ? 'text-amber-600' : 'text-gray-800'}`}
+                    <td className={`${td} ws-agg font-bold ${short ? 'text-red-600' : over ? 'text-amber-600' : 'text-gray-800'}`}
                       title={c.extra > 0 ? `정규 ${c.hours}h + 추가근무 ${c.extra}h = ${c.total}h (기준 ${bh}h)` : `${c.total}h (기준 ${bh}h)`}>
                       {c.total}
                       {short && <span className="block text-[9px] font-extrabold text-red-600">{Math.round((c.total - bh) * 10) / 10}h</span>}
-                      <span className="block mt-0.5 h-1 w-10 mx-auto rounded-full bg-gray-100 overflow-hidden">
+                      <span className="ws-bar block mt-0.5 h-1 w-10 mx-auto rounded-full bg-gray-100 overflow-hidden">
                         <span className={`block h-full ${short ? 'bg-red-500' : over ? 'bg-amber-400' : 'bg-emerald-400'}`}
                           style={{ width: `${bh > 0 ? Math.min(100, (c.total / bh) * 100) : 0}%` }} />
                       </span>
                     </td>
-                    <td className={`${td} text-gray-600`}>{c.d || ''}</td>
-                    <td className={`${td} text-gray-600`}>{c.n || ''}</td>
-                    <td className={`${td} text-emerald-700`}>{c.annual || ''}</td>
-                    <td className={`${td} text-amber-700`}>{c.off || ''}</td>
-                    <td className={`${td} text-violet-700`}>{c.comp || ''}</td>
-                    <td className={`${td} text-sky-700`}>{c.extra || ''}</td>
-                    <td className={`${td} text-gray-400 text-[10px]`}>{s.note}</td>
+                    <td className={`${td} ws-agg text-gray-600`}>{c.d || ''}</td>
+                    <td className={`${td} ws-agg text-gray-600`}>{c.n || ''}</td>
+                    <td className={`${td} ws-agg text-emerald-700`}>{c.annual || ''}</td>
+                    <td className={`${td} ws-agg text-amber-700`}>{c.off || ''}</td>
+                    <td className={`${td} ws-agg text-violet-700`}>{c.comp || ''}</td>
+                    <td className={`${td} ws-agg text-sky-700`}>{c.extra || ''}</td>
+                    <td className={`${td} ws-agg text-gray-400 text-[10px]`}>{s.note}</td>
                   </tr>
                 )
               })}
-              <tr className="bg-gray-50">
+              <tr className="ws-row-sum bg-gray-50">
                 <td className={`${td} font-bold text-gray-600 sticky left-0 z-10 bg-gray-50`} colSpan={3}>특이사항 (근무 인원)</td>
                 {days.map(({ day }) => {
                   const n = dayCount(day)
@@ -771,7 +857,7 @@ export default function WorkSchedulePage() {
                     </td>
                   )
                 })}
-                <td className={td} colSpan={8} />
+                <td className={`${td} ws-agg`} colSpan={8} />
               </tr>
             </tbody>
           </table>
@@ -779,7 +865,7 @@ export default function WorkSchedulePage() {
       )}
 
       {/* 범례 */}
-      <div className="mt-2 flex items-center gap-2.5 flex-wrap">
+      <div className="ws-legend mt-2 flex items-center gap-2.5 flex-wrap print-legend">
         <span className="inline-flex items-center gap-1 text-[11px] text-gray-500"><span className="w-3 h-3 rounded bg-blue-50 border border-blue-200" /> 토요일</span>
         <span className="inline-flex items-center gap-1 text-[11px] text-gray-500"><span className="w-3 h-3 rounded bg-red-50 border border-red-200" /> 일요일·공휴일</span>
         <span className="inline-flex items-center gap-1 text-[11px] text-gray-500"><span className="w-3 h-3 rounded bg-violet-50 border border-violet-200" /> 유급휴일(근로자의 날)</span>
@@ -814,9 +900,78 @@ export default function WorkSchedulePage() {
       )}
 
       <style>{`
+        /* ── 인쇄 ────────────────────────────────────────────────
+           게시용은 벽에 붙여 여러 명이 멀리서 보는 문서다.
+           총시간·초과휴 같은 숫자는 '왜 저 사람은 나보다 많지?'라는 오해를 부르므로
+           빼고, 대신 근무 칸과 이름을 크게 키운다. 관리·결재용은 집계까지 모두 넣는다. */
+        .print-approve, .print-approve td { border: 0.4mm solid #000; border-collapse: collapse; }
+        /* 화면에서도 시간대는 두 줄로 (칸이 좁아 잘리는 건 마찬가지) */
+        .ws-time { display: block; line-height: 1.05; font-size: 9px; font-variant-numeric: tabular-nums; }
         @media print {
-          @page { size: A4 landscape; margin: 8mm; }
+          @page { size: A4 landscape; margin: 6mm; }
+          html, body { background: #fff !important; }
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print\\:hidden { display: none !important; }
+
+          .ws-wrap { overflow: visible !important; border: 0 !important; border-radius: 0 !important; }
+          .ws-table { width: 100% !important; min-width: 0 !important; table-layout: fixed; }
+          .ws-table th, .ws-table td {
+            border: 0.15mm solid #666 !important;
+            padding: 0.5mm 0 !important; line-height: 1.2 !important;
+            overflow: hidden; white-space: nowrap; text-align: center;
+            vertical-align: middle;
+          }
+          /* 시간대 칸만 두 줄 허용 — 한 줄로는 절반이 잘린다 */
+          .ws-table .ws-time {
+            display: block; white-space: normal; line-height: 1.05 !important;
+            font-variant-numeric: tabular-nums; letter-spacing: -0.2pt;
+          }
+          .ws-table thead th { background: #e9e9e9 !important; font-weight: 700; }
+          thead { display: table-header-group; }
+          tr { break-inside: avoid; page-break-inside: avoid; }
+          .ws-table .sticky { position: static !important; }
+          .ws-bar { display: none !important; }
+          .ws-row-sum td { background: #e4e4e4 !important; font-weight: 700; }
+          .ws-table tbody tr:nth-child(even) td { background-color: #fafafa; }
+
+          /* 고정열 폭 */
+          .ws-table col.c-pos { width: 14mm; }
+          .ws-table col.c-team { width: 7mm; }
+          .ws-table col.c-name { width: 20mm; }
+
+          /* ① 기본 — 집계 열은 통째로 빼고 근무만 크게.
+             Ctrl+P로 바로 인쇄해도 동일하게 적용된다.
+             행 높이를 8mm로 잡아 시간대 두 줄(6.5pt×2≈4.8mm)이 눌리지 않게 한다. */
+          .ws-agg { display: none !important; }
+          .ws-table col.c-agg { width: 0 !important; }
+          .ws-table th, .ws-table td { font-size: 8.5pt !important; padding: 1mm 0.3mm !important; }
+          .ws-table tbody td { height: 8mm; }
+          .ws-name { font-size: 11pt !important; font-weight: 800 !important; letter-spacing: -0.2pt; }
+          .ws-time { font-size: 6.5pt !important; }
+
+
+          /* ② 관리·결재용 — '관리용' 버튼으로 뽑을 때만 집계 열을 되살린다 */
+          .ws-full .ws-agg { display: table-cell !important; }
+          .ws-full .ws-table th, .ws-full .ws-table td { font-size: 6pt !important; padding: 0.5mm 0.2mm !important; }
+          .ws-full .ws-table tbody td { height: 5.5mm; }
+          .ws-full .ws-name { font-size: 7.5pt !important; font-weight: 700 !important; }
+          .ws-full .ws-time { font-size: 5pt !important; }
+          .ws-full .ws-table col.c-sum  { width: 13mm !important; }
+          .ws-full .ws-table col.c-cnt  { width: 6mm !important; }
+          .ws-full .ws-table col.c-off  { width: 7mm !important; }
+          .ws-full .ws-table col.c-comp { width: 8mm !important; }
+          .ws-full .ws-table col.c-ext  { width: 9mm !important; }
+          .ws-full .ws-table col.c-memo { width: 10mm !important; }
+
+          /* 범례 — 표 아래 한 줄 */
+          .print-legend { font-size: 8pt !important; gap: 3mm !important; margin-top: 2mm !important; }
+          .print-legend .text-gray-200 { display: none; }
+
+          /* 결재란 */
+          .print-approve { font-size: 8pt; }
+          .print-approve .pa-label { width: 7mm; text-align: center; font-weight: 700; padding: 0 0.5mm; }
+          .print-approve .pa-role  { width: 18mm; height: 4.5mm; text-align: center; background: #f0f0f0; }
+          .print-approve .pa-sign  { height: 12mm; }
         }
       `}</style>
     </div>
