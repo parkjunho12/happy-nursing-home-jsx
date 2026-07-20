@@ -96,5 +96,5 @@ from app.models.staff_education import StaffEducation
 # 경관식 재고
 from app.models.enteral import EnteralProduct, EnteralTransaction
 from app.models.record_audit import RecordAudit  # noqa: F401
-from app.models.work_schedule import WorkSchedule  # noqa: F401
+from app.models.work_schedule import WorkSchedule, WorkScheduleVersion  # noqa: F401
 from app.models.handover import HandoverReport  # noqa: F401
