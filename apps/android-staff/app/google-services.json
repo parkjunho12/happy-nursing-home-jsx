@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "254390008848",
+    "project_id": "happy-nursing-home-cc2eb",
+    "storage_bucket": "happy-nursing-home-cc2eb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:254390008848:android:389085c0ff259ed51fde95",
+        "android_client_info": {
+          "package_name": "com.happycare.guardianalbum"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAfWXGGcXvyESQD3AV5Wr6G1ijeKeFzmfQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:254390008848:android:8d3cb1a5a1785c2c1fde95",
+        "android_client_info": {
+          "package_name": "com.happycare.staffapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAfWXGGcXvyESQD3AV5Wr6G1ijeKeFzmfQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
