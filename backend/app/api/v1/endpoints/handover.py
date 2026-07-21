@@ -18,6 +18,7 @@ from app.core.security import get_current_user
 from app.models.user import User
 from app.models.handover import HandoverReport
 from app.schemas.response import ApiResponse
+from app.services.storage import save_upload, delete_upload
 from app.services.handover_ai import analyze_handover, regenerate_summary
 from app.services.resident_match import apply_matching
 from app.models.eval import LtcResident, LtcStaffMember
@@ -74,7 +75,6 @@ async def analyze(
     if len(images) > MAX_FILES:
         raise HTTPException(400, f"사진은 최대 {MAX_FILES}장까지 가능합니다.")
 
-    os.makedirs(UPLOAD_SUBDIR, exist_ok=True)
     blobs: List[bytes] = []
     mts: List[str] = []
     urls: List[str] = []
@@ -85,11 +85,9 @@ async def analyze(
         data = await f.read()
         if len(data) > MAX_SIZE:
             raise HTTPException(400, "이미지가 너무 큽니다(최대 10MB).")
-        disk = f"{uuid.uuid4()}{ext}"
-        with open(os.path.join(UPLOAD_SUBDIR, disk), "wb") as out:
-            out.write(data)
         blobs.append(data); mts.append(MIME.get(ext, "image/jpeg"))
-        urls.append(f"/uploads/handover/{disk}")
+        # R2(설정 시) 또는 로컬에 저장 — 서버 디스크가 사진으로 차는 것을 막는다
+        urls.append(save_upload(data, "handover", f.filename, MIME.get(ext, "image/jpeg")))
 
     # 판독은 명단 없이 '있는 그대로' — 이름 확정은 아래 매칭 단계에서만 수행
     report = analyze_handover(blobs, mts)

@@ -47,3 +47,17 @@ class WorkScheduleVersion(Base):
     changed = Column(Integer, default=0)            # 직전 저장 대비 바뀐 칸 수
     saved_by = Column(String(100), nullable=True)
     saved_at = Column(DateTime(timezone=True), default=now_kst, index=True)
+
+
+class WorkScheduleConfig(Base):
+    """근무표 전역 설정 — 한 행만 쓴다.
+
+    정산 시작월과 회전 기준일이 코드에 박혀 있으면 해가 바뀔 때
+    아무 오류 없이 정산이 어긋난다. 그래서 DB로 뺐다."""
+    __tablename__ = "work_schedule_config"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    settle_start = Column(String(7), nullable=True)      # 'YYYY-MM' 정산(이월) 시작월
+    rotation_anchor = Column(String(10), nullable=True)  # 'YYYY-MM-DD' 주주야야휴휴 0일차
+    updated_by = Column(String(100), nullable=True)
+    updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)

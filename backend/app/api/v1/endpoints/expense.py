@@ -22,6 +22,7 @@ from app.models.expense import (
     EXPENSE_CATEGORIES, PAYMENT_METHODS, now_kst,
 )
 from app.schemas.response import ApiResponse
+from app.services.storage import save_upload, delete_upload
 
 router = APIRouter()
 
@@ -102,12 +103,10 @@ def _save_files(files: List[UploadFile], request_id: str, db: Session):
         if len(data) > MAX_SIZE:
             raise HTTPException(400, f"파일이 너무 큽니다(최대 10MB): {f.filename}")
         fid = str(uuid.uuid4())
-        disk_name = f"{fid}{ext}"
-        with open(os.path.join(UPLOAD_SUBDIR, disk_name), "wb") as out:
-            out.write(data)
+        url = save_upload(data, "expenses", f.filename, f.content_type)
         db.add(ExpenseAttachment(
             id=fid, request_id=request_id, file_name=f.filename,
-            file_url=f"/uploads/expenses/{disk_name}",
+            file_url=url,
             content_type=f.content_type, file_size=len(data),
         ))
 
@@ -243,13 +242,8 @@ def update_request(
 
 
 def _unlink(file_url: str):
-    try:
-        if file_url and file_url.startswith("/uploads/expenses/"):
-            p = file_url.lstrip("/")
-            if os.path.exists(p):
-                os.remove(p)
-    except Exception:
-        pass
+    # R2·로컬 어느 쪽에 있든 storage가 판단해 지운다
+    delete_upload(file_url)
 
 
 @router.post("/requests/{rid}/approve")

@@ -1,2 +1,11 @@
 packages:
   - 'apps/*'
+
+# pnpm 10+는 의존성 설치 스크립트를 기본 차단한다.
+# esbuild는 설치 시 플랫폼 바이너리를 받아야 vite 빌드가 되므로 허용.
+# (버전에 따라 읽는 키가 달라 두 형식을 모두 명시)
+onlyBuiltDependencies:
+  - esbuild
+
+allowBuilds:
+  esbuild: true
