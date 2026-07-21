@@ -61,14 +61,16 @@ jobs:
             # compose 실행 (v2)
             cd /opt/happy/infra
 
-            # 이미지 빌드 + 배포
+            # 이미지 빌드
             docker compose build backend
-            docker compose up -d --force-recreate backend
 
-            # 마이그레이션 — 실패하면 배포도 실패해야 한다.
-            # (이전의 `|| true`는 마이그레이션이 깨져도 ✅를 찍었다.
-            #  화면은 새 버전인데 테이블이 없는 '조용한 반쪽 배포'가 그렇게 생긴다)
-            docker compose exec -T backend alembic upgrade head
+            # 마이그레이션을 '컨테이너 기동 전에' 한 번만 실행한다.
+            # 예전에는 up 직후 exec로 또 실행해서, entrypoint의 alembic과
+            # 동시에 돌며 같은 테이블을 두 번 만들다 충돌했다(pg_type unique violation).
+            docker compose run --rm --no-deps backend alembic upgrade head
+
+            # 새 컨테이너 기동 — entrypoint의 alembic은 이미 head라 즉시 통과한다
+            docker compose up -d --force-recreate backend
 
             # 상태 확인
             docker compose ps
