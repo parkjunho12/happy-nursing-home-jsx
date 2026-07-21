@@ -409,7 +409,25 @@ def upload_media(
         saved.append({"id": m.id, "url": file_url, "thumb": thumb_url, "type": media_type, "status": media_status})
 
     db.commit()
-    # ※ 푸시는 자동 발송하지 않음. 관리자 화면의 '알림 보내기' 버튼으로 수동 발송.
+
+    # 관리자(자동 승인) 업로드도 보호자에게 알린다.
+    # 예전에는 '승인' 단계에서만 자동 푸시라, 관리자가 직접 올리면 승인 절차가 없어
+    # 푸시가 한 번도 안 나갔다 — "사진 추가됐는데 알림이 안 와요"의 원인.
+    # 승인 경로와 같은 3분 디바운스를 써서 여러 장 연속 업로드에도 1회만 발송한다.
+    if auto_approve and saved:
+        try:
+            now = datetime.now(KST)
+            ln = a.last_notified_at
+            if ln is not None and ln.tzinfo is None:
+                ln = ln.replace(tzinfo=KST)
+            if ln is None or (now - ln).total_seconds() > NOTIFY_DEBOUNCE_SEC:
+                _notify_album_guardians(db, a)
+                a.last_notified_at = now
+                db.commit()
+        except Exception as e:
+            logger.warning(f"업로드 자동 푸시 실패(업로드는 성공): {e}")
+            db.rollback()
+
     return ApiResponse(success=True, data=saved)
 
 

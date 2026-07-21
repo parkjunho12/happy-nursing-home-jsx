@@ -65,6 +65,18 @@ services:
       # ✅ 운영에서는 자동 시드 비활성 권장 (초기 1회만 수동 실행)
       RUN_SEED: ${RUN_SEED:-false}
 
+      # ✅ Cloudflare R2 — 업로드(앨범·인수인계 사진·공지/소식 이미지·지출 증빙) 저장소.
+      #    비워두면 컨테이너 로컬 uploads/ 로 폴백 (개발용). 값은 infra/.env 에서.
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET_NAME: ${R2_BUCKET_NAME:-happy-nursing-home-albums}
+      R2_PUBLIC_URL: ${R2_PUBLIC_URL:-}
+
+      # ✅ FCM(푸시) — 서비스계정 JSON. 이 두 줄이 없으면 모든 푸시가 조용히 비활성화된다.
+      #    서버에 파일 배치: /opt/happy/infra/secrets/fcm-service-account.json
+      FCM_CREDENTIALS_FILE: ${FCM_CREDENTIALS_FILE:-/app/secrets/fcm-service-account.json}
+
     depends_on:
       postgres:
         condition: service_healthy
@@ -74,6 +86,8 @@ services:
     volumes:
       - backend_uploads:/app/uploads
       - backend_logs:/app/logs
+      # FCM 서비스계정 (없으면 푸시만 꺼지고 서버는 정상 기동)
+      - ./secrets:/app/secrets:ro
 
     # ✅ 운영에서는 외부로 8000 노출 불필요 (Caddy가 프록시)
     expose:

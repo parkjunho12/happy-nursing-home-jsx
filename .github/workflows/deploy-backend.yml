@@ -13,7 +13,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  check:
+    # 배포 전에 러너에서 잡을 수 있는 것은 먼저 잡는다 (의존성 설치 없이 도는 검사만)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python 문법 전수 검사
+        run: python3 -m compileall -q backend/app backend/alembic/versions
+      - name: 마이그레이션 head가 하나인지 검사
+        # head가 갈라지면 alembic upgrade가 서버에서 실패한다 — 미리 잡는다
+        run: |
+          python3 - <<'EOF'
+          import os, re
+          d = "backend/alembic/versions"; revs = {}; downs = set()
+          for f in os.listdir(d):
+              if not f.endswith(".py"): continue
+              s = open(os.path.join(d, f), encoding="utf-8").read()
+              r = re.search(r"^revision(?::\s*str)?\s*=\s*['\"]([^'\"]+)", s, re.M)
+              dn = re.search(r"^down_revision(?::[^=]+)?\s*=\s*(\(.*?\)|['\"][^'\"]+['\"]|None)", s, re.M | re.S)
+              if r: revs[r.group(1)] = f
+              if dn: downs.update(re.findall(r"['\"]([^'\"]+)['\"]", dn.group(1)))
+          heads = [r for r in revs if r not in downs]
+          print("heads:", heads)
+          assert len(heads) == 1, f"head가 {len(heads)}개: {heads}"
+          EOF
+
   deploy:
+    needs: check
     runs-on: ubuntu-latest
 
     steps:
@@ -39,8 +65,10 @@ jobs:
             docker compose build backend
             docker compose up -d --force-recreate backend
 
-            # (선택) 마이그레이션 자동 실행
-            docker compose exec -T backend alembic upgrade head || true
+            # 마이그레이션 — 실패하면 배포도 실패해야 한다.
+            # (이전의 `|| true`는 마이그레이션이 깨져도 ✅를 찍었다.
+            #  화면은 새 버전인데 테이블이 없는 '조용한 반쪽 배포'가 그렇게 생긴다)
+            docker compose exec -T backend alembic upgrade head
 
             # 상태 확인
             docker compose ps

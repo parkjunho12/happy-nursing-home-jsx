@@ -30,6 +30,14 @@ export interface WorkScheduleDoc {
   updated_by?: string | null
   updated_at?: string | null
 }
+/** 내 근무표 응답 */
+export interface MySchedule {
+  year_month: string
+  staff_name: string
+  team?: string | null
+  codes: Record<string, string>   // day → 근무 코드
+  updated_at?: string | null
+}
 export interface SavePayload {
   year_month: string
   data: ScheduleData
@@ -61,6 +69,16 @@ export interface ScheduleVersionFull extends ScheduleVersion {
 export const workScheduleAPI = {
   get: (month: string) => apiClient.get(BASE, { params: { month } }).then(unwrap<WorkScheduleDoc>),
   save: (body: SavePayload) => apiClient.put(BASE, body).then(unwrap<WorkScheduleDoc>),
+  /** 근무표 발표 알림 — 전 직원 푸시 */
+  notify: (year_month: string) =>
+    apiClient.post(`${BASE}/notify`, { year_month }).then(unwrap<{ tokens: number; recipients?: number; sent: number; failed: number }>),
+  /** 내 근무표 — 전 직원 */
+  mine: (month: string) =>
+    apiClient.get(`${BASE}/mine`, { params: { month } }).then(unwrap<MySchedule>),
+  /** 전역 설정 — 정산 시작월·회전 기준일 */
+  config: () => apiClient.get(`${BASE}/config`).then(unwrap<{ settle_start: string; rotation_anchor: string }>),
+  saveConfig: (b: { settle_start?: string; rotation_anchor?: string }) =>
+    apiClient.put(`${BASE}/config`, b).then(unwrap<{ settle_start: string; rotation_anchor: string }>),
   versions: (month: string) =>
     apiClient.get(`${BASE}/versions`, { params: { month } }).then(unwrap<ScheduleVersion[]>),
   version: (id: string) =>

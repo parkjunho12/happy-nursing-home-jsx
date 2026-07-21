@@ -79,6 +79,7 @@ export function getNavConfig(
             checklistItem,
             { to: '/eval/calendar', icon: CalendarDays, label: '체크 캘린더' },
             { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
+            { to: '/my-schedule', icon: CalendarDays, label: '내 근무표' },
             { to: '/education', icon: GraduationCap, label: '직원 교육' },
           ],
         },
@@ -102,6 +103,7 @@ export function getNavConfig(
             { to: '/staff-hr', icon: FileText, label: '직원 상세' },
             { to: '/staffing', icon: Users, label: '인력배치 시뮬레이터' },
             { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
+            { to: '/my-schedule', icon: CalendarDays, label: '내 근무표' },
             { to: '/work-schedule', icon: CalendarClock, label: '근무표' },
             { to: '/handover', icon: ClipboardCheck, label: '인수인계 AI' },
             { to: '/facility-news', icon: Megaphone, label: '시설소식' },
@@ -168,6 +170,7 @@ export function getNavConfig(
             { to: '/staff-hr', icon: FileText, label: '직원 상세' },
             { to: '/staffing', icon: Users, label: '인력배치 시뮬레이터' },
             { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
+            { to: '/my-schedule', icon: CalendarDays, label: '내 근무표' },
             { to: '/work-schedule', icon: CalendarClock, label: '근무표' },
             { to: '/handover', icon: ClipboardCheck, label: '인수인계 AI' },
             { to: '/facility-news', icon: Megaphone, label: '시설소식' },
@@ -217,6 +220,7 @@ export function getNavConfig(
   const operItems: NavItem[] = [
     { to: '/contacts', icon: MessageSquare, label: '상담 관리' },
     { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
+    { to: '/my-schedule', icon: CalendarDays, label: '내 근무표' },
   ]
   if (isSocialWorker) operItems.push(
     { to: '/notices', icon: Bell, label: '내부 공지 관리' },
@@ -271,6 +275,7 @@ export function getMobileTabs(user: NavUser | null): NavItem[] {
   if (isCaregiver) {
     return [
       { to: '/eval/checklist', icon: ClipboardList, label: '체크리스트' },
+      { to: '/my-schedule',    icon: CalendarDays,  label: '내 근무' },
       { to: '/schedule',       icon: CalendarDays,  label: '일정' },
       { to: '/eval/albums',    icon: ImageIcon,     label: '앨범' },
     ]

@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Printer, Save, Eraser, Loader2, CalendarDays, Wand2, Users, AlertTriangle, History, Sparkles, CheckCircle2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Printer, Save, Eraser, Loader2, CalendarDays, Wand2, Users, History, Sparkles } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
 import { workScheduleAPI, type ScheduleData, type ScheduleRow, type HolidayInfo } from '@/api/workScheduleClient'
 import { calcBase, DAILY_HOURS } from '@/utils/baseHours'
 import ScheduleHistoryModal from '@/components/schedule/ScheduleHistoryModal'
+import TeamPanel from '@/components/schedule/TeamPanel'
+import SettlementPanel from '@/components/schedule/SettlementPanel'
+import AuditPanel from '@/components/schedule/AuditPanel'
+import { TEAM_BAND, canJoinTeam } from '@/components/schedule/shared'
 import { planDayShift, interleaveByPosition } from '@/utils/dayShiftPlan'
 import { planMembersMonths, type MonthContext, type MemberMonthPlan } from '@/utils/shiftBalance'
 import { calcBase as calcBaseFor } from '@/utils/baseHours'
-import { SHIFT_CODES, CODE_MAP, hoursOf, extraHoursOf, countAsOf, meta, isAutoManaged, splitTimeRange, shortOf, TEAMS, DAY_TEAM, DEFAULT_TEAM_OFFSET, ROTATION, rotationFor, rotationPreview } from '@/utils/shiftCodes'
+import { SHIFT_CODES, CODE_MAP, hoursOf, extraHoursOf, countAsOf, meta, isAutoManaged, splitTimeRange, shortOf, TEAMS, DEFAULT_TEAM_OFFSET, rotationFor } from '@/utils/shiftCodes'
 import { auditSchedule, type Issue } from '@/utils/scheduleAudit'
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
@@ -22,20 +26,11 @@ const todayISO = () => { const d = new Date(); const p = (n: number) => String(n
 
 /** 직종 표시 순서 — 편성표 양식과 동일 */
 const POS_ORDER = ['시설장', '사회복지사', '간호사', '간호조무사', '요양보호사', '조리원', '위생원', '사무원']
-/** 시간 정산을 시작하는 달 — 이 달부터 잔고를 쌓아 이월한다 */
-const SETTLE_START = '2026-07'
 
 /** 교대(주주야야휴휴)를 도는 직종 — 나머지는 모두 주간 근무다 */
-const SHIFT_POSITION = '요양보호사'
-const canJoinTeam = (pos?: string | null) => (pos ?? '').includes(SHIFT_POSITION)
 
 const posRank = (p?: string | null) => { const i = POS_ORDER.indexOf(p ?? ''); return i < 0 ? POS_ORDER.length : i }
 
-/** 조별 색 띠 — 표에서 조 경계를 눈으로 잡기 위한 것 */
-const TEAM_BAND: Record<string, string> = {
-  'A조': 'bg-rose-400', 'B조': 'bg-sky-400', 'C조': 'bg-emerald-400',
-  'D조': 'bg-violet-400', 'E조': 'bg-amber-400', 'F조': 'bg-teal-400', '주간': 'bg-gray-300',
-}
 
 export default function WorkSchedulePage() {
   const { staffList, loaded, loadAll } = useLtcStore()
@@ -62,6 +57,15 @@ export default function WorkSchedulePage() {
   const [wantPrint, setWantPrint] = useState(false)
   const [rowsFrom, setRowsFrom] = useState<string | null>(null)
   // 남은 잔고를 수당으로 줄 때 얼마인지 — 시설마다 달라 입력받는다
+  // 정산 시작월·회전 기준일 — 코드에 박지 않고 설정에서 가져온다 (해가 바뀌어도 화면에서 조정)
+  const [settleStart, setSettleStart] = useState('2026-07')
+  const [anchor, setAnchor] = useState('2026-08-01')
+  useEffect(() => {
+    workScheduleAPI.config()
+      .then(c => { setSettleStart(c.settle_start); setAnchor(c.rotation_anchor) })
+      .catch(() => { /* 설정을 못 읽으면 기본값으로 동작 */ })
+  }, [])
+
   const [wage, setWage] = useState<string>(() => localStorage.getItem('ws.wage') ?? '')
   const [rate, setRate] = useState<string>(() => localStorage.getItem('ws.rate') ?? '1.5')
   useEffect(() => { localStorage.setItem('ws.wage', wage) }, [wage])
@@ -224,7 +228,8 @@ export default function WorkSchedulePage() {
         const row = { ...(next[s.id] ?? {}) }
         days.forEach(({ day }) => {
           if (!overwrite && !isAutoManaged(row[String(day)])) return   // 연차·병가만 보존
-          const code = rotationFor(s.team, day, offsets)
+          // ym·anchor를 넘겨야 달이 바뀌어도 주기가 이어진다 (빼먹으면 매월 1일에 리셋)
+          const code = rotationFor(s.team, day, offsets, ym, anchor)
           if (code) row[String(day)] = code
           else delete row[String(day)]                 // 휴휴 자리는 공란으로 비운다
           filled++
@@ -243,7 +248,7 @@ export default function WorkSchedulePage() {
    */
   /** 정산 시작월부터 이번 달까지의 월 정보 — 잔고를 이어받기 위해 필요 */
   const buildContexts = async (): Promise<{ ctxs: MonthContext[]; saved: Record<string, ScheduleData> }> => {
-    const [sy, sm] = SETTLE_START.split('-').map(Number)
+    const [sy, sm] = settleStart.split('-').map(Number)
     const [ey, em] = ym.split('-').map(Number)
     const list: MonthContext[] = []
     const saved: Record<string, ScheduleData> = {}
@@ -264,6 +269,7 @@ export default function WorkSchedulePage() {
           day: i + 1, iso: `${key}-${String(i + 1).padStart(2, '0')}`,
         })),
         baseHours: calcBaseFor(key, hs, exclLabor).hours,
+        anchor,
         // 유급휴일(근로자의 날)은 관공서 공휴일이 아니라 대휴 대상에서 제외
         holidays: new Set(Object.entries(hs).filter(([, v]) => v.kind !== 'paid').map(([d]) => d)),
       })
@@ -401,6 +407,16 @@ export default function WorkSchedulePage() {
       const payload = staff.map((s, i) => ({ staff_id: s.id, position: s.pos, team: s.team, order: i, note: s.note }))
       const doc = await workScheduleAPI.save({ year_month: ym, data, rows: payload, base_hours: baseHours, base_days: baseDays, as_of: asOf, team_offsets: offsets })
       setUpdatedBy(doc.updated_by ?? null); setDirty(false)
+      // 근무표가 나와도 아무도 모르면 소용없다 — 저장 직후 알림을 제안한다.
+      // 편집 중간 저장도 있으니 자동 발송은 하지 않고 매번 물어본다.
+      if (confirm(`${m}월 근무표를 저장했습니다.\n\n직원들에게 "근무표가 나왔습니다" 알림을 보낼까요?\n(직원앱에서 누르면 본인 근무표가 바로 열립니다)`)) {
+        try {
+          const r = await workScheduleAPI.notify(ym)
+          alert(r.tokens === 0
+            ? '직원앱에 등록된 기기가 없어 알림은 발송되지 않았습니다.'
+            : `직원 기기 ${r.tokens}대 중 ${r.sent}대에 알림을 보냈습니다.`)
+        } catch (e: any) { alert(e?.message ?? '알림 발송 실패 (근무표 저장은 완료됨)') }
+      }
     } catch (e: any) { alert(e?.message ?? '저장 실패') } finally { setSaving(false) }
   }
 
@@ -511,67 +527,10 @@ export default function WorkSchedulePage() {
         </div>
 
         {teamOpen && (
-          <div className="mb-3 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-3">
-            <p className="text-xs font-bold text-indigo-800 mb-2">조 편성 — <b>요양보호사</b>만 교대조를 지정할 수 있고, 나머지 직종은 주간 근무입니다</p>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5">
-              {staff.map(s => {
-                const shiftable = canJoinTeam(s.pos)
-                return (
-                  <div key={s.id} className="flex items-center gap-1.5 bg-white rounded-lg px-2 py-1.5 border border-gray-100">
-                    <span className="text-xs font-semibold text-gray-700 flex-1 truncate" title={s.pos ?? ''}>{s.name}</span>
-                    {shiftable ? (
-                      <select value={s.team ?? ''} onChange={e => patchRow(s.id, { position: s.pos, team: e.target.value })}
-                        className="text-[11px] border border-gray-200 rounded px-1 py-1">
-                        <option value="">-</option>
-                        {TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
-                        <option value={DAY_TEAM}>{DAY_TEAM}</option>
-                      </select>
-                    ) : (
-                      <span className="text-[11px] text-gray-400 px-1 py-1" title={`${s.pos || '이 직종'}은 교대를 돌지 않습니다`}>주간</span>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-            <div className="mt-3 border-t border-indigo-100 pt-2.5">
-              <p className="text-[11px] font-bold text-indigo-800 mb-1.5">
-                조별 시작 패턴 <span className="font-normal text-indigo-500">— 1일이 무슨 근무로 시작할지 정합니다 (주주야야휴휴 {ROTATION.length}일 주기 · 휴휴는 공란)</span>
-              </p>
-              <div className="space-y-1">
-                {TEAMS.filter(t => staff.some(s => canJoinTeam(s.pos) && s.team === t)).map(t => {
-                  const used = staff.filter(s => canJoinTeam(s.pos) && s.team === t).length
-                  return (
-                    <div key={t} className="flex items-center gap-2 flex-wrap bg-white rounded-lg px-2 py-1.5 border border-gray-100">
-                      <span className={`w-1.5 h-4 rounded-sm ${TEAM_BAND[t] ?? 'bg-gray-300'}`} />
-                      <span className="text-xs font-bold text-gray-700 w-9">{t}</span>
-                      <span className="text-[10px] text-gray-400 w-9">{used}명</span>
-                      <div className="flex gap-0.5">
-                        {rotationPreview(t, offsets).map((c, i) => (
-                          <span key={i} title={c ? undefined : '근무 없음(공란)'}
-                            className={`w-6 text-center text-[10px] font-bold py-0.5 rounded ${c ? (meta(c)?.cls ?? 'bg-gray-100') : 'bg-gray-50 text-gray-300'}`}>
-                            {c || '·'}
-                          </span>
-                        ))}
-                      </div>
-                      <button type="button" onClick={() => { setOffsets(p => ({ ...p, [t]: (((p[t] ?? 0) + 5) % 6) })); setDirty(true) }}
-                        className="text-[11px] font-bold text-gray-400 hover:text-indigo-600 px-1.5 py-1 rounded hover:bg-indigo-50">◀</button>
-                      <button type="button" onClick={() => { setOffsets(p => ({ ...p, [t]: (((p[t] ?? 0) + 1) % 6) })); setDirty(true) }}
-                        className="text-[11px] font-bold text-gray-400 hover:text-indigo-600 px-1.5 py-1 rounded hover:bg-indigo-50">▶</button>
-                      {(() => {
-                        const dup = TEAMS.filter(o => o !== t && staff.some(s => canJoinTeam(s.pos) && s.team === o) && (offsets[o] ?? 0) === (offsets[t] ?? 0))
-                        return dup.length > 0
-                          ? <span className="text-[10px] font-bold text-amber-600">{dup.join('·')}와 같은 주기</span>
-                          : null
-                      })()}
-                    </div>
-                  )
-                })}
-                {!staff.some(s => canJoinTeam(s.pos) && (TEAMS as readonly string[]).includes(s.team ?? '')) && (
-                  <p className="text-[11px] text-gray-400">위에서 요양보호사에게 조를 지정하면 시작 패턴을 조정할 수 있습니다.</p>
-                )}
-              </div>
-            </div>
-          </div>
+          <TeamPanel
+            staff={staff} patchRow={patchRow} offsets={offsets} setOffsets={setOffsets} setDirty={setDirty}
+            anchor={anchor} setAnchor={setAnchor} settleStart={settleStart} setSettleStart={setSettleStart}
+          />
         )}
 
         {rowsFrom && (
@@ -584,134 +543,11 @@ export default function WorkSchedulePage() {
           </div>
         )}
 
-        {/* 교대조 정산 결과 — 왜 이 근무가 나왔는지 근거를 남긴다 */}
-        {lastPlans.length > 0 && (
-          <div className="mb-3 rounded-2xl border border-indigo-100 bg-indigo-50/50 px-3 py-2.5 print:hidden">
-            <div className="flex items-center gap-2 mb-1.5">
-              <Sparkles size={13} className="text-indigo-600" />
-              <span className="text-xs font-bold text-indigo-800">교대조 근무시간 맞추기 <span className="font-normal text-indigo-500">(입사일 기준 개인별)</span></span>
-              <span className="text-[11px] text-indigo-500">{SETTLE_START.replace('-', '년 ')}월부터 이월 계산</span>
-              <button onClick={() => setLastPlans([])} className="ml-auto text-[11px] text-gray-400 hover:text-gray-600">닫기</button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="text-[11px] w-full min-w-[520px]">
-                <thead>
-                  <tr className="text-gray-500">
-                    <th className="text-left font-semibold py-1">이름</th>
-                    <th className="font-semibold">조</th>
-                    <th className="font-semibold">회전</th>
-                    <th className="font-semibold">대휴</th>
-                    <th className="font-semibold">이월<br /><span className="font-normal text-[10px]">지난달까지</span></th>
-                    <th className="font-semibold">추가<br />근무</th>
-                    <th className="font-semibold">갚음<br /><span className="font-normal text-[10px]">휴가·단축</span></th>
-                    <th className="font-semibold">추가근무</th>
-                    <th className="font-semibold">실근무</th>
-                    <th className="font-semibold">기준</th>
-                    <th className="font-semibold">못 갚은<br />추가근무</th>
-                    <th className="font-semibold">예상 수당</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lastPlans.map(p => (
-                    <tr key={p.memberId} className="border-t border-indigo-100/70">
-                      <td className="py-1 font-bold text-gray-700">
-                        {p.name}
-                        {p.activeDays < p.monthDays && (
-                          <span className="ml-1 text-[10px] font-normal text-amber-600">재직 {p.activeDays}/{p.monthDays}일</span>
-                        )}
-                      </td>
-                      <td className="text-center text-gray-500">{p.team}</td>
-                      <td className="text-center text-gray-500">{p.rotationHours}h</td>
-                      <td className="text-center text-amber-700">{p.daehyuDays || '-'}{p.daehyuDays ? '일' : ''}</td>
-                      <td className={`text-center font-semibold ${p.opening > 0 ? 'text-amber-700' : 'text-gray-300'}`}>
-                        {p.opening > 0 ? `${p.opening}h` : '-'}
-                      </td>
-                      <td className="text-center text-sky-700">{p.extraHours > 0 ? `${p.extraHours}h` : '-'}</td>
-                      <td className="text-center text-violet-700">
-                        {p.paidBack > 0
-                          ? <>{p.compDays > 0 && `${p.compDays}일`}{p.compDays > 0 && p.shortenHours > 0 && '+'}{p.shortenHours > 0 && `${p.shortenHours}h단축`}</>
-                          : '-'}
-                      </td>
-                      <td className="text-center text-violet-700">{p.extraHours > 0 ? `${p.extraHours}h` : '-'}</td>
-                      <td className={`text-center font-bold ${Math.abs(p.workedHours - p.baseHours) > 8 ? 'text-red-600' : 'text-gray-800'}`}>{p.workedHours}h</td>
-                      <td className="text-center text-gray-500">{p.baseHours}h</td>
-                      <td className={`text-center font-semibold ${p.closing === 0 ? 'text-gray-400' : 'text-emerald-700'}`}>
-                        {p.closing > 0 ? `${p.closing}h` : '0'}
-                      </td>
-                      <td className="text-center text-gray-600">
-                        {p.closing > 0 && Number(wage) > 0
-                          ? `${Math.round(p.closing * Number(wage) * (Number(rate) || 1)).toLocaleString()}원`
-                          : '-'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap mt-2 pt-2 border-t border-indigo-100">
-              <span className="text-[11px] font-bold text-indigo-800">못 갚은 추가근무를 수당으로</span>
-              <label className="text-[11px] text-gray-500">시급
-                <input value={wage} onChange={e => setWage(e.target.value.replace(/[^0-9]/g, ''))}
-                  placeholder="10320" className="ml-1 w-20 px-2 py-1 text-[12px] border border-gray-200 rounded-lg text-right" />원
-              </label>
-              <label className="text-[11px] text-gray-500">가산율
-                <input value={rate} onChange={e => setRate(e.target.value.replace(/[^0-9.]/g, ''))}
-                  className="ml-1 w-12 px-2 py-1 text-[12px] border border-gray-200 rounded-lg text-right" />배
-              </label>
-              {Number(wage) > 0 && (() => {
-                const owed = lastPlans.reduce((a, p) => a + Math.max(0, p.closing), 0)
-                return (
-                  <span className="text-[11.5px] font-bold text-indigo-800">
-                    합계 {Math.round(owed * 10) / 10}시간 · 약 {Math.round(owed * Number(wage) * (Number(rate) || 1)).toLocaleString()}원
-                  </span>
-                )
-              })()}
-              <span className="text-[11px] text-gray-400">연장근로 가산은 통상임금의 50%(1.5배)가 일반적입니다 — 시설 기준에 맞게 조정하세요.</span>
-            </div>
-            <p className="text-[11px] text-indigo-600 mt-1.5">
-              공휴일에 근무하면 <b>대체휴무</b>로 다른 날 쉬고, 그만큼 줄어든 시간은 <b>추가근무</b>(0850~)로 채웁니다.
-              쉬는 날 나와서 일한 추가근무는 쌓아 두었다가, 기준시간을 넘는 여유가 생기면
-              <b>초과근무 휴가</b>(하루)나 <b>근무 단축</b>(0850~1600 등)으로 갚습니다.
-              연말까지 못 갚은 시간은 위의 <b>예상 수당</b>으로 지급하시면 됩니다.
-            </p>
-          </div>
-        )}
+        <SettlementPanel plans={lastPlans} onClose={() => setLastPlans([])} settleStart={settleStart}
+          wage={wage} setWage={setWage} rate={rate} setRate={setRate} />
 
-        {/* 점검 — 확정 전에 문제를 자동으로 훑는다 */}
-        <div className={`mb-3 rounded-2xl border ${danger > 0 ? 'border-red-200 bg-red-50/60' : issues.length > 0 ? 'border-amber-200 bg-amber-50/60' : 'border-emerald-200 bg-emerald-50/60'}`}>
-          <button onClick={() => setAuditOpen(v => !v)} className="w-full flex items-center gap-2 px-3 py-2.5 text-left">
-            {issues.length === 0
-              ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              : <AlertTriangle className={`w-4 h-4 shrink-0 ${danger > 0 ? 'text-red-600' : 'text-amber-600'}`} />}
-            <span className="text-sm font-bold text-gray-800">
-              {issues.length === 0 ? '점검 통과 — 확정해도 됩니다'
-                : `점검 ${issues.length}건`}
-            </span>
-            {danger > 0 && <span className="text-[10px] font-extrabold bg-red-600 text-white px-1.5 py-0.5 rounded-full">위험 {danger}</span>}
-            <label className="ml-auto text-[11px] text-gray-500 flex items-center gap-1" onClick={e => e.stopPropagation()}>
-              하루 최소 인원
-              <input type="number" min={0} value={minStaff} onChange={e => setMinStaff(Number(e.target.value) || 0)}
-                className="w-12 px-1.5 py-1 border border-gray-200 rounded text-center" />
-            </label>
-            <span className="text-[11px] text-gray-400">{auditOpen ? '접기 ▴' : '펼치기 ▾'}</span>
-          </button>
-          {auditOpen && issues.length > 0 && (
-            <ul className="px-3 pb-3 grid grid-cols-1 md:grid-cols-2 gap-1">
-              {issues.map(i => (
-                <li key={i.id}>
-                  <button onClick={() => setFocus({ staffId: i.staffId, day: i.day })}
-                    className={`w-full text-left flex items-start gap-2 rounded-lg px-2 py-1.5 bg-white/80 border hover:bg-white ${i.level === 'danger' ? 'border-red-200' : 'border-amber-200'}`}>
-                    <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${i.level === 'danger' ? 'bg-red-500' : 'bg-amber-500'}`} />
-                    <span className="min-w-0">
-                      <span className="block text-[12px] font-semibold text-gray-800">{i.title}</span>
-                      <span className="block text-[11px] text-gray-500">{i.detail}</span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <AuditPanel issues={issues} danger={danger} open={auditOpen} onToggle={() => setAuditOpen(v => !v)}
+          minStaff={minStaff} setMinStaff={setMinStaff} onFocus={setFocus} />
       </div>
 
       {/* 인쇄 머리말 — 결재란은 인쇄물에만 */}

@@ -22,6 +22,7 @@ from app.models.facility_news import FacilityNews, NEWS_CATEGORIES, now_kst
 from app.models.push import FamilyPushToken
 from app.services.fcm import send_to_tokens
 from app.schemas.response import ApiResponse
+from app.services.storage import save_upload, delete_upload
 from app.api.v1.endpoints.albums import get_guardian_id  # 보호자 인증 재사용
 
 admin_router = APIRouter()
@@ -84,13 +85,8 @@ def _save_image(f: UploadFile) -> str:
 
 
 def _unlink(url: Optional[str]):
-    try:
-        if url and url.startswith("/uploads/news/"):
-            p = url.lstrip("/")
-            if os.path.exists(p):
-                os.remove(p)
-    except Exception:
-        pass
+    # R2·로컬 어느 쪽에 있든 storage가 판단해 지운다
+    delete_upload(url)
 
 
 def _notify_all_guardians(db: Session, n: FacilityNews) -> dict:

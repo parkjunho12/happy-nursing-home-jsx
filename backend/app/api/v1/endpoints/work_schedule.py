@@ -10,7 +10,9 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
-from app.models.work_schedule import WorkSchedule, WorkScheduleVersion
+from app.models.work_schedule import WorkSchedule, WorkScheduleVersion, WorkScheduleConfig
+from app.models.eval import LtcStaffMember
+from app.services.staff_notify import notify_all_staff
 from app.models.staffing import HolidayCalendar
 from app.schemas.response import ApiResponse
 
@@ -105,6 +107,97 @@ class ScheduleBody(BaseModel):
     base_days: Optional[str] = None
     as_of: Optional[str] = None
     team_offsets: Optional[Dict[str, int]] = None
+
+
+class ConfigBody(BaseModel):
+    settle_start: Optional[str] = None
+    rotation_anchor: Optional[str] = None
+
+
+def _config_row(db: Session) -> WorkScheduleConfig:
+    row = db.query(WorkScheduleConfig).first()
+    if not row:
+        row = WorkScheduleConfig(settle_start="2026-07", rotation_anchor="2026-08-01")
+        db.add(row); db.commit(); db.refresh(row)
+    return row
+
+
+@router.post("/notify")
+def notify_schedule(body: ScheduleBody, db: Session = Depends(get_db),
+                    current_user: User = Depends(_manager)):
+    """근무표 발표 알림 — 전 직원 푸시. 누르면 직원앱이 '내 근무표'를 연다."""
+    if not _YM.match(body.year_month or ""):
+        raise HTTPException(400, "year_month 형식은 YYYY-MM 이어야 합니다.")
+    y, m = body.year_month.split("-")
+    result = notify_all_staff(
+        db,
+        f"{int(m)}월 근무표가 나왔습니다",
+        "내 근무표에서 이번 달 근무를 확인하세요.",
+        data={"type": "my-schedule", "month": body.year_month},
+        exclude_user_id=getattr(current_user, "id", None),
+    )
+    return ApiResponse(success=True, data=result)
+
+
+@router.get("/mine")
+def my_schedule(month: str = Query(...), db: Session = Depends(get_db),
+                current_user: User = Depends(get_current_user)):
+    """로그인한 직원 본인의 한 달 근무 — 관리자 권한 없이 전 직원이 본다.
+
+    편성표는 LtcStaffMember.id 로 저장되므로 로그인 계정과 이름으로 잇는다.
+    동명이인이 있으면 재직자 우선, 그래도 여럿이면 매칭 불가로 안내한다."""
+    if not _YM.match(month or ""):
+        raise HTTPException(400, "month 형식은 YYYY-MM 이어야 합니다.")
+    name = (getattr(current_user, "name", None) or "").strip()
+    if not name:
+        raise HTTPException(404, "계정에 이름이 없어 근무표를 찾을 수 없습니다.")
+    rows = db.query(LtcStaffMember).filter(LtcStaffMember.name == name).all()
+    active = [r for r in rows if (getattr(r, "status", "") or "active") == "active"]
+    cand = active or rows
+    if not cand:
+        raise HTTPException(404, "직원 명단에서 이름을 찾지 못했습니다. 관리자에게 문의하세요.")
+    if len(cand) > 1:
+        raise HTTPException(409, "같은 이름의 직원이 여러 명이라 자동으로 연결할 수 없습니다. 관리자에게 문의하세요.")
+    staff = cand[0]
+
+    w = db.query(WorkSchedule).filter(WorkSchedule.year_month == month).first()
+    codes = (w.data or {}).get(staff.id, {}) if w else {}
+    team = None
+    for r in (w.rows or []) if w else []:
+        if r.get("staff_id") == staff.id:
+            team = r.get("team")
+            break
+    return ApiResponse(success=True, data={
+        "year_month": month, "staff_name": staff.name, "team": team,
+        "codes": codes,
+        "updated_at": (w.updated_at.isoformat() if w and w.updated_at else None),
+    })
+
+
+@router.get("/config")
+def get_config(db: Session = Depends(get_db), _: User = Depends(_manager)):
+    """정산 시작월·회전 기준일 — 연도가 바뀌면 여기만 고치면 된다."""
+    row = _config_row(db)
+    return ApiResponse(success=True, data={
+        "settle_start": row.settle_start or "2026-07",
+        "rotation_anchor": row.rotation_anchor or "2026-08-01",
+    })
+
+
+@router.put("/config")
+def save_config(body: ConfigBody, db: Session = Depends(get_db), current_user: User = Depends(_manager)):
+    if body.settle_start and not re.match(r"^\d{4}-\d{2}$", body.settle_start):
+        raise HTTPException(400, "정산 시작월은 YYYY-MM 형식이어야 합니다.")
+    if body.rotation_anchor and not re.match(r"^\d{4}-\d{2}-\d{2}$", body.rotation_anchor):
+        raise HTTPException(400, "회전 기준일은 YYYY-MM-DD 형식이어야 합니다.")
+    row = _config_row(db)
+    if body.settle_start is not None: row.settle_start = body.settle_start or None
+    if body.rotation_anchor is not None: row.rotation_anchor = body.rotation_anchor or None
+    row.updated_by = getattr(current_user, "name", None)
+    db.commit(); db.refresh(row)
+    return ApiResponse(success=True, data={
+        "settle_start": row.settle_start, "rotation_anchor": row.rotation_anchor,
+    })
 
 
 @router.get("/holidays")

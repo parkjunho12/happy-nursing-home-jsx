@@ -140,23 +140,23 @@ export const DEFAULT_TEAM_OFFSET: Record<string, number> = {
  */
 export const ROTATION_ANCHOR = '2026-08-01'
 
-/** 기준일로부터 경과일 */
-export function daysFromAnchor(iso: string): number {
-  const a = new Date(`${ROTATION_ANCHOR}T00:00:00`)
+/** 기준일로부터 경과일 — anchor를 안 주면 코드 기본값(마이그레이션 시드와 동일) */
+export function daysFromAnchor(iso: string, anchor?: string): number {
+  const a = new Date(`${anchor || ROTATION_ANCHOR}T00:00:00`)
   const d = new Date(`${iso}T00:00:00`)
   return Math.round((d.getTime() - a.getTime()) / 86400000)
 }
 
 /** 날짜(ISO) → 주주야야휴휴 근무 코드. 달이 바뀌어도 주기가 이어진다. */
-export function rotationOn(team: string, iso: string, offsets?: Record<string, number>): string {
+export function rotationOn(team: string, iso: string, offsets?: Record<string, number>, anchor?: string): string {
   const off = offsets?.[team] ?? DEFAULT_TEAM_OFFSET[team] ?? 0
-  const n = daysFromAnchor(iso) + off
+  const n = daysFromAnchor(iso, anchor) + off
   return ROTATION[((n % 6) + 6) % 6]
 }
 
 /** 조·일자 → 근무 코드 (월 정보를 함께 넘겨야 주기가 이어진다) */
-export const rotationFor = (team: string, day: number, offsets?: Record<string, number>, ym?: string): string => {
-  if (ym) return rotationOn(team, `${ym}-${String(day).padStart(2, '0')}`, offsets)
+export const rotationFor = (team: string, day: number, offsets?: Record<string, number>, ym?: string, anchor?: string): string => {
+  if (ym) return rotationOn(team, `${ym}-${String(day).padStart(2, '0')}`, offsets, anchor)
   const off = offsets?.[team] ?? DEFAULT_TEAM_OFFSET[team] ?? 0
   return ROTATION[(((day - 1) + off) % 6 + 6) % 6]
 }

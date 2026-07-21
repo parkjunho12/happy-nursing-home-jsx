@@ -6,7 +6,8 @@
     "dev": "vite --port 3001",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "lint": "eslint src --ext ts,tsx"
+    "lint": "eslint src --ext ts,tsx",
+    "test": "tsc -p tsconfig.test.json && node -e \"require('fs').writeFileSync('.test-dist/package.json','{\\\"type\\\":\\\"commonjs\\\"}')\" && node --test .test-dist/tests/*.test.js"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.20.5",

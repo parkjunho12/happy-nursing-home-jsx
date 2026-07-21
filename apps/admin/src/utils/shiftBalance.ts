@@ -18,6 +18,7 @@ export interface MonthContext {
   days: { day: number; iso: string }[]
   baseHours: number
   holidays: Set<string>        // 공휴일 ISO (유급휴일 제외)
+  anchor?: string              // 주주야야휴휴 0일차 (설정에서 옴)
 }
 
 /** 정산 대상 한 명 — 입사일이 다르면 누적 잔고도 달라진다 */
@@ -105,7 +106,7 @@ export function planMembersMonth(
   const allWorkDays: number[] = []
   const allRestDays: number[] = []
   ctx.days.forEach(({ day, iso }) => {
-    const c = rotationOn(team, iso, offsets)
+    const c = rotationOn(team, iso, offsets, ctx.anchor)
     if (c) {
       baseCodes[String(day)] = c
       if (c === 'D') allWorkDays.push(day)
@@ -115,7 +116,7 @@ export function planMembersMonth(
   // '주주(D D) 시작 직전 휴무일'을 추가근무 우선 후보로
   const preDD = allRestDays.filter(d => {
     const next = ctx.days.find(x => x.day === d + 1)
-    return next ? rotationOn(team, next.iso, offsets) === 'D' : false
+    return next ? rotationOn(team, next.iso, offsets, ctx.anchor) === 'D' : false
   })
   const restPool = [...preDD, ...allRestDays.filter(d => !preDD.includes(d))]
 
@@ -236,7 +237,7 @@ export function settleFromSaved(
   ctx.days.forEach(({ day, iso }) => {
     const v = (row[String(day)] ?? '').trim()
     if (!v) return
-    const planned = rotationOn(team, iso, offsets)
+    const planned = rotationOn(team, iso, offsets, ctx.anchor)
     const custom = extraHoursOf(v)              // 직접 적은 시간대면 그 근무시간
     if (planned === 'D') {
       if (v === '초과휴') paidBack += DAILY_HOURS

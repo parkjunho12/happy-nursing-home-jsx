@@ -37,6 +37,12 @@ jobs:
       - name: Install dependencies (workspace root)
         run: pnpm install --frozen-lockfile
 
+      - name: Test admin (정산 로직 20종 + 타입체크)
+        # 테스트가 깨지면 배포가 멈춘다 — 급여와 직결된 정산 코드의 안전판
+        run: |
+          pnpm --filter ./apps/admin exec tsc --noEmit
+          pnpm --filter ./apps/admin test
+
       - name: Build admin
         env:
           VITE_API_BASE_URL: https://api.xn--p80bu1t60gba47bg6abm347gsla.com

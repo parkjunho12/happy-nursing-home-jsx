@@ -12,6 +12,12 @@ from app.core.security import get_current_user
 from app.models.user import User
 from app.models.staffing import InternalNotice
 from app.schemas.response import ApiResponse
+from app.services.storage import save_upload
+import os as _os
+from app.core.config import settings as _settings
+from app.services.fcm import is_available as _fcm_available
+from app.models.staff_push import StaffPushToken
+from app.models.push import FamilyPushToken
 from app.services.staff_notify import notify_all_staff
 
 router = APIRouter()
@@ -162,8 +168,31 @@ def upload_notice_image(file: UploadFile = File(...), _: User = Depends(_can_wri
     data = file.file.read()
     if len(data) > MAX_SIZE:
         raise HTTPException(400, "이미지가 너무 큽니다(최대 10MB).")
-    os.makedirs(UPLOAD_SUBDIR, exist_ok=True)
-    disk = f"{uuid.uuid4()}{ext}"
-    with open(os.path.join(UPLOAD_SUBDIR, disk), "wb") as out:
-        out.write(data)
-    return ApiResponse(success=True, data={"url": f"/uploads/notices/{disk}"})
+    url = save_upload(data, "notices", file.filename, file.content_type)
+    return ApiResponse(success=True, data={"url": url})
+
+
+@router.get("/push-status")
+def push_status(db: Session = Depends(get_db), _: User = Depends(_can_write)):
+    """푸시가 왜 안 가는지 한 번에 진단.
+
+    지금까지는 자격 미설정이면 로그 한 줄 남기고 조용히 비활성이라
+    '보냈다는데 안 온다'를 추적할 방법이 없었다."""
+    cred = _settings.FCM_CREDENTIALS_FILE
+    try:
+        staff_tokens = db.query(StaffPushToken).count()
+    except Exception:
+        staff_tokens = -1
+    try:
+        family_tokens = db.query(FamilyPushToken).count()
+    except Exception:
+        family_tokens = -1
+    return ApiResponse(success=True, data={
+        "fcm_available": _fcm_available(),
+        "credentials_file": cred or "(미설정)",
+        "credentials_exists": bool(cred and _os.path.isfile(cred)),
+        "staff_tokens": staff_tokens,       # 직원앱 등록 기기 수
+        "family_tokens": family_tokens,     # 보호자앱 등록 기기 수
+        "hint": ("정상" if _fcm_available()
+                 else "FCM_CREDENTIALS_FILE 미설정 또는 파일 없음 — infra/secrets/에 서비스계정 JSON을 넣고 재기동하세요"),
+    })

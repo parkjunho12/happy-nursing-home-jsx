@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "outDir": ".test-dist",
+    "rootDir": ".",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/utils/shiftCodes.ts",
+    "src/utils/shiftBalance.ts",
+    "src/utils/baseHours.ts",
+    "src/utils/dayShiftPlan.ts",
+    "src/utils/scheduleAudit.ts",
+    "tests/**/*.ts"
+  ]
+}

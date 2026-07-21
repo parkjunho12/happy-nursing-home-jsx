@@ -1,6 +1,8 @@
 // 월 기준 근무시간 — 토·일·공휴일을 뺀 날수 × 1일 근무시간
 // 실제 편성표의 '160시간 / 20일'(2026년 8월)을 이 규칙으로 재현해 확인했다.
-import type { HolidayInfo } from '@/api/workScheduleClient'
+// 구조만 맞으면 되므로 로컬 타입으로 정의한다.
+// (API 클라이언트를 끌고 오면 axios까지 딸려와 단독 테스트가 불가능해진다)
+export interface HolidayInfo { name: string; kind: string }
 
 export const DAILY_HOURS = 8
 
