@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom'
 import {
   CalendarDays, Plus, ChevronLeft, ChevronRight, X, Trash2, MapPin,
   Phone, Clock, Briefcase, Loader2, Grid3x3, Columns3, List, UserPlus, ClipboardList, Pencil } from 'lucide-react'
+import { useLtcStore } from '@/store/ltc'
+import { birthdaysInRange } from '@/utils/birthdays'
 import {
   scheduleAPI, SCHEDULE_CATEGORIES, type ScheduleEvent, type EventInput, type LifecycleEvent, type RenewalEvent, type DocCalEvent, type EduCalEvent,
 } from '../../api/scheduleClient'
@@ -20,7 +22,7 @@ const hmOf = (iso?: string | null) => {
 const startOfWeek = (d: Date) => { const x = new Date(d); x.setDate(x.getDate() - x.getDay()); x.setHours(0, 0, 0, 0); return x }
 
 /* 카테고리 색상 */
-type CatKey = '방문상담' | '외부방문' | '회의' | '행사' | '기타' | '면접' | '입소' | '입사' | '재계약' | '계약서' | '계획서' | '평가' | '교육'
+type CatKey = '방문상담' | '외부방문' | '회의' | '행사' | '기타' | '면접' | '입소' | '입사' | '재계약' | '계약서' | '계획서' | '평가' | '교육' | '생신' | '생일'
 const CAT: Record<CatKey, { dot: string; chip: string; bar: string }> = {
   방문상담: { dot: 'bg-blue-500',   chip: 'bg-blue-50 text-blue-700 border-blue-200',       bar: 'border-l-blue-500 bg-blue-50' },
   외부방문: { dot: 'bg-teal-500',   chip: 'bg-teal-50 text-teal-700 border-teal-200',       bar: 'border-l-teal-500 bg-teal-50' },
@@ -35,8 +37,10 @@ const CAT: Record<CatKey, { dot: string; chip: string; bar: string }> = {
   계획서:  { dot: 'bg-sky-500',     chip: 'bg-sky-50 text-sky-700 border-sky-200',             bar: 'border-l-sky-500 bg-sky-50' },
   평가:    { dot: 'bg-fuchsia-500', chip: 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200', bar: 'border-l-fuchsia-500 bg-fuchsia-50' },
   교육:    { dot: 'bg-orange-500',  chip: 'bg-orange-50 text-orange-700 border-orange-200',     bar: 'border-l-orange-500 bg-orange-50' },
+  생신:    { dot: 'bg-red-400',     chip: 'bg-red-50 text-red-600 border-red-200',               bar: 'border-l-red-400 bg-red-50' },
+  생일:    { dot: 'bg-lime-500',    chip: 'bg-lime-50 text-lime-700 border-lime-200',            bar: 'border-l-lime-500 bg-lime-50' },
 }
-const ALL_CATS: CatKey[] = ['방문상담', '외부방문', '회의', '행사', '기타', '면접', '입소', '입사', '재계약', '계약서', '계획서', '평가', '교육']
+const ALL_CATS: CatKey[] = ['방문상담', '외부방문', '회의', '행사', '기타', '면접', '입소', '입사', '재계약', '계약서', '계획서', '평가', '교육', '생신', '생일']
 
 /* 통합 이벤트 */
 type UEvent = {
@@ -73,6 +77,9 @@ export default function SchedulePage() {
   const [addDate, setAddDate] = useState<string | null>(null)
   const [editEvent, setEditEvent] = useState<ScheduleEvent | null>(null)
   const [detail, setDetail] = useState<UEvent | null>(null)
+  // 생일은 서버 조회가 아니라 이미 있는 명단(수급자·직원)의 생년월일에서 계산한다
+  const { residents, staffList, loaded: ltcLoaded, loadAll: ltcLoadAll } = useLtcStore()
+  useEffect(() => { if (!ltcLoaded) ltcLoadAll() }, [ltcLoaded, ltcLoadAll])
 
   const y = cursor.getFullYear(), m = cursor.getMonth()
 
@@ -104,12 +111,32 @@ export default function SchedulePage() {
 
   const unified: UEvent[] = useMemo(() => {
     const out: UEvent[] = []
+
+    // 어르신 생신·직원 생일 — 매년 반복, 시간 없는 종일 항목
+    for (const b of birthdaysInRange(residents, rangeStart, rangeEnd, 'resident')) {
+      out.push({
+        key: b.key, kind: 'lifecycle', category: '생신',
+        title: `${b.name} 어르신 생신 (${b.age}세)`,
+        start: `${b.dateKey}T00:00`, dateKey: b.dateKey, time: '',
+        memo: '생신 축하 준비 — 보호자 연락·생신상', raw: b as any,
+      })
+    }
+    for (const b of birthdaysInRange(staffList, rangeStart, rangeEnd, 'staff')) {
+      out.push({
+        key: b.key, kind: 'lifecycle', category: '생일',
+        title: `${b.name} 선생님 생일`,
+        start: `${b.dateKey}T00:00`, dateKey: b.dateKey, time: '',
+        memo: null, raw: b as any,
+      })
+    }
     for (const e of events) {
       const cat = (SCHEDULE_CATEGORIES as readonly string[]).includes(e.category) ? (e.category as CatKey) : '기타'
       if (!e.start_at) continue
       out.push({
         key: `e-${e.id}`, kind: 'event', category: cat, title: e.title,
-        start: e.start_at, dateKey: ymd(new Date(e.start_at)), time: hmOf(e.start_at),
+        // 규약: 00:00에 저장된 일정은 '시간 미정' — 자정에 시작하는 일정은 현실적으로 없다
+        start: e.start_at, dateKey: ymd(new Date(e.start_at)),
+        time: hmOf(e.start_at) === '00:00' ? '미정' : hmOf(e.start_at),
         location: e.location, contactName: e.contact_name, contactPhone: e.contact_phone,
         memo: e.memo, raw: e,
       })
@@ -164,7 +191,7 @@ export default function SchedulePage() {
       })
     }
     return out.sort((a, b) => (a.start! < b.start! ? -1 : 1))
-  }, [events, interviews, lifecycles, renewals, docs, edus])
+  }, [events, interviews, lifecycles, renewals, docs, edus, residents, staffList, rangeStart, rangeEnd])
 
   const shown = useMemo(() => unified.filter(u => active.has(u.category)), [unified, active])
 
@@ -441,7 +468,9 @@ function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: strin
   const [category, setCategory] = useState<string>(editing?.category ?? '방문상담')
   const [title, setTitle] = useState(editing?.title ?? '')
   const [date, setDate] = useState(() => (eStart ? ymd(eStart) : presetDate ?? ymd(new Date())))
-  const [time, setTime] = useState(eStart ? hmOf(editing!.start_at!) : '10:00')
+  // 시간 미정: 00:00으로 저장하는 규약 (연락 대기 중인 방문 상담 등)
+  const [noTime, setNoTime] = useState(() => !!eStart && hmOf(editing!.start_at!) === '00:00')
+  const [time, setTime] = useState(eStart && hmOf(editing!.start_at!) !== '00:00' ? hmOf(editing!.start_at!) : '10:00')
   const [durMin, setDurMin] = useState<number | null>(() => {
     if (editing?.start_at && editing?.end_at) {
       const d = (new Date(editing.end_at).getTime() - new Date(editing.start_at).getTime()) / 60000
@@ -456,8 +485,8 @@ function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: strin
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
 
-  const start_at = `${date}T${time}`
-  const endPreview = durMin ? addMinutes(date, time, durMin) : null
+  const start_at = noTime ? `${date}T00:00` : `${date}T${time}`
+  const endPreview = !noTime && durMin ? addMinutes(date, time, durMin) : null
   const endTimeStr = endPreview ? endPreview.slice(11, 16) : null
 
   const dateChips = [
@@ -511,7 +540,18 @@ function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: strin
 
         {/* 시작 시간 */}
         <div>
-          <label className="text-xs font-semibold text-gray-500 mb-1.5 block">시작 시간</label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-xs font-semibold text-gray-500">시작 시간</label>
+            <label className="inline-flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+              <input type="checkbox" checked={noTime} onChange={e => setNoTime(e.target.checked)} className="accent-violet-600" />
+              시간 미정 <span className="text-[10px] text-gray-400">(정해지면 나중에 수정)</span>
+            </label>
+          </div>
+          {noTime ? (
+            <p className="text-xs text-gray-400 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2.5">
+              시간을 정하지 않고 등록합니다 — 달력에는 <b className="text-gray-500">미정</b>으로 표시되고 그날 맨 위에 옵니다.
+            </p>
+          ) : (<>
           <div className="flex flex-wrap gap-1.5 mb-2">
             {QUICK_TIMES.map(t => (
               <button key={t} onClick={() => setTime(t)}
@@ -521,9 +561,11 @@ function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: strin
           <select value={time} onChange={e => setTime(e.target.value)} className="inp">
             {TIME_SLOTS.map(t => <option key={t} value={t}>{timeLabel(t)}</option>)}
           </select>
+          </>)}
         </div>
 
-        {/* 소요 시간 */}
+        {/* 소요 시간 — 시간 미정이면 의미 없음 */}
+        {!noTime && (
         <div>
           <label className="text-xs font-semibold text-gray-500 mb-1.5 block">
             소요 시간{endTimeStr && <span className="ml-1.5 text-violet-600 font-bold">→ {timeLabel(endTimeStr)} 종료</span>}
@@ -535,6 +577,7 @@ function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: strin
             ))}
           </div>
         </div>
+        )}
 
         <Field label="장소 (선택)"><input value={location} onChange={e => setLocation(e.target.value)} placeholder="예: 시설 1층 상담실" className="inp" /></Field>
         <div className="grid grid-cols-2 gap-2">
