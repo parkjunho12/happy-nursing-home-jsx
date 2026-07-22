@@ -7,10 +7,13 @@ import { canJoinTeam, TEAM_BAND, type StaffRow } from './shared'
  * (장기 병가, 이번 달만 다른 스케줄, 수습 중이라 따로 짜는 경우 등)
  * 뺀 사람의 칸은 자동 생성이 전혀 건드리지 않는다.
  */
-export default function GeneratePickModal({ staff, onClose, onConfirm }: {
+export default function GeneratePickModal({ staff, onClose, onConfirm, title = '자동 생성 대상', verb = '생성', hint = '뺀 사람의 근무 칸은 그대로 둡니다' }: {
   staff: StaffRow[]
   onClose: () => void
   onConfirm: (ids: Set<string>) => void
+  title?: string
+  verb?: string
+  hint?: string
 }) {
   const [picked, setPicked] = useState<Set<string>>(() => new Set(staff.map(s => s.id)))
 
@@ -45,7 +48,7 @@ export default function GeneratePickModal({ staff, onClose, onConfirm }: {
         <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
           <div className="flex items-center gap-2">
             <Sparkles size={16} className="text-indigo-600" />
-            <h3 className="font-bold text-gray-900">자동 생성 대상</h3>
+            <h3 className="font-bold text-gray-900">{title}</h3>
             <span className="text-[11px] text-gray-400">{picked.size}/{staff.length}명</span>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center">
@@ -58,7 +61,7 @@ export default function GeneratePickModal({ staff, onClose, onConfirm }: {
             className="text-[11px] font-bold text-indigo-600 hover:bg-indigo-50 px-2 py-1 rounded">전체 선택</button>
           <button onClick={() => setPicked(new Set())}
             className="text-[11px] font-bold text-gray-400 hover:bg-gray-50 px-2 py-1 rounded">전체 해제</button>
-          <span className="ml-auto text-[11px] text-gray-400">뺀 사람의 근무 칸은 그대로 둡니다</span>
+          <span className="ml-auto text-[11px] text-gray-400">{hint}</span>
         </div>
 
         <div className="overflow-y-auto flex-1 min-h-0 px-5 py-3 space-y-3">
@@ -90,7 +93,7 @@ export default function GeneratePickModal({ staff, onClose, onConfirm }: {
           <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-700 rounded-xl py-2.5 text-sm font-semibold">취소</button>
           <button onClick={() => onConfirm(picked)} disabled={picked.size === 0}
             className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white rounded-xl py-2.5 text-sm font-semibold">
-            {excluded > 0 ? `${picked.size}명만 생성 (${excluded}명 제외)` : `전원 ${picked.size}명 생성`}
+            {excluded > 0 ? `${picked.size}명만 ${verb} (${excluded}명 제외)` : `전원 ${picked.size}명 ${verb}`}
           </button>
         </div>
       </div>
