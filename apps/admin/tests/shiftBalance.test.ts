@@ -127,3 +127,18 @@ test('저장본 정산 — D를 줄인 날(0850~1600)과 초과휴는 갚음으�
   const { paidBack } = settleFromSaved(aug, 'B조', undefined, row)
   assert.equal(paidBack, 10)
 })
+
+test('연차는 정산 중립 — 쉬는 날의 休가 추가근무 빚이 되지 않는다', () => {
+  const aug = CTXS[1]
+  const row: Record<string, string> = {}
+  let restDay = 0
+  aug.days.forEach(({ day, iso }) => {
+    const c = rotationOn('B조', iso)
+    if (c) row[String(day)] = c
+    else if (!restDay) restDay = day
+  })
+  row[String(restDay)] = '休'            // 쉬는 날에 연차 표기 (실무에서 종종 나온다)
+  const { extra, paidBack } = settleFromSaved(aug, 'B조', undefined, row)
+  assert.equal(extra, 0)                 // 연차가 빚으로 잡히면 안 된다
+  assert.equal(paidBack, 0)
+})

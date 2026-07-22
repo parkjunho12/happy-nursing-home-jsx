@@ -395,7 +395,7 @@ export default function WorkSchedulePage() {
     if (e.key === 'ArrowDown') return move(1, 0)
     if (e.key === 'ArrowLeft') return move(0, -1)
     if (e.key === 'ArrowRight' || e.key === 'Tab') return move(0, 1)
-    const KEY: Record<string, string> = { d: 'D', n: 'N', h: '休', o: '대휴', c: '초과휴', a: 'AD', p: 'PD', b: '반' }
+    const KEY: Record<string, string> = { d: 'D', m: 'M', n: 'N', h: '休', o: '대휴', c: '초과휴', a: 'AD', p: 'PD', b: '반' }
     const code = KEY[e.key.toLowerCase()]
     if (code) { e.preventDefault(); setCell(staff[si].id, days[di].day, code); setSel({ si, di: Math.min(days.length - 1, di + 1) }) }
     if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); setCell(staff[si].id, days[di].day, '') }
@@ -523,7 +523,7 @@ export default function WorkSchedulePage() {
           <button onClick={() => setBrush('')} className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-bold border ${brush === '' ? 'bg-gray-200 text-gray-700 ring-2 ring-offset-1 ring-gray-300' : 'bg-white border-gray-200 text-gray-400'}`}>
             <Eraser className="w-3 h-3" /> 지우기
           </button>
-          <span className="text-[11px] text-gray-400 ml-2">칸을 누르거나 끌면 칠해집니다 · 두 번 누르면 직접 입력 · 선택 후 <b>D N H O C</b> 키와 방향키로도 편성됩니다</span>
+          <span className="text-[11px] text-gray-400 ml-2">칸을 누르거나 끌면 칠해집니다 · 두 번 누르면 직접 입력 · 선택 후 <b>D M N H O C</b> 키와 방향키로도 편성됩니다</span>
         </div>
 
         {teamOpen && (
