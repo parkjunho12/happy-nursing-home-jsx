@@ -7,6 +7,7 @@ import ScheduleHistoryModal from '@/components/schedule/ScheduleHistoryModal'
 import TeamPanel from '@/components/schedule/TeamPanel'
 import SettlementPanel from '@/components/schedule/SettlementPanel'
 import AuditPanel from '@/components/schedule/AuditPanel'
+import GeneratePickModal from '@/components/schedule/GeneratePickModal'
 import { TEAM_BAND, canJoinTeam } from '@/components/schedule/shared'
 import { planDayShift, interleaveByPosition } from '@/utils/dayShiftPlan'
 import { planMembersMonths, type MonthContext, type MemberMonthPlan } from '@/utils/shiftBalance'
@@ -48,6 +49,7 @@ export default function WorkSchedulePage() {
   const [teamOpen, setTeamOpen] = useState(false)
   const [auditOpen, setAuditOpen] = useState(true)
   const [histOpen, setHistOpen] = useState(false)
+  const [pickOpen, setPickOpen] = useState(false)   // 자동 생성 대상 선택
   const [building, setBuilding] = useState(false)
   // 인쇄는 '집계 열 없이'가 기본이다. 총시간·초과휴 같은 숫자가 벽에 붙으면
   // '왜 저 사람은 나보다 많지?' 같은 오해가 생긴다.
@@ -278,9 +280,11 @@ export default function WorkSchedulePage() {
     return { ctxs: list, saved }
   }
 
-  const autoBuild = async () => {
-    const shiftStaff = staff.filter(s => canJoinTeam(s.pos) && (TEAMS as readonly string[]).includes(s.team ?? ''))
-    const dayStaff = staff.filter(s => !(canJoinTeam(s.pos) && (TEAMS as readonly string[]).includes(s.team ?? '')))
+  const autoBuild = async (pickedIds: Set<string>) => {
+    // 선택된 사람만 생성 대상 — 뺀 사람(장기 병가, 별도 스케줄 등)의 칸은 전혀 건드리지 않는다
+    const pickedStaff = staff.filter(s => pickedIds.has(s.id))
+    const shiftStaff = pickedStaff.filter(s => canJoinTeam(s.pos) && (TEAMS as readonly string[]).includes(s.team ?? ''))
+    const dayStaff = pickedStaff.filter(s => !(canJoinTeam(s.pos) && (TEAMS as readonly string[]).includes(s.team ?? '')))
     if (shiftStaff.length === 0 && dayStaff.length === 0) { alert('편성할 직원이 없습니다.'); return }
 
     const target = Number(baseDays) || base.workdays
@@ -439,7 +443,7 @@ export default function WorkSchedulePage() {
             <button onClick={() => setTeamOpen(v => !v)} className={`inline-flex items-center gap-1.5 px-3 py-2.5 border rounded-xl text-sm font-semibold ${teamOpen ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
               <Users className="w-4 h-4" /> 조 편성
             </button>
-            <button onClick={autoBuild} disabled={building} className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow-sm">
+            <button onClick={() => setPickOpen(true)} disabled={building} className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow-sm">
               {building ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} 근무표 자동 생성
             </button>
             <button onClick={() => autoRotate(false)} title="교대조만 다시 채웁니다"
@@ -719,6 +723,14 @@ export default function WorkSchedulePage() {
           </span>
         ))}
       </div>
+
+      {pickOpen && (
+        <GeneratePickModal
+          staff={staff}
+          onClose={() => setPickOpen(false)}
+          onConfirm={ids => { setPickOpen(false); autoBuild(ids) }}
+        />
+      )}
 
       {histOpen && (
         <ScheduleHistoryModal
