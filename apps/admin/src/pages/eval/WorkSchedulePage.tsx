@@ -389,9 +389,12 @@ export default function WorkSchedulePage() {
   }
 
   /** 일별 근무 인원 (특이사항 행) */
-  const dayCount = (day: number) => {
+  /** 일별 근무 인원 — 요양보호사와 그 외(주간 직종)를 나눠 센다.
+   *  케어 인력이 몇 명인지가 실제로 중요한 숫자라 합산하면 의미가 흐려진다. */
+  const dayCountBy = (day: number, caregiver: boolean) => {
     // 인쇄 대상을 골랐으면 그 인원만 센다 — 표에 없는 사람이 숫자에 섞이면 벽보가 안 맞는다
-    const pool = printPick ? staff.filter(s => printPick.has(s.id)) : staff
+    const base = printPick ? staff.filter(s => printPick.has(s.id)) : staff
+    const pool = base.filter(s => canJoinTeam(s.pos) === caregiver)
     return pool.reduce((acc, s) => acc + (countAsOf(data[s.id]?.[String(day)]) ? 1 : 0), 0)
   }
 
@@ -588,7 +591,6 @@ export default function WorkSchedulePage() {
         행복한 요양원 <span className="text-teal-700">{y}년 {m}월</span> 근무 편성표
         <span className="block text-xs font-semibold text-gray-500 print:text-[9pt] print:mt-0.5">
           작성 기준 {asOf ? `${Number(asOf.slice(5, 7))}월 ${Number(asOf.slice(8, 10))}일` : '-'}
-          <span className="hidden print:inline"> · 월 기준 {baseHours}시간 / {baseDays}일</span>
         </span>
       </h2>
 
@@ -628,7 +630,7 @@ export default function WorkSchedulePage() {
                 <th className={`${th} ws-agg`}>비고</th>
               </tr>
               <tr>
-                <th className={th} colSpan={3}>{baseHours}시간 / {baseDays}일 기준</th>
+                <th className={th} colSpan={3}><span className="print:hidden">{baseHours}시간 / {baseDays}일 기준</span></th>
                 {days.map(({ day, dow }) => {
                   const t = dayTone(day, dow)
                   const h = holidays[iso(day)]?.name
@@ -702,9 +704,9 @@ export default function WorkSchedulePage() {
                 )
               })}
               <tr className="ws-row-sum bg-gray-50">
-                <td className={`${td} font-bold text-gray-600 sticky left-0 z-10 bg-gray-50`} colSpan={3}>특이사항 (근무 인원)</td>
+                <td className={`${td} font-bold text-gray-600 sticky left-0 z-10 bg-gray-50`} colSpan={3}>요양보호사 근무 인원</td>
                 {days.map(({ day }) => {
-                  const n = dayCount(day)
+                  const n = dayCountBy(day, true)
                   return (
                     <td key={day}
                       className={`${td} font-bold ${n === 0 ? 'bg-red-100 text-red-700' : n < minStaff ? 'bg-amber-100 text-amber-800' : 'text-gray-700'} ${focus?.day === day ? 'outline outline-2 outline-amber-400' : ''}`}>
@@ -712,6 +714,13 @@ export default function WorkSchedulePage() {
                     </td>
                   )
                 })}
+                <td className={`${td} ws-agg`} colSpan={8} />
+              </tr>
+              <tr className="ws-row-sum bg-gray-50/60">
+                <td className={`${td} font-semibold text-gray-500 sticky left-0 z-10 bg-gray-50`} colSpan={3}>그 외 주간 인원</td>
+                {days.map(({ day }) => (
+                  <td key={day} className={`${td} text-gray-500`}>{dayCountBy(day, false) || '0'}</td>
+                ))}
                 <td className={`${td} ws-agg`} colSpan={8} />
               </tr>
             </tbody>
