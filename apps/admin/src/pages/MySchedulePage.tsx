@@ -29,7 +29,9 @@ function describe(code?: string): { title: string; time?: string; icon: 'day' | 
     return { title: m.label, icon: 'rest' }
   }
   const tr = splitTimeRange(v)
-  if (tr) return { title: '추가근무', time: `${tr[0].slice(0, 2)}:${tr[0].slice(2)} ~ ${tr[1].slice(0, 2)}:${tr[1].slice(2)} (${extraHoursOf(v)}시간)`, icon: 'day' }
+  // 시간이 직접 적힌 날은 추가근무일 수도, 단축 근무(초과분 갚는 날)일 수도 있다.
+  // 본인 화면에서는 구분 없이 '시간 지정 근무'로 중립 표기 — 시간만 정확하면 된다.
+  if (tr) return { title: '시간 지정 근무', time: `${tr[0].slice(0, 2)}:${tr[0].slice(2)} ~ ${tr[1].slice(0, 2)}:${tr[1].slice(2)} (${extraHoursOf(v)}시간)`, icon: 'day' }
   return { title: v, icon: 'day' }
 }
 
