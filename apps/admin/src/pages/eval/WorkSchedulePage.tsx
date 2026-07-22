@@ -50,6 +50,10 @@ export default function WorkSchedulePage() {
   const [auditOpen, setAuditOpen] = useState(true)
   const [histOpen, setHistOpen] = useState(false)
   const [pickOpen, setPickOpen] = useState(false)   // 자동 생성 대상 선택
+  // 인쇄 대상 선택 — 층별로 나눠 붙이거나 특정 인원만 뽑을 때
+  const [printPickOpen, setPrintPickOpen] = useState(false)
+  const [printPick, setPrintPick] = useState<Set<string> | null>(null)
+  const pendingFull = useRef(false)
   const [building, setBuilding] = useState(false)
   // 인쇄는 '집계 열 없이'가 기본이다. 총시간·초과휴 같은 숫자가 벽에 붙으면
   // '왜 저 사람은 나보다 많지?' 같은 오해가 생긴다.
@@ -126,7 +130,7 @@ export default function WorkSchedulePage() {
   }, [ym])
 
   useEffect(() => {
-    const after = () => setFullPrint(false)
+    const after = () => { setFullPrint(false); setPrintPick(null) }
     window.addEventListener('afterprint', after)
     return () => window.removeEventListener('afterprint', after)
   }, [])
@@ -150,7 +154,15 @@ export default function WorkSchedulePage() {
 
   const printAs = (full: boolean) => {
     if (dirty && !confirm('저장하지 않은 변경이 있습니다. 저장한 내용이 아닌 현재 화면 그대로 인쇄됩니다.\n계속할까요?')) return
-    setFullPrint(full); setWantPrint(true)
+    pendingFull.current = full
+    setPrintPickOpen(true)          // 누구를 인쇄할지 먼저 고른다 (기본 전원)
+  }
+
+  const printPicked = (ids: Set<string>) => {
+    setPrintPickOpen(false)
+    setPrintPick(ids.size === staff.length ? null : ids)   // 전원이면 필터 없음
+    setFullPrint(pendingFull.current)
+    setWantPrint(true)
   }
 
   useEffect(() => {
@@ -377,8 +389,11 @@ export default function WorkSchedulePage() {
   }
 
   /** 일별 근무 인원 (특이사항 행) */
-  const dayCount = (day: number) =>
-    staff.reduce((acc, s) => acc + (countAsOf(data[s.id]?.[String(day)]) ? 1 : 0), 0)
+  const dayCount = (day: number) => {
+    // 인쇄 대상을 골랐으면 그 인원만 센다 — 표에 없는 사람이 숫자에 섞이면 벽보가 안 맞는다
+    const pool = printPick ? staff.filter(s => printPick.has(s.id)) : staff
+    return pool.reduce((acc, s) => acc + (countAsOf(data[s.id]?.[String(day)]) ? 1 : 0), 0)
+  }
 
   const issues: Issue[] = useMemo(() => auditSchedule({
     days, staff: staff.map(s => ({ id: s.id, name: s.name, team: s.team, pos: s.pos })), data,
@@ -634,7 +649,7 @@ export default function WorkSchedulePage() {
                 const short = bh > 0 && c.total < bh        // 미달 — 급여가 깎이는 쪽이라 빨갛게
                 const over = bh > 0 && c.total > bh
                 return (
-                  <tr key={s.id} className={`hover:bg-indigo-50/20 ${focus?.staffId === s.id ? 'bg-amber-50' : ''}`}>
+                  <tr key={s.id} className={`hover:bg-indigo-50/20 ${focus?.staffId === s.id ? 'bg-amber-50' : ''} ${printPick && !printPick.has(s.id) ? 'print:hidden' : ''}`}>
                     <td className={`${td} sticky left-0 z-10 bg-white font-semibold text-gray-600 relative`}>
                       {s.team && TEAM_BAND[s.team] && <span className={`absolute left-0 top-0 bottom-0 w-1 ${TEAM_BAND[s.team]}`} />}
                       {s.pos || '-'}
@@ -729,6 +744,15 @@ export default function WorkSchedulePage() {
           staff={staff}
           onClose={() => setPickOpen(false)}
           onConfirm={ids => { setPickOpen(false); autoBuild(ids) }}
+        />
+      )}
+
+      {printPickOpen && (
+        <GeneratePickModal
+          staff={staff} title="인쇄할 직원" verb="인쇄"
+          hint="뺀 사람은 이번 인쇄물에서만 빠집니다 (화면·데이터는 그대로)"
+          onClose={() => setPrintPickOpen(false)}
+          onConfirm={printPicked}
         />
       )}
 
