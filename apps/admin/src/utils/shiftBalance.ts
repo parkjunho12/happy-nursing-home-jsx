@@ -244,7 +244,9 @@ export function settleFromSaved(
       else if (custom > 0 && custom < DAILY_HOURS) paidBack += DAILY_HOURS - custom
     } else if (!planned) {                      // 원래 쉬는 날
       if (custom > 0) extra += custom
-      else if (CODE_MAP[v]) extra += CODE_MAP[v].hours
+      // '근무' 코드만 추가근무로 센다. 연차(休)는 유급이라 hours가 8이지만
+      // 쉬는 날에 쓴 연차가 '갚을 빚'이 되면 안 된다 — 연차는 정산 중립.
+      else if (CODE_MAP[v]?.group === '근무') extra += CODE_MAP[v].hours
     }
   })
   return { extra: Math.round(extra * 10) / 10, paidBack: Math.round(paidBack * 10) / 10 }

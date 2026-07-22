@@ -8,10 +8,17 @@ import { hoursOf, extraHoursOf, timeRangeForHours, breakMinutes, rotationOn, spl
 
 test('근무 코드 시간 — 실제 편성표 검산값(D=8h·N=9h)과 일치', () => {
   assert.equal(hoursOf('D'), 8)
+  assert.equal(hoursOf('M'), 8)     // 모닝 07:00~16:00 − 휴게 1h
   assert.equal(hoursOf('N'), 9)
-  assert.equal(hoursOf('대휴'), 0)
-  assert.equal(hoursOf('초과휴'), 0)
-  assert.equal(hoursOf('休'), 0)
+  assert.equal(hoursOf('대휴'), 0)      // 공휴일 대체휴무 — 시간 깎임을 추가근무로 채우는 구조
+  assert.equal(hoursOf('초과휴'), 0)    // 쌓인 빚을 갚는 날 — 시간을 또 주면 이중 계산
+})
+
+test('연차는 유급 — 총시간에 하루 8시간으로 들어간다', () => {
+  assert.equal(hoursOf('休'), 8)
+  assert.equal(hoursOf('반'), 4)        // 반차는 반일
+  assert.equal(hoursOf('AD반'), 8)      // 근무 4h + 반차 4h = 하루치
+  assert.equal(hoursOf('반PD'), 8)
 })
 
 test('직접 입력 시간대 — 휴게 70분 규칙(0850~1400=4h, 0850~1600=6h)', () => {
