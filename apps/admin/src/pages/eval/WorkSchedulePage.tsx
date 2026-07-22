@@ -391,12 +391,18 @@ export default function WorkSchedulePage() {
 
   /** 일별 근무 인원 (특이사항 행) */
   /** 일별 근무 인원 — 요양보호사와 그 외(주간 직종)를 나눠 센다.
-   *  케어 인력이 몇 명인지가 실제로 중요한 숫자라 합산하면 의미가 흐려진다. */
+   *  케어 인력이 몇 명인지가 실제로 중요한 숫자라 합산하면 의미가 흐려진다.
+   *  요양보호사 줄은 야간(N)을 빼고 센다 — 낮에 어르신 곁에 몇 명 있는지가 핵심이라,
+   *  N까지 섞으면 낮 인력이 실제보다 많아 보인다. */
   const dayCountBy = (day: number, caregiver: boolean) => {
     // 인쇄 대상을 골랐으면 그 인원만 센다 — 표에 없는 사람이 숫자에 섞이면 벽보가 안 맞는다
     const base = printPick ? staff.filter(s => printPick.has(s.id)) : staff
     const pool = base.filter(s => canJoinTeam(s.pos) === caregiver)
-    return pool.reduce((acc, s) => acc + (countAsOf(data[s.id]?.[String(day)]) ? 1 : 0), 0)
+    return pool.reduce((acc, s) => {
+      const c = countAsOf(data[s.id]?.[String(day)])
+      const working = caregiver ? c === 'D' : c !== null   // 요양보호사 줄은 주간 계열만
+      return acc + (working ? 1 : 0)
+    }, 0)
   }
 
   const issues: Issue[] = useMemo(() => auditSchedule({
@@ -713,7 +719,7 @@ export default function WorkSchedulePage() {
                 )
               })}
               <tr className="ws-row-sum bg-gray-50">
-                <td className={`${td} font-bold text-gray-600 sticky left-0 z-10 bg-gray-50`} colSpan={3}>요양보호사 근무 인원</td>
+                <td className={`${td} font-bold text-gray-600 sticky left-0 z-10 bg-gray-50`} colSpan={3}>요양보호사 주간 인원 <span className="font-normal text-gray-400">(야간 제외)</span></td>
                 {days.map(({ day }) => {
                   const n = dayCountBy(day, true)
                   return (

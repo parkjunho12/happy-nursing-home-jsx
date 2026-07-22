@@ -1,5 +1,6 @@
 // 근무 코드 — 시설에서 쓰는 근무표 범례를 그대로 옮긴 것
-// D 09:00~18:00(휴게 1h) = 8시간 / N 18:00~익일09:00(휴게 6h) = 9시간
+// D 08:50~18:00(휴게 70분) = 8시간 / N 17:50~익일09:00 = 9시간 / M 06:50~16:00 = 8시간
+// (10분 일찍 시작 = 앞 근무와의 인수인계 겹침)
 // 실제 편성표 13명의 총시간을 이 값으로 검산해 전부 일치함을 확인했다.
 
 export interface ShiftCode {
@@ -17,12 +18,12 @@ export interface ShiftCode {
 }
 
 export const SHIFT_CODES: ShiftCode[] = [
-  { code: 'D',    label: '주간',    time: '09:00~18:00',      hours: 8,   group: '근무', countAs: 'D', cls: 'bg-sky-100 text-sky-900' },
+  { code: 'D',    label: '주간',    time: '08:50~18:00',      hours: 8,   group: '근무', countAs: 'D', cls: 'bg-sky-100 text-sky-900' },
   // 모닝 — 아침 일찍 시작하는 주간조. 07:00~16:00(9시간) − 휴게 1시간 = 8시간
-  { code: 'M',    label: '모닝',    time: '07:00~16:00',      hours: 8,   group: '근무', countAs: 'D', cls: 'bg-amber-100 text-amber-900' },
+  { code: 'M',    label: '모닝',    time: '06:50~16:00',      hours: 8,   group: '근무', countAs: 'D', cls: 'bg-amber-100 text-amber-900' },
   { code: 'AD',   label: '오전',    time: '09:00~13:30',      hours: 4,   group: '근무', countAs: 'D', cls: 'bg-sky-50 text-sky-700' },
   { code: 'PD',   label: '오후',    time: '13:30~18:00',      hours: 4,   group: '근무', countAs: 'D', cls: 'bg-sky-50 text-sky-700' },
-  { code: 'N',    label: '야간',    time: '18:00~익일 09:00', hours: 9,   group: '근무', countAs: 'N', cls: 'bg-indigo-100 text-indigo-900' },
+  { code: 'N',    label: '야간',    time: '17:50~익일 09:00', hours: 9,   group: '근무', countAs: 'N', cls: 'bg-indigo-100 text-indigo-900' },
   // 반차 조합일: 근무 4h + 반차(유급) 4h = 하루치 8h로 친다
   { code: 'AD반', label: '오전근무·오후반차', time: '09:00~13:30 근무', hours: 8, group: '근무', countAs: 'D', cls: 'bg-teal-50 text-teal-700' },
   { code: '반PD', label: '오전반차·오후근무', time: '13:30~18:00 근무', hours: 8, group: '근무', countAs: 'D', cls: 'bg-teal-50 text-teal-700' },
