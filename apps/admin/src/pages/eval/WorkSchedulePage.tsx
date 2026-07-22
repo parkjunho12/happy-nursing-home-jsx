@@ -26,7 +26,8 @@ const todayISO = () => { const d = new Date(); const p = (n: number) => String(n
 
 
 /** 직종 표시 순서 — 편성표 양식과 동일 */
-const POS_ORDER = ['시설장', '사회복지사', '간호사', '간호조무사', '요양보호사', '조리원', '위생원', '사무원']
+// 간호팀장은 시설장 바로 아래 — 지시 체계 순서대로 벽보에서도 읽히게
+const POS_ORDER = ['시설장', '간호팀장', '팀장', '사회복지사', '간호사', '간호조무사', '요양보호사', '조리원', '위생원', '사무원']
 
 /** 교대(주주야야휴휴)를 도는 직종 — 나머지는 모두 주간 근무다 */
 
@@ -664,6 +665,12 @@ export default function WorkSchedulePage() {
                       const si = staff.findIndex(x => x.id === s.id)
                       const picked = sel?.si === si && sel?.di === di
                       const lit = focus?.day === day || (focus?.staffId === s.id && focus?.day === undefined)
+                      // 단축 근무: 교대조의 D 자리에 8시간 미만 시간대가 적혀 있으면
+                      // 초과근무를 갚느라 일찍 퇴근하는 날이다 — 노랑(추가근무)과 구분한다
+                      const isShift = canJoinTeam(s.pos) && (TEAMS as readonly string[]).includes(s.team ?? '')
+                      const customH = extraHoursOf(v)
+                      const shortened = isShift && customH > 0 && customH < DAILY_HOURS
+                        && rotationFor(s.team, day, offsets, ym, anchor) === 'D'
                       return (
                         <td key={day}
                           onMouseDown={() => { painting.current = true; setSel({ si, di }); setCell(s.id, day, brush) }}
@@ -672,9 +679,11 @@ export default function WorkSchedulePage() {
                             const t = prompt(`${s.name} · ${m}월 ${day}일 근무 (예: D, N, 대휴, 0850 1600)`, v)
                             if (t !== null) setCell(s.id, day, t.trim())
                           }}
-                          title={mt ? `${mt.label}${mt.time ? ` ${mt.time}` : ''}` : v}
+                          title={shortened
+                            ? `단축 근무 — 초과근무 ${Math.round((DAILY_HOURS - customH) * 10) / 10}시간 갚는 날 (${customH}시간 근무)`
+                            : mt ? `${mt.label}${mt.time ? ` ${mt.time}` : ''}` : v}
                           data-code={v}
-                          className={`${td} ws-cell cursor-pointer select-none ${mt ? mt.cls : v ? 'bg-yellow-50 text-gray-700 text-[9px] leading-tight' : dayTone(day, dow) === 'red' ? 'bg-red-50/70' : dayTone(day, dow) === 'blue' ? 'bg-blue-50/70' : dayTone(day, dow) === 'paid' ? 'bg-violet-50/60' : ''} ${day === todayCol ? 'ring-1 ring-inset ring-indigo-200' : ''} ${lit ? 'outline outline-2 outline-amber-400' : ''} ${picked ? 'ring-2 ring-inset ring-gray-800' : ''}`}>
+                          className={`${td} ws-cell cursor-pointer select-none ${mt ? mt.cls : shortened ? 'bg-violet-100 text-violet-900 text-[9px] leading-tight' : v ? 'bg-yellow-50 text-gray-700 text-[9px] leading-tight' : dayTone(day, dow) === 'red' ? 'bg-red-50/70' : dayTone(day, dow) === 'blue' ? 'bg-blue-50/70' : dayTone(day, dow) === 'paid' ? 'bg-violet-50/60' : ''} ${day === todayCol ? 'ring-1 ring-inset ring-indigo-200' : ''} ${lit ? 'outline outline-2 outline-amber-400' : ''} ${picked ? 'ring-2 ring-inset ring-gray-800' : ''}`}>
                           {(() => {
                             const tr = splitTimeRange(v)
                             // 시간대는 좁은 칸에 한 줄로 안 들어가 잘린다 → 시작/끝을 두 줄로
@@ -736,6 +745,12 @@ export default function WorkSchedulePage() {
         <span className="text-gray-200">|</span>
         <span className="inline-flex items-center gap-1 text-[11px] text-gray-500">
           <span className="w-3 h-3 rounded bg-red-500" /> 총시간 기준 미달
+        </span>
+        <span className="inline-flex items-center gap-1 text-[11px] text-gray-500" title="예: 0850~1600 = 6시간 근무, 초과근무 2시간 갚음">
+          <span className="w-3 h-3 rounded bg-violet-100 border border-violet-300" /> 단축 근무(초과근무 갚는 날)
+        </span>
+        <span className="inline-flex items-center gap-1 text-[11px] text-gray-500">
+          <span className="w-3 h-3 rounded bg-yellow-50 border border-yellow-300" /> 추가근무(쉬는 날 나옴)
         </span>
         <span className="text-gray-200">|</span>
         {SHIFT_CODES.map(c => (
