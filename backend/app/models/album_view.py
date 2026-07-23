@@ -27,3 +27,4 @@ class FamilyAlbumView(Base):
 
 
 Index("ix_fav_album_event", FamilyAlbumView.album_id, FamilyAlbumView.event_type)
+
