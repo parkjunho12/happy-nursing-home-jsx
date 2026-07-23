@@ -9,6 +9,7 @@ import {
 import { dashboardAPI, apiClient } from '@/api/client'
 import { expenseAPI } from '@/api/expenseClient'
 import { leaveAPI, swapAPI } from '@/api/leaveClient'
+import { visitAPI } from '@/api/visitClient'
 import { newsAPI, type FacilityNews } from '@/api/newsClient'
 import { useLtcStore } from '@/store/ltc'
 import { useAuthStore } from '@/store/auth'
@@ -60,7 +61,7 @@ export default function DashboardPage() {
   const canChecklist = can('/eval/checklist')
   const [siteStats, setSiteStats] = useState<DashboardStats | null>(null)
   const [loadingSite, setLoadingSite] = useState(true)
-  const [pending, setPending] = useState<{ expense: number; album: number; leave: number; swap: number }>({ expense: 0, album: 0, leave: 0, swap: 0 })
+  const [pending, setPending] = useState<{ expense: number; album: number; leave: number; swap: number; visit: number }>({ expense: 0, album: 0, leave: 0, swap: 0, visit: 0 })
   const [recentNews, setRecentNews] = useState<FacilityNews[]>([])
 
   const { checklists, occurrences, residents, staffList, loaded, loadAll, toggleComplete, completeOccurrence } = useLtcStore()
@@ -80,8 +81,9 @@ export default function DashboardPage() {
 
   // 크로스 기능 '처리 대기' 카운트 — 권한 없으면 0으로 폴백(대시보드에 영향 없음)
   const canApproveLeave = authUser?.role === 'ADMIN' || authUser?.position === '시설장'
+  const canVisit = authUser?.role === 'ADMIN' || ['시설장', '사회복지사'].includes(authUser?.position ?? '')
   const loadPending = async () => {
-    const [exp, alb, news, lv, sw] = await Promise.all([
+    const [exp, alb, news, lv, sw, vs] = await Promise.all([
       can('/expense')
         ? expenseAPI.list({ status: 'pending' }).then(r => r.length).catch(() => 0) : Promise.resolve(0),
       can('/eval/albums')
@@ -92,8 +94,10 @@ export default function DashboardPage() {
         ? leaveAPI.list(undefined, 'pending').then(r => r.length).catch(() => 0) : Promise.resolve(0),
       canApproveLeave
         ? swapAPI.list('pending').then(r => r.length).catch(() => 0) : Promise.resolve(0),
+      canVisit
+        ? visitAPI.list('pending').then(r => r.length).catch(() => 0) : Promise.resolve(0),
     ])
-    setPending({ expense: exp, album: alb, leave: lv, swap: sw })
+    setPending({ expense: exp, album: alb, leave: lv, swap: sw, visit: vs })
     setRecentNews(news)
   }
 
@@ -328,6 +332,7 @@ export default function DashboardPage() {
     { show: can('/contacts') && (siteStats?.pendingContacts ?? 0) > 0, label: '대기 중인 상담', value: siteStats?.pendingContacts ?? 0, unit: '건', to: '/contacts', icon: MessageSquare, tone: 'orange' as const },
     { show: canApproveLeave && pending.leave > 0, label: '휴무 신청 승인 대기', value: pending.leave, unit: '건', to: '/work-schedule', icon: CalendarClock, tone: 'emerald' as const },
     { show: canApproveLeave && pending.swap > 0, label: '근무 맞교대 승인 대기', value: pending.swap, unit: '건', to: '/work-schedule', icon: ArrowLeftRight, tone: 'blue' as const },
+    { show: canVisit && pending.visit > 0, label: '면회 예약 확인 대기', value: pending.visit, unit: '건', to: '/schedule', icon: CalendarClock, tone: 'orange' as const },
   ].filter(i => i.show)
 
   const runningTasks = todayTasks.filter(t => t.inProgress).slice(0, 2)
@@ -387,7 +392,7 @@ export default function DashboardPage() {
   const secSchedule = can('/schedule') ? <UpcomingSchedule limit={isMobile ? 4 : 6} days={45} /> : null
 
   // 처리 대기 — 모바일은 비었을 때 렌더하지 않음(빈 카드로 화면 낭비 방지)
-  const hasPendingScope = can('/expense') || can('/eval/albums') || can('/contacts') || canApproveLeave
+  const hasPendingScope = can('/expense') || can('/eval/albums') || can('/contacts') || canApproveLeave || canVisit
   const secPending = (!hasPendingScope || (isMobile && pendingItems.length === 0)) ? null : (
     <section>
       <div className="flex items-center gap-2 mb-2">

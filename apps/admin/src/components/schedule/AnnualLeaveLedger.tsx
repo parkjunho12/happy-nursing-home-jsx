@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Loader2, Plus, X as XIcon } from 'lucide-react'
 import { ledgerAPI, type LedgerRow } from '@/api/leaveClient'
+import { useAuthStore } from '@/store/auth'
 
 /**
  * 연차휴가 관리대장 — 엑셀 시트를 그대로 화면으로.
@@ -20,18 +21,51 @@ import { ledgerAPI, type LedgerRow } from '@/api/leaveClient'
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1)
 
 export default function AnnualLeaveLedger() {
+  const { user } = useAuthStore()
+  // 직접 입력은 ADMIN·시설장만 — 수기 장부의 과거 사용분을 올릴 때 쓴다
+  const canEdit = user?.role === 'ADMIN' || user?.position === '시설장'
   const [year, setYear] = useState(new Date().getFullYear())
+  // 월 칸 클릭 → 그 달 사용 내역 편집
+  const [cell, setCell] = useState<{ row: LedgerRow; month: number } | null>(null)
+  const [dayInput, setDayInput] = useState('')
+  const [busy, setBusy] = useState(false)
   const [rows, setRows] = useState<LedgerRow[]>([])
   const [monthNow, setMonthNow] = useState(0)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  const load = () => {
     setLoading(true)
     ledgerAPI.get(year)
-      .then(r => { setRows(r.rows); setMonthNow(r.month_now) })
+      .then(r => {
+        setRows(r.rows); setMonthNow(r.month_now)
+        // 편집 중인 칸이 있으면 새 데이터로 갱신
+        setCell(c => c ? { ...c, row: r.rows.find(x => x.staff_id === c.row.staff_id) ?? c.row } : c)
+      })
       .catch(() => setRows([]))
       .finally(() => setLoading(false))
-  }, [year])
+  }
+  useEffect(load, [year])
+
+  const addManual = async () => {
+    if (!cell || !dayInput) return
+    const d = Number(dayInput)
+    const last = new Date(year, cell.month, 0).getDate()
+    if (!(d >= 1 && d <= last)) { alert(`1~${last} 사이의 일자를 넣어주세요.`); return }
+    setBusy(true)
+    try {
+      await ledgerAPI.addManual(cell.row.staff_id, `${year}-${String(cell.month).padStart(2, '0')}-${String(d).padStart(2, '0')}`)
+      setDayInput(''); load()
+    } catch (e: any) { alert(e?.response?.data?.detail ?? '기록 실패') }
+    finally { setBusy(false) }
+  }
+  const removeManual = async (date: string) => {
+    if (!cell) return
+    if (!confirm(`${cell.row.name} · ${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))} 연차 기록을 지울까요?`)) return
+    setBusy(true)
+    try { await ledgerAPI.removeManual(cell.row.staff_id, date); load() }
+    catch (e: any) { alert(e?.response?.data?.detail ?? '삭제 실패') }
+    finally { setBusy(false) }
+  }
 
   const th = 'px-2 py-1.5 text-[11px] font-bold text-gray-500 bg-gray-50 border border-gray-200 whitespace-nowrap'
   const td = 'px-2 py-1.5 text-xs border border-gray-100 text-center whitespace-nowrap'
@@ -126,11 +160,13 @@ export default function AnnualLeaveLedger() {
                     const missed = !blocked && uses.length === 0 && monthNow > 0 && m < monthNow &&
                       !!r.hire_date && `${year}-${String(m).padStart(2, '0')}` >= r.hire_date.slice(0, 7)
                     return (
-                      <td key={m} className={`${td} ${m === monthNow ? 'bg-indigo-50/40' : ''} ${
+                      <td key={m}
+                        onClick={canEdit && !blocked ? () => { setCell({ row: r, month: m }); setDayInput('') } : undefined}
+                        className={`${td} ${canEdit && !blocked ? 'cursor-pointer hover:ring-2 hover:ring-inset hover:ring-emerald-300' : ''} ${m === monthNow ? 'bg-indigo-50/40' : ''} ${
                         blocked ? 'bg-violet-50 text-violet-600 font-bold'
                         : uses.length ? 'text-emerald-700 font-semibold'
                         : missed ? 'text-gray-300' : 'text-gray-200'}`}
-                        title={blocked ? '연차 사용불가월' : uses.length ? uses.join(', ') : missed ? '사용 없음' : ''}>
+                        title={blocked ? '연차 사용불가월' : (uses.length ? uses.join(', ') + ' — ' : '') + (canEdit ? '클릭해서 직접 입력' : uses.length ? '' : missed ? '사용 없음' : '')}>
                         {blocked ? '★' : uses.length ? fmtUse(uses) : missed ? 'X' : ''}
                       </td>
                     )
@@ -153,6 +189,44 @@ export default function AnnualLeaveLedger() {
         <span className="text-red-500 font-semibold">촉진제 — 이월 없음 · 촉진 통지는 서면·개별(일괄 연말 공지는 효력 없음)</span>
         <span className="text-gray-400">1년 이상: 1차 7/1~7/10 · 2차 10/31까지 · 12/31 소멸 — 1년 미만: 입사 1년 기준 역산</span>
       </div>
+      {cell && (
+        <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={() => setCell(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-sm font-bold text-gray-800">{cell.row.name} · {year}년 {cell.month}월 연차</h3>
+              <button onClick={() => setCell(null)} className="ml-auto text-gray-300 hover:text-gray-500"><XIcon size={16} /></button>
+            </div>
+            <p className="text-xs text-gray-400 mb-3">직접 입력한 기록은 그 날짜 근무표에 休로 적힙니다.</p>
+
+            {(cell.row.used_by_month[String(cell.month)] ?? []).length > 0 ? (
+              <ul className="space-y-1 mb-3">
+                {(cell.row.used_by_month[String(cell.month)] ?? []).map(d => (
+                  <li key={d} className="flex items-center gap-2 text-sm text-gray-700 bg-emerald-50/60 border border-emerald-100 rounded-lg px-2.5 py-1.5">
+                    <span className="font-semibold">{Number(d.slice(5, 7))}월 {Number(d.slice(8, 10))}일</span>
+                    <button onClick={() => removeManual(d)} disabled={busy}
+                      className="ml-auto text-gray-300 hover:text-red-500" title="기록 지우기 (신청 기반 사용은 신청에서 처리)">
+                      <XIcon size={14} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-gray-300 mb-3">이 달 사용 기록 없음</p>
+            )}
+
+            <div className="flex gap-1.5">
+              <input type="number" min={1} max={31} value={dayInput} onChange={e => setDayInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addManual()}
+                placeholder={`${cell.month}월의 일자 (예: 15)`}
+                className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-xl" />
+              <button onClick={addManual} disabled={busy || !dayInput}
+                className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold disabled:opacity-40">
+                {busy ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />} 기록
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

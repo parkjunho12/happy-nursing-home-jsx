@@ -43,6 +43,8 @@ import NaverAdsKeywordDetailPage from './pages/admin/NaverAdsKeywordDetailPage'
 import VolunteersPage from './pages/admin/VolunteersPage'
 import RecruitmentPage from './pages/admin/RecruitmentPage'
 import SchedulePage from './pages/admin/SchedulePage'
+import IncidentsPage from './pages/admin/IncidentsPage'
+import MonthlyReportPage from './pages/admin/MonthlyReportPage'
 import ExpensePage from './pages/admin/ExpensePage'
 import FacilityNewsPage from './pages/admin/FacilityNewsPage'
 import StaffHrPage from './pages/admin/StaffHrPage'
@@ -241,6 +243,8 @@ function App() {
             <Route path="work-schedule"           element={<ManagerRoute><WorkSchedulePage /></ManagerRoute>} />
             <Route path="my-schedule"             element={<MySchedulePage />} />
             <Route path="handover"                 element={<HandoverAiPage />} />
+            <Route path="incidents"                element={<ManagerRoute><IncidentsPage /></ManagerRoute>} />
+            <Route path="monthly-report"           element={<StaffAdminRoute><MonthlyReportPage /></StaffAdminRoute>} />
             <Route path="handover/:id"             element={<HandoverDetailPage />} />
             <Route path="resident-docs"            element={<SocialWorkerRoute><ResidentDocsPage /></SocialWorkerRoute>} />
             <Route path="education"                element={<StaffEducationPage />} />

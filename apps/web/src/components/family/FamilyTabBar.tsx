@@ -2,10 +2,11 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Images, Megaphone } from 'lucide-react'
+import { Images, Megaphone, CalendarHeart } from 'lucide-react'
 
 const TABS = [
   { href: '/family/albums', label: '앨범', icon: Images },
+  { href: '/family/visit', label: '면회 예약', icon: CalendarHeart },
   { href: '/family/news', label: '시설소식', icon: Megaphone },
 ]
 

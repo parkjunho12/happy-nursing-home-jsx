@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
-from app.models.staffing import InternalNotice
+from app.models.staffing import InternalNotice, NoticeAck
 from app.schemas.response import ApiResponse
 from app.services.storage import save_upload
 import os as _os
@@ -76,12 +76,70 @@ class NoticeBody(BaseModel):
 
 @router.get("")
 def list_notices(limit: int = Query(20), db: Session = Depends(get_db),
-                 _: User = Depends(get_current_user)):
+                 current_user: User = Depends(get_current_user)):
     rows = (db.query(InternalNotice)
             .filter(InternalNotice.active == True)  # noqa: E712
             .order_by(InternalNotice.pinned.desc(), InternalNotice.created_at.desc())
             .limit(max(1, min(limit, 100))).all())
-    return ApiResponse(success=True, data=[_view(n) for n in rows])
+    # 읽음 확인 — 중요·긴급 공지의 "봤어요" 여부. 실패해도 목록은 산다.
+    ack_count: dict = {}
+    my_acked: set = set()
+    try:
+        ids = [n.id for n in rows]
+        if ids:
+            from sqlalchemy import func
+            for nid, cnt in (db.query(NoticeAck.notice_id, func.count(NoticeAck.id))
+                             .filter(NoticeAck.notice_id.in_(ids))
+                             .group_by(NoticeAck.notice_id).all()):
+                ack_count[nid] = cnt
+            uid = getattr(current_user, "id", None)
+            if uid:
+                my_acked = {a.notice_id for a in db.query(NoticeAck).filter(
+                    NoticeAck.notice_id.in_(ids), NoticeAck.user_id == uid).all()}
+    except Exception:
+        pass
+    out = []
+    for n in rows:
+        v = _view(n)
+        v["ack_count"] = ack_count.get(n.id, 0)
+        v["my_acked"] = n.id in my_acked
+        out.append(v)
+    return ApiResponse(success=True, data=out)
+
+
+@router.post("/{nid}/ack")
+def ack_notice(nid: str, db: Session = Depends(get_db),
+               current_user: User = Depends(get_current_user)):
+    """'확인했습니다' — 한 번 누르면 끝, 중복 누름은 조용히 무시한다."""
+    n = db.query(InternalNotice).filter(InternalNotice.id == nid).first()
+    if not n:
+        raise HTTPException(404, "공지를 찾을 수 없습니다.")
+    uid = getattr(current_user, "id", None)
+    if not db.query(NoticeAck).filter(NoticeAck.notice_id == nid,
+                                      NoticeAck.user_id == uid).first():
+        db.add(NoticeAck(notice_id=nid, user_id=uid,
+                         user_name=getattr(current_user, "name", None),
+                         position=getattr(current_user, "position", None)))
+        db.commit()
+    return ApiResponse(success=True, message="확인했습니다.")
+
+
+@router.get("/{nid}/acks")
+def notice_acks(nid: str, db: Session = Depends(get_db),
+                _: User = Depends(_can_write)):
+    """확인 현황 — 누가 봤고 누가 안 봤는지. 관리자가 쫓아다니지 않게."""
+    n = db.query(InternalNotice).filter(InternalNotice.id == nid).first()
+    if not n:
+        raise HTTPException(404, "공지를 찾을 수 없습니다.")
+    acks = (db.query(NoticeAck).filter(NoticeAck.notice_id == nid)
+            .order_by(NoticeAck.created_at.asc()).all())
+    acked_ids = {a.user_id for a in acks}
+    others = [u for u in db.query(User).all() if u.id not in acked_ids]
+    return ApiResponse(success=True, data={
+        "acked": [{"name": a.user_name, "position": a.position,
+                   "at": a.created_at.isoformat() if a.created_at else None} for a in acks],
+        "not_acked": [{"name": u.name, "position": getattr(u, "position", None)} for u in others],
+    })
 
 
 @router.post("", status_code=201)

@@ -138,4 +138,9 @@ export const ledgerAPI = {
   get: (year: number) =>
     apiClient.get(`${BASE}/ledger`, { params: { year } })
       .then(unwrap<{ year: number; month_now: number; rows: LedgerRow[] }>),
+  /** 직접 입력 (ADMIN·시설장) — 그 날짜 근무표에 休를 적는 방식 */
+  addManual: (staff_id: string, date: string) =>
+    apiClient.post(`${BASE}/ledger/manual`, { staff_id, date }).then(r => r.data),
+  removeManual: (staff_id: string, date: string) =>
+    apiClient.delete(`${BASE}/ledger/manual`, { params: { staff_id, date } }).then(r => r.data),
 }

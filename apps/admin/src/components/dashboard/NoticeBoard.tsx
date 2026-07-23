@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Megaphone, Pin, Plus, Loader2, Pencil, Trash2, Send, MessageCircle } from 'lucide-react'
+import { Megaphone, Pin, Plus, Loader2, Pencil, Trash2, Send, MessageCircle, CheckCircle2, X } from 'lucide-react'
 import { useAuthStore } from '@/store/auth'
-import { noticeAPI, NOTICE_LEVEL, noticeImageUrl, type InternalNotice } from '@/api/noticeClient'
+import { noticeAPI, NOTICE_LEVEL, noticeImageUrl, type InternalNotice, type NoticeAckStatus } from '@/api/noticeClient'
 import { isKakaoShareEnabled, shareNotice } from '@/lib/kakaoShare'
 import NoticeModal from '@/components/notices/NoticeModal'
 
@@ -21,12 +21,26 @@ const rel = (iso?: string | null) => {
 /** 내부 공지사항 (직원용) — 읽기: 전 직원 / 작성: ADMIN·시설장 */
 export default function NoticeBoard() {
   const { user } = useAuthStore()
-  const canWrite = user?.role === 'ADMIN' || user?.position === '시설장'
+  const canWrite = user?.role === 'ADMIN' || user?.position === '시설장' || user?.position === '사회복지사'
 
   const [list, setList] = useState<InternalNotice[]>([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<InternalNotice | null | undefined>(undefined)
   const [openId, setOpenId] = useState<string | null>(null)
+  // 읽음 확인 — 중요·긴급 공지의 '확인했습니다'
+  const [ackBusy, setAckBusy] = useState<string | null>(null)
+  const [ackView, setAckView] = useState<{ title: string; data: NoticeAckStatus } | null>(null)
+
+  const doAck = async (n: InternalNotice) => {
+    setAckBusy(n.id)
+    try { await noticeAPI.ack(n.id); load() }
+    catch { alert('확인 처리에 실패했습니다.') }
+    finally { setAckBusy(null) }
+  }
+  const showAcks = async (n: InternalNotice) => {
+    try { setAckView({ title: n.title, data: await noticeAPI.acks(n.id) }) }
+    catch { alert('확인 현황을 불러오지 못했습니다.') }
+  }
 
   const load = () => {
     setLoading(true)
@@ -77,9 +91,23 @@ export default function NoticeBoard() {
                       {open && n.content && (
                         <p className="text-xs text-gray-600 mt-1.5 whitespace-pre-wrap leading-relaxed">{n.content}</p>
                       )}
-                      <p className="text-[10px] text-gray-400 mt-1">
+                      <p className="text-[10px] text-gray-400 mt-1 flex items-center gap-1.5">
                         {n.author_name ?? '관리자'} · {rel(n.created_at)}
+                        {n.level !== 'info' && canWrite && (
+                          <button onClick={e => { e.stopPropagation(); showAcks(n) }}
+                            className="font-bold text-emerald-600 hover:underline">확인 {n.ack_count ?? 0}명 ›</button>
+                        )}
+                        {n.level !== 'info' && !canWrite && n.my_acked && (
+                          <span className="font-bold text-emerald-600 inline-flex items-center gap-0.5"><CheckCircle2 size={10} /> 확인함</span>
+                        )}
                       </p>
+                      {open && n.level !== 'info' && !n.my_acked && (
+                        <button onClick={e => { e.stopPropagation(); doAck(n) }} disabled={ackBusy === n.id}
+                          className="mt-2 w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold disabled:opacity-50 inline-flex items-center justify-center gap-1.5">
+                          {ackBusy === n.id ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                          확인했습니다
+                        </button>
+                      )}
                     </div>
                     {open && (
                       <div className="flex items-center gap-0.5 shrink-0" onClick={e => e.stopPropagation()}>
@@ -123,6 +151,35 @@ export default function NoticeBoard() {
 
       {editing !== undefined && (
         <NoticeModal notice={editing} onClose={() => setEditing(undefined)} onSaved={() => { setEditing(undefined); load() }} />
+      )}
+
+      {ackView && (
+        <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={() => setAckView(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm max-h-[80vh] overflow-y-auto p-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-3">
+              <h3 className="text-sm font-bold text-gray-800 truncate">확인 현황 — {ackView.title}</h3>
+              <button onClick={() => setAckView(null)} className="ml-auto text-gray-300 hover:text-gray-500"><X size={16} /></button>
+            </div>
+            <p className="text-xs font-bold text-emerald-600 mb-1.5">확인 {ackView.data.acked.length}명</p>
+            <ul className="space-y-1 mb-3">
+              {ackView.data.acked.map((a, i) => (
+                <li key={i} className="text-xs text-gray-600 flex items-center gap-1.5">
+                  <CheckCircle2 size={11} className="text-emerald-500 shrink-0" />
+                  {a.name}{a.position ? ` (${a.position})` : ''}
+                  {a.at && <span className="text-gray-300 ml-auto">{new Date(a.at).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}</span>}
+                </li>
+              ))}
+              {ackView.data.acked.length === 0 && <li className="text-xs text-gray-300">아직 없음</li>}
+            </ul>
+            <p className="text-xs font-bold text-red-500 mb-1.5">미확인 {ackView.data.not_acked.length}명</p>
+            <ul className="space-y-1">
+              {ackView.data.not_acked.map((a, i) => (
+                <li key={i} className="text-xs text-gray-500">{a.name}{a.position ? ` (${a.position})` : ''}</li>
+              ))}
+              {ackView.data.not_acked.length === 0 && <li className="text-xs text-emerald-600 font-semibold">전원 확인 완료 🎉</li>}
+            </ul>
+          </div>
+        </div>
       )}
     </section>
   )

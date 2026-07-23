@@ -655,6 +655,73 @@ def _promotion_schedule(hire: str, year: int, service_year: int) -> dict:
     }
 
 
+class LedgerManualBody(BaseModel):
+    staff_id: str
+    date: str    # YYYY-MM-DD
+
+
+@router.post("/ledger/manual")
+def ledger_manual_add(body: LedgerManualBody, db: Session = Depends(get_db),
+                      current_user: User = Depends(_manager)):
+    """연차 대장 직접 입력 (ADMIN·시설장) — 수기 기록·과거 사용분을 올린다.
+
+    별도 장부를 만들지 않고 그 날짜 근무표에 休를 적는다.
+    대장 사용 집계가 근무표 休를 읽으므로 한 곳만 진실이 된다."""
+    if not _D.match(body.date):
+        raise HTTPException(400, "날짜 형식이 잘못됐습니다.")
+    st = db.query(LtcStaffMember).filter(LtcStaffMember.id == body.staff_id).first()
+    if not st:
+        raise HTTPException(404, "직원을 찾을 수 없습니다.")
+    hire = (st.hire_date or "")[:10]
+    if int(body.date[5:7]) in _blocked_months(hire, int(body.date[:4])):
+        raise HTTPException(400, "입사 첫 달(★)에는 연차를 쓸 수 없습니다.")
+    ym = body.date[:7]
+    w = db.query(WorkSchedule).filter(WorkSchedule.year_month == ym).first()
+    if not w:
+        w = WorkSchedule(year_month=ym, data={})
+        db.add(w)
+    data = dict(w.data or {})
+    row = dict(data.get(body.staff_id) or {})
+    day = str(int(body.date[8:10]))
+    if row.get(day) == "休":
+        raise HTTPException(409, "이미 그날 연차(休)가 기록돼 있습니다.")
+    row[day] = "休"
+    data[body.staff_id] = row
+    w.data = data                              # JSON 재할당으로 변경 감지
+    db.commit()
+    return ApiResponse(success=True, message=f"{st.name} {body.date} 연차를 기록했습니다.")
+
+
+@router.delete("/ledger/manual")
+def ledger_manual_remove(staff_id: str, date: str, db: Session = Depends(get_db),
+                         current_user: User = Depends(_manager)):
+    """대장에서 연차 기록 제거 — 근무표의 休 칸을 지운다.
+
+    승인된 '신청'에서 온 사용은 여기서 못 지운다(신청 이력이 남아 다시 집계됨)."""
+    if not _D.match(date):
+        raise HTTPException(400, "날짜 형식이 잘못됐습니다.")
+    # 신청 기반 사용인지 먼저 확인 — 지워도 되살아나는 헛수고를 막는다
+    req = db.query(LeaveRequest).filter(
+        LeaveRequest.staff_id == staff_id, LeaveRequest.date == date,
+        LeaveRequest.status == "approved",
+        (LeaveRequest.kind == "연차") | ((LeaveRequest.kind == "희망휴무") & (LeaveRequest.use_annual == True)),  # noqa: E712
+    ).first()
+    if req:
+        raise HTTPException(409,
+            "이 날짜는 승인된 신청에서 온 사용 기록입니다. 신청 자체를 반려/취소 처리해야 합니다.")
+    w = db.query(WorkSchedule).filter(WorkSchedule.year_month == date[:7]).first()
+    day = str(int(date[8:10]))
+    if not w or ((w.data or {}).get(staff_id) or {}).get(day) != "休":
+        raise HTTPException(404, "그날 연차(休) 기록이 없습니다.")
+    data = dict(w.data or {})
+    row = dict(data.get(staff_id) or {})
+    row.pop(day, None)
+    data[staff_id] = row
+    w.data = data
+    db.commit()
+    return ApiResponse(success=True, message="연차 기록을 지웠습니다.")
+
+
 @router.get("/ledger")
 def annual_leave_ledger(year: int, db: Session = Depends(get_db), _: User = Depends(_hr_viewer)):
     """연차휴가 관리대장 — 시트로 관리하던 것을 그대로 화면에 올린 것.

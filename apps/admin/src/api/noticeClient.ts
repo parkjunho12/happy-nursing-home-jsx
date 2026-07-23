@@ -23,6 +23,13 @@ export interface InternalNotice {
   content_images?: string[] | null
   author_name?: string | null
   created_at?: string | null
+  ack_count?: number     // 확인한 직원 수
+  my_acked?: boolean     // 내가 확인했는지
+}
+
+export interface NoticeAckStatus {
+  acked: { name: string; position?: string | null; at?: string | null }[]
+  not_acked: { name: string; position?: string | null }[]
 }
 export interface NoticeInput {
   title?: string
@@ -53,6 +60,8 @@ export const NOTICE_LEVEL: Record<NoticeLevel, { label: string; cls: string; dot
 
 export const noticeAPI = {
   list: (limit = 20) => apiClient.get(BASE, { params: { limit } }).then(unwrap<InternalNotice[]>),
+  ack: (id: string) => apiClient.post(`${BASE}/${id}/ack`).then(r => r.data),
+  acks: (id: string) => apiClient.get(`${BASE}/${id}/acks`).then(unwrap<NoticeAckStatus>),
   create: (b: NoticeInput) => apiClient.post(BASE, b).then(unwrap<CreatedNotice>),
   update: (id: string, b: NoticeInput) => apiClient.patch(`${BASE}/${id}`, b).then(unwrap<InternalNotice>),
   remove: (id: string) => apiClient.delete(`${BASE}/${id}`).then(r => r.data),
