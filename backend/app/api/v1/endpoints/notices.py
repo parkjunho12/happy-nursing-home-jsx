@@ -98,10 +98,13 @@ def list_notices(limit: int = Query(20), db: Session = Depends(get_db),
                     NoticeAck.notice_id.in_(ids), NoticeAck.user_id == uid).all()}
     except Exception:
         pass
+    is_admin = (current_user.role.value if hasattr(current_user.role, "value")
+                else str(current_user.role)) == "ADMIN"
     out = []
     for n in rows:
         v = _view(n)
-        v["ack_count"] = ack_count.get(n.id, 0)
+        if is_admin:
+            v["ack_count"] = ack_count.get(n.id, 0)   # 확인 수는 ADMIN만
         v["my_acked"] = n.id in my_acked
         out.append(v)
     return ApiResponse(success=True, data=out)
@@ -124,10 +127,17 @@ def ack_notice(nid: str, db: Session = Depends(get_db),
     return ApiResponse(success=True, message="확인했습니다.")
 
 
+def _admin_only(current_user: User = Depends(get_current_user)) -> User:
+    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    if role != "ADMIN":
+        raise HTTPException(403, "확인 현황은 관리자만 볼 수 있습니다.")
+    return current_user
+
+
 @router.get("/{nid}/acks")
 def notice_acks(nid: str, db: Session = Depends(get_db),
-                _: User = Depends(_can_write)):
-    """확인 현황 — 누가 봤고 누가 안 봤는지. 관리자가 쫓아다니지 않게."""
+                _: User = Depends(_admin_only)):
+    """확인 현황 — 누가 봤고 누가 안 봤는지. ADMIN 전용."""
     n = db.query(InternalNotice).filter(InternalNotice.id == nid).first()
     if not n:
         raise HTTPException(404, "공지를 찾을 수 없습니다.")
