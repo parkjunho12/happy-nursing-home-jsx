@@ -207,7 +207,6 @@ export function getNavConfig(
         {
           label: '시스템',
           items: [
-            { to: '/eval/users', icon: Users, label: '직원 계정 관리' },
             { to: '/settings', icon: Settings, label: '설정' },
           ],
         },

@@ -7,6 +7,7 @@ import type { LtcStaff } from '@/store/ltc'
 import type { ChecklistItem } from '@/utils/period'
 import { calcAge, isItemDone, daysFromToday } from '@/utils/period'
 import ChecklistDetailModal from '@/components/eval/ChecklistDetailModal'
+import { STAFF_POSITIONS } from '@/constants/positions'
 
 type Tab = 'active' | 'resigned' | 'all'
 
@@ -268,8 +269,14 @@ function StaffForm({ existing, onClose }: { existing?: LtcStaff; onClose:()=>voi
           </div>
           <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">입사일 *</label><DateField className={ic} value={form.hireDate} onChange={v=>setForm({...form,hireDate:v})} clearable={false}/></div>
           <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">직종 *</label>
-            <input list="staff-pos" className={ic} value={form.position} onChange={e=>setForm({...form,position:e.target.value})} placeholder="예: 요양보호사"/>
-            <datalist id="staff-pos">{['시설장','사무국장','대표','이사','사회복지사','간호사','간호팀장','간호조무사','물리치료사','요양팀장','요양보호사','조리원','영양사'].map(p=><option key={p} value={p}/>)}</datalist>
+            <select className={ic} value={form.position} onChange={e=>setForm({...form,position:e.target.value})}>
+              <option value="">직종 선택</option>
+              {/* 목록에 없는 옛 표기는 그대로 보여줘 수정 중에 값이 날아가지 않게 */}
+              {form.position && !(STAFF_POSITIONS as readonly string[]).includes(form.position) && (
+                <option value={form.position}>{form.position}</option>
+              )}
+              {STAFF_POSITIONS.map(p=><option key={p} value={p}>{p}</option>)}
+            </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">주민번호</label><input className={ic} value={form.residentNo} onChange={e=>setForm({...form,residentNo:e.target.value})} placeholder="000000-0000000"/></div>

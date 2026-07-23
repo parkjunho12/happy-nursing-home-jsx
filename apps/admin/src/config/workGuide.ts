@@ -21,7 +21,7 @@ export const ROLE_META: Record<GuideRole, { label: string; position: string; des
   social_worker:  { label: '사회복지사',  position: '사회복지사',  desc: '입소·상담·서류·보호자 소통 중심', accent: 'teal' },
   nurse:          { label: '간호사',      position: '간호사',      desc: '건강상태 확인·기록 검수 중심',   accent: 'rose' },
   nurse_assistant:{ label: '간호조무사',  position: '간호조무사',  desc: '측정·기록·보조 업무 중심',       accent: 'indigo' },
-  caregiver:      { label: '요양보호사',  position: '요양보호사',  desc: '일상생활 지원 기록 중심',        accent: 'orange' },
+  caregiver:      { label: '요양보호사',  position: '요양보호사',  desc: '오늘 할 일 · 내 근무표 · 휴무 신청', accent: 'orange' },
 }
 
 /** App.tsx 에 실제 존재하는 라우트 (가이드 바로가기 검증용) */
@@ -30,7 +30,7 @@ export const EXISTING_ROUTES = new Set<string>([
   '/schedule', '/facility-news', '/volunteers', '/recruitment', '/enteral', '/expense',
   '/eval/checklist', '/eval/calendar', '/eval/albums', '/eval/workload',
   '/eval/record-audit', '/eval/record-guide', '/eval/ai-review', '/eval/users',
-  '/history', '/reviews', '/settings', '/guide', '/work-guide',
+  '/history', '/reviews', '/settings', '/guide', '/work-guide', '/my-schedule',
 ])
 
 export interface RoleGuideItem {
@@ -59,7 +59,7 @@ export interface GuideFlow { id: string; roles: GuideRole[]; title: string; step
 export const GUIDE_ITEMS: RoleGuideItem[] = [
   /* ── 공통(전 직종) ── */
   {
-    id: 'checklist', roles: ['social_worker', 'nurse', 'nurse_assistant', 'caregiver'],
+    id: 'checklist', roles: ['social_worker', 'nurse', 'nurse_assistant'],
     category: '매일', title: '오늘 할 일 · 기록 체크리스트',
     description: '오늘 해야 할 업무를 확인하고 완료 체크합니다. 할 일이 생기면 바로 티켓으로 등록할 수 있습니다.',
     route: '/eval/checklist', menuLabel: '체크리스트',
@@ -68,21 +68,21 @@ export const GUIDE_ITEMS: RoleGuideItem[] = [
     relatedRoles: ['전 직종'], order: 10, isActive: true,
   },
   {
-    id: 'calendar', roles: ['social_worker', 'nurse', 'nurse_assistant', 'caregiver'],
+    id: 'calendar', roles: ['social_worker', 'nurse', 'nurse_assistant'],
     category: '매일', title: '체크 캘린더로 주기 업무 확인',
     description: '일별·주별·월별 반복 업무가 언제 도래하는지 달력으로 확인합니다.',
     route: '/eval/calendar', menuLabel: '체크 캘린더',
     timing: '주 1회 이상', order: 20, isActive: true,
   },
   {
-    id: 'schedule', roles: ['social_worker', 'nurse', 'nurse_assistant', 'caregiver'],
+    id: 'schedule', roles: ['social_worker', 'nurse', 'nurse_assistant'],
     category: '매일', title: '일정 캘린더',
     description: '시설 일정, 입소일, 어르신 서류 일시(계약서·계획서·평가), 직원 재계약일을 한 곳에서 봅니다.',
     route: '/schedule', menuLabel: '일정 캘린더',
     timing: '매일 아침', order: 30, isActive: true,
   },
   {
-    id: 'album', roles: ['social_worker', 'nurse', 'nurse_assistant', 'caregiver'],
+    id: 'album', roles: ['social_worker', 'nurse', 'nurse_assistant'],
     category: '소통', title: '보호자 앨범에 사진 올리기',
     description: '어르신 활동 사진을 올려 보호자에게 공유합니다.',
     route: '/eval/albums', menuLabel: '보호자 앨범',
@@ -91,7 +91,7 @@ export const GUIDE_ITEMS: RoleGuideItem[] = [
     order: 40, isActive: true,
   },
   {
-    id: 'expense', roles: ['social_worker', 'nurse', 'nurse_assistant', 'caregiver'],
+    id: 'expense', roles: ['social_worker', 'nurse', 'nurse_assistant'],
     category: '회계', title: '지출결의 올리기',
     description: '구매·결제한 내역과 영수증을 등록해 결재를 요청합니다.',
     route: '/expense', menuLabel: '지출결의',
@@ -326,31 +326,50 @@ export const GUIDE_ITEMS: RoleGuideItem[] = [
     relatedRoles: ['간호사'], order: 330, isActive: true,
   },
 
-  /* ── 요양보호사 ── */
+  /* ── 요양보호사 — 50대 이상 선생님 기준: 카드 5장, 짧고 쉬운 말로 ── */
+  {
+    id: 'cg-my-schedule', roles: ['caregiver'],
+    category: '근무', title: '내 근무표 보기',
+    description: '오늘 내가 무슨 근무인지, 이번 달 근무가 어떻게 되는지 봅니다. 근무표가 새로 나오면 알림이 옵니다.',
+    route: '/my-schedule', menuLabel: '내 근무표',
+    timing: '매일 아침 · 근무표 알림이 왔을 때',
+    order: 395, isActive: true,
+  },
+  {
+    id: 'cg-leave', roles: ['caregiver'],
+    category: '근무', title: '연차 · 쉬고 싶은 날 신청',
+    description: '내 근무표 화면 아래에서 신청합니다. 연차는 근무가 있는 날을 골라 서명하면 되고, 쉬고 싶은 날(희망휴무)은 한 달에 2일까지 미리 낼 수 있어요. 동료와 근무를 바꾸는 것(맞교대)도 여기서 합니다.',
+    route: '/my-schedule', menuLabel: '내 근무표',
+    timing: '다음 달 근무표 나오기 전까지',
+    caution: '신청만 하면 끝이 아니에요. 관리자 승인이 나야 확정입니다. 승인되면 알림이 와요.',
+    order: 396, isActive: true,
+  },
   {
     id: 'cg-record', roles: ['caregiver'],
-    category: '매일 기록', title: '급여제공기록 (일상생활 지원) 작성',
-    description: '식사·수분·배변·체위변경·목욕·구강관리 등 오늘 수행한 지원을 체크리스트에서 완료 기록합니다.',
+    category: '매일 기록', title: '오늘 한 일 체크하기',
+    description: '식사, 물 드리기, 기저귀, 자세 바꿔드리기, 목욕, 양치 — 어르신께 해드린 일을 그때그때 체크합니다.',
     route: '/eval/checklist', menuLabel: '체크리스트',
-    timing: '수행 직후 (근무 종료 전 반드시 마감)',
-    caution: '기억에 의존해 몰아서 쓰지 말고 수행 직후 기록하세요. 누락은 검수에서 지적됩니다.',
-    relatedRoles: ['사회복지사', '간호사'], order: 400, isActive: true,
+    timing: '해드린 직후 바로 · 퇴근 전에 빠진 것 없나 한 번 더',
+    caution: '나중에 몰아서 하면 빠뜨리기 쉬워요. 하나 끝나면 바로 체크하세요.',
+    order: 400, isActive: true,
   },
   {
     id: 'cg-report', roles: ['caregiver'],
-    category: '보고', title: '이상 있으면 바로 보고하기',
-    description: '낙상, 피부 상처, 식사 거부, 발열 등 평소와 다르면 간호사에게 즉시 알리고 체크리스트에 남깁니다.',
+    category: '보고', title: '어르신이 평소와 다르면 바로 알리기',
+    description: '넘어지셨거나, 살갗에 상처가 있거나, 식사를 안 하시거나, 열이 나면 — 먼저 간호사 선생님께 말로 알리고, 그다음 체크리스트에 남깁니다.',
     route: '/eval/checklist', menuLabel: '체크리스트',
-    timing: '발견 즉시',
-    caution: '"괜찮겠지"하고 넘기지 마세요. 보고가 우선입니다.',
-    relatedRoles: ['간호사', '간호조무사'], order: 410, isActive: true,
+    timing: '발견하자마자',
+    caution: '"괜찮겠지" 하고 넘기지 마세요. 말로 알리는 게 제일 먼저입니다.',
+    order: 410, isActive: true,
   },
   {
     id: 'cg-album', roles: ['caregiver'],
     category: '소통', title: '어르신 사진 올리기',
-    description: '프로그램·활동 사진을 보호자 앨범에 올립니다.',
+    description: '프로그램이나 활동 사진을 올리면 보호자 가족들이 앱에서 바로 봅니다.',
     route: '/eval/albums', menuLabel: '보호자 앨범',
-    timing: '활동 직후', order: 420, isActive: true,
+    timing: '활동 끝난 직후',
+    caution: '다른 어르신 얼굴이 같이 나온 사진은 올리기 전에 한 번 더 확인하세요.',
+    order: 420, isActive: true,
   },
 ]
 
@@ -437,20 +456,21 @@ export const GUIDE_FLOWS: GuideFlow[] = [
     ],
   },
   {
-    id: 'flow-daily-care', roles: ['caregiver'], title: '요양보호사 하루 업무',
+    id: 'flow-daily-care', roles: ['caregiver'], title: '하루 순서 — 이대로만 하면 됩니다',
     steps: [
-      { label: '출근 후 오늘 할 일 확인', route: '/eval/checklist', menuLabel: '체크리스트' },
-      { label: '일상생활 지원 수행 → 수행 직후 바로 완료 체크', route: '/eval/checklist', menuLabel: '체크리스트' },
-      { label: '이상 발견 시 간호사에게 보고 + 티켓 등록', route: '/eval/checklist', menuLabel: '체크리스트' },
-      { label: '활동 사진 앨범 등록', route: '/eval/albums', menuLabel: '보호자 앨범' },
-      { label: '퇴근 전 미완료 항목 마감', route: '/eval/checklist', menuLabel: '체크리스트' },
+      { label: '출근하면 내 근무표에서 오늘 근무 확인', route: '/my-schedule', menuLabel: '내 근무표' },
+      { label: '오늘 할 일 목록 열어보기', route: '/eval/checklist', menuLabel: '체크리스트' },
+      { label: '어르신께 해드린 일은 그때그때 바로 체크', route: '/eval/checklist', menuLabel: '체크리스트' },
+      { label: '평소와 다른 점이 보이면 간호사 선생님께 먼저 말하기', note: '말로 알리는 게 먼저, 기록은 그다음' },
+      { label: '활동 사진이 있으면 앨범에 올리기', route: '/eval/albums', menuLabel: '보호자 앨범' },
+      { label: '퇴근 전, 체크 안 한 것 없나 한 번 더 보기', route: '/eval/checklist', menuLabel: '체크리스트' },
     ],
   },
   {
     id: 'flow-abnormal', roles: ['nurse', 'nurse_assistant', 'caregiver'], title: '이상 상태 발생 시',
     steps: [
       { label: '① 즉시 간호사(또는 상급자)에게 구두 보고', note: '기록보다 보고가 먼저' },
-      { label: '② 체크리스트에 티켓으로 상황 기록', route: '/eval/checklist', menuLabel: '체크리스트' },
+      { label: '② 체크리스트에 무슨 일이 있었는지 기록', route: '/eval/checklist', menuLabel: '체크리스트' },
       { label: '③ 필요 시 보호자 통보 (상담 관리에 이력)', route: '/contacts', menuLabel: '상담 관리' },
       { label: '④ 후속 조치 완료 후 체크 마감', route: '/eval/checklist', menuLabel: '체크리스트' },
     ],

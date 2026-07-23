@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, CalendarDays, Loader2, Sun, Moon, Coffee } from 'lucide-react'
 import { workScheduleAPI, type MySchedule } from '@/api/workScheduleClient'
 import { CODE_MAP, extraHoursOf, splitTimeRange } from '@/utils/shiftCodes'
+import LeaveRequestCard from '@/components/schedule/LeaveRequestCard'
+import SwapRequestCard from '@/components/schedule/SwapRequestCard'
 
 /**
  * 내 근무표 — 선생님들이 휴대폰으로 자기 근무만 확인하는 화면.
@@ -184,6 +186,9 @@ export default function MySchedulePage() {
               </div>
             ))}
           </div>
+
+          <LeaveRequestCard />
+          <SwapRequestCard />
 
           {/* 이번 달에 실제로 등장하는 코드만 설명 */}
           <div className="mt-3 rounded-2xl bg-white border border-gray-100 p-3">

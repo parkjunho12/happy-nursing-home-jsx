@@ -24,7 +24,7 @@ from app.schemas.response import ApiResponse
 router = APIRouter()
 
 _KST = timezone(timedelta(hours=9))
-CATEGORIES = ["방문상담", "외부방문", "회의", "행사", "기타"]
+CATEGORIES = ["방문상담", "외부방문", "회의", "행사", "외래·병원", "면회", "외출·외박", "갱신", "퇴소", "기타"]
 
 
 # 모든 일정 수정·삭제 가능(관리자급)

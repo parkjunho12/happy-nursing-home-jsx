@@ -17,7 +17,8 @@ const fmt = (iso?: string | null) => {
 
 export default function InternalNoticesPage() {
   const { user } = useAuthStore()
-  const canWrite = user?.role === 'ADMIN' || user?.position === '시설장'
+  // 등록·수정·템플릿 — 백엔드 _can_write와 동일 기준 (관리자·시설장·사회복지사)
+  const canWrite = user?.role === 'ADMIN' || user?.position === '시설장' || user?.position === '사회복지사'
 
   const [list, setList] = useState<InternalNotice[]>([])
   const [loading, setLoading] = useState(true)

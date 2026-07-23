@@ -89,6 +89,7 @@ function RoleRedirect({ children }: { children: React.ReactNode }) {
     '/eval/checklist',
     '/eval/calendar',
     '/schedule',
+    '/my-schedule',      // 내 근무표 — 빠뜨리면 요양보호사가 열자마자 대시보드로 튕긴다
     '/education',        // 직원 의무교육
     '/guide',
     '/work-guide',
@@ -264,7 +265,7 @@ function App() {
 
             {/* ADMIN 전용 */}
             <Route path="eval/ai-review" element={<ManagerRoute><EvalAIReviewPage /></ManagerRoute>} />
-            <Route path="eval/users"     element={<ManagerRoute><EvalUsersPage /></ManagerRoute>} />
+            <Route path="eval/users"     element={<AdminRoute><EvalUsersPage /></AdminRoute>} />
             <Route path="eval/workload"  element={<ManagerRoute><StaffWorkloadPage /></ManagerRoute>} />
           </Route>
 
