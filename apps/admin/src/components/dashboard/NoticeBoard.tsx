@@ -93,11 +93,12 @@ export default function NoticeBoard() {
                       )}
                       <p className="text-[10px] text-gray-400 mt-1 flex items-center gap-1.5">
                         {n.author_name ?? '관리자'} · {rel(n.created_at)}
-                        {n.level !== 'info' && canWrite && (
+                        {/* 확인 현황(누가 봤는지)은 ADMIN만 — 서버도 동일하게 막는다 */}
+                        {n.level !== 'info' && user?.role === 'ADMIN' && (
                           <button onClick={e => { e.stopPropagation(); showAcks(n) }}
                             className="font-bold text-emerald-600 hover:underline">확인 {n.ack_count ?? 0}명 ›</button>
                         )}
-                        {n.level !== 'info' && !canWrite && n.my_acked && (
+                        {n.level !== 'info' && user?.role !== 'ADMIN' && n.my_acked && (
                           <span className="font-bold text-emerald-600 inline-flex items-center gap-0.5"><CheckCircle2 size={10} /> 확인함</span>
                         )}
                       </p>
