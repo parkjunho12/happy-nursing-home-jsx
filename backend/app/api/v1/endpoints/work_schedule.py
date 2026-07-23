@@ -144,21 +144,11 @@ def my_schedule(month: str = Query(...), db: Session = Depends(get_db),
                 current_user: User = Depends(get_current_user)):
     """로그인한 직원 본인의 한 달 근무 — 관리자 권한 없이 전 직원이 본다.
 
-    편성표는 LtcStaffMember.id 로 저장되므로 로그인 계정과 이름으로 잇는다.
-    동명이인이 있으면 재직자 우선, 그래도 여럿이면 매칭 불가로 안내한다."""
+    계정 관리에서 연동한 직원을 최우선으로, 미연동 계정은 이름 매칭으로 찾는다."""
     if not _YM.match(month or ""):
         raise HTTPException(400, "month 형식은 YYYY-MM 이어야 합니다.")
-    name = (getattr(current_user, "name", None) or "").strip()
-    if not name:
-        raise HTTPException(404, "계정에 이름이 없어 근무표를 찾을 수 없습니다.")
-    rows = db.query(LtcStaffMember).filter(LtcStaffMember.name == name).all()
-    active = [r for r in rows if (getattr(r, "status", "") or "active") == "active"]
-    cand = active or rows
-    if not cand:
-        raise HTTPException(404, "직원 명단에서 이름을 찾지 못했습니다. 관리자에게 문의하세요.")
-    if len(cand) > 1:
-        raise HTTPException(409, "같은 이름의 직원이 여러 명이라 자동으로 연결할 수 없습니다. 관리자에게 문의하세요.")
-    staff = cand[0]
+    from app.services.staff_link import resolve_staff_for_user
+    staff = resolve_staff_for_user(db, current_user)
 
     w = db.query(WorkSchedule).filter(WorkSchedule.year_month == month).first()
     codes = (w.data or {}).get(staff.id, {}) if w else {}

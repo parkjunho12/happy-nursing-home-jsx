@@ -4,9 +4,11 @@ import {
   Users, UserCog, MessageSquare, TrendingUp, Calendar,
   AlertTriangle, CheckCircle2, Clock, ChevronRight,
   LogIn, LogOut, UserPlus, UserMinus, ClipboardList,
-  Receipt, Image as ImageIcon, Inbox, Megaphone, Loader2, Check } from 'lucide-react'
+  Receipt, Image as ImageIcon, Inbox, Megaphone, Loader2, Check , CalendarClock, ArrowLeftRight
+} from 'lucide-react'
 import { dashboardAPI, apiClient } from '@/api/client'
 import { expenseAPI } from '@/api/expenseClient'
+import { leaveAPI, swapAPI } from '@/api/leaveClient'
 import { newsAPI, type FacilityNews } from '@/api/newsClient'
 import { useLtcStore } from '@/store/ltc'
 import { useAuthStore } from '@/store/auth'
@@ -58,7 +60,7 @@ export default function DashboardPage() {
   const canChecklist = can('/eval/checklist')
   const [siteStats, setSiteStats] = useState<DashboardStats | null>(null)
   const [loadingSite, setLoadingSite] = useState(true)
-  const [pending, setPending] = useState<{ expense: number; album: number }>({ expense: 0, album: 0 })
+  const [pending, setPending] = useState<{ expense: number; album: number; leave: number; swap: number }>({ expense: 0, album: 0, leave: 0, swap: 0 })
   const [recentNews, setRecentNews] = useState<FacilityNews[]>([])
 
   const { checklists, occurrences, residents, staffList, loaded, loadAll, toggleComplete, completeOccurrence } = useLtcStore()
@@ -77,16 +79,21 @@ export default function DashboardPage() {
   }
 
   // 크로스 기능 '처리 대기' 카운트 — 권한 없으면 0으로 폴백(대시보드에 영향 없음)
+  const canApproveLeave = authUser?.role === 'ADMIN' || authUser?.position === '시설장'
   const loadPending = async () => {
-    const [exp, alb, news] = await Promise.all([
+    const [exp, alb, news, lv, sw] = await Promise.all([
       can('/expense')
         ? expenseAPI.list({ status: 'pending' }).then(r => r.length).catch(() => 0) : Promise.resolve(0),
       can('/eval/albums')
         ? apiClient.get('/api/v1/admin/pending-media').then((r: any) => (r.data?.data ?? []).length).catch(() => 0) : Promise.resolve(0),
       can('/facility-news')
         ? newsAPI.list().then(rows => rows.filter(n => n.is_published).slice(0, 3)).catch(() => [] as FacilityNews[]) : Promise.resolve([] as FacilityNews[]),
+      canApproveLeave
+        ? leaveAPI.list(undefined, 'pending').then(r => r.length).catch(() => 0) : Promise.resolve(0),
+      canApproveLeave
+        ? swapAPI.list('pending').then(r => r.length).catch(() => 0) : Promise.resolve(0),
     ])
-    setPending({ expense: exp, album: alb })
+    setPending({ expense: exp, album: alb, leave: lv, swap: sw })
     setRecentNews(news)
   }
 
@@ -319,6 +326,8 @@ export default function DashboardPage() {
     { show: can('/expense') && pending.expense > 0, label: '지출결의 승인 대기', value: pending.expense, unit: '건', to: '/expense', icon: Receipt, tone: 'emerald' as const },
     { show: can('/eval/albums') && pending.album > 0, label: '앨범 사진 승인 대기', value: pending.album, unit: '장', to: '/eval/albums', icon: ImageIcon, tone: 'blue' as const },
     { show: can('/contacts') && (siteStats?.pendingContacts ?? 0) > 0, label: '대기 중인 상담', value: siteStats?.pendingContacts ?? 0, unit: '건', to: '/contacts', icon: MessageSquare, tone: 'orange' as const },
+    { show: canApproveLeave && pending.leave > 0, label: '휴무 신청 승인 대기', value: pending.leave, unit: '건', to: '/work-schedule', icon: CalendarClock, tone: 'emerald' as const },
+    { show: canApproveLeave && pending.swap > 0, label: '근무 맞교대 승인 대기', value: pending.swap, unit: '건', to: '/work-schedule', icon: ArrowLeftRight, tone: 'blue' as const },
   ].filter(i => i.show)
 
   const runningTasks = todayTasks.filter(t => t.inProgress).slice(0, 2)
@@ -378,7 +387,7 @@ export default function DashboardPage() {
   const secSchedule = can('/schedule') ? <UpcomingSchedule limit={isMobile ? 4 : 6} days={45} /> : null
 
   // 처리 대기 — 모바일은 비었을 때 렌더하지 않음(빈 카드로 화면 낭비 방지)
-  const hasPendingScope = can('/expense') || can('/eval/albums') || can('/contacts')
+  const hasPendingScope = can('/expense') || can('/eval/albums') || can('/contacts') || canApproveLeave
   const secPending = (!hasPendingScope || (isMobile && pendingItems.length === 0)) ? null : (
     <section>
       <div className="flex items-center gap-2 mb-2">

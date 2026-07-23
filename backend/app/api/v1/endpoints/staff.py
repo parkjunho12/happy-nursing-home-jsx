@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import get_current_user, get_current_admin_user, get_password_hash
+from app.models.eval import LtcStaffMember
 from app.models.user import User, UserRole, ALLOWED_POSITIONS
 
 router = APIRouter()
@@ -130,7 +131,17 @@ def list_users(
     users = db.query(User).order_by(User.name).all()
     if not _is_admin_user(current_user):   # 시설장: ADMIN 계정 제외
         users = [u for u in users if _role_str(u) != "ADMIN"]
-    return {"success": True, "data": [_to_dict(u) for u in users]}
+    # 연동된 직원을 한 번에 붙인다 — 계정 관리 화면의 '직원 연동' 열
+    links = {r.user_id: r for r in
+             db.query(LtcStaffMember).filter(LtcStaffMember.user_id.isnot(None)).all()}
+    out = []
+    for u in users:
+        d = _to_dict(u)
+        st = links.get(u.id)
+        d["staff_link"] = ({"staff_id": st.id, "staff_name": st.name,
+                            "position": st.position} if st else None)
+        out.append(d)
+    return {"success": True, "data": out}
 
 
 # ── 직원 추가 (ADMIN만) ────────────────────────────────────────────────────────
@@ -216,5 +227,46 @@ def delete_user(
     if not _is_admin_user(current_user) and _role_str(u) == "ADMIN":
         raise HTTPException(403, "관리자 계정은 삭제할 수 없습니다.")
     db.delete(u)
+    db.commit()
+    return {"success": True, "data": None}
+
+
+# ── 직원(명단) 연동 — ADMIN 전용 ────────────────────────────────────────────────
+class StaffLinkBody(BaseModel):
+    staff_id: Optional[str] = None    # null이면 해제
+
+
+@router.put("/{user_id}/staff-link")
+def set_staff_link(
+    user_id: str,
+    body: StaffLinkBody,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_admin_user),
+):
+    """계정에 직원(명단)을 연결한다.
+
+    이 연결이 있으면 내 근무표·휴무 신청이 이름 매칭 없이 정확히 그 직원으로 동작한다.
+    규칙: 계정 하나 ↔ 직원 하나. 이미 다른 계정에 연결된 직원은 먼저 해제해야 한다."""
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
+        raise HTTPException(404, "계정을 찾을 수 없습니다.")
+
+    # 이 계정의 기존 연결 해제
+    for prev in db.query(LtcStaffMember).filter(LtcStaffMember.user_id == user_id).all():
+        prev.user_id = None
+
+    if body.staff_id:
+        st = db.query(LtcStaffMember).filter(LtcStaffMember.id == body.staff_id).first()
+        if not st:
+            raise HTTPException(404, "직원을 찾을 수 없습니다.")
+        if st.user_id and st.user_id != user_id:
+            other = db.query(User).filter(User.id == st.user_id).first()
+            raise HTTPException(409,
+                f"'{st.name}' 직원은 이미 다른 계정({getattr(other, 'email', st.user_id)})에 연동돼 있습니다. "
+                f"그쪽 연동을 먼저 해제하세요.")
+        st.user_id = user_id
+        db.commit()
+        return {"success": True,
+                "data": {"staff_id": st.id, "staff_name": st.name, "position": st.position}}
     db.commit()
     return {"success": True, "data": None}

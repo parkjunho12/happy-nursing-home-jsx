@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Printer, Save, Eraser, Loader2, CalendarDays, Wand2, Users, History, Sparkles } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Printer, Save, Eraser, Loader2, CalendarDays, Wand2, Users, History, Sparkles, Inbox } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
 import { workScheduleAPI, type ScheduleData, type ScheduleRow, type HolidayInfo } from '@/api/workScheduleClient'
 import { calcBase, DAILY_HOURS } from '@/utils/baseHours'
@@ -8,6 +8,8 @@ import TeamPanel from '@/components/schedule/TeamPanel'
 import SettlementPanel from '@/components/schedule/SettlementPanel'
 import AuditPanel from '@/components/schedule/AuditPanel'
 import GeneratePickModal from '@/components/schedule/GeneratePickModal'
+import LeaveInboxPanel from '@/components/schedule/LeaveInboxPanel'
+import { leaveAPI, swapAPI } from '@/api/leaveClient'
 import { TEAM_BAND, canJoinTeam } from '@/components/schedule/shared'
 import { planDayShift, interleaveByPosition } from '@/utils/dayShiftPlan'
 import { planMembersMonths, type MonthContext, type MemberMonthPlan } from '@/utils/shiftBalance'
@@ -52,6 +54,14 @@ export default function WorkSchedulePage() {
   const [histOpen, setHistOpen] = useState(false)
   const [pickOpen, setPickOpen] = useState(false)   // 자동 생성 대상 선택
   // 인쇄 대상 선택 — 층별로 나눠 붙이거나 특정 인원만 뽑을 때
+  const [leaveOpen, setLeaveOpen] = useState(false)
+  const [leavePending, setLeavePending] = useState(0)
+  useEffect(() => {
+    Promise.all([
+      leaveAPI.list(undefined, 'pending').catch(() => []),
+      swapAPI.list('pending').catch(() => []),
+    ]).then(([l, s]) => setLeavePending(l.length + s.length))
+  }, [])
   const [printPickOpen, setPrintPickOpen] = useState(false)
   const [printPick, setPrintPick] = useState<Set<string> | null>(null)
   const pendingFull = useRef(false)
@@ -308,7 +318,28 @@ export default function WorkSchedulePage() {
     const groups: Record<string, string[]> = {}
     dayStaff.forEach(s => { (groups[s.pos || '기타'] ||= []).push(s.id) })
     const ordered = interleaveByPosition(groups)
-    const { plan } = planDayShift({ days: days.map(d => d.day), staffIds: ordered, workDays: target })
+
+    // 승인된 희망휴무 — '연차 반영' 건은 승인 시 이미 休로 적혀 있어 여기서 보존만 되면 된다.
+    // 연차 미반영 건: 주간 직원은 그날을 휴무로 우선 배정,
+    // 교대조는 회전을 깰 수 없어 충돌만 알려 관리자가 손대게 한다
+    let preferRest: Record<string, number[]> = {}
+    const hopeConflicts: string[] = []
+    let hopeAnnual = 0
+    try {
+      const hopes = (await leaveAPI.list(ym, 'approved')).filter(h => h.kind === '희망휴무')
+      for (const h of hopes) {
+        const d = Number(h.date.slice(8, 10))
+        if (h.use_annual) { hopeAnnual++; continue }   // 休로 이미 반영 — 생성이 건드리지 않음
+        if (dayStaff.some(s => s.id === h.staff_id)) {
+          (preferRest[h.staff_id] ||= []).push(d)
+        } else {
+          const sm = shiftStaff.find(s => s.id === h.staff_id)
+          if (sm) hopeConflicts.push(`${sm.name} ${d}일`)
+        }
+      }
+    } catch { /* 조회 실패 시 희망휴무 없이 진행 */ }
+
+    const { plan } = planDayShift({ days: days.map(d => d.day), staffIds: ordered, workDays: target, preferRest })
 
     // 교대조 — 정산 시작월부터 이어서 계산해 이번 달 몫을 가져온다
     setBuilding(true)
@@ -364,7 +395,11 @@ export default function WorkSchedulePage() {
       `근무표를 만들었습니다.\n\n` +
       `· 교대조 ${shiftStaff.length}명 — 주주야야휴휴 ${shiftCells}칸\n${summary}\n\n` +
       `· 주간 ${dayStaff.length}명 — 1인 ${target}일(${target * DAILY_HOURS}시간) ${dayCells}칸\n\n` +
-      `연차·반차·병가·경조사는 그대로 두고 나머지는 새로 계산했습니다.\n아래 점검 결과를 확인한 뒤 저장하세요.`
+      `연차·병가·경조사는 그대로 두고 나머지는 새로 계산했습니다.\n아래 점검 결과를 확인한 뒤 저장하세요.` +
+      (hopeAnnual > 0 ? `\n\n· 희망휴무(연차 반영) ${hopeAnnual}건은 이미 休로 들어 있어 그대로 두었습니다.` : '') +
+      (hopeConflicts.length > 0
+        ? `\n\n⚠ 교대조 희망휴무 ${hopeConflicts.length}건은 자동 반영되지 않았습니다:\n   ${hopeConflicts.join(', ')}\n   회전(주주야야휴휴)과 겹치니 필요하면 손으로 조정해주세요.`
+        : '')
     )
   }
 
@@ -424,7 +459,7 @@ export default function WorkSchedulePage() {
     if (e.key === 'ArrowDown') return move(1, 0)
     if (e.key === 'ArrowLeft') return move(0, -1)
     if (e.key === 'ArrowRight' || e.key === 'Tab') return move(0, 1)
-    const KEY: Record<string, string> = { d: 'D', m: 'M', n: 'N', h: '休', o: '대휴', c: '초과휴', a: 'AD', p: 'PD', b: '반' }
+    const KEY: Record<string, string> = { d: 'D', m: 'M', n: 'N', h: '休', o: '대휴', c: '초과휴', a: 'AD', p: 'PD' }
     const code = KEY[e.key.toLowerCase()]
     if (code) { e.preventDefault(); setCell(staff[si].id, days[di].day, code); setSel({ si, di: Math.min(days.length - 1, di + 1) }) }
     if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); setCell(staff[si].id, days[di].day, '') }
@@ -465,6 +500,13 @@ export default function WorkSchedulePage() {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <button onClick={() => setLeaveOpen(true)}
+              className="relative inline-flex items-center gap-1.5 px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">
+              <Inbox className="w-4 h-4" /> 휴무 신청
+              {leavePending > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 text-[10px] font-extrabold bg-amber-500 text-white rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">{leavePending}</span>
+              )}
+            </button>
             <button onClick={() => setTeamOpen(v => !v)} className={`inline-flex items-center gap-1.5 px-3 py-2.5 border rounded-xl text-sm font-semibold ${teamOpen ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
               <Users className="w-4 h-4" /> 조 편성
             </button>
@@ -549,6 +591,22 @@ export default function WorkSchedulePage() {
               {c.code}
             </button>
           ))}
+          <span className="text-gray-200 mx-0.5">|</span>
+          <span className="text-[11px] font-semibold text-gray-400">시간 직접</span>
+          {/* 단축·추가근무를 손으로 넣을 때 — 자주 쓰는 시간대는 칠하기만 하면 된다 */}
+          {['0850~1400', '0850~1600', '0850~1700'].map(t => (
+            <button key={t} onClick={() => setBrush(t)} title={`${extraHoursOf(t)}시간 근무 — D 자리에 칠하면 단축(갚음), 쉬는 날에 칠하면 추가근무`}
+              className={`px-2 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${brush === t ? 'bg-violet-100 text-violet-800 border-violet-300 ring-2 ring-offset-1 ring-violet-200' : 'bg-white border-gray-200 text-gray-500'}`}>
+              {t.replace('~', '–')}<span className="font-normal text-gray-400"> {extraHoursOf(t)}h</span>
+            </button>
+          ))}
+          <button onClick={() => {
+            const t = prompt('근무 시간대 입력 (예: 0850~1500)', '0850~')
+            if (t && extraHoursOf(t) > 0) setBrush(t.trim())
+            else if (t) alert('형식을 읽지 못했습니다. 0850~1500 처럼 입력해주세요.')
+          }} className={`px-2 py-1.5 rounded-lg text-[10px] font-bold border ${brush.includes('~') && !['0850~1400','0850~1600','0850~1700'].includes(brush) ? 'bg-violet-100 text-violet-800 border-violet-300 ring-2 ring-offset-1 ring-violet-200' : 'bg-white border-gray-200 text-gray-500'}`}>
+            기타 시간…
+          </button>
           <button onClick={() => setBrush('')} className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-bold border ${brush === '' ? 'bg-gray-200 text-gray-700 ring-2 ring-offset-1 ring-gray-300' : 'bg-white border-gray-200 text-gray-400'}`}>
             <Eraser className="w-3 h-3" /> 지우기
           </button>
@@ -689,6 +747,7 @@ export default function WorkSchedulePage() {
                             ? `단축 근무 — 초과근무 ${Math.round((DAILY_HOURS - customH) * 10) / 10}시간 갚는 날 (${customH}시간 근무)`
                             : mt ? `${mt.label}${mt.time ? ` ${mt.time}` : ''}` : v}
                           data-code={v}
+                          data-shorten={shortened ? '1' : undefined}
                           className={`${td} ws-cell cursor-pointer select-none ${mt ? mt.cls : shortened ? 'bg-violet-100 text-violet-900 text-[9px] leading-tight' : v ? 'bg-yellow-50 text-gray-700 text-[9px] leading-tight' : dayTone(day, dow) === 'red' ? 'bg-red-50/70' : dayTone(day, dow) === 'blue' ? 'bg-blue-50/70' : dayTone(day, dow) === 'paid' ? 'bg-violet-50/60' : ''} ${day === todayCol ? 'ring-1 ring-inset ring-indigo-200' : ''} ${lit ? 'outline outline-2 outline-amber-400' : ''} ${picked ? 'ring-2 ring-inset ring-gray-800' : ''}`}>
                           {(() => {
                             const tr = splitTimeRange(v)
@@ -777,6 +836,20 @@ export default function WorkSchedulePage() {
         />
       )}
 
+      {leaveOpen && (
+        <LeaveInboxPanel
+          onClose={() => setLeaveOpen(false)}
+          onChanged={() => {
+            // 승인이 근무표 칸을 바꿨을 수 있다 — 현재 달 다시 불러오고 배지 갱신
+            Promise.all([
+              leaveAPI.list(undefined, 'pending').catch(() => []),
+              swapAPI.list('pending').catch(() => []),
+            ]).then(([l, sw]) => setLeavePending(l.length + sw.length))
+            workScheduleAPI.get(ym).then(doc => { setData(doc.data || {}) }).catch(() => {})
+          }}
+        />
+      )}
+
       {printPickOpen && (
         <GeneratePickModal
           staff={staff} title="인쇄할 직원" verb="인쇄"
@@ -834,7 +907,13 @@ export default function WorkSchedulePage() {
           .ws-table .sticky { position: static !important; }
           .ws-bar { display: none !important; }
           .ws-row-sum td { background: #e4e4e4 !important; font-weight: 700; }
-          .ws-table tbody tr:nth-child(even) td { background-color: #fafafa; }
+          /* 줄무늬는 근무 색(D·N·대휴…)을 덮어써서 짝수 행 색이 안 나왔다 → 인쇄에선 제거.
+             대신 의미 있는 칸은 진하게 강제해 흑백 복사에도 살아남게 한다. */
+          .ws-table td[data-shorten] { background: #ddd6fe !important; }                       /* 단축 근무(갚는 날) */
+          .ws-table td[data-code*="~"]:not([data-shorten]) { background: #fde68a !important; } /* 추가근무(쉬는 날) */
+          .ws-table td[data-code="대휴"] { background: #fcd34d !important; }
+          .ws-table td[data-code="초과휴"] { background: #c4b5fd !important; }
+          .ws-table td[data-code="休"], .ws-table td[data-code="반"] { background: #a7f3d0 !important; }
 
           /* 고정열 폭 */
           .ws-table col.c-pos { width: 14mm; }

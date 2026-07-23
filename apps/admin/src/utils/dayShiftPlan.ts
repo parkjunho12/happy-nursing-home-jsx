@@ -10,6 +10,8 @@ export interface DayPlanInput {
   days: number[]          // 편성할 일자 (1..31)
   staffIds: string[]      // 편성 순서 (앞뒤로 가까울수록 휴무일도 가까워진다)
   workDays: number        // 1인당 근무일수 (= 월 기준일수)
+  /** 승인된 희망휴무 — staffId → 쉬고 싶은 일자들. 휴무 배정에서 이 날을 먼저 쓴다 */
+  preferRest?: Record<string, number[]>
 }
 
 /**
@@ -34,7 +36,7 @@ export interface DayPlanResult {
   perDay: Record<number, number>
 }
 
-export function planDayShift({ days, staffIds, workDays }: DayPlanInput): DayPlanResult {
+export function planDayShift({ days, staffIds, workDays, preferRest }: DayPlanInput): DayPlanResult {
   const N = days.length
   const G = staffIds.length
   const plan: Record<string, Record<string, string>> = {}
@@ -51,18 +53,36 @@ export function planDayShift({ days, staffIds, workDays }: DayPlanInput): DayPla
   let assigned = 0
   let cursor = 0                            // 톱니: 매일 시작 지점을 옮겨 같은 사람만 쉬지 않게
 
+  // 희망휴무는 시작 전에 '예약'한다.
+  // 돌면서 소진하면(첫 구현) 월 후반 희망일에 도달할 즈음 휴무 정원이 이미
+  // 스태거로 다 쓰여, 정작 낸 날에 근무가 배정됐다 — 테스트가 잡아준 버그.
+  const daySet = new Set(days)
+  const reserved = staffIds.map((id, i) => {
+    const want = (preferRest?.[id] ?? []).filter(d => daySet.has(d)).slice(0, rest)
+    left[i] -= want.length                 // 예약분만큼 스태거 몫을 미리 줄인다
+    return new Set(want)
+  })
+
   days.forEach((day, di) => {
     // 오늘까지 배정되어야 할 누적 휴무 수 (고르게 펴기)
     const target = Math.round((totalRest * (di + 1)) / N)
     let todayRest = Math.max(0, target - assigned)
 
     const restingToday: number[] = []
+    // ① 예약된 희망휴무 먼저 — 정원과 무관하게 보장
+    staffIds.forEach((_, i) => {
+      if (reserved[i].has(day)) {
+        restingToday.push(i)
+        assigned++
+        todayRest--
+      }
+    })
+    // ② 남은 정원은 기존 톱니 순번대로
     let tried = 0
     while (todayRest > 0 && tried < G) {
       const i = (cursor + tried) % G
       tried++
-      if (left[i] <= 0) continue
-      // 남은 날수보다 남은 휴무가 적으면 굳이 오늘 쉬지 않아도 된다
+      if (left[i] <= 0 || restingToday.includes(i)) continue
       restingToday.push(i)
       left[i]--
       assigned++

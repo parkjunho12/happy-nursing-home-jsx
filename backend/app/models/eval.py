@@ -265,6 +265,9 @@ class LtcStaffMember(Base):
     __tablename__ = "ltc_staff_members"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    # 로그인 계정(users.id)과의 명시 연동 — 내 근무표·휴무 신청이 이걸 우선 사용한다.
+    # (이름 매칭은 동명이인·개명에 취약해 fallback으로만 남긴다)
+    user_id = Column(String, nullable=True, index=True)
     name = Column(String(100), nullable=False, index=True)
     birth_date = Column(String(20), nullable=False)
     gender = Column(String(10), nullable=False)

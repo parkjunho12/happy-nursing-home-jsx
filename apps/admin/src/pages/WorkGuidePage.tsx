@@ -91,6 +91,8 @@ export default function WorkGuidePage() {
 
   const meta = ROLE_META[role]
   const ac = ACCENT[meta.accent]
+  // 요양보호사 선생님들은 50대 이상 — 글씨를 키우고 곁가지 정보를 줄인다
+  const big = role === 'caregiver'
 
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-4">
@@ -135,8 +137,8 @@ export default function WorkGuidePage() {
           <div className="flex items-center gap-2.5">
             <ClipboardList className={`w-5 h-5 ${todoCount > 0 ? 'text-amber-600' : 'text-gray-300'}`} />
             <div>
-              <p className="text-sm font-bold text-gray-800">확인이 필요한 기록</p>
-              <p className="text-xs text-gray-500">완료하지 않은 체크리스트가 있으면 누락으로 집계됩니다.</p>
+              <p className={`${big ? 'text-base' : 'text-sm'} font-bold text-gray-800`}>{big ? '아직 체크 안 한 일' : '확인이 필요한 기록'}</p>
+              <p className={`${big ? 'text-sm' : 'text-xs'} text-gray-500`}>{big ? '누르면 오늘 할 일 목록이 열려요.' : '완료하지 않은 체크리스트가 있으면 누락으로 집계됩니다.'}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -148,9 +150,9 @@ export default function WorkGuidePage() {
 
       {/* 주요 업무 카드 */}
       <div>
-        <h2 className="text-sm font-bold text-gray-800 mb-2">내가 주로 하는 업무</h2>
+        <h2 className={`${big ? 'text-base' : 'text-sm'} font-bold text-gray-800 mb-2`}>내가 주로 하는 업무</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          {items.map(it => <ItemCard key={it.id} item={it} accent={meta.accent} onGo={() => it.route && navigate(it.route)} canOpen={canOpen(it.route)} />)}
+          {items.map(it => <ItemCard key={it.id} item={it} accent={meta.accent} big={big} onGo={() => it.route && navigate(it.route)} canOpen={canOpen(it.route)} />)}
         </div>
         {items.length === 0 && <p className="text-sm text-gray-400 py-6 text-center">표시할 업무가 없습니다.</p>}
       </div>
@@ -158,7 +160,7 @@ export default function WorkGuidePage() {
       {/* 업무 흐름 */}
       {flows.map(f => (
         <div key={f.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-          <h2 className="text-sm font-bold text-gray-800 mb-3">{f.title}</h2>
+          <h2 className={`${big ? 'text-base' : 'text-sm'} font-bold text-gray-800 mb-3`}>{f.title}</h2>
           <ol className="space-y-2">
             {f.steps.map((s, i) => {
               const open = canOpen(s.route)
@@ -166,8 +168,8 @@ export default function WorkGuidePage() {
                 <li key={i} className="flex items-start gap-2.5">
                   <span className={`shrink-0 w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center ${ac.bg} ${ac.text}`}>{i + 1}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-700">{s.label}</p>
-                    {s.note && <p className="text-[11px] text-amber-600 mt-0.5">※ {s.note}</p>}
+                    <p className={`${big ? 'text-base' : 'text-sm'} text-gray-700`}>{s.label}</p>
+                    {s.note && <p className={`${big ? 'text-xs' : 'text-[11px]'} text-amber-600 mt-0.5`}>※ {s.note}</p>}
                   </div>
                   {open && (
                     <button onClick={() => navigate(s.route!)}
@@ -199,35 +201,36 @@ export default function WorkGuidePage() {
   )
 }
 
-function ItemCard({ item, accent, onGo, canOpen }: { item: RoleGuideItem; accent: string; onGo: () => void; canOpen: boolean }) {
+function ItemCard({ item, accent, big, onGo, canOpen }: { item: RoleGuideItem; accent: string; big?: boolean; onGo: () => void; canOpen: boolean }) {
   const ac = ACCENT[accent]
   const mode = item.mode ? EXEC_MODE[item.mode] : null
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3.5 flex flex-col">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${ac.bg} ${ac.text}`}>{item.category}</span>
-          <p className="text-sm font-bold text-gray-900 mt-1.5 leading-snug">{item.title}</p>
+          <span className={`${big ? 'text-xs' : 'text-[10px]'} font-bold px-1.5 py-0.5 rounded ${ac.bg} ${ac.text}`}>{item.category}</span>
+          <p className={`${big ? 'text-base' : 'text-sm'} font-bold text-gray-900 mt-1.5 leading-snug`}>{item.title}</p>
         </div>
         {mode && <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border ${mode.tone}`}>{mode.label}</span>}
       </div>
-      <p className="text-xs text-gray-500 mt-1.5 leading-relaxed flex-1">{item.description}</p>
+      <p className={`${big ? 'text-sm text-gray-600' : 'text-xs text-gray-500'} mt-1.5 leading-relaxed flex-1`}>{item.description}</p>
 
       {item.timing && (
-        <p className="text-[11px] text-gray-500 mt-2 flex items-start gap-1"><Clock className="w-3 h-3 mt-0.5 shrink-0 text-gray-300" />{item.timing}</p>
+        <p className={`${big ? 'text-xs' : 'text-[11px]'} text-gray-500 mt-2 flex items-start gap-1`}><Clock className="w-3 h-3 mt-0.5 shrink-0 text-gray-300" />{item.timing}</p>
       )}
-      {item.relatedRoles && item.relatedRoles.length > 0 && (
+      {/* 큰 글씨 모드에선 '연계 직종' 같은 곁가지 정보는 숨긴다 — 핵심만 */}
+      {!big && item.relatedRoles && item.relatedRoles.length > 0 && (
         <p className="text-[11px] text-gray-400 mt-1 flex items-start gap-1"><Users className="w-3 h-3 mt-0.5 shrink-0 text-gray-300" />연계: {item.relatedRoles.join(' · ')}</p>
       )}
       {item.caution && (
-        <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2 mt-2 flex items-start gap-1">
+        <p className={`${big ? 'text-xs' : 'text-[11px]'} text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2 mt-2 flex items-start gap-1`}>
           <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />{item.caution}
         </p>
       )}
 
       {canOpen && item.route && (
         <button onClick={onGo}
-          className={`mt-3 w-full py-2.5 rounded-xl text-white text-sm font-bold inline-flex items-center justify-center gap-1.5 ${ac.btn}`}>
+          className={`mt-3 w-full ${big ? 'py-3 text-base' : 'py-2.5 text-sm'} rounded-xl text-white font-bold inline-flex items-center justify-center gap-1.5 ${ac.btn}`}>
           {item.menuLabel} 열기 <ArrowRight className="w-4 h-4" />
         </button>
       )}

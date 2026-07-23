@@ -4,8 +4,9 @@ import { FileText, Plus, X, Trash2, Loader2, Check } from 'lucide-react'
 import { hrAPI, DOC_FIELDS, type HrRecord, type HrInput, type DocKey } from '../../api/hrClient'
 import { useLtcStore, type LtcStaff } from '@/store/ltc'
 import { cardKeyAPI, type CardKey, type CardInput } from '../../api/cardKeyClient'
+import AnnualLeaveLedger from '@/components/schedule/AnnualLeaveLedger'
+import { STAFF_POSITIONS } from '@/constants/positions'
 
-const POSITIONS = ['시설장', '사무국장', '대표', '이사', '사회복지사', '간호사', '간호조무사', '물리치료사', '요양팀장', '요양보호사', '앨범담당']
 
 const fmtD = (s?: string | null) => {
   if (!s) return ''
@@ -29,7 +30,7 @@ export default function StaffHrPage() {
   const [incompleteOnly, setIncompleteOnly] = useState(false)
   const [showResigned, setShowResigned] = useState(false)
   const [expandedC, setExpandedC] = useState<Set<string>>(new Set())
-  const [tab, setTab] = useState<'detail' | 'hr' | 'card'>('detail')
+  const [tab, setTab] = useState<'detail' | 'hr' | 'card' | 'leave'>('detail')
   const { staffList, loaded: ltcLoaded, loadAll } = useLtcStore()
   useEffect(() => { if (!ltcLoaded) loadAll() }, [ltcLoaded, loadAll])
   const toggleC = (id: string) => setExpandedC(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -98,7 +99,7 @@ export default function StaffHrPage() {
 
       {/* 탭 */}
       <div className="flex gap-1.5 mb-4">
-        {([['detail', '직원 상세정보'], ['hr', '근로계약·서류'], ['card', '카드키 관리']] as const).map(([k, label]) => (
+        {([['detail', '직원 상세정보'], ['hr', '근로계약·서류'], ['leave', '연차 대장'], ['card', '카드키 관리']] as const).map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${tab === k ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
             {label}
@@ -235,6 +236,7 @@ export default function StaffHrPage() {
 
       {tab === 'detail' && <StaffDetailTable staff={staffList} />}
 
+      {tab === 'leave' && <AnnualLeaveLedger />}
       {tab === 'card' && <CardKeyTable />}
 
       {(addOpen || editing) && (
@@ -337,8 +339,15 @@ function HrFormModal({ editing, onClose, onSaved }: { editing: HrRecord | null; 
         <div className="px-5 py-4 space-y-3">
           <div className="grid grid-cols-2 gap-2">
             <Field label="이름 *"><input value={f.name ?? ''} onChange={e => setF({ ...f, name: e.target.value })} className={inp} autoFocus /></Field>
-            <Field label="직종"><input list="hr-pos" value={f.position ?? ''} onChange={e => setF({ ...f, position: e.target.value })} className={inp} />
-              <datalist id="hr-pos">{POSITIONS.map(p => <option key={p} value={p} />)}</datalist></Field>
+            <Field label="직종">
+              <select value={f.position ?? ''} onChange={e => setF({ ...f, position: e.target.value })} className={inp}>
+                <option value="">직종 선택</option>
+                {f.position && !(STAFF_POSITIONS as readonly string[]).includes(f.position) && (
+                  <option value={f.position}>{f.position}</option>
+                )}
+                {STAFF_POSITIONS.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </Field>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <Field label="입사일"><DateField value={f.hire_date} onChange={v => onHireChange(v)} className={inp} /></Field>

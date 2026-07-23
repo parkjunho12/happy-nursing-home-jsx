@@ -14,11 +14,9 @@ test('근무 코드 시간 — 실제 편성표 검산값(D=8h·N=9h)과 일치'
   assert.equal(hoursOf('초과휴'), 0)    // 쌓인 빚을 갚는 날 — 시간을 또 주면 이중 계산
 })
 
-test('연차는 유급 — 총시간에 하루 8시간으로 들어간다', () => {
+test('연차는 유급 — 총시간에 하루 8시간으로 들어간다 (반차 제도 없음)', () => {
   assert.equal(hoursOf('休'), 8)
-  assert.equal(hoursOf('반'), 4)        // 반차는 반일
-  assert.equal(hoursOf('AD반'), 8)      // 근무 4h + 반차 4h = 하루치
-  assert.equal(hoursOf('반PD'), 8)
+  assert.equal(hoursOf('반'), 0)        // 반차 미사용 — 코드에서 제거됨
 })
 
 test('직접 입력 시간대 — 휴게 70분 규칙(0850~1400=4h, 0850~1600=6h)', () => {

@@ -2,6 +2,8 @@ import StickyToolbar from '../../components/common/StickyToolbar'
 import { useState, useEffect, useMemo } from 'react'
 import { Plus, Edit2, Trash2, Search, X, Eye, EyeOff, KeyRound } from 'lucide-react'
 import { apiClient } from '@/api/client'
+import { useLtcStore } from '@/store/ltc'
+import { Link2, Link2Off } from 'lucide-react'
 
 // ── 허용 직종 (백엔드 enum과 동일) ───────────────────────────────────────────
 const POSITIONS = [
@@ -22,6 +24,8 @@ interface UserAccount {
   role:       'ADMIN' | 'STAFF'
   position?:  string | null
   created_at: string | null
+  /** 직원 명단(ltc_staff_members)과의 연동 — 내 근무표·휴무 신청이 이 연결을 쓴다 */
+  staff_link?: { staff_id: string; staff_name: string; position?: string | null } | null
 }
 
 const ic = 'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40'
@@ -40,6 +44,9 @@ export default function EvalUsersPage() {
   const [addOpen,    setAddOpen]    = useState(false)
   const [editUser,   setEditUser]   = useState<UserAccount | null>(null)
   const [pwUser,     setPwUser]     = useState<UserAccount | null>(null)
+  const [linkUser,   setLinkUser]   = useState<UserAccount | null>(null)
+  const { staffList, loaded: ltcLoaded, loadAll: ltcLoadAll } = useLtcStore()
+  useEffect(() => { if (!ltcLoaded) ltcLoadAll() }, [ltcLoaded, ltcLoadAll])
 
   const load = async () => {
     setLoading(true)
@@ -133,10 +140,19 @@ export default function EvalUsersPage() {
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-400">{u.email}</p>
+                  <p className="text-xs text-gray-400">
+                    {u.email}
+                    {u.staff_link
+                      ? <span className="ml-2 text-[10px] font-bold text-teal-700 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded-full">🔗 {u.staff_link.staff_name}</span>
+                      : u.role !== 'ADMIN' && <span className="ml-2 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">직원 미연동</span>}
+                  </p>
                 </div>
 
                 <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <button onClick={() => setLinkUser(u)} title={u.staff_link ? `직원 연동: ${u.staff_link.staff_name} (변경/해제)` : '직원 명단과 연동'}
+                    className={`p-1.5 rounded-lg border transition-colors ${u.staff_link ? 'border-teal-200 bg-teal-50 hover:bg-teal-100' : 'border-gray-200 hover:bg-gray-50'}`}>
+                    {u.staff_link ? <Link2 size={13} className="text-teal-600" /> : <Link2Off size={13} className="text-gray-400" />}
+                  </button>
                   <button onClick={() => setPwUser(u)} title="비밀번호 변경"
                     className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
                     <KeyRound size={13} className="text-gray-400"/>
@@ -156,6 +172,13 @@ export default function EvalUsersPage() {
         )}
       </div>
 
+      {linkUser && (
+        <StaffLinkModal
+          user={linkUser} users={users} staffList={staffList}
+          onClose={() => setLinkUser(null)}
+          onSaved={() => { setLinkUser(null); load() }}
+        />
+      )}
       {addOpen  && <UserFormModal onClose={() => setAddOpen(false)}   onSaved={load} />}
       {editUser && <UserFormModal existing={editUser} onClose={() => setEditUser(null)} onSaved={load} />}
       {pwUser   && <PasswordModal user={pwUser} onClose={() => setPwUser(null)} />}
@@ -347,6 +370,90 @@ function PasswordModal({ user, onClose }: { user: UserAccount; onClose: ()=>void
             className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-xl text-sm hover:bg-gray-50">
             {done ? '닫기' : '취소'}
           </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+/** 직원 명단 연동 모달 — 같은 이름을 맨 위에 추천한다 */
+function StaffLinkModal({ user, users, staffList, onClose, onSaved }: {
+  user: UserAccount
+  users: UserAccount[]
+  staffList: { id: string; name: string; position?: string; status: string }[]
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [q, setQ] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  // 이미 다른 계정에 연동된 직원 표시용
+  const linkedBy = new Map<string, string>()
+  for (const u of users) if (u.staff_link) linkedBy.set(u.staff_link.staff_id, u.name)
+
+  const rows = staffList
+    .filter(s => s.status === 'active')
+    .filter(s => !q || s.name.includes(q) || (s.position ?? '').includes(q))
+    .sort((a, b) => {
+      // 같은 이름 → 맨 위 (대부분 이걸 고르면 된다)
+      const am = a.name === user.name ? 0 : 1
+      const bm = b.name === user.name ? 0 : 1
+      return am - bm || a.name.localeCompare(b.name)
+    })
+
+  const save = async (staffId: string | null) => {
+    setBusy(true)
+    try {
+      await apiClient.put(`/api/v1/users/${user.id}/staff-link`, { staff_id: staffId })
+      onSaved()
+    } catch (e: any) {
+      alert(e?.response?.data?.detail ?? e?.message ?? '연동 실패')
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b shrink-0">
+          <h3 className="font-bold text-gray-900">직원 연동 — {user.name}</h3>
+          <p className="text-[11px] text-gray-400 mt-0.5">
+            연동하면 이 계정으로 로그인했을 때 <b>내 근무표·휴무 신청</b>이 그 직원으로 동작합니다.
+          </p>
+        </div>
+        <div className="px-5 py-2.5 border-b shrink-0 flex items-center gap-2">
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="이름·직종 검색"
+            className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg" autoFocus />
+          {user.staff_link && (
+            <button onClick={() => save(null)} disabled={busy}
+              className="text-[11px] font-bold text-red-500 border border-red-200 rounded-lg px-2.5 py-2 hover:bg-red-50 disabled:opacity-50">
+              연동 해제
+            </button>
+          )}
+        </div>
+        <div className="overflow-y-auto flex-1 min-h-0 px-3 py-2">
+          {rows.map(st => {
+            const cur = user.staff_link?.staff_id === st.id
+            const taken = !cur && linkedBy.has(st.id)
+            return (
+              <button key={st.id} disabled={busy || taken}
+                onClick={() => save(st.id)}
+                className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-left min-h-[46px] ${
+                  cur ? 'bg-teal-50 border border-teal-200'
+                  : taken ? 'opacity-45 cursor-not-allowed'
+                  : 'hover:bg-gray-50'}`}>
+                <span className={`text-sm font-semibold ${st.name === user.name ? 'text-teal-700' : 'text-gray-800'}`}>{st.name}</span>
+                {st.position && <span className="text-[10px] text-gray-400">{st.position}</span>}
+                {st.name === user.name && !cur && !taken && (
+                  <span className="text-[10px] font-bold text-teal-600 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded">이름 일치</span>
+                )}
+                {cur && <span className="ml-auto text-[10px] font-bold text-teal-700">현재 연동됨</span>}
+                {taken && <span className="ml-auto text-[10px] text-gray-400">{linkedBy.get(st.id)} 계정에 연동됨</span>}
+              </button>
+            )
+          })}
+          {rows.length === 0 && <p className="text-xs text-gray-400 text-center py-8">검색 결과가 없습니다</p>}
         </div>
       </div>
     </div>

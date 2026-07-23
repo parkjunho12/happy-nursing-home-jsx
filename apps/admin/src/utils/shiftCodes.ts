@@ -24,13 +24,9 @@ export const SHIFT_CODES: ShiftCode[] = [
   { code: 'AD',   label: '오전',    time: '09:00~13:30',      hours: 4,   group: '근무', countAs: 'D', cls: 'bg-sky-50 text-sky-700' },
   { code: 'PD',   label: '오후',    time: '13:30~18:00',      hours: 4,   group: '근무', countAs: 'D', cls: 'bg-sky-50 text-sky-700' },
   { code: 'N',    label: '야간',    time: '17:50~익일 09:00', hours: 9,   group: '근무', countAs: 'N', cls: 'bg-indigo-100 text-indigo-900' },
-  // 반차 조합일: 근무 4h + 반차(유급) 4h = 하루치 8h로 친다
-  { code: 'AD반', label: '오전근무·오후반차', time: '09:00~13:30 근무', hours: 8, group: '근무', countAs: 'D', cls: 'bg-teal-50 text-teal-700' },
-  { code: '반PD', label: '오전반차·오후근무', time: '13:30~18:00 근무', hours: 8, group: '근무', countAs: 'D', cls: 'bg-teal-50 text-teal-700' },
   // 연차는 유급휴가 — 근무한 것과 같이 하루 8시간으로 총시간에 들어간다.
   // (안 넣으면 연차 쓴 달마다 '기준 미달' 빨간불이 떠서 연차 쓰기가 눈치 보이게 된다)
   { code: '休',   label: '연차',    time: '', hours: 8, group: '휴무', annual: true, cls: 'bg-emerald-100 text-emerald-800' },
-  { code: '반',   label: '반차',    time: '', hours: 4, group: '휴무', annual: true, cls: 'bg-emerald-50 text-emerald-700' },
   { code: '대휴', label: '대체휴무', time: '', note: '공휴일 근무 대신 쉬는 날',
     hours: 0, group: '휴무', offday: true, cls: 'bg-amber-100 text-amber-800' },
   // 초과근무 휴가 — 법률 용어는 '보상휴가'(근로기준법 제57조)지만
@@ -88,7 +84,7 @@ export function breakMinutes(spanMinutes: number): number {
  * D·N·대휴·초과휴·추가근무는 정산 결과라서 다시 계산되어야 한다.
  * (이 구분이 없으면 두 번째 자동 생성부터는 아무것도 바뀌지 않는다)
  */
-export const MANUAL_ONLY_CODES = ['休', '반', '◆병', '◆', 'AD', 'PD', 'AD반', '반PD']
+export const MANUAL_ONLY_CODES = ['休', '◆병', '◆', 'AD', 'PD']
 export const isAutoManaged = (raw?: string | null): boolean => {
   const v = (raw ?? '').trim()
   if (!v) return true
@@ -110,7 +106,7 @@ export function splitTimeRange(raw?: string | null): [string, string] | null {
 }
 
 /** 좁은 칸(인쇄)용 짧은 표기 — 세 글자 코드는 두 글자로 */
-export const SHORT_CODE: Record<string, string> = { '초과휴': '초휴', 'AD반': 'AD반', '반PD': '반PD' }
+export const SHORT_CODE: Record<string, string> = { '초과휴': '초휴' }
 export const shortOf = (raw?: string | null): string => {
   const v = (raw ?? '').trim()
   return SHORT_CODE[v] ?? v

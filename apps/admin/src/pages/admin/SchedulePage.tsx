@@ -6,6 +6,9 @@ import {
   Phone, Clock, Briefcase, Loader2, Grid3x3, Columns3, List, UserPlus, ClipboardList, Pencil } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
 import { birthdaysInRange } from '@/utils/birthdays'
+import { ledgerAPI, type LedgerRow } from '@/api/leaveClient'
+import { useAuthStore } from '@/store/auth'
+import { getNavConfig } from '@/components/layout/navConfig'
 import {
   scheduleAPI, SCHEDULE_CATEGORIES, type ScheduleEvent, type EventInput, type LifecycleEvent, type RenewalEvent, type DocCalEvent, type EduCalEvent,
 } from '../../api/scheduleClient'
@@ -22,12 +25,17 @@ const hmOf = (iso?: string | null) => {
 const startOfWeek = (d: Date) => { const x = new Date(d); x.setDate(x.getDate() - x.getDay()); x.setHours(0, 0, 0, 0); return x }
 
 /* 카테고리 색상 */
-type CatKey = '방문상담' | '외부방문' | '회의' | '행사' | '기타' | '면접' | '입소' | '입사' | '재계약' | '계약서' | '계획서' | '평가' | '교육' | '생신' | '생일'
+type CatKey = '방문상담' | '외부방문' | '회의' | '행사' | '외래·병원' | '면회' | '외출·외박' | '갱신' | '퇴소' | '기타' | '면접' | '입소' | '입사' | '재계약' | '계약서' | '계획서' | '평가' | '교육' | '생신' | '생일' | '연차촉진'
 const CAT: Record<CatKey, { dot: string; chip: string; bar: string }> = {
   방문상담: { dot: 'bg-blue-500',   chip: 'bg-blue-50 text-blue-700 border-blue-200',       bar: 'border-l-blue-500 bg-blue-50' },
   외부방문: { dot: 'bg-teal-500',   chip: 'bg-teal-50 text-teal-700 border-teal-200',       bar: 'border-l-teal-500 bg-teal-50' },
   회의:    { dot: 'bg-indigo-500', chip: 'bg-indigo-50 text-indigo-700 border-indigo-200', bar: 'border-l-indigo-500 bg-indigo-50' },
   행사:    { dot: 'bg-pink-500',   chip: 'bg-pink-50 text-pink-700 border-pink-200',       bar: 'border-l-pink-500 bg-pink-50' },
+  '외래·병원': { dot: 'bg-purple-500', chip: 'bg-purple-50 text-purple-700 border-purple-200', bar: 'border-l-purple-500 bg-purple-50' },
+  면회:    { dot: 'bg-yellow-500', chip: 'bg-yellow-50 text-yellow-700 border-yellow-200',  bar: 'border-l-yellow-500 bg-yellow-50' },
+  '외출·외박': { dot: 'bg-green-600', chip: 'bg-green-50 text-green-700 border-green-200',   bar: 'border-l-green-600 bg-green-50' },
+  갱신:    { dot: 'bg-stone-500',  chip: 'bg-stone-100 text-stone-700 border-stone-300',    bar: 'border-l-stone-500 bg-stone-100' },
+  퇴소:    { dot: 'bg-slate-500',  chip: 'bg-slate-100 text-slate-600 border-slate-300',    bar: 'border-l-slate-500 bg-slate-100' },
   기타:    { dot: 'bg-gray-400',   chip: 'bg-gray-50 text-gray-600 border-gray-200',       bar: 'border-l-gray-400 bg-gray-50' },
   면접:    { dot: 'bg-violet-500', chip: 'bg-violet-50 text-violet-700 border-violet-200', bar: 'border-l-violet-500 bg-violet-50' },
   입소:    { dot: 'bg-rose-500',   chip: 'bg-rose-50 text-rose-600 border-rose-200',       bar: 'border-l-rose-500 bg-rose-50' },
@@ -39,8 +47,23 @@ const CAT: Record<CatKey, { dot: string; chip: string; bar: string }> = {
   교육:    { dot: 'bg-orange-500',  chip: 'bg-orange-50 text-orange-700 border-orange-200',     bar: 'border-l-orange-500 bg-orange-50' },
   생신:    { dot: 'bg-red-400',     chip: 'bg-red-50 text-red-600 border-red-200',               bar: 'border-l-red-400 bg-red-50' },
   생일:    { dot: 'bg-lime-500',    chip: 'bg-lime-50 text-lime-700 border-lime-200',            bar: 'border-l-lime-500 bg-lime-50' },
+  연차촉진: { dot: 'bg-fuchsia-500', chip: 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200',     bar: 'border-l-fuchsia-500 bg-fuchsia-50' },
 }
-const ALL_CATS: CatKey[] = ['방문상담', '외부방문', '회의', '행사', '기타', '면접', '입소', '입사', '재계약', '계약서', '계획서', '평가', '교육', '생신', '생일']
+const ALL_CATS: CatKey[] = ['방문상담', '외부방문', '회의', '행사', '외래·병원', '면회', '외출·외박', '갱신', '퇴소', '기타', '면접', '입소', '입사', '재계약', '계약서', '계획서', '평가', '교육', '생신', '생일', '연차촉진']
+
+// 카테고리마다 근거가 되는 메뉴가 있다 — 그 메뉴를 못 보는 직종은 캘린더에서도 그 정보를 못 본다.
+// null = 일반 일정(캘린더 접근자 전원)
+const CAT_ROUTE: Record<CatKey, string | null> = {
+  방문상담: null, 외부방문: null, 회의: null, 행사: null, 기타: null,
+  '외래·병원': null, 면회: null, '외출·외박': null,   // 어르신 케어와 직결 — 전 직원
+  갱신: '/resident-docs', 퇴소: '/eval/residents',
+  면접: '/recruitment',
+  입소: '/eval/residents', 생신: '/eval/residents',
+  입사: '/eval/staff', 생일: '/eval/staff', 재계약: '/staff-hr',
+  계약서: '/resident-docs', 계획서: '/resident-docs', 평가: '/resident-docs',
+  교육: '/education',
+  연차촉진: null,   // 별도 규칙(시설장·ADMIN) — 아래 canPromo로 판정
+}
 
 /* 통합 이벤트 */
 type UEvent = {
@@ -81,7 +104,40 @@ export default function SchedulePage() {
   const { residents, staffList, loaded: ltcLoaded, loadAll: ltcLoadAll } = useLtcStore()
   useEffect(() => { if (!ltcLoaded) ltcLoadAll() }, [ltcLoaded, ltcLoadAll])
 
+  // 연차촉진 통지 일정 — 시설장·ADMIN만. 놓치면 법적 효력이 사라지므로 캘린더에 박아둔다.
+  const { user: authUser } = useAuthStore()
+  const canPromo = authUser?.role === 'ADMIN' || authUser?.position === '시설장'
+  const [promoRows, setPromoRows] = useState<LedgerRow[]>([])
+
+  // 직종별 가시 카테고리 — 사이드바 메뉴 접근권과 동일 기준
+  // 요양보호사는 고정 5종만: 행사·기타·교육·생신·생일 (상담·회의 같은 운영 일정은 제외)
+  const visibleCats = useMemo(() => {
+    if (authUser?.role !== 'ADMIN' && authUser?.position === '요양보호사')
+      return new Set<CatKey>(['행사', '기타', '교육', '생신', '생일', '외래·병원', '면회', '외출·외박'])
+    const nav = getNavConfig(authUser)
+    const routes = new Set<string>(nav.sections.flatMap(sec => sec.items.map(i => i.to)))
+    return new Set<CatKey>(ALL_CATS.filter(c =>
+      c === '연차촉진' ? canPromo : (CAT_ROUTE[c] === null || routes.has(CAT_ROUTE[c]!))))
+  }, [authUser, canPromo])
+
   const y = cursor.getFullYear(), m = cursor.getMonth()
+
+  useEffect(() => {
+    if (!canPromo) return
+    // 1년 미만 입사자의 촉진일은 다음 해에 걸치므로 작년 대장도 함께 본다
+    Promise.all([ledgerAPI.get(y).catch(() => null), ledgerAPI.get(y - 1).catch(() => null)])
+      .then(([a, b]) => {
+        const seen = new Set<string>()
+        const rows: LedgerRow[] = []
+        for (const res of [a, b]) {
+          for (const r of res?.rows ?? []) {
+            const k = `${r.staff_id}-${r.promotion?.basis}-${r.promotion?.expire_on}`
+            if (r.promotion && !seen.has(k)) { seen.add(k); rows.push(r) }
+          }
+        }
+        setPromoRows(rows)
+      })
+  }, [canPromo, y])
 
   const range = useMemo(() => {
     if (view === 'week') {
@@ -121,6 +177,48 @@ export default function SchedulePage() {
         memo: '생신 축하 준비 — 보호자 연락·생신상', raw: b as any,
       })
     }
+    // 연차촉진 — 회계연도(1년 이상)는 하나로 묶고, 1년 미만은 개인별로
+    if (canPromo && promoRows.length > 0) {
+      const inRange = (d: string) => d >= rangeStart && d <= rangeEnd
+      const fiscal = promoRows.filter(r => r.promotion!.basis === 'fiscal' && r.remaining > 0)
+      const f = fiscal[0]?.promotion
+      if (f && inRange(f.first_notice[0])) {
+        out.push({
+          key: `promo-f1-${f.first_notice[0]}`, kind: 'lifecycle', category: '연차촉진',
+          title: `연차촉진 1차 서면 통지 시작 (1년 이상 ${fiscal.length}명) — ${f.first_notice[1].slice(5).replace('-', '/')}까지`,
+          start: `${f.first_notice[0]}T00:00`, dateKey: f.first_notice[0], time: '',
+          memo: '근로기준법 61조 — 미사용 연차를 서면으로 개별 촉구 (일괄 공지는 효력 없음)', raw: {} as any,
+        })
+      }
+      if (f && inRange(f.second_deadline)) {
+        out.push({
+          key: `promo-f2-${f.second_deadline}`, kind: 'lifecycle', category: '연차촉진',
+          title: `연차촉진 2차 지정 통보 기한 (1년 이상 ${fiscal.length}명)`,
+          start: `${f.second_deadline}T00:00`, dateKey: f.second_deadline, time: '',
+          memo: '직원이 사용 시기를 안 정했으면 회사가 사용일을 지정해 서면 통보', raw: {} as any,
+        })
+      }
+      for (const r of promoRows.filter(r => r.promotion!.basis === 'hire')) {
+        const p = r.promotion!
+        if (inRange(p.first_notice[0])) {
+          out.push({
+            key: `promo-h1-${r.staff_id}`, kind: 'lifecycle', category: '연차촉진',
+            title: `${r.name} 연차촉진 1차 통지 (입사 1년 기준) — ${p.first_notice[1].slice(5).replace('-', '/')}까지`,
+            start: `${p.first_notice[0]}T00:00`, dateKey: p.first_notice[0], time: '',
+            memo: `1년 미만 월차 — 소멸일 ${p.expire_on}. 서면·개별 촉구`, raw: {} as any,
+          })
+        }
+        if (inRange(p.second_deadline)) {
+          out.push({
+            key: `promo-h2-${r.staff_id}`, kind: 'lifecycle', category: '연차촉진',
+            title: `${r.name} 연차촉진 2차 지정 통보 기한`,
+            start: `${p.second_deadline}T00:00`, dateKey: p.second_deadline, time: '',
+            memo: `소멸일 ${p.expire_on} — 사용일 지정 서면 통보`, raw: {} as any,
+          })
+        }
+      }
+    }
+
     for (const b of birthdaysInRange(staffList, rangeStart, rangeEnd, 'staff')) {
       out.push({
         key: b.key, kind: 'lifecycle', category: '생일',
@@ -191,9 +289,9 @@ export default function SchedulePage() {
       })
     }
     return out.sort((a, b) => (a.start! < b.start! ? -1 : 1))
-  }, [events, interviews, lifecycles, renewals, docs, edus, residents, staffList, rangeStart, rangeEnd])
+  }, [events, interviews, lifecycles, renewals, docs, edus, residents, staffList, rangeStart, rangeEnd, canPromo, promoRows])
 
-  const shown = useMemo(() => unified.filter(u => active.has(u.category)), [unified, active])
+  const shown = useMemo(() => unified.filter(u => visibleCats.has(u.category) && active.has(u.category)), [unified, active, visibleCats])
 
   const byDay = useMemo(() => {
     const map: Record<string, UEvent[]> = {}
@@ -300,20 +398,36 @@ export default function SchedulePage() {
         </div>
       </div>
 
-      {/* 범례/필터 (건수 포함) */}
-      <div className="flex flex-wrap items-center gap-1.5 mb-4">
-        {ALL_CATS.map(c => {
-          const on = active.has(c)
-          const n = catCounts[c] ?? 0
-          return (
-            <button key={c} onClick={() => toggleCat(c)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold transition-all ${on ? CAT[c].chip : 'bg-white text-gray-300 border-gray-100'}`}>
-              <span className={`w-2 h-2 rounded-full ${on ? CAT[c].dot : 'bg-gray-200'}`} />
-              {c}{n > 0 && <span className="opacity-70">{n}</span>}
+      {/* 범례/필터 (건수 포함) — 전체 토글, 더블클릭=이 분류만 */}
+      {(() => {
+        const cats = ALL_CATS.filter(c => visibleCats.has(c))
+        const onCount = cats.filter(c => active.has(c)).length
+        const allOn = onCount === cats.length
+        return (
+          <div className="flex flex-wrap items-center gap-1.5 mb-4">
+            <button onClick={() => setActive(allOn ? new Set() : new Set(cats))}
+              title={allOn ? '모든 분류 숨기기' : '모든 분류 보기'}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold transition-all ${
+                allOn ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'}`}>
+              {allOn ? '전체 끄기' : `전체 켜기${onCount > 0 ? ` (${onCount}/${cats.length})` : ''}`}
             </button>
-          )
-        })}
-      </div>
+            <span className="w-px h-5 bg-gray-200 mx-0.5" />
+            {cats.map(c => {
+              const on = active.has(c)
+              const n = catCounts[c] ?? 0
+              return (
+                <button key={c} onClick={() => toggleCat(c)}
+                  onDoubleClick={() => setActive(new Set([c]))}
+                  title="클릭: 켜기/끄기 · 더블클릭: 이 분류만 보기"
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold transition-all ${on ? CAT[c].chip : 'bg-white text-gray-300 border-gray-100'}`}>
+                  <span className={`w-2 h-2 rounded-full ${on ? CAT[c].dot : 'bg-gray-200'}`} />
+                  {c}{n > 0 && <span className="opacity-70">{n}</span>}
+                </button>
+              )
+            })}
+          </div>
+        )
+      })()}
 
       {/* ── 월 뷰 ── */}
       {view === 'month' && (
