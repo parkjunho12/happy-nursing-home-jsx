@@ -40,3 +40,4 @@ export const cardKeyAPI = {
   update: (id: string, b: CardInput) => apiClient.patch(`${BASE}/records/${id}`, b).then(unwrap<CardKey>),
   remove: (id: string) => apiClient.delete(`${BASE}/records/${id}`).then(r => r.data),
 }
+
