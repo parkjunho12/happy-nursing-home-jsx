@@ -6,6 +6,27 @@ import {
   type LucideIcon, AlertTriangle, BarChart3,
 } from 'lucide-react'
 
+/**
+ * 모바일에서 숨기는 메뉴 — 넓은 표 편집·인쇄·대량 서류 작업 등 PC 전용 화면.
+ * 현장(폰)에서 쓰는 것만 남겨 50대 선생님들이 헤매지 않게 한다.
+ */
+export const MOBILE_HIDDEN = new Set<string>([
+  '/work-schedule',        // 근무표 편성·인쇄 — 31열 표
+  '/staffing',             // 인력배치 시뮬레이터
+  '/staff-hr',             // 직원 상세 서류
+  '/resident-docs',        // 어르신 서류현황 표
+  '/eval/record-audit',    // 제공기록지 검수
+  '/eval/record-guide',
+  '/eval/ai-review',
+  '/eval/users',           // 계정 관리
+  '/eval/workload',
+  '/monthly-report',       // 인쇄 중심 리포트
+  '/recruitment',
+  '/eval/blog-ai-writer',
+  '/history',
+  '/reviews',
+])
+
 export interface NavUser {
   role?: string | null
   position?: string | null

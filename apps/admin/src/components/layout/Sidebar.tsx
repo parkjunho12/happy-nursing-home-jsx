@@ -3,7 +3,7 @@ import { LayoutDashboard, LogOut, BookOpen, Compass } from 'lucide-react'
 import { useAuthStore } from '@/store/auth'
 import { useLtcStore } from '@/store/ltc'
 import { todayKST, isItemDone } from '@/utils/period'
-import { getNavConfig, type NavItem as NavItemT } from './navConfig'
+import { getNavConfig, MOBILE_HIDDEN, type NavItem as NavItemT } from './navConfig'
 
 interface SidebarProps {
   mobile?: boolean
@@ -43,7 +43,10 @@ export default function Sidebar({ mobile = false, onNavigate }: SidebarProps) {
   }
 
   const nav = getNavConfig(user, counts)
-  const sections = nav.sections.filter(s => s.items.length > 0)
+  // 모바일 드로어에서는 PC 전용(넓은 표·인쇄) 메뉴를 걷어낸다
+  const sections = nav.sections
+    .map(sec => mobile ? { ...sec, items: sec.items.filter(i => !MOBILE_HIDDEN.has(i.to)) } : sec)
+    .filter(s => s.items.length > 0)
 
   const handleNav = () => onNavigate?.()
   const handleLogout = () => { logout(); handleNav() }
