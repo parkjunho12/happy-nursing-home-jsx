@@ -80,3 +80,4 @@ export const familyAPI = {
   albums: () => apiClient.get(`${BASE}/family/albums`,       familyBase()).then(unwrap<any[]>),
   album:  (id: string) => apiClient.get(`${BASE}/family/albums/${id}`, familyBase()).then(unwrap<any>),
 }
+
