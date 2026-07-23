@@ -7,6 +7,8 @@ import {
 import { useLtcStore } from '@/store/ltc'
 import { birthdaysInRange } from '@/utils/birthdays'
 import { ledgerAPI, type LedgerRow } from '@/api/leaveClient'
+import { visitAPI } from '@/api/visitClient'
+import VisitInboxPanel from '@/components/schedule/VisitInboxPanel'
 import { useAuthStore } from '@/store/auth'
 import { getNavConfig } from '@/components/layout/navConfig'
 import {
@@ -108,6 +110,16 @@ export default function SchedulePage() {
   const { user: authUser } = useAuthStore()
   const canPromo = authUser?.role === 'ADMIN' || authUser?.position === '시설장'
   const [promoRows, setPromoRows] = useState<LedgerRow[]>([])
+
+  // 면회 예약 승인함 — 백엔드 권한(ADMIN·시설장·사회복지사)과 동일 기준
+  const canVisit = authUser?.role === 'ADMIN' || ['시설장', '사회복지사'].includes(authUser?.position ?? '')
+  const [visitOpen, setVisitOpen] = useState(false)
+  const [visitPending, setVisitPending] = useState(0)
+  const loadVisitCount = useCallback(() => {
+    if (!canVisit) return
+    visitAPI.list('pending').then(r => setVisitPending(r.length)).catch(() => {})
+  }, [canVisit])
+  useEffect(() => { loadVisitCount() }, [loadVisitCount])
 
   // 직종별 가시 카테고리 — 사이드바 메뉴 접근권과 동일 기준
   // 요양보호사는 고정 5종만: 행사·기타·교육·생신·생일 (상담·회의 같은 운영 일정은 제외)
@@ -395,6 +407,13 @@ export default function SchedulePage() {
           </div>
           <button onClick={() => go(1)} className="w-9 h-9 rounded-lg hover:bg-gray-100 flex items-center justify-center"><ChevronRight className="w-5 h-5 text-gray-500" /></button>
           <button onClick={goToday} className="ml-1 px-3 py-1.5 text-xs font-semibold text-violet-600 hover:bg-violet-50 rounded-lg border border-violet-100">오늘</button>
+          {canVisit && (
+            <button onClick={() => setVisitOpen(true)}
+              className={`ml-1 relative px-3 py-1.5 text-xs font-semibold rounded-lg border ${visitPending > 0 ? 'text-yellow-700 bg-yellow-50 border-yellow-200' : 'text-gray-500 border-gray-200 hover:bg-gray-50'}`}>
+              면회 예약
+              {visitPending > 0 && <span className="ml-1 text-[10px] font-extrabold bg-yellow-500 text-white rounded-full px-1.5 py-0.5">{visitPending}</span>}
+            </button>
+          )}
         </div>
       </div>
 
@@ -428,6 +447,11 @@ export default function SchedulePage() {
           </div>
         )
       })()}
+
+      {visitOpen && (
+        <VisitInboxPanel onClose={() => setVisitOpen(false)}
+          onDecided={() => { loadVisitCount(); load() }} />
+      )}
 
       {/* ── 월 뷰 ── */}
       {view === 'month' && (

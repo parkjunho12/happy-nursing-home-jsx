@@ -63,6 +63,20 @@ class InternalNotice(Base):
     updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)
 
 
+class NoticeAck(Base):
+    """공지 읽음 확인 — 중요·긴급 공지의 '확인했습니다' 기록.
+
+    "공지 못 봤어요"를 없애는 장치. 관리자는 미확인자를 바로 파악한다."""
+    __tablename__ = "notice_acks"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    notice_id = Column(String, nullable=False, index=True)
+    user_id = Column(String, nullable=False, index=True)
+    user_name = Column(String(100), nullable=True)
+    position = Column(String(50), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_kst)
+
+
 class NoticeTemplate(Base):
     """내부 공지 작성 템플릿 (공용) — 자주 쓰는 공지 양식을 저장·재사용."""
     __tablename__ = "notice_templates"
