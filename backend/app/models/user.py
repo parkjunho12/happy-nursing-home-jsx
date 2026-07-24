@@ -41,5 +41,6 @@ class User(Base):
     )
 
     handover_access = Column(Boolean, default=False)   # 인수인계 AI 페이지 지정 접근 허용
+    saved_signature_url = Column(String, nullable=True)  # 저장해둔 전자서명 — 연차·맞교대 신청에서 재사용
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { CalendarPlus, ChevronLeft, ChevronRight, Loader2, X } from 'lucide-react'
 import { leaveAPI, LEAVE_KIND_META, MAX_HOPE_PER_MONTH, type LeaveKind, type LeaveRequest, type MyAnnual } from '@/api/leaveClient'
-import SignaturePad from './SignaturePad'
+import SignatureInput, { type SigValue } from './SignatureInput'
 
 /**
  * 연차·휴무 신청 — 선생님이 앱에서 직접 낸다.
@@ -36,7 +36,7 @@ export default function LeaveRequestCard({ month: monthProp }: { month?: string 
   const [usedAnnual, setUsedAnnual] = useState<number | null>(null)
   const [annual, setAnnual] = useState<MyAnnual | null>(null)
   const [busy, setBusy] = useState(false)
-  const [signature, setSignature] = useState<string | null>(null)
+  const [sig, setSig] = useState<SigValue>({ use_saved: false, signature: null, save: true, ok: false })
   // 희망휴무를 연차(休)로 우선 반영 — 시설 기본 방침이라 켬이 기본
   const [useAnnual, setUseAnnual] = useState(true)
   const [err, setErr] = useState('')
@@ -73,34 +73,27 @@ export default function LeaveRequestCard({ month: monthProp }: { month?: string 
     setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
   }
 
-  /** 그 달의 희망휴무 수 = 이미 낸 것(대기·승인) + 지금 담은 것 */
+  /** 그 달에 이미 낸 희망휴무 수 (대기·승인) */
   const hopeCountFor = (ym: string) =>
-    mine.filter(r => r.kind === '희망휴무' && r.status !== 'rejected' && r.date.startsWith(ym)).length +
-    dates.filter(d => d.startsWith(ym)).length
+    mine.filter(r => r.kind === '희망휴무' && r.status !== 'rejected' && r.date.startsWith(ym)).length
 
-  const addDate = () => {
-    if (!dateInput) return
-    if (kind === '희망휴무' && hopeCountFor(dateInput.slice(0, 7)) >= MAX_HOPE_PER_MONTH) {
-      // 서버도 막지만, 담는 순간 알려주는 게 덜 답답하다
-      setErr(`희망휴무는 한 달에 최대 ${MAX_HOPE_PER_MONTH}일까지예요. ${Number(dateInput.slice(5, 7))}월은 이미 다 찼습니다.`)
-      return
-    }
-    setErr('')
-    if (!dates.includes(dateInput)) setDates(p => [...p, dateInput].sort())
-    setDateInput('')
-  }
 
   const submit = async () => {
-    if (dates.length === 0) { setErr('날짜를 하나 이상 골라주세요.'); return }
-    if (kind === '연차' && annual && dates.length > Math.max(0, annual.available)) {
-      setErr(`지금 쓸 수 있는 연차는 ${Math.max(0, annual.available)}개인데 ${dates.length}일을 담았어요.`); return
+    // 희망휴무는 날짜 하나를 골라 바로 신청 — 담는 단계가 오히려 헷갈린다
+    const target = kind === '희망휴무' ? (dateInput ? [dateInput] : []) : dates
+    if (target.length === 0) { setErr(kind === '희망휴무' ? '쉬고 싶은 날을 골라주세요.' : '날짜를 하나 이상 골라주세요.'); return }
+    if (kind === '희망휴무' && hopeCountFor(dateInput.slice(0, 7)) >= MAX_HOPE_PER_MONTH) {
+      setErr(`희망휴무는 한 달에 최대 ${MAX_HOPE_PER_MONTH}일까지예요. ${Number(dateInput.slice(5, 7))}월은 이미 다 찼습니다.`); return
     }
-    if (!signature) { setErr('신청에는 서명이 필요합니다. 아래에 서명해주세요.'); return }
+    if (kind === '연차' && annual && target.length > Math.max(0, annual.available)) {
+      setErr(`지금 쓸 수 있는 연차는 ${Math.max(0, annual.available)}개인데 ${target.length}일을 담았어요.`); return
+    }
+    if (!sig.ok) { setErr('신청에는 서명이 필요합니다. 아래에 서명해주세요.'); return }
     setBusy(true); setErr('')
     try {
-      await leaveAPI.create(dates, kind, reason || undefined, signature,
+      await leaveAPI.create(target, kind, reason || undefined, sig,
         kind === '희망휴무' ? useAnnual : undefined)
-      setDates([]); setReason(''); setSignature(null)
+      setDates([]); setReason('')
       load()
       alert('신청했습니다. 관리자가 확인하면 알림으로 알려드립니다.')
     } catch (e: any) {
@@ -189,14 +182,13 @@ export default function LeaveRequestCard({ month: monthProp }: { month?: string 
           )}
         </div>
       ) : (
-        <div className="flex gap-1.5 mb-2">
+        <div className="mb-2">
+          <p className="text-[11px] font-semibold text-gray-500 mb-1">쉬고 싶은 날 <span className="font-normal text-gray-400">— 하루씩 바로 신청돼요 (한 달 최대 {MAX_HOPE_PER_MONTH}일)</span></p>
           <input type="date" value={dateInput} onChange={e => setDateInput(e.target.value)}
-            className="flex-1 px-3 py-2.5 text-sm border border-gray-200 rounded-xl" />
-          <button onClick={addDate} disabled={!dateInput}
-            className="px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold disabled:opacity-40">담기</button>
+            className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl" />
         </div>
       )}
-      {dates.length > 0 && (
+      {kind === '연차' && dates.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-2">
           {dates.map(d => (
             <span key={d} className="inline-flex items-center gap-1 text-xs font-semibold bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5">
@@ -221,15 +213,12 @@ export default function LeaveRequestCard({ month: monthProp }: { month?: string 
         </label>
       )}
       <div className="mb-2">
-        <p className="text-xs font-semibold text-gray-500 mb-1.5">
-          서명 <span className="font-normal text-gray-400">— 신청서에 들어갑니다</span>
-        </p>
-        <SignaturePad onChange={setSignature} />
+        <SignatureInput label="신청서에 들어갑니다" onChange={setSig} />
       </div>
       {err && <p className="text-xs text-red-500 mb-2">{err}</p>}
-      <button onClick={submit} disabled={busy || dates.length === 0 || !signature}
+      <button onClick={submit} disabled={busy || (kind === '연차' ? dates.length === 0 : !dateInput) || !sig.ok}
         className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold disabled:opacity-40">
-        {busy ? <Loader2 size={15} className="animate-spin mx-auto" /> : dates.length > 1 ? `${dates.length}일 신청하기` : '신청하기'}
+        {busy ? <Loader2 size={15} className="animate-spin mx-auto" /> : kind === '연차' && dates.length > 1 ? `${dates.length}일 신청하기` : '신청하기'}
       </button>
 
       {/* 내 신청 현황 — 지난달 것은 자동으로 사라진다 (계속 쌓이면 화면만 길어지므로) */}

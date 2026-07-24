@@ -34,6 +34,15 @@ export const signatureUrl = (u?: string | null) => (!u ? null : u.startsWith('ht
 
 export const MAX_HOPE_PER_MONTH = 2   // 백엔드와 동일 값 — 서버가 최종 검증한다
 
+/** 서명 제출 값 — 저장 서명 재사용 또는 새 서명 */
+export interface SigPayload { use_saved: boolean; signature: string | null; save: boolean }
+
+export const signatureAPI = {
+  get: () => apiClient.get(`${BASE}/my-signature`).then(unwrap<{ signature_url: string | null }>),
+  save: (signature: string) => apiClient.post(`${BASE}/my-signature`, { signature }).then(unwrap<{ signature_url: string }>),
+  remove: () => apiClient.delete(`${BASE}/my-signature`).then(r => r.data),
+}
+
 export interface MyAnnual {
   year: number; service_year: number
   entitle: number      // 연간 최대 발생 — 1년차 11 (만근+다음 달 근무 시 1개씩)
@@ -52,8 +61,11 @@ export const leaveAPI = {
   myShifts: (month: string) =>
     apiClient.get(`${BASE}/requests/my-shifts`, { params: { month } })
       .then(unwrap<{ month: string; saved: boolean; shifts: Record<string, string> }>),
-  create: (dates: string[], kind: LeaveKind, reason?: string, signature?: string | null, useAnnual?: boolean) =>
-    apiClient.post(`${BASE}/requests`, { dates, kind, reason, signature, use_annual: useAnnual }).then(unwrap<LeaveRequest[]>),
+  create: (dates: string[], kind: LeaveKind, reason: string | undefined, sig: SigPayload, useAnnual?: boolean) =>
+    apiClient.post(`${BASE}/requests`, {
+      dates, kind, reason, use_annual: useAnnual,
+      signature: sig.signature, use_saved_signature: sig.use_saved, save_signature: sig.save,
+    }).then(unwrap<LeaveRequest[]>),
   mine: (year?: string) =>
     apiClient.get(`${BASE}/requests/mine`, { params: year ? { year } : {} })
       .then(unwrap<{ requests: LeaveRequest[]; used_annual: number; year: string }>),
@@ -102,11 +114,17 @@ export const swapAPI = {
   shifts: (partner_staff_id: string, month: string) =>
     apiClient.get(`${BASE}/swaps/shifts`, { params: { partner_staff_id, month } })
       .then(unwrap<{ month: string; saved: boolean; mine: Record<string, string>; partner: Record<string, string> }>),
-  create: (partner_staff_id: string, my_date: string, partner_date: string, reason: string | undefined, signature: string) =>
-    apiClient.post(`${BASE}/swaps`, { partner_staff_id, my_date, partner_date, reason, signature }).then(unwrap<SwapRequest>),
+  create: (partner_staff_id: string, my_date: string, partner_date: string, reason: string | undefined, sig: SigPayload) =>
+    apiClient.post(`${BASE}/swaps`, {
+      partner_staff_id, my_date, partner_date, reason,
+      signature: sig.signature, use_saved_signature: sig.use_saved, save_signature: sig.save,
+    }).then(unwrap<SwapRequest>),
   mine: () => apiClient.get(`${BASE}/swaps/mine`).then(unwrap<SwapRequest[]>),
-  consent: (id: string, agree: boolean, signature?: string) =>
-    apiClient.post(`${BASE}/swaps/${id}/consent`, { agree, signature }).then(unwrap<SwapRequest>),
+  consent: (id: string, agree: boolean, sig?: SigPayload) =>
+    apiClient.post(`${BASE}/swaps/${id}/consent`, {
+      agree, signature: sig?.signature ?? null,
+      use_saved_signature: sig?.use_saved, save_signature: sig?.save,
+    }).then(unwrap<SwapRequest>),
   list: (status = 'pending') =>
     apiClient.get(`${BASE}/swaps`, { params: { status } }).then(unwrap<SwapRequest[]>),
   decide: (id: string, approve: boolean, note?: string) =>

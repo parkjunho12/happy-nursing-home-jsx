@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowLeftRight, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { swapAPI, SWAP_STATUS_META, type SwapRequest } from '@/api/leaveClient'
-import SignaturePad from './SignaturePad'
+import SignatureInput, { type SigValue } from './SignatureInput'
 
 const fmtD = (iso: string) => {
   const [y, m, d] = iso.split('-').map(Number)
@@ -46,12 +46,12 @@ export default function SwapRequestCard({ month: monthProp }: { month?: string }
   const [myDate, setMyDate] = useState('')
   const [theirDate, setTheirDate] = useState('')
   const [reason, setReason] = useState('')
-  const [signature, setSignature] = useState<string | null>(null)
+  const [sig, setSig] = useState<SigValue>({ use_saved: false, signature: null, save: true, ok: false })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   // 동의 서명 모달
   const [consentTarget, setConsentTarget] = useState<SwapRequest | null>(null)
-  const [consentSig, setConsentSig] = useState<string | null>(null)
+  const [consentSig, setConsentSig] = useState<SigValue>({ use_saved: false, signature: null, save: true, ok: false })
 
   const load = () => { swapAPI.mine().then(setMine).catch(() => {}) }
   useEffect(load, [])
@@ -81,11 +81,11 @@ export default function SwapRequestCard({ month: monthProp }: { month?: string }
     if (!partner) { setErr('바꿀 상대를 선택해주세요.'); return }
     if (!myDate) { setErr('내 근무를 골라주세요.'); return }
     if (!theirDate) { setErr(`${partnerName} 선생님의 근무를 골라주세요.`); return }
-    if (!signature) { setErr('서명이 필요합니다.'); return }
+    if (!sig.ok) { setErr('서명이 필요합니다.'); return }
     setBusy(true); setErr('')
     try {
-      await swapAPI.create(partner, myDate, theirDate, reason || undefined, signature)
-      setPartner(''); setMyDate(''); setTheirDate(''); setReason(''); setSignature(null); setShifts(null)
+      await swapAPI.create(partner, myDate, theirDate, reason || undefined, sig)
+      setPartner(''); setMyDate(''); setTheirDate(''); setReason(''); setShifts(null)
       load()
       alert('요청했습니다. 상대 선생님이 동의하면 관리자 승인으로 넘어갑니다.')
     } catch (e: any) { setErr(e?.response?.data?.detail ?? e?.message ?? '요청 실패') }
@@ -94,11 +94,11 @@ export default function SwapRequestCard({ month: monthProp }: { month?: string }
 
   const doConsent = async (agree: boolean) => {
     if (!consentTarget) return
-    if (agree && !consentSig) { alert('동의하려면 서명해주세요.'); return }
+    if (agree && !consentSig.ok) { alert('동의하려면 서명해주세요.'); return }
     setBusy(true)
     try {
-      await swapAPI.consent(consentTarget.id, agree, agree ? consentSig! : undefined)
-      setConsentTarget(null); setConsentSig(null); load()
+      await swapAPI.consent(consentTarget.id, agree, agree ? consentSig : undefined)
+      setConsentTarget(null); load()
     } catch (e: any) { alert(e?.response?.data?.detail ?? '처리 실패') }
     finally { setBusy(false) }
   }
@@ -163,17 +163,16 @@ export default function SwapRequestCard({ month: monthProp }: { month?: string }
           {r.reason && <p className="text-xs text-gray-500 mt-1">사유 · {r.reason}</p>}
           {consentTarget?.id === r.id ? (
             <div className="mt-2">
-              <p className="text-xs font-semibold text-gray-500 mb-1.5">동의 서명</p>
-              <SignaturePad onChange={setConsentSig} />
+              <SignatureInput label="동의 확인용" onChange={setConsentSig} />
               <div className="flex gap-2 mt-2">
-                <button onClick={() => doConsent(true)} disabled={busy || !consentSig}
+                <button onClick={() => doConsent(true)} disabled={busy || !consentSig.ok}
                   className="flex-1 py-2.5 rounded-xl bg-sky-600 text-white text-sm font-bold disabled:opacity-40">동의하고 서명 제출</button>
                 <button onClick={() => setConsentTarget(null)} className="px-4 rounded-xl border border-gray-200 text-sm text-gray-500">취소</button>
               </div>
             </div>
           ) : (
             <div className="flex gap-2 mt-2">
-              <button onClick={() => { setConsentTarget(r); setConsentSig(null) }}
+              <button onClick={() => setConsentTarget(r)}
                 className="flex-1 py-2.5 rounded-xl bg-sky-600 text-white text-sm font-bold">동의 (서명)</button>
               <button onClick={() => { setConsentTarget(r); doConsent(false) }} disabled={busy}
                 className="px-4 rounded-xl border border-gray-200 text-sm text-gray-500 hover:text-red-500">거절</button>
@@ -235,11 +234,10 @@ export default function SwapRequestCard({ month: monthProp }: { month?: string }
 
         <input value={reason} onChange={e => setReason(e.target.value)} placeholder="사유 (선택)" className={inp} />
         <div>
-          <p className="text-xs font-semibold text-gray-500 mb-1.5">④ 서명 <span className="font-normal text-gray-400">— 합의 확인용</span></p>
-          <SignaturePad onChange={setSignature} />
+          <SignatureInput label="④ 합의 확인용" onChange={setSig} />
         </div>
         {err && <p className="text-xs text-red-500">{err}</p>}
-        <button onClick={submit} disabled={busy || !partner || !myDate || !theirDate || !signature}
+        <button onClick={submit} disabled={busy || !partner || !myDate || !theirDate || !sig.ok}
           className="w-full py-3 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-bold disabled:opacity-40">
           {busy ? <Loader2 size={15} className="animate-spin mx-auto" /> : '교대 요청 보내기'}
         </button>
