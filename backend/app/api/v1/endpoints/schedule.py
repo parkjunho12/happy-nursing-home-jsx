@@ -81,6 +81,7 @@ def _kst(dt):
 def _view(e: ScheduleEvent, user: Optional[User] = None) -> dict:
     return {
         "can_edit": _can_edit_event(user, e) if user else False,
+        "notice_id": e.notice_id,
         "created_by_id": e.created_by_id,
         "id": e.id, "category": e.category, "title": e.title,
         "start_at": _kst(e.start_at).isoformat() if e.start_at else None,
@@ -115,6 +116,72 @@ def list_events(
     return ApiResponse(success=True, data=[_view(e, current_user) for e in rows])
 
 
+# 일정 → 공개 공지 자동 생성 대상 분류 (보호자·가족 단톡에 공유하는 안내들)
+NOTICE_CATEGORIES = ("외출·외박", "외래·병원", "면회", "외부방문", "행사")
+
+# 분류별 카톡 공유 카드 이미지 (apps/web/public/assets/notice-cards/)
+# 주소 기준 = settings.PUBLIC_WEB_URL — 로컬(.env: http://localhost:3000)은 로컬 next dev에서,
+# 운영(기본값 www)은 배포된 웹에서 서빙된다. 화면 표시는 양쪽 다 되고,
+# 카카오 '카드 썸네일'만은 카카오 서버가 가져가므로 공개 https(운영)에서만 뜬다.
+from app.core.config import settings as _settings
+
+def _category_card(category: str):
+    base = (_settings.PUBLIC_WEB_URL or "").rstrip("/")
+    f = {"면회": "visit", "외래·병원": "hospital",
+         "외부방문": "external", "외출·외박": "outing"}.get(category)
+    return f"{base}/assets/notice-cards/{f}.png" if (base and f) else None
+
+WEEK_KO = ["월", "화", "수", "목", "금", "토", "일"]
+
+
+def _notice_text(e: ScheduleEvent) -> tuple:
+    """일정 내용으로 공지 제목·본문 생성 — 카톡 템플릿 그대로.
+
+    일정이 수정되면 이 템플릿으로 다시 만들어 공지도 함께 바뀐다."""
+    dt = _kst(e.start_at)
+    w = WEEK_KO[dt.weekday()]
+    when = f"{dt.month}월 {dt.day}일({w}) {dt.strftime('%H:%M')}"
+    title = f"[{e.category}] {e.title} — {dt.month}/{dt.day}({w})"
+    lines = [
+        f"안내드립니다 🙂",
+        "",
+        f"· 내용: {e.title}",
+        f"· 일시: {when}",
+    ]
+    if e.location:
+        lines.append(f"· 장소: {e.location}")
+    if e.contact_name:
+        lines.append(f"· 담당: {e.contact_name}" + (f" ({e.contact_phone})" if e.contact_phone else ""))
+    if e.memo:
+        lines += ["", e.memo]
+    lines += ["", "궁금하신 점은 시설로 연락 부탁드립니다.", "— 행복한요양원"]
+    return title, "\n".join(lines)
+
+
+def _sync_notice(db: Session, e: ScheduleEvent, user: User, create: bool = False):
+    """일정에 연결된 공개 공지를 만들거나 최신 내용으로 맞춘다."""
+    from app.models.staffing import InternalNotice
+    title, content = _notice_text(e)
+    if e.notice_id:
+        n = db.query(InternalNotice).filter(InternalNotice.id == e.notice_id).first()
+        if n:
+            n.title, n.content = title, content
+            n.image_url = _category_card(e.category) or n.image_url
+            n.active = e.status != "canceled"   # 일정 취소 → 공지도 내림
+            return n
+        e.notice_id = None                       # 공지가 지워졌으면 연결 해제
+    if create:
+        n = InternalNotice(title=title, content=content, level="info",
+                           public=True,          # 로그인 없이 링크 열람 → 카톡 공유용
+                           image_url=_category_card(e.category),
+                           author_id=getattr(user, "id", None),
+                           author_name=getattr(user, "name", None))
+        db.add(n); db.flush()
+        e.notice_id = n.id
+        return n
+    return None
+
+
 class EventBody(BaseModel):
     category: str = "기타"
     title: str
@@ -124,6 +191,7 @@ class EventBody(BaseModel):
     contact_name: Optional[str] = None
     contact_phone: Optional[str] = None
     memo: Optional[str] = None
+    make_notice: Optional[bool] = None   # 공개 공지도 함께 만들기 (외출·외박/외래 등)
 
 
 @router.post("/events")
@@ -142,8 +210,16 @@ def create_event(body: EventBody, db: Session = Depends(get_db),
         created_by=getattr(current_user, "name", None),
         created_by_id=current_user.id,
     )
-    db.add(e); db.commit(); db.refresh(e)
-    return ApiResponse(success=True, data=_view(e, current_user))
+    db.add(e)
+    notice = None
+    if body.make_notice and e.category in NOTICE_CATEGORIES:
+        db.flush()
+        notice = _sync_notice(db, e, current_user, create=True)
+    db.commit(); db.refresh(e)
+    out = _view(e, current_user)
+    if notice:
+        out["notice_id"] = notice.id
+    return ApiResponse(success=True, data=out)
 
 
 class EventUpdate(BaseModel):
@@ -156,6 +232,7 @@ class EventUpdate(BaseModel):
     contact_phone: Optional[str] = None
     memo: Optional[str] = None
     status: Optional[str] = None
+    make_notice: Optional[bool] = None   # 수정하면서 공지를 새로 붙일 수도 있다
 
 
 @router.patch("/events/{eid}")
@@ -187,6 +264,9 @@ def update_event(eid: str, body: EventUpdate, db: Session = Depends(get_db),
     if body.status is not None:
         e.status = body.status
     e.updated_at = now_kst()
+    # 연결된 공지가 있으면 항상 최신 내용으로 — 일정만 고치고 공지를 잊는 사고를 없앤다
+    _sync_notice(db, e, current_user,
+                 create=bool(body.make_notice) and e.category in NOTICE_CATEGORIES)
     db.commit(); db.refresh(e)
     return ApiResponse(success=True, data=_view(e, current_user))
 
@@ -199,6 +279,11 @@ def delete_event(eid: str, db: Session = Depends(get_db),
         raise HTTPException(status_code=404, detail="일정을 찾을 수 없습니다.")
     if not _can_edit_event(current_user, e):
         raise HTTPException(status_code=403, detail="본인이 등록한 일정만 삭제할 수 있습니다.")
+    if e.notice_id:
+        from app.models.staffing import InternalNotice
+        n = db.query(InternalNotice).filter(InternalNotice.id == e.notice_id).first()
+        if n:
+            n.active = False               # 일정이 사라지면 공지도 내린다
     db.delete(e); db.commit()
     return ApiResponse(success=True, message="삭제되었습니다.")
 
