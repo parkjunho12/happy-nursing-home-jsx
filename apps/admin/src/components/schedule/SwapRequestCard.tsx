@@ -26,7 +26,7 @@ const codeCls = (c: string) => CODE_CLS[c] ?? 'bg-gray-100 text-gray-700 border-
  * 말로만 합의하면 나중에 "그런 적 없다"가 되므로 양쪽 다 서명을 남기고,
  * 관리자 승인이 나면 근무표가 자동으로 바뀐다.
  */
-export default function SwapRequestCard() {
+export default function SwapRequestCard({ month: monthProp }: { month?: string } = {}) {
   // 바꿀 수 있는 상대 = 같은 직종의 재직자만 (서버가 거른 목록)
   const [partners, setPartners] = useState<{ id: string; name: string; position?: string | null }[]>([])
   const [myPosition, setMyPosition] = useState<string | null>(null)
@@ -39,7 +39,8 @@ export default function SwapRequestCard() {
   const [mine, setMine] = useState<SwapRequest[]>([])
   const [partner, setPartner] = useState('')
   const now = new Date()
-  const [month, setMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
+  const [month, setMonth] = useState(monthProp ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
+  useEffect(() => { if (monthProp) setMonth(monthProp) }, [monthProp])
   const [shifts, setShifts] = useState<{ saved: boolean; mine: Record<string, string>; partner: Record<string, string> } | null>(null)
   const [loadingShifts, setLoadingShifts] = useState(false)
   const [myDate, setMyDate] = useState('')
