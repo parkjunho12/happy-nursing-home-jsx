@@ -14,3 +14,4 @@ read -r ANSWER
 docker exec -i "$DB_CONTAINER" sh -c \
   'pg_restore --clean --if-exists -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < "$DUMP"
 echo "✅ 복원 완료 — 백엔드 재시작을 권장합니다: docker compose restart backend"
+
