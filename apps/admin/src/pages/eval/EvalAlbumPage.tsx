@@ -125,9 +125,16 @@ export default function EvalAlbumPage() {
     if (!files || !selAlbum) return
     setUploading(true)
     try {
-      await adminAlbumAPI.uploadMedia(selAlbum.id, Array.from(files))
+      const saved = await adminAlbumAPI.uploadMedia(selAlbum.id, Array.from(files))
       await fetchMedia(selAlbum.id)
       await fetchAlbums()
+      // 일반 직원 업로드는 승인 전까지 보호자에게 안 보인다 — 모르면 "안 올라갔다"고 느낀다
+      if (Array.isArray(saved) && saved.some((x: any) => x?.status === 'pending')) {
+        alert('올렸습니다! 관리자 승인 후 보호자에게 보입니다. (대시보드 처리 대기에서 승인)')
+      }
+    } catch (e: any) {
+      // 실패를 조용히 삼키면 "안 올라가는데?"만 남는다 — 서버가 준 이유를 그대로 보여준다
+      alert(e?.response?.data?.detail ?? e?.message ?? '업로드에 실패했습니다. 잠시 후 다시 시도해주세요.')
     } finally { setUploading(false) }
   }, [selAlbum])
 
