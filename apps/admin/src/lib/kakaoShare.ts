@@ -58,6 +58,7 @@ export interface ShareNoticeInput {
   level?: 'info' | 'important' | 'urgent'
   link?: string          // 카드 클릭 시 열 URL (기본 SHARE_LINK)
   image?: string | null  // 공지 첨부 이미지(절대 URL) — 있으면 카드 썸네일로 사용
+  noLabel?: boolean      // '공지 ·' 라벨 없이 제목 그대로 (날짜 선두 제목용)
 }
 
 const LEVEL_EMOJI: Record<string, string> = { urgent: '🚨', important: '📢', info: '💬' }
@@ -82,7 +83,7 @@ export async function shareNotice(n: ShareNoticeInput): Promise<void> {
   const url = n.link || SHARE_LINK
   const lv = n.level ?? 'info'
   // 제목: [이모지][라벨] · 제목  → 오픈채팅방 목록에서 한눈에 성격이 보이게
-  const title = `${LEVEL_EMOJI[lv]} ${LEVEL_LABEL[lv]} · ${n.title}`.trim()
+  const title = n.noLabel ? n.title.trim() : `${LEVEL_EMOJI[lv]} ${LEVEL_LABEL[lv]} · ${n.title}`.trim()
   // 설명: 본문 요약 + 시설명 꼬리표(신뢰감)
   const description = `${summarize(n.content)}\n— ${FACILITY}`
   // 카카오는 HTTPS 공개 이미지만 표시 → http/로컬이면 배너로 폴백(빈 카드 방지)

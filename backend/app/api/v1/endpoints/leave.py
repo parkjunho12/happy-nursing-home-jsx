@@ -47,12 +47,57 @@ def _view(r: LeaveRequest) -> dict:
     }
 
 
+def _resolve_signature(db: Session, user: User, name: str,
+                       signature: Optional[str], use_saved: bool, save: bool) -> str:
+    """서명 결정 — 저장된 서명 재사용 또는 새 서명(+원하면 저장).
+
+    50대 선생님들이 신청 때마다 서명을 다시 그리는 게 가장 큰 마찰이라
+    한 번 그린 서명을 저장해두고 쓰게 한다."""
+    if use_saved:
+        url = getattr(user, "saved_signature_url", None)
+        if not url:
+            raise HTTPException(400, "저장된 서명이 없습니다. 한 번 서명하고 '서명 저장'을 켜주세요.")
+        return url
+    url = _save_signature(name, signature)
+    if save:
+        user.saved_signature_url = url
+        db.add(user)
+    return url
+
+
+@router.get("/my-signature")
+def get_my_signature(current_user: User = Depends(get_current_user)):
+    return ApiResponse(success=True, data={"signature_url": getattr(current_user, "saved_signature_url", None)})
+
+
+class SignatureBody(BaseModel):
+    signature: str
+
+
+@router.post("/my-signature")
+def save_my_signature(body: SignatureBody, db: Session = Depends(get_db),
+                      current_user: User = Depends(get_current_user)):
+    current_user.saved_signature_url = _save_signature(getattr(current_user, "name", "user"), body.signature)
+    db.add(current_user); db.commit()
+    return ApiResponse(success=True, data={"signature_url": current_user.saved_signature_url})
+
+
+@router.delete("/my-signature")
+def delete_my_signature(db: Session = Depends(get_db),
+                        current_user: User = Depends(get_current_user)):
+    current_user.saved_signature_url = None
+    db.add(current_user); db.commit()
+    return ApiResponse(success=True, message="저장된 서명을 지웠습니다.")
+
+
 class CreateBody(BaseModel):
     dates: List[str]
     kind: str
     reason: Optional[str] = None
     use_annual: Optional[bool] = None   # 희망휴무: 근무표 짤 때 연차(休)로 우선 반영 (기본 켬)
-    signature: Optional[str] = None     # data:image/png;base64,... — 모든 신청에 필수
+    signature: Optional[str] = None     # data:image/png;base64,... — 새로 그린 서명
+    use_saved_signature: Optional[bool] = None   # 저장된 서명 재사용
+    save_signature: Optional[bool] = None        # 이번 서명을 저장해두기
 
 
 @router.post("/requests")
@@ -113,7 +158,8 @@ def create_requests(body: CreateBody, db: Session = Depends(get_db),
                     f"{d}에는 내 근무가 없습니다. 근무표에 근무가 있는 날만 연차를 쓸 수 있어요.")
 
     # 모든 신청은 서면(전자서명) — 나중에 "신청한 적 없다" 분쟁을 막는 근거가 된다
-    sig_url = _save_signature(staff.name, body.signature)
+    sig_url = _resolve_signature(db, current_user, staff.name, body.signature,
+                                 bool(body.use_saved_signature), bool(body.save_signature))
 
     dup = db.query(LeaveRequest).filter(
         LeaveRequest.staff_id == staff.id,
@@ -409,6 +455,8 @@ class SwapCreateBody(BaseModel):
     partner_staff_id: str
     reason: Optional[str] = None
     signature: Optional[str] = None
+    use_saved_signature: Optional[bool] = None
+    save_signature: Optional[bool] = None
 
 
 @router.post("/swaps")
@@ -446,7 +494,8 @@ def create_swap(body: SwapCreateBody, db: Session = Depends(get_db),
         raise HTTPException(400, f"{partner.name} 선생님은 {my_date}에 이미 '{_cell(db, partner.id, my_date)}'가 있어 바꿀 수 없습니다.")
     if _cell(db, me.id, their_date):
         raise HTTPException(400, f"나는 {their_date}에 이미 '{_cell(db, me.id, their_date)}'가 있어 바꿀 수 없습니다.")
-    sig = _save_signature(me.name, body.signature)
+    sig = _resolve_signature(db, current_user, me.name, body.signature,
+                             bool(body.use_saved_signature), bool(body.save_signature))
 
     r = SwapRequest(
         requester_staff_id=me.id, requester_name=me.name,
@@ -478,7 +527,9 @@ def my_swaps(db: Session = Depends(get_db), current_user: User = Depends(get_cur
 
 class SwapConsentBody(BaseModel):
     agree: bool
-    signature: Optional[str] = None   # 동의 시 필수
+    signature: Optional[str] = None   # 동의 시 필수 (저장 서명 재사용 가능)
+    use_saved_signature: Optional[bool] = None
+    save_signature: Optional[bool] = None
 
 
 @router.post("/swaps/{rid}/consent")
@@ -495,7 +546,8 @@ def consent_swap(rid: str, body: SwapConsentBody, db: Session = Depends(get_db),
         raise HTTPException(400, "이미 처리된 요청입니다.")
 
     if body.agree:
-        r.partner_signature_url = _save_signature(me.name, body.signature)
+        r.partner_signature_url = _resolve_signature(db, current_user, me.name, body.signature,
+                                                     bool(body.use_saved_signature), bool(body.save_signature))
         r.partner_user_id = getattr(current_user, "id", None) or r.partner_user_id
         r.status = "pending"
         msg = f"{me.name} 선생님이 교대에 동의했습니다. 관리자 승인을 기다립니다."

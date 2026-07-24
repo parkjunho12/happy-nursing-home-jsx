@@ -141,7 +141,8 @@ def _notice_text(e: ScheduleEvent) -> tuple:
     dt = _kst(e.start_at)
     w = WEEK_KO[dt.weekday()]
     when = f"{dt.month}월 {dt.day}일({w}) {dt.strftime('%H:%M')}"
-    title = f"[{e.category}] {e.title} — {dt.month}/{dt.day}({w})"
+    # 날짜를 맨 앞에 — 단톡방 목록에서 "언제"가 제일 먼저 보여야 한다
+    title = f"{dt.month}/{dt.day}({w}) [{e.category}] {e.title}"
     lines = [
         f"안내드립니다 🙂",
         "",
