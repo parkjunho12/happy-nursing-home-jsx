@@ -68,6 +68,7 @@ export default function EvalAlbumPage() {
   const [resSearch,    setResSearch]    = useState('')       // 드롭다운 내 검색
   const [resDropOpen,  setResDropOpen]  = useState(false)
   const [albumSearch,  setAlbumSearch]  = useState('')       // 앨범 검색
+  const [pendingOnly,  setPendingOnly]  = useState(false)     // 승인대기 있는 앨범만
   const [guardianSearch, setGuardianSearch] = useState('')   // 보호자 검색
 
   // 페이지네이션
@@ -193,16 +194,20 @@ export default function EvalAlbumPage() {
       !resSearch || r.name.includes(resSearch)
     ), [activeResidents, resSearch])
 
-  // 앨범 프론트 검색
+  // 앨범 프론트 검색 + 승인대기 필터
   const searchedAlbums = useMemo(() => {
-    if (!albumSearch.trim()) return albums
+    let list = albums
+    if (pendingOnly) list = list.filter(a => (a.pending_count ?? 0) > 0)
+    if (!albumSearch.trim()) return list
     const q = albumSearch.toLowerCase()
-    return albums.filter(a =>
+    return list.filter(a =>
       a.title.toLowerCase().includes(q) ||
       a.resident_name.toLowerCase().includes(q) ||
       (a.description?.toLowerCase().includes(q))
     )
-  }, [albums, albumSearch])
+  }, [albums, albumSearch, pendingOnly])
+
+  const totalPending = useMemo(() => albums.reduce((n, a) => n + (a.pending_count ?? 0), 0), [albums])
 
   // 페이지네이션
   const pagedAlbums  = searchedAlbums.slice(0, page * PAGE_SIZE)
@@ -363,6 +368,17 @@ export default function EvalAlbumPage() {
                   <X size={13}/>
                 </button>
               )}
+            </div>
+
+            {/* 승인대기 필터 — 몇 장이 기다리는지 보이고, 누르면 그 앨범만 남는다 */}
+            <div className="shrink-0">
+              <button onClick={() => { setPendingOnly(p => !p); setPage(1) }}
+                className={`h-10 px-3.5 rounded-xl text-sm font-bold border transition-all ${
+                  pendingOnly ? 'bg-amber-500 text-white border-amber-500'
+                  : totalPending > 0 ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                  : 'bg-white text-gray-400 border-gray-200'}`}>
+                승인대기만{totalPending > 0 && <span className={`ml-1.5 text-[11px] font-extrabold px-1.5 py-0.5 rounded-full ${pendingOnly ? 'bg-white/25' : 'bg-amber-500 text-white'}`}>{totalPending}</span>}
+              </button>
             </div>
 
             {/* 새로고침 */}
@@ -695,6 +711,7 @@ function MediaModal({ album, media, uploading, onUpload, onDeleteMedia, canAppro
   fileRef: React.RefObject<HTMLInputElement>
   folderRef: React.RefObject<HTMLInputElement>
 }) {
+  const [pendingFilter, setPendingFilter] = useState(false)
   const [selectMode, setSelectMode] = useState(false)
   const [selected,   setSelected]   = useState<Set<string>>(new Set())
   const [deleting,   setDeleting]   = useState(false)
@@ -856,6 +873,14 @@ function MediaModal({ album, media, uploading, onUpload, onDeleteMedia, canAppro
           {/* 사진 그리드 */}
           {media.length > 0 && (
             <div className="p-3">
+              {/* 승인대기만 보기 — 승인할 사진만 골라 처리 */}
+              {canApprove && media.some(mm => mm.status === 'pending') && (
+                <button onClick={() => setPendingFilter(p => !p)}
+                  className={`mb-3 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                    pendingFilter ? 'bg-amber-500 text-white border-amber-500' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'}`}>
+                  승인대기만 보기 ({media.filter(mm => mm.status === 'pending').length}장)
+                </button>
+              )}
               {/* 드래그 업로드 존 (소형) */}
               {!selectMode && (
                 <div
@@ -869,7 +894,7 @@ function MediaModal({ album, media, uploading, onUpload, onDeleteMedia, canAppro
 
               {/* 날짜별 그룹 */}
               <MediaGrid
-                media={media}
+                media={pendingFilter ? media.filter(mm => mm.status === 'pending') : media}
                 selectMode={selectMode}
                 selected={selected}
                 onToggle={toggleSelect}
