@@ -76,6 +76,10 @@ class Settings(BaseSettings):
     # =============================
     # Cloudflare R2 Storage
     # =============================
+    # 공개 웹(www) 주소 — 공지 카드 이미지·공유 링크의 기준.
+    # 로컬 테스트: backend/.env 에 PUBLIC_WEB_URL=http://localhost:3000
+    PUBLIC_WEB_URL: str = "https://www.xn--p80bu1t60gba47bg6abm347gsla.com"
+
     R2_ACCOUNT_ID: str = ""
     R2_ACCESS_KEY_ID: str = ""
     R2_SECRET_ACCESS_KEY: str = ""

@@ -91,6 +91,12 @@ export default function NoticeBoard() {
                       {open && n.content && (
                         <p className="text-xs text-gray-600 mt-1.5 whitespace-pre-wrap leading-relaxed">{n.content}</p>
                       )}
+                      {open && n.image_url && (
+                        // 대표 이미지(카톡 카드) — 깨진 이미지 아이콘 대신 조용히 숨긴다 (web 배포 전 404 대비)
+                        <img src={noticeImageUrl(n.image_url)!} alt="" loading="lazy"
+                          onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                          className="mt-2 rounded-xl border border-gray-100 max-h-56 w-auto" />
+                      )}
                       <p className="text-[10px] text-gray-400 mt-1 flex items-center gap-1.5">
                         {n.author_name ?? '관리자'} · {rel(n.created_at)}
                         {/* 확인 현황(누가 봤는지)은 ADMIN만 — 서버도 동일하게 막는다 */}

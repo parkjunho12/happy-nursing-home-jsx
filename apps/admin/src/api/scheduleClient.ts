@@ -24,6 +24,7 @@ export interface ScheduleEvent {
   status: string
   created_by?: string | null
   created_by_id?: string | null
+  notice_id?: string | null      // 연결된 공개 공지 — 일정 수정 시 함께 갱신됨
   can_edit?: boolean
   created_at?: string | null
 }
@@ -36,6 +37,7 @@ export interface EventInput {
   contact_name?: string | null
   contact_phone?: string | null
   memo?: string | null
+  make_notice?: boolean   // 공개 공지도 함께 생성 (외출·외박/외래·병원/면회/행사)
 }
 
 export interface LifecycleEvent {

@@ -10,6 +10,7 @@ import { ledgerAPI, type LedgerRow } from '@/api/leaveClient'
 import { visitAPI } from '@/api/visitClient'
 import VisitInboxPanel from '@/components/schedule/VisitInboxPanel'
 import { useAuthStore } from '@/store/auth'
+import { isKakaoShareEnabled, shareNotice } from '@/lib/kakaoShare'
 import { getNavConfig } from '@/components/layout/navConfig'
 import {
   scheduleAPI, SCHEDULE_CATEGORIES, type ScheduleEvent, type EventInput, type LifecycleEvent, type RenewalEvent, type DocCalEvent, type EduCalEvent,
@@ -84,6 +85,15 @@ type UEvent = {
 }
 
 const WEEK = ['일', '월', '화', '수', '목', '금', '토']
+// 로컬에서 열렸으면 공개 웹도 로컬(next dev, 3000)을 본다 — 카드 이미지·공지 링크 테스트용
+const PUBLIC_WEB = (() => {
+  if (typeof window !== 'undefined') {
+    const h = window.location.hostname
+    if (h === 'localhost' || h === '127.0.0.1' || /^192\.168\./.test(h) || /^10\./.test(h))
+      return `http://${h}:3000`
+  }
+  return (import.meta.env.VITE_PUBLIC_WEB_URL || 'https://www.xn--p80bu1t60gba47bg6abm347gsla.com').replace(/\/$/, '')
+})()
 
 export default function SchedulePage() {
   const navigate = useNavigate()
@@ -620,6 +630,23 @@ function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: strin
   const [contactName, setContactName] = useState(editing?.contact_name ?? '')
   const [contactPhone, setContactPhone] = useState(editing?.contact_phone ?? '')
   const [memo, setMemo] = useState(editing?.memo ?? '')
+  // 외출·외박/외래 안내는 가족 단톡에 공유하는 경우가 많다 — 공지로도 만들어 카톡 템플릿 공유
+  const NOTICE_CATS = ['외출·외박', '외래·병원', '면회', '외부방문', '행사']
+  // 분류별 카드 이미지 — 로컬에서 열리면 localhost:3000(next dev), 운영에선 www
+  const CARD_BASE = `${PUBLIC_WEB}/assets/notice-cards`
+  const CARD_IMG: Record<string, string> = {
+    면회: `${CARD_BASE}/visit.png`,
+    '외래·병원': `${CARD_BASE}/hospital.png`,
+    외부방문: `${CARD_BASE}/external.png`,
+    '외출·외박': `${CARD_BASE}/outing.png`,
+  }
+  const noticeCat = NOTICE_CATS.includes(category)
+  const hasNotice = !!editing?.notice_id
+  const [makeNotice, setMakeNotice] = useState(false)
+  useEffect(() => {
+    // 분류를 외출·외박/외래로 고르면 기본 켬 (수정 중 + 이미 공지 연결이면 항상 유지)
+    setMakeNotice(hasNotice || (category === '외출·외박' || category === '외래·병원'))
+  }, [category, hasNotice])
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
 
@@ -641,10 +668,21 @@ function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: strin
         category, title: title.trim(), start_at,
         end_at: endPreview, location: location || null,
         contact_name: contactName || null, contact_phone: contactPhone || null, memo: memo || null,
+        make_notice: noticeCat && makeNotice,
       }
-      if (isEdit) await scheduleAPI.updateEvent(editing!.id, body)
-      else await scheduleAPI.createEvent(body)
+      const saved = isEdit ? await scheduleAPI.updateEvent(editing!.id, body)
+        : await scheduleAPI.createEvent(body)
       onSaved()
+      // 공지가 연결됐으면 바로 카톡 공유 제안 — 등록하고 공유하러 찾아가는 수고를 줄인다
+      const nid = (saved as any)?.notice_id
+      if (nid && isKakaoShareEnabled() && confirm(isEdit
+        ? '연결된 공지도 최신 내용으로 바뀌었습니다. 카카오톡으로 다시 공유할까요?'
+        : '공개 공지가 만들어졌습니다. 지금 카카오톡으로 공유할까요?')) {
+        try {
+          await shareNotice({ title: title.trim(), content: memo || undefined, level: 'info',
+            link: `${PUBLIC_WEB}/notice/${nid}`, image: CARD_IMG[category] })
+        } catch (e: any) { alert(e?.message ?? '카카오 공유는 모바일 카카오톡에서 시도해주세요.') }
+      }
     } catch (e: any) { setErr(e?.message ?? '저장 실패') } finally { setSaving(false) }
   }
 
@@ -661,6 +699,19 @@ function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: strin
             ))}
           </div>
         </div>
+
+        {noticeCat && (
+          <label className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-50/60 border border-amber-100 cursor-pointer">
+            <input type="checkbox" checked={makeNotice} onChange={e => setMakeNotice(e.target.checked)}
+              className="mt-0.5 w-4 h-4 accent-amber-600" disabled={hasNotice} />
+            <span className="text-xs text-gray-600 leading-relaxed">
+              <b className="text-amber-700">공개 공지로도 등록 — 카카오톡 공유용</b><br />
+              {hasNotice
+                ? '이 일정에는 이미 공지가 연결돼 있어요. 저장하면 공지도 최신 내용으로 바뀝니다.'
+                : '일시·장소가 템플릿에 맞춰 공지로 만들어지고, 링크로 가족 단톡에 공유할 수 있어요. 일정을 나중에 고치면 공지도 같이 바뀝니다.'}
+            </span>
+          </label>
+        )}
 
         <Field label="제목"><input value={title} onChange={e => setTitle(e.target.value)} placeholder="예: 김OO 어르신 방문상담" className="inp" autoFocus /></Field>
 
