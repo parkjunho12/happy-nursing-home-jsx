@@ -20,12 +20,14 @@ const fmtD = (iso: string) => {
   return `${m}월 ${d}일(${w})`
 }
 
-export default function LeaveRequestCard() {
+export default function LeaveRequestCard({ month: monthProp }: { month?: string } = {}) {
   const [dates, setDates] = useState<string[]>([])
   const [dateInput, setDateInput] = useState('')
   // 연차는 근무표의 내 근무 날짜에서만 고른다 (근무 → 休 교체이므로)
   const now = new Date()
-  const [month, setMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
+  const [month, setMonth] = useState(monthProp ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
+  // 위 근무표에서 달을 바꾸면 신청 카드도 따라간다
+  useEffect(() => { if (monthProp) setMonth(monthProp) }, [monthProp])
   const [myShifts, setMyShifts] = useState<{ saved: boolean; shifts: Record<string, string> } | null>(null)
   const [loadingShifts, setLoadingShifts] = useState(false)
   const [kind, setKind] = useState<LeaveKind>('연차')
@@ -56,6 +58,13 @@ export default function LeaveRequestCard() {
       .catch(() => { if (!dead) setMyShifts(null) })
       .finally(() => { if (!dead) setLoadingShifts(false) })
     return () => { dead = true }
+  }, [kind, month])
+
+  // 희망휴무 날짜 선택 — 달력이 '보던 달'에서 열리도록 비어 있으면 그 달 1일을 넣어둔다
+  useEffect(() => {
+    if (kind !== '희망휴무') return
+    if (!dateInput || dateInput.slice(0, 7) !== month) setDateInput(`${month}-01`)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kind, month])
 
   const moveMonth = (delta: number) => {

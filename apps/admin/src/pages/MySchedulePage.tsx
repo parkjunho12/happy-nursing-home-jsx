@@ -187,8 +187,9 @@ export default function MySchedulePage() {
             ))}
           </div>
 
-          <LeaveRequestCard />
-          <SwapRequestCard />
+          {/* 위에서 보던 달을 그대로 신청 카드에도 — 8월 보다가 신청하면 8월이 떠야 한다 */}
+          <LeaveRequestCard month={ym} />
+          <SwapRequestCard month={ym} />
 
           {/* 이번 달에 실제로 등장하는 코드만 설명 */}
           <div className="mt-3 rounded-2xl bg-white border border-gray-100 p-3">
