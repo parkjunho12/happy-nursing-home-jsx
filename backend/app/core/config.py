@@ -90,6 +90,23 @@ class Settings(BaseSettings):
     @property
     def R2_CONFIGURED(self) -> bool:
         return bool(self.R2_ACCOUNT_ID and self.R2_ACCESS_KEY_ID and self.R2_SECRET_ACCESS_KEY)
+    # ── R2 빈 값 방어 ──────────────────────────────────────────────
+    # docker-compose가 `${R2_ACCOUNT_ID:-}` 로 빈 문자열을 주입하면
+    # 환경변수가 .env보다 우선이라 R2가 '미설정'으로 죽는다 (앨범 업로드 503).
+    # 빈 값이면 .env 파일 값으로 되살린다 — 운영 사고 재발 방지용.
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        if not self.R2_ACCOUNT_ID or not self.R2_ACCESS_KEY_ID or not self.R2_SECRET_ACCESS_KEY:
+            try:
+                from dotenv import dotenv_values
+                f = dotenv_values(".env")
+                for k in ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY",
+                          "R2_BUCKET_NAME", "R2_PUBLIC_URL"):
+                    if not getattr(self, k, None) and (f.get(k) or "").strip():
+                        object.__setattr__(self, k, f[k].strip())
+            except Exception:
+                pass
+
     class Config:
         env_file = ".env"
         case_sensitive = True

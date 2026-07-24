@@ -362,6 +362,34 @@ def list_media(album_id: str, db: Session = Depends(get_db), current_user: User 
     return ApiResponse(success=True, data=[_media_dict(m, uploader_names) for m in media])
 
 
+@admin_router.get("/albums/storage-status")
+def storage_status(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """R2 스토리지 진단 — 운영에서 '사진이 안 올라간다' 할 때 원인을 바로 본다.
+
+    설정 여부 + 실제 쓰기·삭제 왕복 테스트까지. ADMIN 전용."""
+    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    if role != "ADMIN":
+        raise HTTPException(403, "관리자만 볼 수 있습니다.")
+    from app.core.config import settings as _st
+    out = {
+        "r2_configured": r2.is_configured(),
+        "bucket": getattr(_st, "R2_BUCKET_NAME", None),
+        "public_url_set": bool(getattr(_st, "R2_PUBLIC_URL", None)),
+        "roundtrip": None, "error": None,
+    }
+    if out["r2_configured"]:
+        try:
+            from app.services.r2_storage import _get_client, _bucket
+            key = "diagnostics/storage-status-probe.txt"
+            _get_client().put_object(Bucket=_bucket(), Key=key, Body=b"ok", ContentType="text/plain")
+            _get_client().delete_object(Bucket=_bucket(), Key=key)
+            out["roundtrip"] = "ok"
+        except Exception as e:
+            out["roundtrip"] = "fail"
+            out["error"] = str(e)[:300]
+    return ApiResponse(success=True, data=out)
+
+
 @admin_router.post("/albums/{album_id}/media")
 def upload_media(
     album_id: str,
