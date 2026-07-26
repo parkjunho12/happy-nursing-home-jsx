@@ -79,6 +79,7 @@ export default function EvalAlbumPage() {
   const thisMonthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
   const [monthFilter,  setMonthFilter]  = useState(thisMonthKey) // 월별 관리 — 기본 이번 달, ''=전체
   const [genBusy,      setGenBusy]      = useState(false)     // 월별 앨범 생성 중
+  const [floorFilter,  setFloorFilter]  = useState('')        // 층 필터 — ''=전체
   const [guardianSearch, setGuardianSearch] = useState('')   // 보호자 검색
 
   // 페이지네이션
@@ -204,9 +205,20 @@ export default function EvalAlbumPage() {
       !resSearch || r.name.includes(resSearch)
     ), [activeResidents, resSearch])
 
+// 층 필터 — 앨범의 수급자 층으로 분류 (명단에서 층을 읽는다)
+  const floorOf = useMemo(() => {
+    const map: Record<string, string> = {}
+    residents.forEach(r => { map[r.id] = r.floor || '미지정' })
+    return map
+  }, [residents])
+  const floorOptions = useMemo(() =>
+    Array.from(new Set(residents.filter(r => r.status === 'active').map(r => r.floor || '미지정')))
+      .sort(), [residents])
+
   // 앨범 프론트 검색 + 승인대기 필터
   const searchedAlbums = useMemo(() => {
     let list = albums
+    if (floorFilter) list = list.filter(a => (floorOf[a.resident_id] ?? '미지정') === floorFilter)
     if (monthFilter) list = list.filter(a => monthKeyOf(a) === monthFilter)
     if (pendingOnly) list = list.filter(a => (a.pending_count ?? 0) > 0)
     if (!albumSearch.trim()) return list
@@ -216,9 +228,10 @@ export default function EvalAlbumPage() {
       a.resident_name.toLowerCase().includes(q) ||
       (a.description?.toLowerCase().includes(q))
     )
-  }, [albums, albumSearch, pendingOnly, monthFilter])
+  }, [albums, albumSearch, pendingOnly, monthFilter, floorFilter, floorOf])
 
   const totalPending = useMemo(() => albums.reduce((n, a) => n + (a.pending_count ?? 0), 0), [albums])
+
 
 
   const generateMonthly = async () => {
@@ -394,6 +407,20 @@ export default function EvalAlbumPage() {
                 </button>
               )}
             </div>
+
+            {/* 층 필터 — 층별로 담당이 나뉘어 있어 제일 앞에 둔다 */}
+            {floorOptions.length > 1 && (
+              <div className="shrink-0 inline-flex items-center gap-1">
+                <button onClick={() => { setFloorFilter(''); setPage(1) }}
+                  className={`h-10 px-3 rounded-xl text-sm font-bold border transition-all ${
+                    !floorFilter ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}>전체</button>
+                {floorOptions.map(f => (
+                  <button key={f} onClick={() => { setFloorFilter(floorFilter === f ? '' : f); setPage(1) }}
+                    className={`h-10 px-3 rounded-xl text-sm font-bold border transition-all ${
+                      floorFilter === f ? 'bg-primary-orange text-white border-primary-orange' : 'bg-white text-gray-500 border-gray-200 hover:border-orange-300'}`}>{f}</button>
+                ))}
+              </div>
+            )}
 
             {/* 월별 관리 — ‹ 2026년 7월 › 로 한 달씩 넘겨 본다. 라벨 클릭 = 전체 보기 */}
             {(() => {
