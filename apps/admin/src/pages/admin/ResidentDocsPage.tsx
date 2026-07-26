@@ -56,7 +56,7 @@ export default function ResidentDocsPage() {
   const [fee, setFee] = useState('')
   const [floorF, setFloorF] = useState('')
   const [careF, setCareF] = useState('')
-  const [rulesOn, setRulesOn] = useState(false)   // 작성 기준 안내 행
+  const [rulesOn, setRulesOn] = useState(true)    // 작성 기준 안내 행 — 기본 표시 (버튼으로 끌 수 있음)
   const [quick, setQuick] = useState<'all' | 'cert' | 'month' | 'alert'>('all')
   const [sopOpen, setSopOpen] = useState(false)
   // 수정 이력 모달 — null=닫힘, {}=전체 최근, {id,name}=해당 어르신
@@ -421,7 +421,7 @@ export default function ResidentDocsPage() {
           </table>
         </div>
       )}
-      <p className="text-[11px] text-gray-400 mt-2">💡 계약서·계획서·평가 칸에는 <b className="text-gray-500">다음에 할 일</b>이 D-day와 함께 맨 위에 옵니다. 「전체 N건」을 누르면 지난 기록까지 펼쳐집니다. 열별 작성 규칙은 상단 「작성 기준」 버튼으로 켜세요.</p>
+      <p className="text-[11px] text-gray-400 mt-2">💡 계약서·계획서·평가 칸에는 <b className="text-gray-500">다음에 할 일</b>이 D-day와 함께 맨 위에 옵니다. 「전체 N건」을 누르면 지난 기록까지 펼쳐집니다. 열별 작성 규칙이 항상 표시됩니다 — 필요 없으면 상단 「작성 기준」 버튼으로 끄세요.</p>
 
       {histOpen && (
         <DocChangesModal docId={histOpen.id} name={histOpen.name} onClose={() => setHistOpen(null)} />
@@ -450,6 +450,13 @@ function DocFormModal({ editing, residents = [], docByResident = new Map<string,
   })
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
+  // 처음 상태 스냅샷 — 실수로 배경을 눌러 입력을 날리는 사고를 막는 기준
+  const [initial] = useState(() => JSON.stringify(f))
+  const dirty = JSON.stringify(f) !== initial
+  const safeClose = () => {
+    if (dirty && !confirm('저장하지 않은 변경이 있습니다. 닫을까요?')) return
+    onClose()
+  }
 
   const inp = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-200'
 
@@ -478,11 +485,14 @@ function DocFormModal({ editing, residents = [], docByResident = new Map<string,
 
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={safeClose}>
       <div className="bg-white rounded-2xl w-full max-w-lg max-h-[92vh] overflow-y-auto shadow-xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
-          <h3 className="font-bold text-gray-900">{isEdit ? '어르신 서류 수정' : '어르신 추가'}</h3>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center"><X className="w-5 h-5 text-gray-400" /></button>
+          <h3 className="font-bold text-gray-900">
+            {isEdit ? '어르신 서류 수정' : '어르신 추가'}
+            {dirty && <span className="ml-2 text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 align-middle">수정 중</span>}
+          </h3>
+          <button onClick={safeClose} className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center"><X className="w-5 h-5 text-gray-400" /></button>
         </div>
         <div className="px-5 py-4 space-y-3">
           {!isEdit && (() => {
@@ -581,11 +591,14 @@ function DocFormModal({ editing, residents = [], docByResident = new Map<string,
           </div>
           {err && <p className="text-xs text-red-500">{err}</p>}
         </div>
-        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-gray-100">
+        {/* 저장 바 — 긴 폼에서도 항상 손 닿는 곳에 (sticky) */}
+        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-gray-100 sticky bottom-0 bg-white z-10">
           {isEdit && <button onClick={del} disabled={saving} className="mr-auto px-3 py-2 text-sm font-semibold text-red-500 hover:bg-red-50 rounded-lg inline-flex items-center gap-1.5"><Trash2 className="w-4 h-4" />삭제</button>}
-          <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-gray-500 hover:bg-gray-100 rounded-lg">취소</button>
-          <button onClick={submit} disabled={saving} className="px-4 py-2 text-sm font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-lg disabled:opacity-50 inline-flex items-center gap-1.5">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}{isEdit ? '저장' : '추가'}
+          <button onClick={safeClose} className="px-4 py-2 text-sm font-semibold text-gray-500 hover:bg-gray-100 rounded-lg">취소</button>
+          <button onClick={submit} disabled={saving || (isEdit && !dirty)}
+            title={isEdit && !dirty ? '변경된 내용이 없습니다' : undefined}
+            className="px-4 py-2 text-sm font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-lg disabled:opacity-50 inline-flex items-center gap-1.5">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}{isEdit ? (dirty ? '저장' : '변경 없음') : '추가'}
           </button>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { X, GripVertical, ArrowDownUp, History } from 'lucide-react'
+import { X, GripVertical, ArrowDownUp, History, Plus } from 'lucide-react'
 import DateField from '@/components/ui/DateField'
 import { type DocEvent, type DocType, KINDS, defaultKind, asEvent, todayISO, STATUSES, statusMeta, effStatus, type EventStatus } from '@/utils/docEvents'
 
@@ -29,7 +29,13 @@ export default function DocEventsEditor({ type, value, onChange, addLabel = '+ �
   const pastCount = items.filter(isPast).length
 
   const patch = (i: number, p: Partial<DocEvent>) => onChange(items.map((x, xi) => xi === i ? { ...x, ...p } : x))
-  const add = () => onChange([...items, { date: '', memo: '', kind: defaultAddKind ?? defaultKind(type) }])
+  // 새 행은 오늘 날짜로 '맨 위'에 — 끝에 빈 행으로 생기면 어디 생겼는지 못 찾는다
+  const [flashI, setFlashI] = useState<number | null>(null)
+  const add = () => {
+    onChange([{ date: today, memo: '', kind: defaultAddKind ?? defaultKind(type) }, ...items])
+    setFlashI(0)
+    setTimeout(() => setFlashI(null), 2000)
+  }
   const rm = (i: number) => onChange(items.filter((_, xi) => xi !== i))
   const sortByDate = () => onChange([...items].sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999')))
 
@@ -49,7 +55,7 @@ export default function DocEventsEditor({ type, value, onChange, addLabel = '+ �
           <div key={i}
             onDragOver={e => { e.preventDefault(); if (overI !== i) setOverI(i) }}
             onDrop={() => drop(i)}
-            className={`flex flex-wrap items-center gap-1.5 rounded-lg ${overI === i && dragI !== null ? 'ring-2 ring-teal-300 ring-offset-1' : ''} ${dragI === i ? 'opacity-40' : ''}`}
+            className={`flex flex-wrap items-center gap-1.5 rounded-lg transition-all ${overI === i && dragI !== null ? 'ring-2 ring-teal-300 ring-offset-1' : ''} ${dragI === i ? 'opacity-40' : ''} ${flashI === i ? 'ring-2 ring-teal-400 bg-teal-50/60' : ''}`}
           >
             <span draggable onDragStart={() => setDragI(i)} onDragEnd={() => { setDragI(null); setOverI(null) }}
               className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 shrink-0" title="드래그로 순서 변경">
@@ -89,10 +95,14 @@ export default function DocEventsEditor({ type, value, onChange, addLabel = '+ �
           {showPast ? `이전 기록 ${pastCount}건 접기 ▴` : `이전 기록 ${pastCount}건 더보기 ▾`}
         </button>
       )}
-      <div className="flex items-center gap-3">
-        <button type="button" onClick={add} className="text-xs font-semibold text-teal-600 hover:underline">{addLabel}</button>
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={add}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-dashed border-teal-300 bg-teal-50/50 text-teal-700 text-sm font-bold hover:bg-teal-50 hover:border-teal-400 transition-colors">
+          <Plus className="w-4 h-4" /> {addLabel.replace(/^\+\s*/, '')}
+        </button>
         {items.length > 1 && (
-          <button type="button" onClick={sortByDate} className="inline-flex items-center gap-1 text-xs font-semibold text-gray-400 hover:text-gray-600">
+          <button type="button" onClick={sortByDate}
+            className="shrink-0 inline-flex items-center gap-1 px-3 py-2.5 rounded-xl border border-gray-200 text-xs font-semibold text-gray-400 hover:text-gray-600 hover:bg-gray-50">
             <ArrowDownUp className="w-3 h-3" /> 날짜순 정렬
           </button>
         )}
