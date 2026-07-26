@@ -33,6 +33,13 @@ interface Guardian {
 
 type ModalType = 'none' | 'createAlbum' | 'uploadMedia' | 'viewMedia' | 'createGuardian'
 
+// 월별 관리 — 제목의 "YYYY년 M월"을 우선 읽고, 없으면 만든 달로 분류
+const monthKeyOf = (a: Album) => {
+  const m = a.title.match(/^(\d{4})년 (\d{1,2})월/)
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}`
+  return a.created_at ? a.created_at.slice(0, 7) : ''
+}
+
 const mediaUrl = (url: string) =>
   url.startsWith('http') ? url : `${API_BASE}${url}`
 
@@ -69,6 +76,9 @@ export default function EvalAlbumPage() {
   const [resDropOpen,  setResDropOpen]  = useState(false)
   const [albumSearch,  setAlbumSearch]  = useState('')       // 앨범 검색
   const [pendingOnly,  setPendingOnly]  = useState(false)     // 승인대기 있는 앨범만
+  const thisMonthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
+  const [monthFilter,  setMonthFilter]  = useState(thisMonthKey) // 월별 관리 — 기본 이번 달, ''=전체
+  const [genBusy,      setGenBusy]      = useState(false)     // 월별 앨범 생성 중
   const [guardianSearch, setGuardianSearch] = useState('')   // 보호자 검색
 
   // 페이지네이션
@@ -197,6 +207,7 @@ export default function EvalAlbumPage() {
   // 앨범 프론트 검색 + 승인대기 필터
   const searchedAlbums = useMemo(() => {
     let list = albums
+    if (monthFilter) list = list.filter(a => monthKeyOf(a) === monthFilter)
     if (pendingOnly) list = list.filter(a => (a.pending_count ?? 0) > 0)
     if (!albumSearch.trim()) return list
     const q = albumSearch.toLowerCase()
@@ -205,9 +216,23 @@ export default function EvalAlbumPage() {
       a.resident_name.toLowerCase().includes(q) ||
       (a.description?.toLowerCase().includes(q))
     )
-  }, [albums, albumSearch, pendingOnly])
+  }, [albums, albumSearch, pendingOnly, monthFilter])
 
   const totalPending = useMemo(() => albums.reduce((n, a) => n + (a.pending_count ?? 0), 0), [albums])
+
+
+  const generateMonthly = async () => {
+    if (!confirm('이번 달 앨범을 재원 어르신 전원에게 만들까요?\n(이미 있는 어르신은 건너뜁니다 · 퇴소자 제외)')) return
+    setGenBusy(true)
+    try {
+      const r = await adminAlbumAPI.generateMonthly()
+      await fetchAlbums()
+      alert(`${r.year}년 ${r.month}월 앨범 ${r.created}개 생성 (이미 있음 ${r.skipped}건)`
+        + (r.created ? `\n${r.created_names.join(', ')}` : '')
+        + (r.text ? `\n\n인사말: ${r.text}` : ''))
+    } catch (e: any) { alert(e?.response?.data?.detail ?? '생성 실패') }
+    finally { setGenBusy(false) }
+  }
 
   // 페이지네이션
   const pagedAlbums  = searchedAlbums.slice(0, page * PAGE_SIZE)
@@ -369,6 +394,38 @@ export default function EvalAlbumPage() {
                 </button>
               )}
             </div>
+
+            {/* 월별 관리 — ‹ 2026년 7월 › 로 한 달씩 넘겨 본다. 라벨 클릭 = 전체 보기 */}
+            {(() => {
+              const moveMonth = (delta: number) => {
+                const base = monthFilter || thisMonthKey
+                const [y, m] = base.split('-').map(Number)
+                const d = new Date(y, m - 1 + delta, 1)
+                setMonthFilter(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+                setPage(1)
+              }
+              const countInMonth = monthFilter ? albums.filter(a => monthKeyOf(a) === monthFilter).length : albums.length
+              return (
+                <div className="shrink-0 inline-flex items-center h-10 border border-gray-200 rounded-xl bg-white overflow-hidden">
+                  <button onClick={() => moveMonth(-1)} aria-label="이전 달"
+                    className="h-full px-2.5 text-gray-400 hover:text-gray-700 hover:bg-gray-50">‹</button>
+                  <button onClick={() => { setMonthFilter(monthFilter ? '' : thisMonthKey); setPage(1) }}
+                    title={monthFilter ? '누르면 전체 월 보기' : '누르면 이번 달 보기'}
+                    className="h-full px-2 min-w-[7.5rem] text-sm font-bold text-gray-700 hover:bg-gray-50">
+                    {monthFilter
+                      ? `${Number(monthFilter.slice(0, 4))}년 ${Number(monthFilter.slice(5, 7))}월`
+                      : '전체 월'}
+                    <span className="ml-1 text-[11px] font-semibold text-gray-400">{countInMonth}</span>
+                  </button>
+                  <button onClick={() => moveMonth(1)} aria-label="다음 달"
+                    className="h-full px-2.5 text-gray-400 hover:text-gray-700 hover:bg-gray-50">›</button>
+                </div>
+              )
+            })()}
+            <button onClick={generateMonthly} disabled={genBusy}
+              className="shrink-0 h-10 px-3.5 rounded-xl text-sm font-bold border border-primary-orange/40 bg-orange-50 text-primary-orange hover:bg-orange-100 disabled:opacity-50">
+              {genBusy ? '생성 중…' : '이번 달 앨범 만들기'}
+            </button>
 
             {/* 승인대기 필터 — 몇 장이 기다리는지 보이고, 누르면 그 앨범만 남는다 */}
             <div className="shrink-0">

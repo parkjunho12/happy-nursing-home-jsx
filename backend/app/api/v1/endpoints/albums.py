@@ -362,6 +362,26 @@ def list_media(album_id: str, db: Session = Depends(get_db), current_user: User 
     return ApiResponse(success=True, data=[_media_dict(m, uploader_names) for m in media])
 
 
+@admin_router.post("/albums/generate-monthly")
+def generate_monthly(month: Optional[str] = None, db: Session = Depends(get_db),
+                     current_user: User = Depends(get_current_user)):
+    """월별 앨범 일괄 생성 — 재원 어르신 전원, 퇴소자 제외, 멱등.
+
+    매월 1일 자동으로도 돌지만, 버튼으로 즉시 만들 수도 있다."""
+    _require_can_manage_guardians(current_user)   # ADMIN·사회복지사
+    from datetime import datetime
+    from app.services.monthly_albums import ensure_monthly_albums
+    if month:
+        try:
+            y, m = int(month[:4]), int(month[5:7])
+        except Exception:
+            raise HTTPException(400, "month는 YYYY-MM 형식이어야 합니다.")
+    else:
+        now = datetime.now(KST)
+        y, m = now.year, now.month
+    return ApiResponse(success=True, data=ensure_monthly_albums(db, y, m))
+
+
 @admin_router.get("/albums/storage-status")
 def storage_status(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """R2 스토리지 진단 — 운영에서 '사진이 안 올라간다' 할 때 원인을 바로 본다.

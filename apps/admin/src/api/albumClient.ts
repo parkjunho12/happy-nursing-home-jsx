@@ -31,6 +31,9 @@ export const adminAlbumAPI = {
     apiClient.get(`${BASE}/admin/albums`, { params: residentId ? { resident_id: residentId } : {} })
       .then(unwrap<any[]>),
 
+  generateMonthly: (month?: string) =>
+    apiClient.post(`${BASE}/admin/albums/generate-monthly`, null, { params: month ? { month } : {} })
+      .then((r: any) => r.data?.data as { year: number; month: number; created: number; created_names: string[]; skipped: number; text?: string | null }),
   createAlbum: (form: FormData) =>
     apiClient.post(`${BASE}/admin/albums`, form, formHeaders).then(unwrap<any>),
 
