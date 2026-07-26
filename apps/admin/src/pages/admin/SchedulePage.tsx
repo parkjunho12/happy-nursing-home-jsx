@@ -660,7 +660,8 @@ function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: strin
     : category === '외박'
       ? (returnDate ? `${returnDate}T${returnTime || '12:00'}` : null)       // 외박 = 다른 날 귀원
       : null
-  const endPreview = returnAt ?? (!noTime && durMin ? addMinutes(date, time, durMin) : null)
+  // 외출·외박은 귀원(지정 안 함이면 없음)만, 그 외 분류는 소요 시간으로 종료 계산
+  const endPreview = isOuting ? returnAt : (!noTime && durMin ? addMinutes(date, time, durMin) : null)
   const endTimeStr = endPreview ? endPreview.slice(11, 16) : null
 
   const dateChips = [
@@ -781,8 +782,8 @@ function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: strin
           </>)}
         </div>
 
-        {/* 소요 시간 — 시간 미정이면 의미 없음 */}
-        {!noTime && (
+        {/* 소요 시간 — 시간 미정이면 의미 없음. 외출·외박은 귀원 시간이 그 역할이라 숨긴다 */}
+        {!noTime && !isOuting && (
         <div>
           <label className="text-xs font-semibold text-gray-500 mb-1.5 block">
             소요 시간{endTimeStr && <span className="ml-1.5 text-violet-600 font-bold">→ {timeLabel(endTimeStr)} 종료</span>}
@@ -812,6 +813,9 @@ function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: strin
               <DateField value={returnDate} onChange={v => setReturnDate(v)} className="inp mb-2" />
             )}
             <div className="flex flex-wrap gap-1.5 mb-2">
+              <button onClick={() => setReturnTime('')}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                  !returnTime ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}>지정 안 함</button>
               {['11:00', '12:00', '15:00', '17:00', '19:00'].map(t => (
                 <button key={t} onClick={() => setReturnTime(returnTime === t ? '' : t)}
                   disabled={category === '외박' && !returnDate}
