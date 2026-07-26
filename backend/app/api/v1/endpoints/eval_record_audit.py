@@ -473,6 +473,17 @@ async def upload_and_audit(
         CareforLeaveRecord.start_date.desc()
     ).limit(500).all()
 
+    # 검수 직전 자동 연동 — 이번 달·지난달 근무표를 저장본 기준으로 최신화
+    try:
+        from datetime import datetime, timezone, timedelta
+        from app.api.v1.endpoints.eval_carefor import auto_sync_schedules
+        _now = datetime.now(timezone(timedelta(hours=9)))
+        _prev = (_now.replace(day=1) - timedelta(days=1))
+        for _ym in {_now.strftime("%Y-%m"), _prev.strftime("%Y-%m")}:
+            auto_sync_schedules(db, _ym)
+    except Exception:
+        db.rollback()
+
     schedules_all = db.query(StaffWorkSchedule).order_by(
         StaffWorkSchedule.work_date
     ).limit(2000).all()

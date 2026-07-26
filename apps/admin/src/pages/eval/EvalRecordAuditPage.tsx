@@ -1732,10 +1732,10 @@ function ScheduleTab({
         <div>
           <p className="font-semibold text-gray-900 text-sm flex items-center gap-1.5">
             <Clock size={15} className="text-teal-500" />
-            근무표 업로드
+            근무표
           </p>
           <p className="text-xs text-gray-400 mt-0.5">
-            근무표 엑셀 업로드 — 행=직원·열=날짜 또는 행=날짜별 기록 지원
+            <b className="text-teal-600">근무표 페이지에서 가져오기</b>를 누르면 저장된 근무표가 그대로 들어옵니다 — 엑셀 업로드는 예비용
           </p>
           <div className="bg-teal-50 border border-teal-100 rounded-xl p-3 mt-2">
             <p className="text-[11px] font-bold text-teal-700 mb-1">📄 엑셀 뽑는 방법</p>
@@ -1748,6 +1748,26 @@ function ScheduleTab({
 
         {isAdmin && (
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={async () => {
+                const ym = `${year}-${String(month).padStart(2, '0')}`
+                if (!confirm(`${year}년 ${month}월 근무표를 근무표 페이지에서 가져올까요?\n(이 달의 기존 검수용 근무표는 대체됩니다)`)) return
+                try {
+                  const r = await apiClient.post(`/api/v1/eval/carefor/work-schedules/sync-from-admin?month=${ym}&replace=true`)
+                  const d = r.data?.data
+                  onRefresh()
+                  onMsg(`✅ 근무표 가져옴 — ${d?.staff_count ?? 0}명 · ${d?.imported ?? 0}칸${d?.unknown_staff ? ` (명단 미매칭 ${d.unknown_staff}명 제외)` : ''}`)
+                } catch (e: any) {
+                  onMsg(`⚠ ${e?.response?.data?.detail ?? '가져오기 실패'}`)
+                }
+              }}
+              className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold"
+            >
+              <Clock size={13} />
+              근무표 페이지에서 가져오기
+            </button>
+
             {schedules.length > 0 && (
               <button
                 type="button"
@@ -1777,7 +1797,7 @@ function ScheduleTab({
               type="button"
               onClick={() => fileRef.current?.click()}
               disabled={uploading}
-              className="flex w-full sm:w-auto items-center justify-center gap-1.5 text-xs font-semibold bg-teal-500 hover:bg-teal-600 text-white px-3 py-2 rounded-xl disabled:opacity-50"
+              className="flex w-full sm:w-auto items-center justify-center gap-1.5 text-xs font-semibold border border-gray-200 hover:bg-gray-50 text-gray-600 px-3 py-2 rounded-xl disabled:opacity-50"
             >
               {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
               {uploading ? '업로드 중...' : '엑셀 업로드'}
