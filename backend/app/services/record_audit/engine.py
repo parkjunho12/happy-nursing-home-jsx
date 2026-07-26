@@ -203,7 +203,8 @@ def audit_daily_records(
                 )
                 if not _in_outing:
                     _missing.append(meal_name)
-            if _missing:
+            # 입소 당일은 도착 시간에 따라 앞 끼니가 비는 게 정상 — 누락으로 잡지 않는다
+            if _missing and not (adm and rec_date == adm):
                 meal_missing_days.append((date_short, _missing))
 
         # ── 혈압/체온 미기재 ────────────────────────────────────────────────

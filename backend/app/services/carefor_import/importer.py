@@ -83,7 +83,9 @@ def upsert_leave_records(db: Session, records: List[Dict[str, Any]]) -> ImportRe
 
             if existing:
                 for k, v in rec.items():
-                    if v is not None:
+                    # 시간 필드는 None도 그대로 반영 — 잘못 저장된 옛 값을
+                    # 재업로드로 바로잡을 수 있어야 한다
+                    if v is not None or k in ("start_time", "end_date", "end_time"):
                         setattr(existing, k, v)
                 updated += 1
             else:
