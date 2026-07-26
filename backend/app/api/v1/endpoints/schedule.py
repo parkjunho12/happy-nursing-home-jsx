@@ -24,7 +24,8 @@ from app.schemas.response import ApiResponse
 router = APIRouter()
 
 _KST = timezone(timedelta(hours=9))
-CATEGORIES = ["방문상담", "외부방문", "회의", "행사", "외래·병원", "면회", "외출·외박", "갱신", "퇴소", "기타"]
+# 외출·외박은 분리 — 귀원 시점이 다르다 (외출=당일, 외박=다음날 이후)
+CATEGORIES = ["방문상담", "외부방문", "회의", "행사", "외래·병원", "면회", "외출", "외박", "갱신", "퇴소", "기타"]
 
 
 # 모든 일정 수정·삭제 가능(관리자급)
@@ -117,7 +118,7 @@ def list_events(
 
 
 # 일정 → 공개 공지 자동 생성 대상 분류 (보호자·가족 단톡에 공유하는 안내들)
-NOTICE_CATEGORIES = ("외출·외박", "외래·병원", "면회", "외부방문", "행사")
+NOTICE_CATEGORIES = ("외출", "외박", "외래·병원", "면회", "외부방문", "행사")
 
 # 분류별 카톡 공유 카드 이미지 (apps/web/public/assets/notice-cards/)
 # 주소 기준 = settings.PUBLIC_WEB_URL — 로컬(.env: http://localhost:3000)은 로컬 next dev에서,
@@ -128,7 +129,7 @@ from app.core.config import settings as _settings
 def _category_card(category: str):
     base = (_settings.PUBLIC_WEB_URL or "").rstrip("/")
     f = {"면회": "visit", "외래·병원": "hospital",
-         "외부방문": "external", "외출·외박": "outing"}.get(category)
+         "외부방문": "external", "외출": "outing", "외박": "outing"}.get(category)
     return f"{base}/assets/notice-cards/{f}.png" if (base and f) else None
 
 WEEK_KO = ["월", "화", "수", "목", "금", "토", "일"]
@@ -149,10 +150,18 @@ def _notice_text(e: ScheduleEvent) -> tuple:
         f"· 내용: {e.title}",
         f"· 일시: {when}",
     ]
+    if e.end_at and e.category in ("외출", "외박"):
+        rt = _kst(e.end_at)
+        if rt.date() == dt.date():          # 외출 — 당일 귀원은 시간만
+            lines.append(f"· 귀원: 당일 {rt.strftime('%H:%M')}")
+        else:
+            rw = WEEK_KO[rt.weekday()]
+            lines.append(f"· 귀원: {rt.month}월 {rt.day}일({rw}) {rt.strftime('%H:%M')}")
     if e.location:
         lines.append(f"· 장소: {e.location}")
     if e.contact_name:
-        lines.append(f"· 담당: {e.contact_name}" + (f" ({e.contact_phone})" if e.contact_phone else ""))
+        # '담당'이 아니라 '연락처' — 어르신 상태를 가장 잘 아는 사람이 받는 번호다
+        lines.append(f"· 연락처: {e.contact_name}" + (f" ({e.contact_phone})" if e.contact_phone else ""))
     if e.memo:
         lines += ["", e.memo]
     lines += ["", "궁금하신 점은 시설로 연락 부탁드립니다.", "— 행복한요양원"]

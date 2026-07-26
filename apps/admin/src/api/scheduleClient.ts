@@ -8,7 +8,7 @@ function unwrap<T>(res: any): T {
 }
 
 // 등록 가능한 분류 — 실제 사용 패턴(외래·면회·외출이 '기타'의 대부분)에서 뽑았다
-export const SCHEDULE_CATEGORIES = ['방문상담', '외부방문', '회의', '행사', '외래·병원', '면회', '외출·외박', '갱신', '퇴소', '기타'] as const
+export const SCHEDULE_CATEGORIES = ['방문상담', '외부방문', '회의', '행사', '외래·병원', '면회', '외출', '외박', '갱신', '퇴소', '기타'] as const
 export type ScheduleCategory = (typeof SCHEDULE_CATEGORIES)[number]
 
 export interface ScheduleEvent {

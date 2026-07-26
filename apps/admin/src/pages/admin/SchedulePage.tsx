@@ -28,7 +28,7 @@ const hmOf = (iso?: string | null) => {
 const startOfWeek = (d: Date) => { const x = new Date(d); x.setDate(x.getDate() - x.getDay()); x.setHours(0, 0, 0, 0); return x }
 
 /* 카테고리 색상 */
-type CatKey = '방문상담' | '외부방문' | '회의' | '행사' | '외래·병원' | '면회' | '외출·외박' | '갱신' | '퇴소' | '기타' | '면접' | '입소' | '입사' | '재계약' | '계약서' | '계획서' | '평가' | '교육' | '생신' | '생일' | '연차촉진'
+type CatKey = '방문상담' | '외부방문' | '회의' | '행사' | '외래·병원' | '면회' | '외출' | '외박' | '갱신' | '퇴소' | '기타' | '면접' | '입소' | '입사' | '재계약' | '계약서' | '계획서' | '평가' | '교육' | '생신' | '생일' | '연차촉진'
 const CAT: Record<CatKey, { dot: string; chip: string; bar: string }> = {
   방문상담: { dot: 'bg-blue-500',   chip: 'bg-blue-50 text-blue-700 border-blue-200',       bar: 'border-l-blue-500 bg-blue-50' },
   외부방문: { dot: 'bg-teal-500',   chip: 'bg-teal-50 text-teal-700 border-teal-200',       bar: 'border-l-teal-500 bg-teal-50' },
@@ -36,7 +36,8 @@ const CAT: Record<CatKey, { dot: string; chip: string; bar: string }> = {
   행사:    { dot: 'bg-pink-500',   chip: 'bg-pink-50 text-pink-700 border-pink-200',       bar: 'border-l-pink-500 bg-pink-50' },
   '외래·병원': { dot: 'bg-purple-500', chip: 'bg-purple-50 text-purple-700 border-purple-200', bar: 'border-l-purple-500 bg-purple-50' },
   면회:    { dot: 'bg-yellow-500', chip: 'bg-yellow-50 text-yellow-700 border-yellow-200',  bar: 'border-l-yellow-500 bg-yellow-50' },
-  '외출·외박': { dot: 'bg-green-600', chip: 'bg-green-50 text-green-700 border-green-200',   bar: 'border-l-green-600 bg-green-50' },
+  외출:    { dot: 'bg-green-600',  chip: 'bg-green-50 text-green-700 border-green-200',     bar: 'border-l-green-600 bg-green-50' },
+  외박:    { dot: 'bg-green-900',  chip: 'bg-green-100 text-green-900 border-green-300',    bar: 'border-l-green-900 bg-green-100' },
   갱신:    { dot: 'bg-stone-500',  chip: 'bg-stone-100 text-stone-700 border-stone-300',    bar: 'border-l-stone-500 bg-stone-100' },
   퇴소:    { dot: 'bg-slate-500',  chip: 'bg-slate-100 text-slate-600 border-slate-300',    bar: 'border-l-slate-500 bg-slate-100' },
   기타:    { dot: 'bg-gray-400',   chip: 'bg-gray-50 text-gray-600 border-gray-200',       bar: 'border-l-gray-400 bg-gray-50' },
@@ -52,13 +53,13 @@ const CAT: Record<CatKey, { dot: string; chip: string; bar: string }> = {
   생일:    { dot: 'bg-lime-500',    chip: 'bg-lime-50 text-lime-700 border-lime-200',            bar: 'border-l-lime-500 bg-lime-50' },
   연차촉진: { dot: 'bg-fuchsia-500', chip: 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200',     bar: 'border-l-fuchsia-500 bg-fuchsia-50' },
 }
-const ALL_CATS: CatKey[] = ['방문상담', '외부방문', '회의', '행사', '외래·병원', '면회', '외출·외박', '갱신', '퇴소', '기타', '면접', '입소', '입사', '재계약', '계약서', '계획서', '평가', '교육', '생신', '생일', '연차촉진']
+const ALL_CATS: CatKey[] = ['방문상담', '외부방문', '회의', '행사', '외래·병원', '면회', '외출', '외박', '갱신', '퇴소', '기타', '면접', '입소', '입사', '재계약', '계약서', '계획서', '평가', '교육', '생신', '생일', '연차촉진']
 
 // 카테고리마다 근거가 되는 메뉴가 있다 — 그 메뉴를 못 보는 직종은 캘린더에서도 그 정보를 못 본다.
 // null = 일반 일정(캘린더 접근자 전원)
 const CAT_ROUTE: Record<CatKey, string | null> = {
   방문상담: null, 외부방문: null, 회의: null, 행사: null, 기타: null,
-  '외래·병원': null, 면회: null, '외출·외박': null,   // 어르신 케어와 직결 — 전 직원
+  '외래·병원': null, 면회: null, 외출: null, 외박: null,   // 어르신 케어와 직결 — 전 직원
   갱신: '/resident-docs', 퇴소: '/eval/residents',
   면접: '/recruitment',
   입소: '/eval/residents', 생신: '/eval/residents',
@@ -85,6 +86,11 @@ type UEvent = {
 }
 
 const WEEK = ['일', '월', '화', '수', '목', '금', '토']
+// 귀원 시간 선택지 — 30분 단위 (06:00~22:00)
+const RETURN_TIMES = Array.from({ length: 33 }, (_, i) => {
+  const h = 6 + Math.floor(i / 2), m = i % 2 ? '30' : '00'
+  return `${String(h).padStart(2, '0')}:${m}`
+})
 // 로컬에서 열렸으면 공개 웹도 로컬(next dev, 3000)을 본다 — 카드 이미지·공지 링크 테스트용
 const PUBLIC_WEB = (() => {
   if (typeof window !== 'undefined') {
@@ -135,7 +141,7 @@ export default function SchedulePage() {
   // 요양보호사는 고정 5종만: 행사·기타·교육·생신·생일 (상담·회의 같은 운영 일정은 제외)
   const visibleCats = useMemo(() => {
     if (authUser?.role !== 'ADMIN' && authUser?.position === '요양보호사')
-      return new Set<CatKey>(['행사', '기타', '교육', '생신', '생일', '외래·병원', '면회', '외출·외박'])
+      return new Set<CatKey>(['행사', '기타', '교육', '생신', '생일', '외래·병원', '면회', '외출', '외박'])
     const nav = getNavConfig(authUser)
     const routes = new Set<string>(nav.sections.flatMap(sec => sec.items.map(i => i.to)))
     return new Set<CatKey>(ALL_CATS.filter(c =>
@@ -626,24 +632,35 @@ function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: strin
     }
     return editing ? null : 60
   })
+  // 귀원 일시 — 외출은 당일이라 시간만, 외박은 날짜+시간 (end_at에 저장)
+  const isOuting = category === '외출' || category === '외박'
+  const [returnDate, setReturnDate] = useState(() =>
+    editing?.end_at && editing.category === '외박' ? ymd(new Date(editing.end_at)) : '')
+  const [returnTime, setReturnTime] = useState(() =>
+    editing?.end_at && ['외출', '외박'].includes(editing.category) ? hmOf(editing.end_at) : '')
   const [location, setLocation] = useState(editing?.location ?? '')
   const [contactName, setContactName] = useState(editing?.contact_name ?? '')
   const [contactPhone, setContactPhone] = useState(editing?.contact_phone ?? '')
   const [memo, setMemo] = useState(editing?.memo ?? '')
   // 외출·외박/외래 안내는 가족 단톡에 공유하는 경우가 많다 — 공지로도 만들어 카톡 템플릿 공유
-  const NOTICE_CATS = ['외출·외박', '외래·병원', '면회', '외부방문', '행사']
+  const NOTICE_CATS = ['외출', '외박', '외래·병원', '면회', '외부방문', '행사']
   const noticeCat = NOTICE_CATS.includes(category)
   const hasNotice = !!editing?.notice_id
   const [makeNotice, setMakeNotice] = useState(false)
   useEffect(() => {
     // 분류를 외출·외박/외래로 고르면 기본 켬 (수정 중 + 이미 공지 연결이면 항상 유지)
-    setMakeNotice(hasNotice || (category === '외출·외박' || category === '외래·병원'))
+    setMakeNotice(hasNotice || ['외출', '외박', '외래·병원'].includes(category))
   }, [category, hasNotice])
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
 
   const start_at = noTime ? `${date}T00:00` : `${date}T${time}`
-  const endPreview = !noTime && durMin ? addMinutes(date, time, durMin) : null
+  const returnAt = category === '외출'
+    ? (returnTime ? `${date}T${returnTime}` : null)                          // 외출 = 당일 귀원
+    : category === '외박'
+      ? (returnDate ? `${returnDate}T${returnTime || '12:00'}` : null)       // 외박 = 다른 날 귀원
+      : null
+  const endPreview = returnAt ?? (!noTime && durMin ? addMinutes(date, time, durMin) : null)
   const endTimeStr = endPreview ? endPreview.slice(11, 16) : null
 
   const dateChips = [
@@ -678,8 +695,17 @@ function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: strin
             `[${category}] ${mm}/${dd}(${w})${noTime ? '' : ` ${time}`}`,
             title.trim(),
           ]
+          if (returnAt) {
+            if (category === '외출') {
+              lines.push(`귀원: 당일 ${returnTime}`)
+            } else {
+              const [ry, rm, rd] = returnDate.split('-').map(Number)
+              const rw = ['일', '월', '화', '수', '목', '금', '토'][new Date(ry, rm - 1, rd).getDay()]
+              lines.push(`귀원: ${rm}/${rd}(${rw}) ${returnTime || '12:00'}`)
+            }
+          }
           if (location) lines.push(`장소: ${location}`)
-          if (contactName) lines.push(`담당: ${contactName}${contactPhone ? ` (${contactPhone})` : ''}`)
+          if (contactName) lines.push(`연락처: ${contactName}${contactPhone ? ` (${contactPhone})` : ''}`)
           if (memo) lines.push(memo.trim())
           lines.push('— 행복한요양원')
           await shareText(lines.join('\n'), `${PUBLIC_WEB}/notice/${nid}`)
@@ -771,8 +797,41 @@ function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: strin
         )}
 
         <Field label="장소 (선택)"><input value={location} onChange={e => setLocation(e.target.value)} placeholder="예: 시설 1층 상담실" className="inp" /></Field>
+        {/* 귀원 — 외출은 당일 시간만, 외박은 날짜+시간. 자주 쓰는 시간은 칩으로 바로. */}
+        {isOuting && (
+          <div>
+            <label className="text-xs font-semibold text-gray-500 mb-1.5 block">
+              {category === '외출' ? '귀원 시간 (선택) — 당일 몇 시에 돌아오시는지' : '귀원 일시 (선택) — 언제 돌아오시는지'}
+              {returnTime && (category === '외출' || returnDate) && (
+                <span className="ml-1.5 text-green-700 font-bold">
+                  → {category === '외출' ? '당일' : `${Number(returnDate.slice(5, 7))}/${Number(returnDate.slice(8, 10))}`} {returnTime} 귀원
+                </span>
+              )}
+            </label>
+            {category === '외박' && (
+              <DateField value={returnDate} onChange={v => setReturnDate(v)} className="inp mb-2" />
+            )}
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {['11:00', '12:00', '15:00', '17:00', '19:00'].map(t => (
+                <button key={t} onClick={() => setReturnTime(returnTime === t ? '' : t)}
+                  disabled={category === '외박' && !returnDate}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all disabled:opacity-40 ${
+                    returnTime === t ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-500 border-gray-200 hover:border-green-400'}`}>{t}</button>
+              ))}
+            </div>
+            <select value={returnTime} onChange={e => setReturnTime(e.target.value)}
+              disabled={category === '외박' && !returnDate} className="inp disabled:opacity-40">
+              <option value="">다른 시간 선택 (30분 단위)</option>
+              {RETURN_TIMES.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            {category === '외박' && !returnDate && (
+              <p className="text-[11px] text-amber-600 mt-1">귀원 날짜를 먼저 고르면 시간을 선택할 수 있어요 — 적어두면 공지·카톡에도 안내됩니다.</p>
+            )}
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-2">
-          <Field label="연락처 이름 (선택)"><input value={contactName} onChange={e => setContactName(e.target.value)} className="inp" /></Field>
+          <Field label="연락처 이름 (선택) — 어르신 상태를 잘 아는 분"><input value={contactName} onChange={e => setContactName(e.target.value)} className="inp" /></Field>
           <Field label="연락처 전화 (선택)"><input value={contactPhone} onChange={e => setContactPhone(e.target.value)} placeholder="010-0000-0000" className="inp" /></Field>
         </div>
         <Field label="메모 (선택)"><textarea value={memo} onChange={e => setMemo(e.target.value)} rows={2} className="inp resize-none" /></Field>
