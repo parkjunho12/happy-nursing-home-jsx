@@ -60,17 +60,31 @@ def generate_month_text(year: int, month: int) -> str:
 
 
 def ensure_monthly_albums(db: Session, year: int, month: int) -> dict:
-    """재원 어르신 전원에게 그 달 앨범 보장 (있으면 건너뜀)."""
+    """재원 어르신 전원에게 그 달 앨범 보장.
+
+    중복 판단은 제목이 아니라 '수급자 + 그 달' — 어르신이 그 달에 만든 앨범이
+    하나라도 있으면(직접 만든 것 포함) 건너뛴다. 제목을 바꿔도 안전하다."""
+    from datetime import datetime, timezone, timedelta
+    KST = timezone(timedelta(hours=9))
+    m_start = datetime(year, month, 1, tzinfo=KST)
+    m_end = datetime(year + (month == 12), (month % 12) + 1, 1, tzinfo=KST)
+
     title_of = lambda name: f"{year}년 {month}월 · {name} 어르신"  # noqa: E731
     residents = (db.query(LtcResident)
                  .filter(LtcResident.status == "active").all())
+
+    # 그 달에 앨범이 이미 있는 수급자 집합 — 자동 생성분이든 손으로 만든 것이든
+    has_album = {a.resident_id for a in db.query(Album).filter(
+        Album.created_at >= m_start, Album.created_at < m_end).all()}
+    # 제목 규칙으로 만들어진 그 달 앨범도 포함 (생성일이 어긋난 경우 대비)
+    prefix = f"{year}년 {month}월"
+    has_album |= {a.resident_id for a in db.query(Album)
+                  .filter(Album.title.like(f"{prefix}%")).all()}
+
     created, skipped = [], 0
     month_text = None
     for r in residents:
-        exists = db.query(Album).filter(
-            Album.resident_id == r.id,
-            Album.title == title_of(r.name)).first()
-        if exists:
+        if r.id in has_album:
             skipped += 1
             continue
         if month_text is None:                     # AI 호출은 달마다 한 번만
