@@ -27,9 +27,9 @@ LEAVE_COL_MAP = {
     "resident_code": ["수급자코드","코드","code","수급번호"],
     "leave_type":    ["구분","외출구분","외박구분","유형","type","leave_type"],
     "start_date":    ["외출일","외박일","시작일","출발일","start_date","외출시작일","시작"],
-    "start_time":    ["출발시간","시작시간","start_time","외출시간"],
+    "start_time":    ["출발시간","시작시간","start_time","외출시간","시간"],      # 실제 시트: 외출일 옆 첫 '시간' 열
     "end_date":      ["귀원일","복귀일","종료일","return_date","end_date","외출종료일","종료"],
-    "end_time":      ["귀원시간","복귀시간","return_time","end_time"],
+    "end_time":      ["귀원시간","복귀시간","return_time","end_time","시간2"],   # 복귀일 옆 두 번째 '시간' 열
     "reason":        ["사유","이유","reason"],
     "guardian_name": ["보호자","보호자명","guardian"],
     "memo":          ["비고","메모","memo","특이사항"],
@@ -37,19 +37,25 @@ LEAVE_COL_MAP = {
 }
 
 
+def _squash(k: str) -> str:
+    """헤더 비교용 정규화 — 공백·줄바꿈 제거 ('복귀 시간' ↔ '복귀시간')"""
+    return re.sub(r"\s+", "", str(k)).lower()
+
+
 def _find_col(row: Dict[str, Any], candidates: List[str]) -> Optional[Any]:
     """row 딕셔너리에서 후보 컬럼명과 fuzzy 매칭해서 값 반환"""
-    row_keys_lower = {k.strip().lower(): k for k in row}
+    row_keys_lower = {_squash(k): k for k in row}
     for cand in candidates:
-        key = cand.lower()
+        key = _squash(cand)
         if key in row_keys_lower:
             v = row[row_keys_lower[key]]
             if v is not None and str(v).strip():
                 return str(v).strip()
     # 부분 매칭
     for cand in candidates:
+        ck = _squash(cand)
         for rk, orig_k in row_keys_lower.items():
-            if cand.lower() in rk or rk in cand.lower():
+            if ck in rk or rk in ck:
                 v = row[orig_k]
                 if v is not None and str(v).strip():
                     return str(v).strip()
@@ -105,13 +111,39 @@ def _normalize_date(val: Any) -> Optional[str]:
 
 
 def _normalize_time(val: Any) -> Optional[str]:
+    """셀 어디에 있든 시간을 찾아 HH:MM으로.
+
+    실전 엑셀은 '2026-07-11 17:00'(날짜+시간 한 칸), 엑셀 시간값(0.708…),
+    '17시 30분', '1700' 등 제각각이라 앞자리 매칭만으론 시간을 다 놓친다."""
     if val is None:
         return None
+    # datetime/time 객체
+    if hasattr(val, 'hour') and hasattr(val, 'minute'):
+        return f"{val.hour:02d}:{val.minute:02d}"
     s = str(val).strip()
-    # 맨 앞이 HH:MM 형식일 때만 시간으로 인정 (날짜·텍스트 섞인 셀은 무시)
-    m = re.match(r'^(\d{1,2}):(\d{2})', s)
+    if not s or s.lower() in ('none', 'nan'):
+        return None
+    # 엑셀 시간값 (하루의 소수 부분)
+    try:
+        f = float(s)
+        if 0 <= f < 1:
+            total = round(f * 24 * 60)
+            return f"{total // 60:02d}:{total % 60:02d}"
+    except ValueError:
+        pass
+    # 문자열 어디든 HH:MM (날짜 뒤에 붙은 시간 포함) — 유효 범위 검증
+    for m in re.finditer(r'(\d{1,2}):(\d{2})', s):
+        h, mi = int(m.group(1)), int(m.group(2))
+        if 0 <= h <= 23 and 0 <= mi <= 59:
+            return f"{h:02d}:{mi:02d}"
+    # '17시 30분' / '17시'
+    m = re.search(r'(\d{1,2})\s*시\s*(\d{1,2})?\s*분?', s)
+    if m and 0 <= int(m.group(1)) <= 23:
+        return f"{int(m.group(1)):02d}:{int(m.group(2) or 0):02d}"
+    # '1700' 4자리
+    m = re.fullmatch(r'([01]\d|2[0-3])([0-5]\d)', s)
     if m:
-        return f"{m.group(1).zfill(2)}:{m.group(2)}"
+        return f"{m.group(1)}:{m.group(2)}"
     return None
 
 
@@ -215,14 +247,53 @@ def normalize_leave(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         except Exception:
             pass
 
+    start_time = _normalize_time(_find_col(row, LEAVE_COL_MAP["start_time"]))
+    end_time = _normalize_time(_find_col(row, LEAVE_COL_MAP["end_time"]))
+
+    # 케어포 표준 서식: '시간' 열이 둘(시작·복귀) — 이 경우 열을 직접 지정한다.
+    # 복귀 '시간'이 비면 퍼지 매칭이 첫 '시간'(시작)으로 새는 사고 방지.
+    if "시간2" in row:
+        start_time = _normalize_time(row.get("시간")) or start_time
+        end_time = _normalize_time(row.get("시간2"))   # 비어 있으면 None — 아래 폴백이 처리
+
+    # 위치 폴백 — 헤더 칸이 비어 파서가 col_N으로 이름 붙인 자리만 위치로 읽는다.
+    # (이름 매칭과 섞어 쓰면 시작 열을 복귀 열로 오인하는 사고가 난다)
+    # B=col_1 시작일 · C=col_2 시작시간 · D=col_3 복귀일 · E=col_4 복귀시간
+    if not start_date:
+        start_date = _normalize_date(row.get("col_1"))
+    if not start_time:
+        start_time = _normalize_time(row.get("col_2"))
+    if not end_date:
+        end_date = _normalize_date(row.get("col_3"))
+    if not end_time:
+        end_time = _normalize_time(row.get("col_4"))
+    # 복귀가 출발과 완전히 같으면 기재 안 된 것으로 본다 (잘못 복사된 값 방지)
+    if end_date == start_date and end_time and end_time == start_time:
+        end_time = None
+    # 시간 칸이 비어 있으면 날짜 칸에 붙은 시간을 쓴다 ('2026-07-11 17:00' 한 칸짜리 서식)
+    if not start_time:
+        start_time = _normalize_time(_find_col(row, LEAVE_COL_MAP["start_date"]))
+    if not end_time:
+        end_time = _normalize_time(_find_col(row, LEAVE_COL_MAP["end_date"]))
+    # 한 칸에 "17:00~19:00"처럼 시작·종료가 같이 있으면 갈라 담는다
+    raw_span = str(_find_col(row, LEAVE_COL_MAP["start_time"]) or "")
+    span = re.findall(r'(\d{1,2}):(\d{2})', raw_span)
+    if len(span) >= 2:
+        h1, m1 = int(span[0][0]), int(span[0][1])
+        h2, m2 = int(span[1][0]), int(span[1][1])
+        if 0 <= h1 <= 23 and 0 <= h2 <= 23:
+            start_time = f"{h1:02d}:{m1:02d}"
+            if not end_time:
+                end_time = f"{h2:02d}:{m2:02d}"
+
     return {
         "resident_name": name,
         "resident_code": _find_col(row, LEAVE_COL_MAP["resident_code"]),
         "leave_type":    leave_type,
         "start_date":    start_date,
-        "start_time":    _normalize_time(_find_col(row, LEAVE_COL_MAP["start_time"])),
+        "start_time":    start_time,
         "end_date":      end_date,
-        "end_time":      _normalize_time(_find_col(row, LEAVE_COL_MAP["end_time"])),
+        "end_time":      end_time,
         "reason":        _find_col(row, LEAVE_COL_MAP["reason"]),
         "guardian_name": _find_col(row, LEAVE_COL_MAP["guardian_name"]),
         "memo":          _find_col(row, LEAVE_COL_MAP["memo"]),

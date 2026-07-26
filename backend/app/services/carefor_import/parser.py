@@ -155,9 +155,17 @@ def _rows_from_grid(grid: List[List[Any]], header_row: int = LEAVE_HEADER_ROW) -
 
     raw_headers = grid[hidx]
     headers = []
+    seen: Dict[str, int] = {}
     for j, h in enumerate(raw_headers):
-        name = _clean_header(h)
-        headers.append(name if name else f"col_{j}")
+        name = _clean_header(h) or f"col_{j}"
+        # 같은 이름 헤더가 여러 개면(예: 시작 '시간'·복귀 '시간') 뒤엣것에 번호를 붙인다
+        # — dict 키가 겹치면 뒤 열이 앞 열을 덮어써 시작시간이 사라진다
+        if name in seen:
+            seen[name] += 1
+            name = f"{name}{seen[name]}"
+        else:
+            seen[name] = 1
+        headers.append(name)
 
     out: List[Dict[str, Any]] = []
     for values in grid[hidx + 1:]:
