@@ -75,6 +75,31 @@ async def _bid_override_loop():
             logger.warning("bid override tick error: %s", type(e).__name__)
             await asyncio.sleep(60)
 
+async def _monthly_album_loop():
+    """월별 보호자 앨범 자동 생성 — 하루 한 번 점검.
+
+    ensure가 멱등이라 매일 돌아도 매월 1일 이후 첫 점검 때만 실제 생성된다."""
+    import asyncio
+    from datetime import datetime, timezone, timedelta
+    KST = timezone(timedelta(hours=9))
+    await asyncio.sleep(60)                       # 기동 직후 혼잡 회피
+    while True:
+        try:
+            from app.core.database import SessionLocal
+            from app.services.monthly_albums import ensure_monthly_albums
+            now = datetime.now(KST)
+            db = SessionLocal()
+            try:
+                r = ensure_monthly_albums(db, now.year, now.month)
+                if r["created"]:
+                    logger.info("📚 월별 앨범 자동 생성: %s년 %s월 %s건", r["year"], r["month"], r["created"])
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning("monthly album loop error: %s", type(e).__name__)
+        await asyncio.sleep(24 * 3600)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -85,6 +110,7 @@ async def lifespan(app: FastAPI):
     # 시간대 자동 입찰 스케줄러 시작
     _scheduler_task = asyncio.create_task(_dayparting_scheduler_loop())
     _override_task = asyncio.create_task(_bid_override_loop())
+    asyncio.create_task(_monthly_album_loop())
     logger.info("⏰ Dayparting bid scheduler + override loop started")
 
     yield
