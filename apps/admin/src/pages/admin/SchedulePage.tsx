@@ -10,7 +10,7 @@ import { ledgerAPI, type LedgerRow } from '@/api/leaveClient'
 import { visitAPI } from '@/api/visitClient'
 import VisitInboxPanel from '@/components/schedule/VisitInboxPanel'
 import { useAuthStore } from '@/store/auth'
-import { isKakaoShareEnabled, shareNotice } from '@/lib/kakaoShare'
+import { isKakaoShareEnabled, shareText } from '@/lib/kakaoShare'
 import { getNavConfig } from '@/components/layout/navConfig'
 import {
   scheduleAPI, SCHEDULE_CATEGORIES, type ScheduleEvent, type EventInput, type LifecycleEvent, type RenewalEvent, type DocCalEvent, type EduCalEvent,
@@ -632,14 +632,6 @@ function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: strin
   const [memo, setMemo] = useState(editing?.memo ?? '')
   // 외출·외박/외래 안내는 가족 단톡에 공유하는 경우가 많다 — 공지로도 만들어 카톡 템플릿 공유
   const NOTICE_CATS = ['외출·외박', '외래·병원', '면회', '외부방문', '행사']
-  // 분류별 카드 이미지 — 로컬에서 열리면 localhost:3000(next dev), 운영에선 www
-  const CARD_BASE = `${PUBLIC_WEB}/assets/notice-cards`
-  const CARD_IMG: Record<string, string> = {
-    면회: `${CARD_BASE}/visit.png`,
-    '외래·병원': `${CARD_BASE}/hospital.png`,
-    외부방문: `${CARD_BASE}/external.png`,
-    '외출·외박': `${CARD_BASE}/outing.png`,
-  }
   const noticeCat = NOTICE_CATS.includes(category)
   const hasNotice = !!editing?.notice_id
   const [makeNotice, setMakeNotice] = useState(false)
@@ -679,12 +671,18 @@ function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: strin
         ? '연결된 공지도 최신 내용으로 바뀌었습니다. 카카오톡으로 다시 공유할까요?'
         : '공개 공지가 만들어졌습니다. 지금 카카오톡으로 공유할까요?')) {
         try {
-          // 공지와 같은 형식: "7/25(토) [외래·병원] 김창수 검사" — 날짜가 제일 먼저
+          // 텍스트 공유(200자) — 그림 카드보다 단톡방에서 읽기 빠르다. 핵심만 줄줄이.
           const [yy, mm, dd] = date.split('-').map(Number)
           const w = ['일', '월', '화', '수', '목', '금', '토'][new Date(yy, mm - 1, dd).getDay()]
-          await shareNotice({ title: `${mm}/${dd}(${w}) [${category}] ${title.trim()}`,
-            content: memo || undefined, level: 'info', noLabel: true,
-            link: `${PUBLIC_WEB}/notice/${nid}`, image: CARD_IMG[category] })
+          const lines = [
+            `[${category}] ${mm}/${dd}(${w})${noTime ? '' : ` ${time}`}`,
+            title.trim(),
+          ]
+          if (location) lines.push(`장소: ${location}`)
+          if (contactName) lines.push(`담당: ${contactName}${contactPhone ? ` (${contactPhone})` : ''}`)
+          if (memo) lines.push(memo.trim())
+          lines.push('— 행복한요양원')
+          await shareText(lines.join('\n'), `${PUBLIC_WEB}/notice/${nid}`)
         } catch (e: any) { alert(e?.message ?? '카카오 공유는 모바일 카카오톡에서 시도해주세요.') }
       }
     } catch (e: any) { setErr(e?.message ?? '저장 실패') } finally { setSaving(false) }
