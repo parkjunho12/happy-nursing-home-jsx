@@ -448,6 +448,11 @@ def list_work_schedules(
 ):
     q = db.query(StaffWorkSchedule)
     if year and month:
+        # 자동 연동 — 근무표 페이지 저장본이 더 새로우면 조용히 복사해온다
+        try:
+            auto_sync_schedules(db, f"{year}-{month:02d}")
+        except Exception:
+            db.rollback()
         prefix = f"{year}-{month:02d}-"
         q = q.filter(StaffWorkSchedule.work_date.like(f"{prefix}%"))
     if staff_name:
@@ -478,6 +483,11 @@ def delete_work_schedules(
 ):
     q = db.query(StaffWorkSchedule)
     if year and month:
+        # 자동 연동 — 근무표 페이지 저장본이 더 새로우면 조용히 복사해온다
+        try:
+            auto_sync_schedules(db, f"{year}-{month:02d}")
+        except Exception:
+            db.rollback()
         prefix = f"{year}-{month:02d}-"
         q = q.filter(StaffWorkSchedule.work_date.like(f"{prefix}%"))
     q.delete(synchronize_session=False)
@@ -602,6 +612,94 @@ def delete_schedule_one(sid: str, db: Session = Depends(get_db),
         raise HTTPException(404, "근무표를 찾을 수 없습니다.")
     db.delete(sc); db.commit()
     return ApiResponse(success=True, message="삭제되었습니다.")
+
+
+# ── 근무표 페이지(WorkSchedule) → 검수용 근무표 동기화 ──────────────────
+# 코드별 시간·성격 — 근무표 페이지(shiftCodes.ts)와 동일 기준
+_SHIFT_INFO = {
+    "D":  ("주간", "08:50", "18:00", True),
+    "M":  ("모닝", "06:50", "16:00", True),
+    "N":  ("야간", "17:50", "09:00", True),
+    "AD": ("오전", "09:00", "13:00", True),
+    "PD": ("오후", "13:00", "18:00", True),
+    "休": ("연차", None, None, False),
+    "대휴": ("대체휴무", None, None, False),
+    "초과휴": ("초과근무휴가", None, None, False),
+    "◆": ("경조사", None, None, False),
+    "◆병": ("병가", None, None, False),
+}
+_TIME_RANGE = re.compile(r"^(\d{2})(\d{2})~(\d{2})(\d{2})$")   # 0850~1600 같은 단축 근무
+
+
+def auto_sync_schedules(db, month: str, force: bool = False):
+    """근무표 페이지 저장본 → 검수용 근무표 자동 복사.
+
+    저장본(WorkSchedule)이 검수용보다 새로울 때만 다시 복사한다 —
+    버튼을 누르지 않아도 항상 최신이 유지되는 이유. 저장본이 없으면 None."""
+    from app.models.work_schedule import WorkSchedule
+    from app.models.eval import LtcStaffMember
+    from sqlalchemy import func as _f
+    w = db.query(WorkSchedule).filter(WorkSchedule.year_month == month).first()
+    if not w or not (w.data or {}):
+        return None
+    if not force:
+        latest = db.query(_f.max(StaffWorkSchedule.updated_at)).filter(
+            StaffWorkSchedule.work_date.like(f"{month}-%")).scalar()
+        if latest and w.updated_at and latest >= w.updated_at:
+            return {"month": month, "skipped": True}      # 이미 최신
+
+    staff_by_id = {st.id: st for st in db.query(LtcStaffMember).all()}
+    if True:
+        db.query(StaffWorkSchedule).filter(
+            StaffWorkSchedule.work_date.like(f"{month}-%")).delete(synchronize_session=False)
+
+    imported, unknown_staff = 0, []
+    for sid, row in (w.data or {}).items():
+        st = staff_by_id.get(sid)
+        if not st:
+            unknown_staff.append(sid)
+            continue
+        uid, _warn = _match_user_id(st.name, db)
+        for day, code in (row or {}).items():
+            c = (code or "").strip()
+            if not c:
+                continue
+            label, start, end, working = _SHIFT_INFO.get(c, (None, None, None, None))
+            if label is None:
+                m2 = _TIME_RANGE.match(c)
+                if m2:      # 0850~1600 — 초과근무 상환 단축 근무
+                    label, start, end, working = ("주간(단축)",
+                        f"{m2.group(1)}:{m2.group(2)}", f"{m2.group(3)}:{m2.group(4)}", True)
+                else:       # 모르는 코드는 그대로 기록 (근무로 취급)
+                    label, start, end, working = (c, None, None, True)
+            db.add(StaffWorkSchedule(
+                staff_name=st.name, user_id=uid, position=st.position,
+                team=getattr(st, "team", None),
+                work_date=f"{month}-{int(day):02d}",
+                shift_code=c, shift_label=label,
+                start_time=start, end_time=end, is_working=working,
+            ))
+            imported += 1
+    db.commit()
+    return {"month": month, "imported": imported,
+            "staff_count": len((w.data or {})) - len(unknown_staff),
+            "unknown_staff": len(unknown_staff)}
+
+
+@router.post("/work-schedules/sync-from-admin")
+def sync_schedules_from_admin(
+    month: str = Query(..., description="YYYY-MM"),
+    replace: bool = Query(True, description="(호환용 — 항상 대체)"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_editor),
+):
+    """수동 가져오기 — 자동 연동이 기본이지만 강제로 다시 복사할 때 사용."""
+    if not re.match(r"^\d{4}-\d{2}$", month):
+        raise HTTPException(400, "month는 YYYY-MM 형식이어야 합니다.")
+    r = auto_sync_schedules(db, month, force=True)
+    if r is None:
+        raise HTTPException(404, f"{month} 근무표가 아직 저장되지 않았습니다. 근무표 페이지에서 먼저 저장해주세요.")
+    return ApiResponse(success=True, data=r)
 
 
 # ── 수급자 관리(LtcResident) → 검수용 수급자 정보 동기화 ─────────────────
