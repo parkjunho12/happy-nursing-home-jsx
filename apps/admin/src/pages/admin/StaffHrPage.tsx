@@ -617,14 +617,19 @@ function CardKeyTable() {
   const td = 'px-2.5 py-2 text-xs whitespace-nowrap text-center border-b border-gray-50 text-gray-600'
   const val = (v?: string | null) => v ? v : <span className="text-gray-300">-</span>
 
-  // 보증금 납부 토글 — 서류 제출/미제출과 같은 클릭 방식.
-  // 납부 = 납부일이 찍힘(없으면 오늘), 액수 비어 있으면 표준 10,000원을 채운다.
+  // 보증금 상태 — 서류 칸과 같은 3단계 순환: 미입력(회색) → 미납부 → 납부 → 미입력
+  // 납부 = 납부일 있음 / 미납부 = 액수 칸에 '미납부' 표식 / 둘 다 없으면 미입력
+  const depositState = (c: CardKey): 'paid' | 'unpaid' | 'none' =>
+    c.deposit_date ? 'paid' : c.deposit_amount === '미납부' ? 'unpaid' : 'none'
   const toggleDeposit = async (c: CardKey) => {
     const today = new Date().toISOString().split('T')[0]
-    const paid = !!c.deposit_date
-    await cardKeyAPI.update(c.id, paid
-      ? { deposit_date: null }
-      : { deposit_date: today, deposit_amount: c.deposit_amount || '10,000원' })
+    const st = depositState(c)
+    const next = st === 'none'
+      ? { deposit_date: null, deposit_amount: '미납부' }                    // → 미납부
+      : st === 'unpaid'
+        ? { deposit_date: today, deposit_amount: '10,000원' }               // → 납부
+        : { deposit_date: null, deposit_amount: null }                      // → 미입력
+    await cardKeyAPI.update(c.id, next)
     load()
   }
 
@@ -652,7 +657,7 @@ function CardKeyTable() {
           <input type="checkbox" checked={showReturned} onChange={e => setShowReturned(e.target.checked)} className="accent-gray-500" />
           반납 포함
         </label>
-        <span className="text-[11px] text-gray-400">💡 보증금·반납 배지를 클릭하면 바로 토글됩니다</span>
+        <span className="text-[11px] text-gray-400">💡 보증금 배지: 미입력 → 미납부 → 납부 10,000원 순환 · 반납 배지도 클릭 토글</span>
         <span className="text-xs text-gray-400 ml-auto">{filtered.length} / {rows.length}개</span>
       </div>
 
@@ -685,15 +690,27 @@ function CardKeyTable() {
                   <td className={td}>{fmtD(c.deposit_date) || <span className="text-gray-300">-</span>}</td>
                   <td className={td}>{val(c.deposit_method)}</td>
                   <td className={td}>
-                    <button onClick={() => toggleDeposit(c)}
-                      title="클릭하면 납부 ↔ 미납부 (납부 시 오늘 날짜 기록)"
-                      className={`text-[10px] font-bold px-2 py-1 rounded transition-colors ${
-                        c.deposit_date ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-red-100 text-red-600 hover:bg-red-200'}`}>
-                      {c.deposit_date ? `납부 ${c.deposit_amount || ''}`.trim() : '미납부'}
-                    </button>
+                    {(() => {
+                      const st = depositState(c)
+                      const meta = st === 'paid'
+                        ? { t: `납부 ${c.deposit_amount || ''}`.trim(), cls: 'bg-green-100 text-green-700 hover:bg-green-200' }
+                        : st === 'unpaid'
+                          ? { t: '미납부', cls: 'bg-red-100 text-red-600 hover:bg-red-200' }
+                          : { t: '미입력', cls: 'bg-gray-100 text-gray-400 hover:bg-gray-200' }
+                      return (
+                        <button type="button"
+                          onClick={e => { e.preventDefault(); e.stopPropagation(); toggleDeposit(c) }}
+                          title="클릭: 미입력 → 미납부 → 납부 10,000원 → 미입력"
+                          className={`text-[10px] font-bold px-2 py-1 rounded transition-colors ${meta.cls}`}>
+                          {meta.t}
+                        </button>
+                      )
+                    })()}
                   </td>
                   <td className={td}>
-                    <button onClick={() => toggleReturn(c)} title="클릭하면 사용중 ↔ 반납완료"
+                    <button type="button"
+                      onClick={e => { e.preventDefault(); e.stopPropagation(); toggleReturn(c) }}
+                      title="클릭하면 사용중 ↔ 반납완료"
                       className="flex flex-col items-center mx-auto">
                       {c.returned ? (
                         <>
@@ -733,7 +750,7 @@ function CardFormModal({ editing, onClose, onSaved }: { editing: CardKey | null;
   const [f, setF] = useState<CardInput>({
     card_number: editing?.card_number ?? '', holder: editing?.holder ?? '',
     deposit_date: editing?.deposit_date ?? '', deposit_method: editing?.deposit_method ?? '',
-    deposit_amount: editing?.deposit_amount ?? '10,000원',   // 시설 표준 보증금
+    deposit_amount: editing?.deposit_amount ?? '',   // 상태 배지에서 납부 클릭 시 10,000원 자동
     returned: editing?.returned ?? false, return_date: editing?.return_date ?? '', returner: editing?.returner ?? '',
     memo: editing?.memo ?? '',
   })

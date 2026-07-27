@@ -17,3 +17,30 @@ export interface StaffRow {
   team: string
   note: string
 }
+
+
+/** 근무표 직종 정렬 순서 — 시설 요청 순.
+ *  시설장 → 사회복지사 → 간호(조무사·팀장·간호사) → 물리치료사 → 기타 →
+ *  요양보호사(교대조 먼저, 주간 아래). 묶음 안은 입사 빠른 순. */
+export const SCHEDULE_POS_ORDER = ['시설장', '사회복지사', '간호조무사', '간호팀장', '간호사', '물리치료사', '팀장', '요양팀장', '조리원', '위생원', '사무원', '요양보호사']
+
+export interface SortableStaff { pos: string; team?: string | null; hireDate?: string | null; name: string }
+
+/** 근무표 표시 정렬 — 페이지·인쇄·근무상황부가 전부 이 함수를 쓴다 */
+export function sortScheduleStaff<T extends SortableStaff>(list: T[]): T[] {
+  const rank = (x: SortableStaff) => {
+    const pos = (x.pos || '').trim()
+    const i = SCHEDULE_POS_ORDER.indexOf(pos)
+    const base = i === -1 ? SCHEDULE_POS_ORDER.length - 2 : i
+    // 교대조(A·B·C조)가 먼저, 주간이 그 아래 — 조 유무는 직종 표기와 무관하게 판정
+    if (canJoinTeam(pos) || (x.team ?? '').trim()) return base * 10 + ((x.team ?? '').trim() ? 0 : 5)
+    return base * 10
+  }
+  const hasTeam = (x: SortableStaff) => ((x.team ?? '').trim() ? 0 : 1)
+  return [...list].sort((a, b) =>
+    rank(a) - rank(b) ||
+    hasTeam(a) - hasTeam(b) ||                                        // 랭크 동률이어도 조 있는 사람 위
+    ((a.team ?? '').trim()).localeCompare((b.team ?? '').trim()) ||    // A→B→C
+    ((a.hireDate || '9999').slice(0, 10)).localeCompare((b.hireDate || '9999').slice(0, 10)) ||
+    a.name.localeCompare(b.name, 'ko'))
+}

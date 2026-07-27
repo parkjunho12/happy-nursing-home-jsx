@@ -11,7 +11,7 @@ import GeneratePickModal from '@/components/schedule/GeneratePickModal'
 import AttendanceSheets from '@/components/schedule/AttendanceSheets'
 import LeaveInboxPanel from '@/components/schedule/LeaveInboxPanel'
 import { leaveAPI, swapAPI } from '@/api/leaveClient'
-import { TEAM_BAND, canJoinTeam } from '@/components/schedule/shared'
+import { TEAM_BAND, canJoinTeam, sortScheduleStaff } from '@/components/schedule/shared'
 import { planDayShift, interleaveByPosition } from '@/utils/dayShiftPlan'
 import { planMembersMonths, type MonthContext, type MemberMonthPlan } from '@/utils/shiftBalance'
 import { calcBase as calcBaseFor } from '@/utils/baseHours'
@@ -28,10 +28,6 @@ const shiftMonth = (ym: string, delta: number) => {
 const todayISO = () => { const d = new Date(); const p = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}` }
 
 
-/** 직종 표시 순서 — 시설 요청 순서.
- *  시설장 → 사회복지사 → 간호(조무사·팀장·간호사) → 물리치료사 → 기타 →
- *  요양보호사(조 있는 분 먼저, 그다음 주간). 같은 묶음 안에서는 입사 빠른 순. */
-const POS_ORDER = ['시설장', '사회복지사', '간호조무사', '간호팀장', '간호사', '물리치료사', '팀장', '요양팀장', '조리원', '위생원', '사무원', '요양보호사']
 
 /** 교대(주주야야휴휴)를 도는 직종 — 나머지는 모두 주간 근무다 */
 
@@ -228,7 +224,7 @@ export default function WorkSchedulePage() {
    *  8/3 입사자는 7월 표에 안 나오고, 7월 말 퇴사자는 8월 표에서 빠진다. */
   const staff = useMemo(() => {
     const monthStart = `${ym}-01`, monthEnd = `${ym}-31`
-    return staffList
+    return sortScheduleStaff(staffList
       .filter(s => {
         const hired = !!s.hireDate && s.hireDate.slice(0, 10) <= monthEnd     // 그달 안에 입사
         const resign = (s.resignDate || '').slice(0, 10)
@@ -239,25 +235,7 @@ export default function WorkSchedulePage() {
       .map(s => {
         const r = rowMap.get(s.id)
         return { ...s, team: r?.team ?? '', note: r?.note ?? '', pos: r?.position ?? s.position ?? '' }
-      })
-      .sort((a, b) => {
-        const rank = (x: { pos: string; team?: string }) => {
-          const pos = (x.pos || '').trim()                     // 운영 데이터의 공백 변형 방어
-          const i = POS_ORDER.indexOf(pos)
-          const base = i === -1 ? POS_ORDER.length - 2 : i     // 모르는 직종은 요보 앞
-          // 교대조(A·B·C조)가 먼저, 주간이 그 아래
-          if (canJoinTeam(pos)) return base * 10 + (x.team ? 0 : 5)
-          return base * 10
-        }
-        // 랭크가 같으면(직종 표기가 달라도) 조 있는 사람이 무조건 위 — '' 가 A조보다
-        // 앞서는 localeCompare 함정을 막는다
-        const hasTeam = (x: { team?: string }) => (x.team ? 0 : 1)
-        return rank(a) - rank(b) ||
-          hasTeam(a) - hasTeam(b) ||
-          (a.team ?? '').localeCompare(b.team ?? '') ||          // 조끼리는 A→B→C
-          (a.hireDate || '9999').localeCompare(b.hireDate || '9999') ||   // 먼저 온 분이 위
-          a.name.localeCompare(b.name, 'ko')
-      })
+      }))
   }, [staffList, rowMap, ym])
 
   const setCell = (sid: string, day: number, code: string) => {
