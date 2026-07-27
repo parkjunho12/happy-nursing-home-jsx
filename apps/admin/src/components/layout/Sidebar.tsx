@@ -143,6 +143,7 @@ export default function Sidebar({ mobile = false, onNavigate }: SidebarProps) {
           <span>로그아웃</span>
         </button>
       </div>
+      <p className="px-4 pb-2 text-[9px] text-gray-300 select-all">빌드 {typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'dev'}</p>
     </aside>
   )
 }
