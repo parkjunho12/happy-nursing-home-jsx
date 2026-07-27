@@ -28,12 +28,17 @@ export interface SortableStaff { pos: string; team?: string | null; hireDate?: s
 
 /** 근무표 표시 정렬 — 페이지·인쇄·근무상황부가 전부 이 함수를 쓴다 */
 export function sortScheduleStaff<T extends SortableStaff>(list: T[]): T[] {
+  const CG = SCHEDULE_POS_ORDER.indexOf('요양보호사')
   const rank = (x: SortableStaff) => {
     const pos = (x.pos || '').trim()
+    const team = (x.team ?? '').trim()
     const i = SCHEDULE_POS_ORDER.indexOf(pos)
-    const base = i === -1 ? SCHEDULE_POS_ORDER.length - 2 : i
-    // 교대조(A·B·C조)가 먼저, 주간이 그 아래 — 조 유무는 직종 표기와 무관하게 판정
-    if (canJoinTeam(pos) || (x.team ?? '').trim()) return base * 10 + ((x.team ?? '').trim() ? 0 : 5)
+    // 모르는 직종은 '요양보호사 표기 변형'일 가능성이 커서 요보와 같은 등급으로 —
+    // 다른 등급에 두면 조 없는 변형 표기가 교대조 위로 올라가는 사고가 난다 (운영 버그의 원인)
+    const base = i === -1 ? CG : i
+    // 조가 있으면 그 등급 최상단, 없으면(요보·미상 직종) 그 아래
+    if (team) return base * 10
+    if (canJoinTeam(pos) || i === -1) return base * 10 + 5
     return base * 10
   }
   const hasTeam = (x: SortableStaff) => ((x.team ?? '').trim() ? 0 : 1)
