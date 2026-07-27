@@ -439,6 +439,18 @@ const POS_RANK = ['시설장', '간호팀장', '사무국장', '사회복지사'
 const posRank = (p?: string | null) => { const i = POS_RANK.indexOf(p ?? ''); return i === -1 ? 99 : i }
 
 function StaffDetailTable({ staff }: { staff: LtcStaff[] }) {
+  const { updateStaff } = useLtcStore()
+  // 메모 인라인 편집 — 클릭해서 바로 적고, 포커스가 빠지면 저장
+  const [memoEdit, setMemoEdit] = useState<{ id: string; v: string } | null>(null)
+  const saveMemo = async () => {
+    if (!memoEdit) return
+    const target = staff.find(x => x.id === memoEdit.id)
+    if (target && (target.memo ?? '') !== memoEdit.v) {
+      try { await updateStaff(memoEdit.id, { memo: memoEdit.v }) }
+      catch { alert('메모 저장에 실패했습니다.') }
+    }
+    setMemoEdit(null)
+  }
   const [q, setQ] = useState('')
   const [sort, setSort] = useState<StaffSort>('hire')
   // 월별 인원 파악 — ''=현재(현인원), 'YYYY-MM'=그 달에 재직했던 인원
@@ -519,6 +531,7 @@ function StaffDetailTable({ staff }: { staff: LtcStaff[] }) {
                 <th className={`${gh} sticky left-0 z-20 bg-indigo-50/60 text-indigo-700 border-r border-gray-200`} colSpan={5}>기본정보</th>
                 <th className={`${gh} bg-teal-50/60 text-teal-700`} colSpan={3}>인적사항</th>
                 <th className={`${gh} bg-amber-50/60 text-amber-700`} colSpan={3}>자격 · 계좌</th>
+                <th className={`${gh} bg-gray-50 text-gray-500`}>메모</th>
               </tr>
               <tr className="bg-gray-50/90">
                 <th className={`${th} sticky left-0 z-20 bg-gray-50 text-left border-r border-gray-200 min-w-[120px]`}>성명</th>
@@ -532,6 +545,7 @@ function StaffDetailTable({ staff }: { staff: LtcStaff[] }) {
                 <th className={th}>자격증 발급일</th>
                 <th className={th}>자격증 No</th>
                 <th className={th}>통장번호</th>
+                <th className={`${th} text-left min-w-[180px]`}>메모 <span className="font-normal text-gray-300">(클릭해 입력)</span></th>
               </tr>
             </thead>
             <tbody>
@@ -552,6 +566,18 @@ function StaffDetailTable({ staff }: { staff: LtcStaff[] }) {
                   <td className={td}>{fmtD(s.licenseDate) || <span className="text-gray-300">-</span>}</td>
                   <td className={td}>{val(s.licenseNo)}</td>
                   <td className={td}>{val(s.bankAccount)}</td>
+                  <td className={`${td} text-left whitespace-normal min-w-[180px] cursor-pointer hover:bg-gray-50`}
+                    onClick={() => !memoEdit && setMemoEdit({ id: s.id, v: s.memo ?? '' })}>
+                    {memoEdit?.id === s.id ? (
+                      <input autoFocus value={memoEdit.v}
+                        onChange={e => setMemoEdit({ id: s.id, v: e.target.value })}
+                        onBlur={saveMemo}
+                        onKeyDown={e => { if (e.key === 'Enter') saveMemo(); if (e.key === 'Escape') setMemoEdit(null) }}
+                        className="w-full px-2 py-1 text-xs border border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-200" />
+                    ) : (
+                      s.memo ? <span className="text-gray-600">{s.memo}</span> : <span className="text-gray-300">메모 추가</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
