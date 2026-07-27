@@ -242,13 +242,18 @@ export default function WorkSchedulePage() {
       })
       .sort((a, b) => {
         const rank = (x: { pos: string; team?: string }) => {
-          const i = POS_ORDER.indexOf(x.pos)
+          const pos = (x.pos || '').trim()                     // 운영 데이터의 공백 변형 방어
+          const i = POS_ORDER.indexOf(pos)
           const base = i === -1 ? POS_ORDER.length - 2 : i     // 모르는 직종은 요보 앞
-          // 요양보호사는 교대조(A·B·C조) 먼저, 주간이 그 아래
-          if (canJoinTeam(x.pos)) return base * 10 + (x.team ? 0 : 5)
+          // 교대조(A·B·C조)가 먼저, 주간이 그 아래
+          if (canJoinTeam(pos)) return base * 10 + (x.team ? 0 : 5)
           return base * 10
         }
+        // 랭크가 같으면(직종 표기가 달라도) 조 있는 사람이 무조건 위 — '' 가 A조보다
+        // 앞서는 localeCompare 함정을 막는다
+        const hasTeam = (x: { team?: string }) => (x.team ? 0 : 1)
         return rank(a) - rank(b) ||
+          hasTeam(a) - hasTeam(b) ||
           (a.team ?? '').localeCompare(b.team ?? '') ||          // 조끼리는 A→B→C
           (a.hireDate || '9999').localeCompare(b.hireDate || '9999') ||   // 먼저 온 분이 위
           a.name.localeCompare(b.name, 'ko')
