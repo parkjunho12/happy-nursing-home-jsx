@@ -115,8 +115,15 @@ export const shortOf = (raw?: string | null): string => {
 export const meta = (raw?: string | null): ShiftCode | null => CODE_MAP[(raw ?? '').trim()] ?? null
 
 /** D/N 갯수 집계 — 정규 코드만 센다 (시간 직접 입력 칸은 제외) */
-export const countAsOf = (raw?: string | null): 'D' | 'N' | null =>
-  CODE_MAP[(raw ?? '').trim()]?.countAs ?? null
+export const countAsOf = (raw?: string | null): 'D' | 'N' | null => {
+  const v = (raw ?? '').trim()
+  const fixed = CODE_MAP[v]?.countAs
+  if (fixed !== undefined) return fixed ?? null
+  // '0850~1600' 같은 직접 입력 시간대(단축 근무)도 주간 근무 인원에 든다 —
+  // 초과근무 상환으로 일찍 퇴근할 뿐, 그날 어르신 곁에 있는 사람이다
+  if (isCustomTime(v)) return 'D'
+  return null
+}
 
 // ── 주주야야휴휴 6일 주기 ─────────────────────────────────
 // 실제 8월 편성표에서 각 조의 1일차를 역산한 결과 A=2, B=0, C=4였다.
