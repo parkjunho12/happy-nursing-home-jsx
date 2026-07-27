@@ -319,23 +319,33 @@ export default function WorkSchedulePage() {
     dayStaff.forEach(s => { (groups[s.pos || '기타'] ||= []).push(s.id) })
     const ordered = interleaveByPosition(groups)
 
-    // 승인된 희망휴무 — '연차 반영' 건은 승인 시 이미 休로 적혀 있어 여기서 보존만 되면 된다.
-    // 연차 미반영 건: 주간 직원은 그날을 휴무로 우선 배정,
-    // 교대조는 회전을 깰 수 없어 충돌만 알려 관리자가 손대게 한다
+    // 희망휴무 반영 — 승인된 것뿐 아니라 '대기 중' 신청도 미리 반영해 짜본다.
+    // 신청이 들어와 있는데 모르고 근무를 박아두면 승인 후 다시 짜야 한다.
+    //  · 승인+연차반영: 이미 休로 적혀 있어 보존만 되면 됨
+    //  · 그 외(승인·대기): 주간 직원은 그날 휴무 우선 배정, 교대조는 충돌 경고
     let preferRest: Record<string, number[]> = {}
     const hopeConflicts: string[] = []
-    let hopeAnnual = 0
+    let hopeAnnual = 0, hopePending = 0
     try {
-      const hopes = (await leaveAPI.list(ym, 'approved')).filter(h => h.kind === '희망휴무')
+      const [approved, pending] = await Promise.all([
+        leaveAPI.list(ym, 'approved'), leaveAPI.list(ym, 'pending'),
+      ])
+      const hopes = [...approved, ...pending].filter(h => h.kind === '희망휴무')
+      hopePending = pending.filter(h => h.kind === '희망휴무' || h.kind === '연차').length
       for (const h of hopes) {
         const d = Number(h.date.slice(8, 10))
-        if (h.use_annual) { hopeAnnual++; continue }   // 休로 이미 반영 — 생성이 건드리지 않음
+        if (h.status === 'approved' && h.use_annual) { hopeAnnual++; continue }   // 休로 이미 반영
         if (dayStaff.some(s => s.id === h.staff_id)) {
           (preferRest[h.staff_id] ||= []).push(d)
         } else {
           const sm = shiftStaff.find(s => s.id === h.staff_id)
-          if (sm) hopeConflicts.push(`${sm.name} ${d}일`)
+          if (sm) hopeConflicts.push(`${sm.name} ${d}일${h.status === 'pending' ? '(대기)' : ''}`)
         }
+      }
+      // 대기 중 '연차' 신청도 그날을 비워둔다 — 승인되면 休가 들어갈 자리
+      for (const a of pending.filter(h => h.kind === '연차')) {
+        const d = Number(a.date.slice(8, 10))
+        if (dayStaff.some(s => s.id === a.staff_id)) (preferRest[a.staff_id] ||= []).push(d)
       }
     } catch { /* 조회 실패 시 희망휴무 없이 진행 */ }
 
@@ -397,6 +407,7 @@ export default function WorkSchedulePage() {
       `· 주간 ${dayStaff.length}명 — 1인 ${target}일(${target * DAILY_HOURS}시간) ${dayCells}칸\n\n` +
       `연차·병가·경조사는 그대로 두고 나머지는 새로 계산했습니다.\n아래 점검 결과를 확인한 뒤 저장하세요.` +
       (hopeAnnual > 0 ? `\n\n· 희망휴무(연차 반영) ${hopeAnnual}건은 이미 休로 들어 있어 그대로 두었습니다.` : '') +
+      (hopePending > 0 ? `\n\n⏳ 대기 중인 휴무 신청 ${hopePending}건도 미리 비워뒀습니다.\n   승인함에서 승인해야 확정(연차는 休 기록)됩니다 — 반려하면 다시 생성하세요.` : '') +
       (hopeConflicts.length > 0
         ? `\n\n⚠ 교대조 희망휴무 ${hopeConflicts.length}건은 자동 반영되지 않았습니다:\n   ${hopeConflicts.join(', ')}\n   회전(주주야야휴휴)과 겹치니 필요하면 손으로 조정해주세요.`
         : '')
@@ -465,12 +476,40 @@ export default function WorkSchedulePage() {
     if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); setCell(staff[si].id, days[di].day, '') }
   }
 
+  const [explaining, setExplaining] = useState(false)
+  /** 개인별 한 줄 설명 생성 — 근무표 확정 후 버튼으로 실행.
+   *  정산 숫자는 화면 계산 그대로 보내고, 문장만 AI가 만든다 (실패 시 서버 템플릿). */
+  const explain = async () => {
+    if (dirty && !confirm('저장하지 않은 변경이 있습니다.\n설명은 "저장된 근무표"에 붙습니다 — 먼저 저장하는 것을 권합니다.\n그래도 지금 화면 기준으로 만들까요?')) return
+    const carryOf = new Map(lastPlans.map(pl => [pl.memberId, pl.closing]))
+    const people = staff
+      .filter(s2 => Object.keys(data[s2.id] ?? {}).length > 0)
+      .map(s2 => {
+        const c = calc(s2.id)
+        return {
+          staff_id: s2.id, name: s2.name, team: s2.team,
+          hours: Math.round(c.hours + c.extra), base: Number(baseHours) || base.hours,
+          d: c.d, n: c.n, annual: c.annual, daehyu: c.off, comp: c.comp,
+          extra: Math.round(c.extra), carry: carryOf.get(s2.id) ?? null,
+        }
+      })
+    if (people.length === 0) { alert('설명을 만들 근무 기록이 없습니다.'); return }
+    setExplaining(true)
+    try {
+      const r = await workScheduleAPI.explain(ym, people)
+      alert(`${m}월 개인별 설명 ${r.count}명분을 만들었습니다${r.ai ? ' (AI 작성)' : ' (기본 문구)'}.\n직원들의 "내 근무표" 상단에 표시됩니다.`)
+    } catch (e: any) { alert(e?.response?.data?.detail ?? e?.message ?? '설명 생성 실패') }
+    finally { setExplaining(false) }
+  }
+
   const save = async () => {
     setSaving(true)
     try {
       const payload = staff.map((s, i) => ({ staff_id: s.id, position: s.pos, team: s.team, order: i, note: s.note }))
       const doc = await workScheduleAPI.save({ year_month: ym, data, rows: payload, base_hours: baseHours, base_days: baseDays, as_of: asOf, team_offsets: offsets })
       setUpdatedBy(doc.updated_by ?? null); setDirty(false)
+
+
       // 근무표가 나와도 아무도 모르면 소용없다 — 저장 직후 알림을 제안한다.
       // 편집 중간 저장도 있으니 자동 발송은 하지 않고 매번 물어본다.
       if (confirm(`${m}월 근무표를 저장했습니다.\n\n직원들에게 "근무표가 나왔습니다" 알림을 보낼까요?\n(직원앱에서 누르면 본인 근무표가 바로 열립니다)`)) {
@@ -530,6 +569,11 @@ export default function WorkSchedulePage() {
                 관리용
               </button>
             </div>
+            <button onClick={explain} disabled={explaining}
+              title="개인별 '이번 달 내 근무 정리' 한 줄을 만들어 직원 내 근무표에 띄웁니다"
+              className="inline-flex items-center gap-1.5 px-3 py-2.5 border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-40 text-indigo-700 rounded-xl text-sm font-semibold">
+              {explaining ? '생성 중…' : '설명 생성'}
+            </button>
             <button onClick={save} disabled={saving || !dirty} className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-40 text-white rounded-xl text-sm font-semibold shadow-sm">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} 저장
             </button>

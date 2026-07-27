@@ -105,7 +105,7 @@ export default function LeaveRequestCard({ month: monthProp }: { month?: string 
     try {
       await leaveAPI.create([hopeDate], '희망휴무', undefined, hopeSig, useAnnual)
       load()
-      alert('신청했습니다.\n다음 근무표를 짤 때 반영해드려요.')
+      alert('신청했습니다.\n근무 인원을 보고 승인·반려로 알려드릴게요.\n결과는 알림으로 와요.')
     } catch (e: any) { setHopeErr(e?.response?.data?.detail ?? '신청 실패') }
     finally { setHopeBusy(false) }
   }
@@ -229,7 +229,11 @@ export default function LeaveRequestCard({ month: monthProp }: { month?: string 
           <span className="ml-auto text-xs text-gray-400">한 달 {MAX_HOPE_PER_MONTH}일까지</span>
         </div>
         <p className="text-sm text-gray-500 mt-1 mb-3">
-          <b>다음 달 근무표가 나오기 전에</b> 미리 내는 신청이에요. 근무표를 짤 때 이날을 쉬게 해드립니다.
+          <b>다음 달 근무표가 나오기 전에</b> 미리 내는 신청이에요. 근무표를 짤 때 최대한 반영해드립니다.
+        </p>
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2.5 mb-3 leading-relaxed">
+          다만 <b>그날 근무 인원이 부족하면 어려울 수 있어요.</b> 관리자가 인원을 보고
+          승인 또는 반려로 알려드립니다 — 결과는 알림으로 와요.
         </p>
 
         <p className="text-xs font-semibold text-gray-500 mb-1">쉬고 싶은 날</p>

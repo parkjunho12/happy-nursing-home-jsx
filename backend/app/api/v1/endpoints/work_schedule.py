@@ -160,6 +160,8 @@ def my_schedule(month: str = Query(...), db: Session = Depends(get_db),
     return ApiResponse(success=True, data={
         "year_month": month, "staff_name": staff.name, "team": team,
         "codes": codes,
+        # 개인별 한 줄 설명 — 저장 시 생성. "왜 이렇게 나왔어요?"에 대한 답
+        "note": ((w.notes or {}).get(staff.id) if w else None),
         "updated_at": (w.updated_at.isoformat() if w and w.updated_at else None),
     })
 
@@ -242,6 +244,93 @@ def get_schedule(month: str = Query(...), db: Session = Depends(get_db), _: User
             data["rows"] = rows
             data["rows_from"] = src        # 어느 달에서 가져왔는지 화면에 알려준다
     return ApiResponse(success=True, data=data)
+
+
+class ExplainPerson(BaseModel):
+    staff_id: str
+    name: str
+    team: Optional[str] = None
+    hours: int = 0            # 총시간 (추가근무 포함)
+    base: int = 0             # 월 기준시간
+    d: int = 0                # 주간 근무 수
+    n: int = 0                # 야간 근무 수
+    annual: int = 0           # 연차(休)
+    daehyu: int = 0           # 대휴
+    comp: int = 0             # 초과휴
+    extra: int = 0            # 추가근무 시간
+    carry: Optional[int] = None   # 다음 달로 이월되는 미상환 시간
+
+
+class ExplainBody(BaseModel):
+    month: str
+    people: List[ExplainPerson]
+
+
+def _fallback_note(p: ExplainPerson) -> str:
+    """AI 없이도 나오는 기본 한 줄 — 숫자는 어차피 여기 다 있다."""
+    bits = []
+    if p.n: bits.append(f"주간 {p.d}·야간 {p.n}")
+    elif p.d: bits.append(f"주간 {p.d}일")
+    if p.annual: bits.append(f"연차 {p.annual}일")
+    if p.daehyu: bits.append(f"공휴일 근무 보상 대휴 {p.daehyu}일")
+    if p.comp: bits.append(f"밀린 추가근무 보상 초과휴 {p.comp}일")
+    if p.extra: bits.append(f"추가근무 {p.extra}시간")
+    body = ", ".join(bits) if bits else "이번 달 근무"
+    return f"{body} — 총 {p.hours}시간 (기준 {p.base}시간 충족)"
+
+
+@router.post("/explain")
+def explain_schedule(body: ExplainBody, db: Session = Depends(get_db),
+                     current_user: User = Depends(_manager)):
+    """저장된 근무표에 개인별 한 줄 설명을 붙인다.
+
+    "왜 나는 이번 달 이렇게 나왔어요?"에 관리자가 일일이 답하지 않도록,
+    정산 숫자를 사람 말로 풀어 직원 내 근무표에 보여준다.
+    계산은 프론트 정산 엔진 결과를 그대로 받고, AI는 문장만 만든다(실패 시 템플릿)."""
+    w = db.query(WorkSchedule).filter(WorkSchedule.year_month == body.month).first()
+    if not w:
+        raise HTTPException(404, "먼저 근무표를 저장해주세요.")
+
+    notes = {p.staff_id: _fallback_note(p) for p in body.people}
+    ai_used = False
+    try:
+        from app.core.config import settings
+        if settings.OPENAI_API_KEY and body.people:
+            import json
+            from openai import OpenAI
+            client = OpenAI(api_key=settings.OPENAI_API_KEY)
+            lines = "\n".join(
+                f"- id={p.name}: 총 {p.hours}h/기준 {p.base}h, 주간 {p.d}, 야간 {p.n}, "
+                f"연차 {p.annual}, 대휴 {p.daehyu}, 초과휴 {p.comp}, 추가근무 {p.extra}h"
+                + (f", 이월 {p.carry}h" if p.carry else "")
+                for p in body.people)
+            r = client.chat.completions.create(
+                model=settings.OPENAI_MODEL or "gpt-4o-mini",
+                messages=[{"role": "user", "content": (
+                    "요양원 근무표를 받은 50~60대 요양보호사 선생님께 보여줄 개인별 한 줄 설명을 만들어주세요.\n"
+                    "규칙: 각자 60자 이내 존댓말 1문장. 숫자를 바꾸거나 새로 만들지 말 것. "
+                    "대휴=공휴일 근무 보상, 초과휴=밀린 추가근무 보상이라는 취지가 드러나게. "
+                    "쉬운 말로, 따뜻하지만 담백하게.\n"
+                    f"{body.month} 근무 내역:\n{lines}\n\n"
+                    '출력은 JSON 하나만: {"이름": "설명", ...}'
+                )}],
+                max_tokens=1500, temperature=0.4, timeout=30,
+            )
+            txt = (r.choices[0].message.content or "").strip()
+            txt = txt[txt.find("{"): txt.rfind("}") + 1]
+            by_name = json.loads(txt)
+            name_to_id = {p.name: p.staff_id for p in body.people}
+            for nm, note in by_name.items():
+                sid = name_to_id.get(nm)
+                if sid and isinstance(note, str) and 5 <= len(note) <= 120:
+                    notes[sid] = note.strip()
+            ai_used = True
+    except Exception as e:
+        logger.warning("근무표 설명 AI 생성 실패 — 템플릿 사용: %s", e)
+
+    w.notes = notes                      # JSON 재할당으로 변경 감지
+    db.commit()
+    return ApiResponse(success=True, data={"count": len(notes), "ai": ai_used})
 
 
 @router.put("")

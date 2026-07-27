@@ -25,7 +25,7 @@ export interface LeaveRequest {
 
 export const LEAVE_KIND_META: Record<LeaveKind, { cls: string; hint: string }> = {
   연차:     { cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', hint: '하루 쉬는 유급휴가 — 서명하고 신청하면, 승인 시 근무표에 休로 들어갑니다' },
-  희망휴무: { cls: 'bg-sky-50 text-sky-700 border-sky-200',             hint: '이날은 쉬고 싶어요 — 한 달에 최대 2일. 근무표 짤 때 연차(休)로 우선 넣어드립니다' },
+  희망휴무: { cls: 'bg-sky-50 text-sky-700 border-sky-200',             hint: '이날은 쉬고 싶어요 — 한 달 최대 2일. 근무 인원을 보고 승인·반려해드립니다' },
 }
 
 const ORIGIN = (apiClient.defaults.baseURL || '').replace(/\/api\/v1\/?$/, '')

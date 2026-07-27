@@ -27,6 +27,7 @@ class WorkSchedule(Base):
     base_days = Column(String(10), nullable=True)    # 기준 근무일수 (기본 20)
     as_of = Column(String(20), nullable=True)        # '( 7월 17일 현재 )' 기준일 ISO
     team_offsets = Column(JSON, nullable=True)      # { 'A조': 2, 'B조': 0, ... } 주주야야휴휴 시작 위치
+    notes = Column(JSON, nullable=True)             # { staffId: '한 줄 설명' } — 저장 시 AI가 생성
     updated_by = Column(String(100), nullable=True)
     updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)
 
