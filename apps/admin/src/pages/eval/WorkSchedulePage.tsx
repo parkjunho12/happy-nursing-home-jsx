@@ -8,6 +8,7 @@ import TeamPanel from '@/components/schedule/TeamPanel'
 import SettlementPanel from '@/components/schedule/SettlementPanel'
 import AuditPanel from '@/components/schedule/AuditPanel'
 import GeneratePickModal from '@/components/schedule/GeneratePickModal'
+import AttendanceSheets from '@/components/schedule/AttendanceSheets'
 import LeaveInboxPanel from '@/components/schedule/LeaveInboxPanel'
 import { leaveAPI, swapAPI } from '@/api/leaveClient'
 import { TEAM_BAND, canJoinTeam } from '@/components/schedule/shared'
@@ -27,13 +28,13 @@ const shiftMonth = (ym: string, delta: number) => {
 const todayISO = () => { const d = new Date(); const p = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}` }
 
 
-/** 직종 표시 순서 — 편성표 양식과 동일 */
-// 간호팀장은 시설장 바로 아래 — 지시 체계 순서대로 벽보에서도 읽히게
-const POS_ORDER = ['시설장', '간호팀장', '팀장', '사회복지사', '간호사', '간호조무사', '요양보호사', '조리원', '위생원', '사무원']
+/** 직종 표시 순서 — 시설 요청 순서.
+ *  시설장 → 사회복지사 → 간호(조무사·팀장·간호사) → 물리치료사 → 기타 →
+ *  요양보호사(조 있는 분 먼저, 그다음 주간). 같은 묶음 안에서는 입사 빠른 순. */
+const POS_ORDER = ['시설장', '사회복지사', '간호조무사', '간호팀장', '간호사', '물리치료사', '팀장', '요양팀장', '조리원', '위생원', '사무원', '요양보호사']
 
 /** 교대(주주야야휴휴)를 도는 직종 — 나머지는 모두 주간 근무다 */
 
-const posRank = (p?: string | null) => { const i = POS_ORDER.indexOf(p ?? ''); return i < 0 ? POS_ORDER.length : i }
 
 
 export default function WorkSchedulePage() {
@@ -72,6 +73,17 @@ export default function WorkSchedulePage() {
   // 결재·보관이 필요할 때만 '관리용' 버튼으로 되살린다.
   const [fullPrint, setFullPrint] = useState(false)
   const [wantPrint, setWantPrint] = useState(false)
+  // 근무상황부(출석부) — 사람마다 한 장, 이름 바꿔 복사하던 절차를 없앤다
+  const [attPickOpen, setAttPickOpen] = useState(false)
+  const [attPick, setAttPick] = useState<Set<string> | null>(null)
+  useEffect(() => {
+    if (!attPick || loading) return
+    const t = requestAnimationFrame(() => {
+      window.print()
+      setAttPick(null)
+    })
+    return () => cancelAnimationFrame(t)
+  }, [attPick, loading])
   const [rowsFrom, setRowsFrom] = useState<string | null>(null)
   // 남은 잔고를 수당으로 줄 때 얼마인지 — 시설마다 달라 입력받는다
   // 정산 시작월·회전 기준일 — 코드에 박지 않고 설정에서 가져온다 (해가 바뀌어도 화면에서 조정)
@@ -219,10 +231,19 @@ export default function WorkSchedulePage() {
       const r = rowMap.get(s.id)
       return { ...s, team: r?.team ?? '', note: r?.note ?? '', pos: r?.position ?? s.position ?? '' }
     })
-    .sort((a, b) =>
-      posRank(a.pos) - posRank(b.pos) ||
-      (a.team ?? '').localeCompare(b.team ?? '') ||
-      a.name.localeCompare(b.name)),
+    .sort((a, b) => {
+      const rank = (x: { pos: string; team?: string }) => {
+        const i = POS_ORDER.indexOf(x.pos)
+        const base = i === -1 ? POS_ORDER.length - 2 : i     // 모르는 직종은 요보 앞
+        // 요양보호사는 조가 있는 분들이 먼저, 주간이 그 뒤
+        if (x.pos === '요양보호사') return base * 10 + (x.team ? 0 : 5)
+        return base * 10
+      }
+      return rank(a) - rank(b) ||
+        (a.team ?? '').localeCompare(b.team ?? '') ||          // 조끼리는 A→B→C
+        (a.hireDate || '9999').localeCompare(b.hireDate || '9999') ||   // 먼저 온 분이 위
+        a.name.localeCompare(b.name, 'ko')
+    }),
     [staffList, rowMap])
 
   const setCell = (sid: string, day: number, code: string) => {
@@ -527,7 +548,7 @@ export default function WorkSchedulePage() {
   const td = 'border border-gray-200 px-1 py-0.5 text-[11px] text-center whitespace-nowrap'
 
   return (
-    <div className={`p-4 md:p-6 max-w-full ${fullPrint ? 'ws-full' : ''}`}>
+    <div className={`p-4 md:p-6 max-w-full ${fullPrint ? 'ws-full' : ''} ${attPick ? 'att-mode' : ''}`}>
       {/* 화면용 도구 — 인쇄 시 숨김 */}
       <div className="print:hidden">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
@@ -569,6 +590,14 @@ export default function WorkSchedulePage() {
                 관리용
               </button>
             </div>
+            <button onClick={() => {
+              if (dirty && !confirm('저장하지 않은 변경이 있습니다. 현재 화면 기준으로 근무상황부를 인쇄합니다.\n계속할까요?')) return
+              setAttPickOpen(true)
+            }}
+              title="사람마다 한 장씩 — 성명·근무형태가 채워진 출석부를 선택 인원만큼 인쇄합니다"
+              className="inline-flex items-center gap-1.5 px-3 py-2.5 border border-gray-200 bg-white hover:bg-gray-50 text-gray-600 rounded-xl text-sm font-semibold">
+              근무상황부
+            </button>
             <button onClick={explain} disabled={explaining}
               title="개인별 '이번 달 내 근무 정리' 한 줄을 만들어 직원 내 근무표에 띄웁니다"
               className="inline-flex items-center gap-1.5 px-3 py-2.5 border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-40 text-indigo-700 rounded-xl text-sm font-semibold">
@@ -684,7 +713,7 @@ export default function WorkSchedulePage() {
       {/* 인쇄 머리말 — 결재란은 인쇄물에만 */}
       <div className="hidden print:flex items-start justify-between mb-1">
         <div />
-        <table className="print-approve">
+        <table className={`print-approve ${attPick ? 'print:hidden' : ''}`}>
           <tbody>
             <tr>
               <td rowSpan={2} className="pa-label">결<br />재</td>
@@ -696,17 +725,27 @@ export default function WorkSchedulePage() {
       </div>
 
       {/* 편성표 본체 */}
-      <h2 className="text-center text-base md:text-lg font-bold text-gray-900 mb-2 print:mb-1">
+      <h2 className={`text-center text-base md:text-lg font-bold text-gray-900 mb-2 print:mb-1 ${attPick ? 'print:hidden' : ''}`}>
         행복한 요양원 <span className="text-teal-700">{y}년 {m}월</span> 근무 편성표
         <span className="block text-xs font-semibold text-gray-500 print:text-[9pt] print:mt-0.5">
           작성 기준 {asOf ? `${Number(asOf.slice(5, 7))}월 ${Number(asOf.slice(8, 10))}일` : '-'}
         </span>
       </h2>
 
+      {attPickOpen && (
+        <GeneratePickModal staff={staff} title="근무상황부 인쇄 대상" verb="인쇄" hint="사람마다 A4 한 장 — 성명과 근무형태가 채워져 나옵니다"
+          onClose={() => setAttPickOpen(false)}
+          onConfirm={ids => { setAttPickOpen(false); setAttPick(ids) }} />
+      )}
+      {attPick && (
+        <AttendanceSheets ym={ym} holidays={holidays}
+          staff={staff.filter(s2 => attPick.has(s2.id))} />
+      )}
+
       {loading ? (
         <div className="flex justify-center py-16"><Loader2 className="animate-spin text-gray-300" size={22} /></div>
       ) : (
-        <div className="ws-wrap overflow-x-auto border border-gray-200 rounded-xl bg-white outline-none" tabIndex={0} onKeyDown={onKey}>
+        <div className={`ws-wrap overflow-x-auto border border-gray-200 rounded-xl bg-white outline-none ${attPick ? 'print:hidden' : ''}`} tabIndex={0} onKeyDown={onKey}>
           <table className="ws-table border-collapse" style={{ minWidth: 1400 }}>
             <colgroup>
               <col className="c-pos" /><col className="c-team" /><col className="c-name" />
@@ -924,10 +963,35 @@ export default function WorkSchedulePage() {
            총시간·초과휴 같은 숫자는 '왜 저 사람은 나보다 많지?'라는 오해를 부르므로
            빼고, 대신 근무 칸과 이름을 크게 키운다. 관리·결재용은 집계까지 모두 넣는다. */
         .print-approve, .print-approve td { border: 0.4mm solid #000; border-collapse: collapse; }
+        /* 근무상황부 — 사람마다 한 장 */
+        @media print {
+          .att-sheets { display: block !important; }
+          /* A4 한 장에 딱 — 고정 높이 플렉스 컬럼, 표가 남는 공간을 전부 차지해
+             행 높이가 자동으로 늘어난다 (달 길이와 무관하게 항상 꽉 찬 한 장) */
+          /* 컨테이너 패딩·인쇄 헤더 잔여 여백까지 0으로 — att-page 높이만 지면을 차지 */
+          .att-mode { padding: 0 !important; }
+          .att-mode > *:not(.att-sheets) { display: none !important; }
+          .att-page {
+            page-break-after: always;
+            box-sizing: border-box;
+            height: 276mm;            /* 세로 A4 297mm - @page 여백 18mm - 여유 3mm */
+            overflow: hidden;
+            padding: 2mm 4mm 0;
+            display: flex;
+            flex-direction: column;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .att-page:last-child { page-break-after: auto; }
+          .att-page table { width: auto; }
+          .att-table { width: 100% !important; flex: 1 1 auto; height: 100%; }
+          /* 일요일·공휴일 빨강 / 토요일 파랑 — 근무표와 같은 색 약속 */
+          .att-red  { color: #dc2626 !important; background: #fef2f2 !important; }
+          .att-blue { color: #2563eb !important; background: #eff6ff !important; }
+        }
         /* 화면에서도 시간대는 두 줄로 (칸이 좁아 잘리는 건 마찬가지) */
         .ws-time { display: block; line-height: 1.05; font-size: 9px; font-variant-numeric: tabular-nums; }
         @media print {
-          @page { size: A4 landscape; margin: 6mm; }
+          @page { size: A4 ${attPick ? 'portrait' : 'landscape'}; margin: ${attPick ? '9mm 12mm' : '6mm'}; }
           html, body { background: #fff !important; }
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print\\:hidden { display: none !important; }
