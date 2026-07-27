@@ -54,11 +54,16 @@ def _clean(v):
 
 
 def _apply(c: CardKey, b: CardBody):
+    # '안 보낸 필드'와 '명시적으로 null(지우기)'을 구분한다 —
+    # 납부 취소·반납 취소가 날짜를 지워야 하는데 None 무시로는 안 지워진다
+    sent = getattr(b, "model_fields_set", None) or getattr(b, "__fields_set__", set())
     for field in ("card_number", "holder", "staff_id", "deposit_date", "deposit_method",
                   "deposit_amount", "return_date", "returner", "memo"):
         val = getattr(b, field)
         if val is not None:
             setattr(c, field, _clean(val))
+        elif field in sent:
+            setattr(c, field, None)          # 명시적 null = 값 지우기
     if b.returned is not None:
         c.returned = bool(b.returned)
 
