@@ -427,13 +427,52 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 // ── 직원 상세정보 표 (인적·자격·계좌 분류) ──────────────────────
+type StaffSort = 'hire' | 'name' | 'birth' | 'position'
+const SORTS: { v: StaffSort; label: string }[] = [
+  { v: 'hire', label: '입사일순' },
+  { v: 'name', label: '가나다순' },
+  { v: 'birth', label: '생년월일순' },
+  { v: 'position', label: '직종순' },
+]
+// 직종 정렬은 지시 체계 순 — 근무표와 같은 기준
+const POS_RANK = ['시설장', '간호팀장', '사무국장', '사회복지사', '간호사', '간호조무사', '물리치료사', '요양팀장', '요양보호사', '조리원', '영양사', '위생원', '사무원']
+const posRank = (p?: string | null) => { const i = POS_RANK.indexOf(p ?? ''); return i === -1 ? 99 : i }
+
 function StaffDetailTable({ staff }: { staff: LtcStaff[] }) {
   const [q, setQ] = useState('')
-  const [showResigned, setShowResigned] = useState(false)
-  const rows = useMemo(() => staff
-    .filter(s => showResigned || s.status === 'active')
-    .filter(s => !q || s.name.includes(q) || (s.position ?? '').includes(q))
-    .sort((a, b) => (a.hireDate || '9999').localeCompare(b.hireDate || '9999')), [staff, q, showResigned])
+  const [sort, setSort] = useState<StaffSort>('hire')
+  // 월별 인원 파악 — ''=현재(현인원), 'YYYY-MM'=그 달에 재직했던 인원
+  const now = new Date()
+  const thisYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const [ym, setYm] = useState('')
+  const moveYm = (delta: number) => {
+    const base = ym || thisYm
+    const [y, m] = base.split('-').map(Number)
+    const d = new Date(y, m - 1 + delta, 1)
+    setYm(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+  }
+  // 그 달 재직 = 그 달이 끝나기 전 입사 + (퇴사 없음 또는 그 달 시작 이후 퇴사)
+  const employedIn = (s: LtcStaff, month: string) => {
+    const end = `${month}-31`, start = `${month}-01`
+    const hired = (s.hireDate || '') <= end
+    const resign = (s as any).resignDate as string | undefined
+    return hired && (!resign || resign >= start)
+  }
+
+  const rows = useMemo(() => {
+    let list = staff
+    if (ym) list = list.filter(s => employedIn(s, ym))          // 과거 달 = 그때 재직자
+    else list = list.filter(s => s.status === 'active')          // 현재 = 현인원
+    if (q) list = list.filter(s => s.name.includes(q) || (s.position ?? '').includes(q))
+    const cmp: Record<StaffSort, (a: LtcStaff, b: LtcStaff) => number> = {
+      hire: (a, b) => (a.hireDate || '9999').localeCompare(b.hireDate || '9999'),
+      name: (a, b) => a.name.localeCompare(b.name, 'ko'),
+      birth: (a, b) => (a.birthDate || '9999').localeCompare(b.birthDate || '9999'),
+      position: (a, b) => posRank(a.position) - posRank(b.position) || a.name.localeCompare(b.name, 'ko'),
+    }
+    return [...list].sort(cmp[sort])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [staff, q, sort, ym])
 
   const th = 'px-2.5 py-2 text-[11px] font-bold text-gray-500 whitespace-nowrap text-center border-b border-gray-200'
   const gh = 'px-2.5 py-1.5 text-[11px] font-extrabold whitespace-nowrap text-center border-b border-gray-200'
@@ -443,13 +482,31 @@ function StaffDetailTable({ staff }: { staff: LtcStaff[] }) {
   return (
     <>
       <div className="flex items-center gap-2 mb-3 flex-wrap">
+        {/* 월별 인원 — ‹ › 로 과거 달의 재직 인원을 본다. 라벨 클릭 = 현인원 */}
+        <div className="inline-flex items-center h-9 border border-gray-200 rounded-xl bg-white overflow-hidden">
+          <button onClick={() => moveYm(-1)} className="h-full px-2.5 text-gray-400 hover:text-gray-700 hover:bg-gray-50" aria-label="이전 달">‹</button>
+          <button onClick={() => setYm(ym ? '' : thisYm)}
+            title={ym ? '누르면 현인원 보기' : '누르면 이번 달부터 과거로 이동'}
+            className="h-full px-2 min-w-[8.5rem] text-sm font-bold text-gray-700 hover:bg-gray-50">
+            {ym ? `${Number(ym.slice(0, 4))}년 ${Number(ym.slice(5, 7))}월 재직` : '현인원'}
+            <span className="ml-1.5 text-[11px] font-extrabold text-indigo-600">{rows.length}명</span>
+          </button>
+          <button onClick={() => moveYm(1)} className="h-full px-2.5 text-gray-400 hover:text-gray-700 hover:bg-gray-50" aria-label="다음 달">›</button>
+        </div>
+
+        {/* 정렬 */}
+        <div className="inline-flex bg-gray-100 rounded-xl p-0.5">
+          {SORTS.map(o => (
+            <button key={o.v} onClick={() => setSort(o.v)}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${sort === o.v ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>
+              {o.label}
+            </button>
+          ))}
+        </div>
+
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="이름·직종 검색"
-          className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-200 w-40" />
-        <label className="inline-flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer">
-          <input type="checkbox" checked={showResigned} onChange={e => setShowResigned(e.target.checked)} className="accent-gray-500" />
-          퇴사 포함
-        </label>
-        <span className="text-xs text-gray-400 ml-auto">입사일 빠른순 · {rows.length}명</span>
+          className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-200 w-36" />
+        {ym && <span className="text-[11px] text-gray-400">그 달에 하루라도 재직했던 인원 (퇴사자 포함)</span>}
       </div>
 
       {rows.length === 0 ? (
