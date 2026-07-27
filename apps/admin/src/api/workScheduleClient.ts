@@ -37,6 +37,7 @@ export interface MySchedule {
   team?: string | null
   codes: Record<string, string>   // day → 근무 코드
   updated_at?: string | null
+  note?: string | null   // 개인별 한 줄 설명 (저장 시 생성)
 }
 export interface SavePayload {
   year_month: string
@@ -72,6 +73,12 @@ export const workScheduleAPI = {
   /** 근무표 발표 알림 — 전 직원 푸시 */
   notify: (year_month: string) =>
     apiClient.post(`${BASE}/notify`, { year_month }).then(unwrap<{ tokens: number; recipients?: number; sent: number; failed: number }>),
+  /** 개인별 한 줄 설명 생성 — 저장 후 호출, AI 실패 시 서버가 템플릿으로 대체 */
+  explain: (month: string, people: {
+    staff_id: string; name: string; team?: string | null
+    hours: number; base: number; d: number; n: number
+    annual: number; daehyu: number; comp: number; extra: number; carry?: number | null
+  }[]) => apiClient.post(`${BASE}/explain`, { month, people }).then(unwrap<{ count: number; ai: boolean }>),
   /** 내 근무표 — 전 직원 */
   mine: (month: string) =>
     apiClient.get(`${BASE}/mine`, { params: { month } }).then(unwrap<MySchedule>),

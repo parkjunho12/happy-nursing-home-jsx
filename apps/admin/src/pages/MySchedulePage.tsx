@@ -135,6 +135,14 @@ export default function MySchedulePage() {
         </div>
       )}
 
+      {/* 이번 달 내 근무가 이렇게 나온 이유 — 저장 시 만들어진 개인별 한 줄 */}
+      {data?.note && (
+        <div className="mb-3 rounded-2xl bg-indigo-50/60 border border-indigo-100 px-4 py-3">
+          <p className="text-xs font-bold text-indigo-500 mb-0.5">이번 달 내 근무 정리</p>
+          <p className="text-sm text-gray-700 leading-relaxed">{data.note}</p>
+        </div>
+      )}
+
       {/* 월 이동 */}
       <div className="flex items-center justify-center gap-1 mb-2">
         <button onClick={() => setYm(shiftMonth(ym, -1))} className="p-3 rounded-xl hover:bg-gray-100" aria-label="이전 달">
