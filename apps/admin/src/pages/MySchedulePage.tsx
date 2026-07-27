@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, CalendarDays, Loader2, Sun, Moon, Coffee } f
 import { workScheduleAPI, type MySchedule } from '@/api/workScheduleClient'
 import { CODE_MAP, extraHoursOf, splitTimeRange } from '@/utils/shiftCodes'
 import LeaveRequestCard from '@/components/schedule/LeaveRequestCard'
+import PayslipCard from '@/components/schedule/PayslipCard'
 import SwapRequestCard from '@/components/schedule/SwapRequestCard'
 
 /**
@@ -194,6 +195,9 @@ export default function MySchedulePage() {
               </div>
             ))}
           </div>
+
+          {/* 이 달 급여명세서 — 올라온 달에만 카드가 나타난다 */}
+          <PayslipCard month={ym} />
 
           {/* 위에서 보던 달을 그대로 신청 카드에도 — 8월 보다가 신청하면 8월이 떠야 한다 */}
           <LeaveRequestCard month={ym} />

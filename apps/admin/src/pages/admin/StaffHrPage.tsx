@@ -5,6 +5,8 @@ import { hrAPI, DOC_FIELDS, type HrRecord, type HrInput, type DocKey } from '../
 import { useLtcStore, type LtcStaff } from '@/store/ltc'
 import { cardKeyAPI, type CardKey, type CardInput } from '../../api/cardKeyClient'
 import AnnualLeaveLedger from '@/components/schedule/AnnualLeaveLedger'
+import PayslipManager from '@/components/hr/PayslipManager'
+import { useAuthStore } from '@/store/auth'
 import { STAFF_POSITIONS } from '@/constants/positions'
 
 
@@ -30,7 +32,10 @@ export default function StaffHrPage() {
   const [incompleteOnly, setIncompleteOnly] = useState(false)
   const [showResigned, setShowResigned] = useState(false)
   const [expandedC, setExpandedC] = useState<Set<string>>(new Set())
-  const [tab, setTab] = useState<'detail' | 'hr' | 'card' | 'leave'>('detail')
+  const [tab, setTab] = useState<'detail' | 'hr' | 'card' | 'leave' | 'pay'>('detail')
+  const { user: authUser } = useAuthStore()
+  // 급여는 민감 정보 — ADMIN·시설장만 탭 노출 (서버도 동일 기준으로 잠금)
+  const canPay = authUser?.role === 'ADMIN' || authUser?.position === '시설장'
   const { staffList, loaded: ltcLoaded, loadAll } = useLtcStore()
   useEffect(() => { if (!ltcLoaded) loadAll() }, [ltcLoaded, loadAll])
   const toggleC = (id: string) => setExpandedC(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -99,7 +104,7 @@ export default function StaffHrPage() {
 
       {/* 탭 */}
       <div className="flex gap-1.5 mb-4">
-        {([['detail', '직원 상세정보'], ['hr', '근로계약·서류'], ['leave', '연차 대장'], ['card', '카드키 관리']] as const).map(([k, label]) => (
+        {([['detail', '직원 상세정보'], ['hr', '근로계약·서류'], ['leave', '연차 대장'], ['pay', '급여명세서'], ['card', '카드키 관리']] as const).filter(([k]) => k !== 'pay' || canPay).map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${tab === k ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
             {label}
@@ -237,6 +242,7 @@ export default function StaffHrPage() {
       {tab === 'detail' && <StaffDetailTable staff={staffList} />}
 
       {tab === 'leave' && <AnnualLeaveLedger />}
+      {tab === 'pay' && canPay && <PayslipManager />}
       {tab === 'card' && <CardKeyTable />}
 
       {(addOpen || editing) && (
@@ -611,6 +617,17 @@ function CardKeyTable() {
   const td = 'px-2.5 py-2 text-xs whitespace-nowrap text-center border-b border-gray-50 text-gray-600'
   const val = (v?: string | null) => v ? v : <span className="text-gray-300">-</span>
 
+  // 보증금 납부 토글 — 서류 제출/미제출과 같은 클릭 방식.
+  // 납부 = 납부일이 찍힘(없으면 오늘), 액수 비어 있으면 표준 10,000원을 채운다.
+  const toggleDeposit = async (c: CardKey) => {
+    const today = new Date().toISOString().split('T')[0]
+    const paid = !!c.deposit_date
+    await cardKeyAPI.update(c.id, paid
+      ? { deposit_date: null }
+      : { deposit_date: today, deposit_amount: c.deposit_amount || '10,000원' })
+    load()
+  }
+
   const toggleReturn = async (c: CardKey) => {
     const today = new Date().toISOString().split('T')[0]
     const next = !c.returned
@@ -635,6 +652,7 @@ function CardKeyTable() {
           <input type="checkbox" checked={showReturned} onChange={e => setShowReturned(e.target.checked)} className="accent-gray-500" />
           반납 포함
         </label>
+        <span className="text-[11px] text-gray-400">💡 보증금·반납 배지를 클릭하면 바로 토글됩니다</span>
         <span className="text-xs text-gray-400 ml-auto">{filtered.length} / {rows.length}개</span>
       </div>
 
@@ -666,16 +684,26 @@ function CardKeyTable() {
                   <td className={td}>{val(c.holder)}</td>
                   <td className={td}>{fmtD(c.deposit_date) || <span className="text-gray-300">-</span>}</td>
                   <td className={td}>{val(c.deposit_method)}</td>
-                  <td className={td}>{val(c.deposit_amount)}</td>
                   <td className={td}>
-                    {c.returned ? (
-                      <div className="flex flex-col items-center">
-                        <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">반납완료</span>
-                        <span className="text-[10px] text-gray-400 mt-0.5">{fmtD(c.return_date)}{c.returner ? ` · ${c.returner}` : ''}</span>
-                      </div>
-                    ) : (
-                      <span className="text-[10px] font-bold text-green-700 bg-green-50 px-1.5 py-0.5 rounded">사용중</span>
-                    )}
+                    <button onClick={() => toggleDeposit(c)}
+                      title="클릭하면 납부 ↔ 미납부 (납부 시 오늘 날짜 기록)"
+                      className={`text-[10px] font-bold px-2 py-1 rounded transition-colors ${
+                        c.deposit_date ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-red-100 text-red-600 hover:bg-red-200'}`}>
+                      {c.deposit_date ? `납부 ${c.deposit_amount || ''}`.trim() : '미납부'}
+                    </button>
+                  </td>
+                  <td className={td}>
+                    <button onClick={() => toggleReturn(c)} title="클릭하면 사용중 ↔ 반납완료"
+                      className="flex flex-col items-center mx-auto">
+                      {c.returned ? (
+                        <>
+                          <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded hover:bg-gray-200">반납완료</span>
+                          <span className="text-[10px] text-gray-400 mt-0.5">{fmtD(c.return_date)}{c.returner ? ` · ${c.returner}` : ''}</span>
+                        </>
+                      ) : (
+                        <span className="text-[10px] font-bold text-green-700 bg-green-50 px-1.5 py-0.5 rounded hover:bg-green-100">사용중</span>
+                      )}
+                    </button>
                   </td>
                   <td className={`${td} text-left whitespace-normal max-w-[160px]`}>{val(c.memo)}</td>
                   <td className={td}>
@@ -705,7 +733,7 @@ function CardFormModal({ editing, onClose, onSaved }: { editing: CardKey | null;
   const [f, setF] = useState<CardInput>({
     card_number: editing?.card_number ?? '', holder: editing?.holder ?? '',
     deposit_date: editing?.deposit_date ?? '', deposit_method: editing?.deposit_method ?? '',
-    deposit_amount: editing?.deposit_amount ?? '',
+    deposit_amount: editing?.deposit_amount ?? '10,000원',   // 시설 표준 보증금
     returned: editing?.returned ?? false, return_date: editing?.return_date ?? '', returner: editing?.returner ?? '',
     memo: editing?.memo ?? '',
   })
@@ -736,7 +764,7 @@ function CardFormModal({ editing, onClose, onSaved }: { editing: CardKey | null;
             <Field label="보증금 납부일"><DateField value={f.deposit_date} onChange={v => setF({ ...f, deposit_date: v })} className={inp} /></Field>
             <Field label="납부 방법"><input value={f.deposit_method ?? ''} onChange={e => setF({ ...f, deposit_method: e.target.value })} className={inp} placeholder="현금 / 이체 등" /></Field>
           </div>
-          <Field label="보증금 액수"><input value={f.deposit_amount ?? ''} onChange={e => setF({ ...f, deposit_amount: e.target.value })} className={inp} placeholder="예: 20,000원" /></Field>
+          <Field label="보증금 액수"><input value={f.deposit_amount ?? ''} onChange={e => setF({ ...f, deposit_amount: e.target.value })} className={inp} placeholder="예: 10,000원" /></Field>
           <div className="border-t border-gray-100 pt-3">
             <label className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600">
               <input type="checkbox" checked={!!f.returned} onChange={e => setF({ ...f, returned: e.target.checked })} className="accent-indigo-600" /> 반납 완료
