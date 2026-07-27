@@ -34,3 +34,14 @@ test('전체 직종 순서 + 묶음 내 입사순', () => {
   assert.deepEqual(sortScheduleStaff(staff).map(s => s.name),
     ['시설장', '사복', '간조', '간호팀장', '물치', '요보A선임', '요보A', '요보주간'])
 })
+
+test('운영 재현 — 직종 표기가 깨진 주간이 교대조 위로 못 올라간다', () => {
+  const staff = [
+    { name: '주간표기변형', pos: '요양 보호사', team: '', hireDate: '2018-01-01' },  // 공백 낀 표기
+    { name: '주간미상', pos: '', team: null, hireDate: '2017-01-01' },               // 직종 비어 있음
+    { name: '조A', pos: '요양보호사', team: 'A조', hireDate: '2024-01-01' },
+    { name: '조B', pos: '요양보호사', team: 'B조', hireDate: '2024-01-01' },
+  ]
+  const out = sortScheduleStaff(staff).map(s => s.name)
+  assert.deepEqual(out.slice(0, 2), ['조A', '조B'], `교대조가 위여야 함: ${out.join(' → ')}`)
+})
