@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { hoursOf, extraHoursOf, timeRangeForHours, breakMinutes, rotationOn, splitTimeRange, shortOf } from '../src/utils/shiftCodes'
+import { countAsOf, hoursOf, extraHoursOf, timeRangeForHours, breakMinutes, rotationOn, splitTimeRange, shortOf } from '../src/utils/shiftCodes'
 
 test('근무 코드 시간 — 실제 편성표 검산값(D=8h·N=9h)과 일치', () => {
   assert.equal(hoursOf('D'), 8)
@@ -56,4 +56,12 @@ test('인쇄용 표기 — 시간대 두 줄 분리·세 글자 축약', () => {
   assert.equal(splitTimeRange('대휴'), null)
   assert.equal(shortOf('초과휴'), '초휴')
   assert.equal(shortOf('D'), 'D')
+})
+
+test('직접 입력 시간대(단축 근무)는 주간(D) 인원으로 센다', () => {
+  assert.equal(countAsOf('0850~1600'), 'D')   // 초과휴 자투리 상환
+  assert.equal(countAsOf('09:00~15:00'), 'D')
+  assert.equal(countAsOf('休'), null)          // 연차는 근무 인원 아님
+  assert.equal(countAsOf('대휴'), null)
+  assert.equal(countAsOf('N'), 'N')
 })
