@@ -224,27 +224,36 @@ export default function WorkSchedulePage() {
 
   const rowMap = useMemo(() => new Map(rows.map(r => [r.staff_id, r])), [rows])
 
-  /** 표에 실을 직원 — 저장된 행 정보(직종·조)를 얹어 정렬 */
-  const staff = useMemo(() => staffList
-    .filter(s => s.status === 'active')
-    .map(s => {
-      const r = rowMap.get(s.id)
-      return { ...s, team: r?.team ?? '', note: r?.note ?? '', pos: r?.position ?? s.position ?? '' }
-    })
-    .sort((a, b) => {
-      const rank = (x: { pos: string; team?: string }) => {
-        const i = POS_ORDER.indexOf(x.pos)
-        const base = i === -1 ? POS_ORDER.length - 2 : i     // 모르는 직종은 요보 앞
-        // 요양보호사는 조가 있는 분들이 먼저, 주간이 그 뒤
-        if (x.pos === '요양보호사') return base * 10 + (x.team ? 0 : 5)
-        return base * 10
-      }
-      return rank(a) - rank(b) ||
-        (a.team ?? '').localeCompare(b.team ?? '') ||          // 조끼리는 A→B→C
-        (a.hireDate || '9999').localeCompare(b.hireDate || '9999') ||   // 먼저 온 분이 위
-        a.name.localeCompare(b.name, 'ko')
-    }),
-    [staffList, rowMap])
+  /** 표에 실을 직원 — 그달에 실제 재직하는 사람만.
+   *  8/3 입사자는 7월 표에 안 나오고, 7월 말 퇴사자는 8월 표에서 빠진다. */
+  const staff = useMemo(() => {
+    const monthStart = `${ym}-01`, monthEnd = `${ym}-31`
+    return staffList
+      .filter(s => {
+        const hired = !!s.hireDate && s.hireDate.slice(0, 10) <= monthEnd     // 그달 안에 입사
+        const resign = (s.resignDate || '').slice(0, 10)
+        if (!hired) return false
+        if (resign) return resign >= monthStart                               // 그달까지는 근무
+        return s.status === 'active'
+      })
+      .map(s => {
+        const r = rowMap.get(s.id)
+        return { ...s, team: r?.team ?? '', note: r?.note ?? '', pos: r?.position ?? s.position ?? '' }
+      })
+      .sort((a, b) => {
+        const rank = (x: { pos: string; team?: string }) => {
+          const i = POS_ORDER.indexOf(x.pos)
+          const base = i === -1 ? POS_ORDER.length - 2 : i     // 모르는 직종은 요보 앞
+          // 요양보호사는 교대조(A·B·C조) 먼저, 주간이 그 아래
+          if (canJoinTeam(x.pos)) return base * 10 + (x.team ? 0 : 5)
+          return base * 10
+        }
+        return rank(a) - rank(b) ||
+          (a.team ?? '').localeCompare(b.team ?? '') ||          // 조끼리는 A→B→C
+          (a.hireDate || '9999').localeCompare(b.hireDate || '9999') ||   // 먼저 온 분이 위
+          a.name.localeCompare(b.name, 'ko')
+      })
+  }, [staffList, rowMap, ym])
 
   const setCell = (sid: string, day: number, code: string) => {
     setData(prev => {
