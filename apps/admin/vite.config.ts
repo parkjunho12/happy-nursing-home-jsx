@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 
 export default defineConfig({
+  // 배포 확인용 빌드 시각 — '운영에 어떤 버전이 떠 있나'를 화면에서 바로 본다
+  define: { __BUILD_TIME__: JSON.stringify(new Date().toISOString().slice(0, 16).replace('T', ' ')) },
   plugins: [react()],
   resolve: {
     alias: {

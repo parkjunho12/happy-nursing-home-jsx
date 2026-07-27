@@ -621,6 +621,11 @@ function CardKeyTable() {
   // 납부 = 납부일 있음 / 미납부 = 액수 칸에 '미납부' 표식 / 둘 다 없으면 미입력
   const depositState = (c: CardKey): 'paid' | 'unpaid' | 'none' =>
     c.deposit_date ? 'paid' : c.deposit_amount === '미납부' ? 'unpaid' : 'none'
+  // 그 줄만 갈아끼운다 — load()로 전체를 다시 그리면 스피너 때문에
+  // 화면이 통째로 새로고침되는 것처럼 보인다
+  const patchRow = (updated: CardKey) =>
+    setRows(rs => rs.map(r => r.id === updated.id ? updated : r))
+
   const toggleDeposit = async (c: CardKey) => {
     const today = new Date().toISOString().split('T')[0]
     const st = depositState(c)
@@ -629,15 +634,18 @@ function CardKeyTable() {
       : st === 'unpaid'
         ? { deposit_date: today, deposit_amount: '10,000원' }               // → 납부
         : { deposit_date: null, deposit_amount: null }                      // → 미입력
-    await cardKeyAPI.update(c.id, next)
-    load()
+    patchRow({ ...c, ...next } as CardKey)                                  // 낙관적 반영 — 즉시 바뀜
+    try { patchRow(await cardKeyAPI.update(c.id, next)) }
+    catch { alert('저장 실패 — 다시 시도해주세요'); load() }
   }
 
   const toggleReturn = async (c: CardKey) => {
     const today = new Date().toISOString().split('T')[0]
     const next = !c.returned
-    await cardKeyAPI.update(c.id, { returned: next, return_date: next ? (c.return_date || today) : null, returner: next ? (c.returner || c.holder || null) : null })
-    load()
+    const body = { returned: next, return_date: next ? (c.return_date || today) : null, returner: next ? (c.returner || c.holder || null) : null }
+    patchRow({ ...c, ...body } as CardKey)
+    try { patchRow(await cardKeyAPI.update(c.id, body)) }
+    catch { alert('저장 실패 — 다시 시도해주세요'); load() }
   }
   const del = async (c: CardKey) => { if (!confirm('이 카드키 기록을 삭제할까요?')) return; await cardKeyAPI.remove(c.id); load() }
 
