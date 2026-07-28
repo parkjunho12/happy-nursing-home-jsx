@@ -91,9 +91,9 @@ export default function AnnualLeaveLedger() {
       {loading ? (
         <div className="flex justify-center py-14"><Loader2 className="animate-spin text-gray-300" size={20} /></div>
       ) : (
-        <div className="overflow-x-auto bg-white border border-gray-200 rounded-xl">
+        <div className="overflow-auto max-h-[70vh] bg-white border border-gray-200 rounded-xl">
           <table className="border-collapse min-w-[1100px] w-full">
-            <thead>
+            <thead className="sticky top-0 z-30 bg-white">
               <tr>
                 <th className={th}>순번</th>
                 <th className={th}>직책</th>

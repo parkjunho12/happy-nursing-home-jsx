@@ -222,9 +222,12 @@ export default function WorkSchedulePage() {
 
   /** 표에 실을 직원 — 그달에 실제 재직하는 사람만.
    *  8/3 입사자는 7월 표에 안 나오고, 7월 말 퇴사자는 8월 표에서 빠진다. */
+  // 정렬 모드 — 기본(직종·조) 외에 이름·입사순도 바로 바꿔볼 수 있게
+  const [sortMode, setSortMode] = useState<'basic' | 'name' | 'hire'>('basic')
+
   const staff = useMemo(() => {
     const monthStart = `${ym}-01`, monthEnd = `${ym}-31`
-    return sortScheduleStaff(staffList
+    const base = staffList
       .filter(s => {
         const hired = !!s.hireDate && s.hireDate.slice(0, 10) <= monthEnd     // 그달 안에 입사
         const resign = (s.resignDate || '').slice(0, 10)
@@ -235,8 +238,12 @@ export default function WorkSchedulePage() {
       .map(s => {
         const r = rowMap.get(s.id)
         return { ...s, team: r?.team ?? '', note: r?.note ?? '', pos: r?.position ?? s.position ?? '' }
-      }))
-  }, [staffList, rowMap, ym])
+      })
+    if (sortMode === 'name') return [...base].sort((a, b) => a.name.localeCompare(b.name, 'ko'))
+    if (sortMode === 'hire') return [...base].sort((a, b) =>
+      (a.hireDate || '9999').localeCompare(b.hireDate || '9999') || a.name.localeCompare(b.name, 'ko'))
+    return sortScheduleStaff(base)
+  }, [staffList, rowMap, ym, sortMode])
 
   const setCell = (sid: string, day: number, code: string) => {
     setData(prev => {
@@ -581,6 +588,17 @@ export default function WorkSchedulePage() {
                 className="px-3 py-2.5 text-sm font-semibold text-gray-500 border-l border-gray-200 hover:bg-gray-50">
                 관리용
               </button>
+            </div>
+            {/* 정렬 — 기본은 직종·조 순(A·B·C조 → 주간), 필요할 때만 바꾼다 */}
+            <div className="inline-flex bg-gray-100 rounded-xl p-0.5">
+              {([['basic', '기본'], ['name', '가나다'], ['hire', '입사순']] as const).map(([v, label]) => (
+                <button key={v} onClick={() => setSortMode(v)}
+                  title={v === 'basic' ? '직종 → 교대조(A·B·C) → 주간 → 입사순' : undefined}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                    sortMode === v ? 'bg-white text-teal-700 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>
+                  {label}
+                </button>
+              ))}
             </div>
             <button onClick={() => {
               if (dirty && !confirm('저장하지 않은 변경이 있습니다. 현재 화면 기준으로 근무상황부를 인쇄합니다.\n계속할까요?')) return

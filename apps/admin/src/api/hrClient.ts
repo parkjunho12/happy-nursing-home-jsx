@@ -49,7 +49,7 @@ export const DOC_FIELDS: { key: DocKey; label: string; short: string }[] = [
   { key: 'family',    label: '가족관계증명서',           short: '가족관계' },
   { key: 'id_copy',   label: '신분증 사본',              short: '신분증' },
   { key: 'bankbook',  label: '통장 사본',                short: '통장' },
-  { key: 'insurance', label: '건강보험자격득실확인서',   short: '건강보험' },
+  { key: 'insurance', label: '건강보험자격득실확인서',   short: '자격득실' },
   { key: 'withholding', label: '원천징수 동의서',          short: '원천징수' },
   { key: 'subholiday',  label: '대체휴일 합의서',          short: '대체휴일' },
   { key: 'compleave',   label: '보상휴가 합의서',          short: '보상휴가' },
