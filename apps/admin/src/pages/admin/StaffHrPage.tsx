@@ -144,9 +144,9 @@ export default function StaffHrPage() {
       {loading ? (
         <div className="flex justify-center py-16"><Loader2 className="animate-spin text-gray-300" /></div>
       ) : (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-auto max-h-[70vh]">
           <table className="w-full border-collapse min-w-[980px]">
-            <thead>
+            <thead className="sticky top-0 z-30">
               <tr className="bg-gray-50/90">
                 <th className={`${th} sticky left-0 z-20 bg-gray-50 text-left border-r border-gray-200 min-w-[140px]`}>직원</th>
                 <th className={th}>입사일</th>
@@ -530,9 +530,9 @@ function StaffDetailTable({ staff }: { staff: LtcStaff[] }) {
       {rows.length === 0 ? (
         <div className="text-center py-16 text-gray-400 bg-white rounded-2xl border border-gray-100 text-sm">직원이 없습니다.</div>
       ) : (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-auto max-h-[70vh]">
           <table className="w-full border-collapse min-w-[1100px]">
-            <thead>
+            <thead className="sticky top-0 z-30 bg-white">
               <tr>
                 <th className={`${gh} sticky left-0 z-20 bg-indigo-50/60 text-indigo-700 border-r border-gray-200`} colSpan={5}>기본정보</th>
                 <th className={`${gh} bg-teal-50/60 text-teal-700`} colSpan={3}>인적사항</th>
@@ -674,9 +674,9 @@ function CardKeyTable() {
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 text-gray-400 bg-white rounded-2xl border border-gray-100 text-sm">등록된 카드키가 없습니다.</div>
       ) : (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-auto max-h-[70vh]">
           <table className="w-full border-collapse min-w-[900px]">
-            <thead>
+            <thead className="sticky top-0 z-30">
               <tr className="bg-gray-50/90">
                 <th className={`${th} w-10`}>#</th>
                 <th className={th}>카드 번호</th>
