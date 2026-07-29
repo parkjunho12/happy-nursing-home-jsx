@@ -221,6 +221,7 @@ class LtcResidentCreate(BaseModel):
     plan_lines:            Optional[List[dict]] = None   # 자동 생성된 계획서 일시
     eval_lines:            Optional[List[dict]] = None   # 자동 생성된 평가 일시
     memo:                  str = ""
+    status:                Optional[str] = None   # active | pending(입소 예정)
 
 
 class LtcResidentUpdate(BaseModel):

@@ -24,6 +24,17 @@ staff_router = APIRouter()
 @residents_router.get("", response_model=ApiResponse)
 def list_ltc_residents(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     rows = db.query(LtcResident).order_by(LtcResident.created_at.desc()).all()
+    # 입소 예정자(pending)는 입소일이 되면 자동으로 현원(active) 전환 —
+    # 사람이 바꿔주길 기다리면 그날 아침 명단이 틀린다
+    from datetime import datetime, timezone, timedelta
+    today = datetime.now(timezone(timedelta(hours=9))).strftime("%Y-%m-%d")
+    flipped = False
+    for r in rows:
+        if r.status == "pending" and (r.admission_date or "")[:10] <= today:
+            r.status = "active"
+            flipped = True
+    if flipped:
+        db.commit()
     return ApiResponse(success=True, data=[LtcResidentOut.model_validate(r).model_dump() for r in rows])
 
 
@@ -38,7 +49,13 @@ def create_ltc_resident(
     contract_in = data.pop("contract_lines", None)
     plan_in = data.pop("plan_lines", None)
     eval_in = data.pop("eval_lines", None)
-    r = LtcResident(**data, status="active")
+    status = data.pop("status", None)
+    # 입소일이 미래면 자동으로 '입소 예정' — 체크 안 해도 실수하지 않게
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    _today = _dt.now(_tz(_td(hours=9))).strftime("%Y-%m-%d")
+    if status not in ("active", "pending"):
+        status = "pending" if (data.get("admission_date") or "")[:10] > _today else "active"
+    r = LtcResident(**data, status=status)
     db.add(r)
     db.commit()
     db.refresh(r)
