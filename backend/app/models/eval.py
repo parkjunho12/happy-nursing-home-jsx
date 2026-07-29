@@ -256,6 +256,7 @@ class LtcResident(Base):
     discharge_date = Column(String(20), nullable=True)
     care_grade_start_date = Column(String(20), nullable=False)
     floor = Column(String(20), nullable=True, index=True)   # 어르신 생활 층
+    room = Column(String(10), nullable=True, index=True)    # 호실 (예: 201) — 담당 명단의 뼈대
     status = Column(String(20), default="active", index=True)
     memo = Column(Text, default="")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
