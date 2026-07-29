@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Save, User, Lock, Bell, Globe } from 'lucide-react'
+import { Save, User, Lock, Bell, Globe, BedDouble } from 'lucide-react'
+import RoomSettings from '@/components/settings/RoomSettings'
 import { useAuthStore } from '@/store/auth'
 
 const SettingsPage = () => {
@@ -10,6 +11,7 @@ const SettingsPage = () => {
     { id: 'profile', label: '프로필', icon: User },
     { id: 'password', label: '비밀번호 변경', icon: Lock },
     { id: 'notifications', label: '알림 설정', icon: Bell },
+    { id: 'rooms', label: '층·호실 관리', icon: BedDouble },
     { id: 'system', label: '시스템 설정', icon: Globe },
   ]
 
@@ -46,7 +48,8 @@ const SettingsPage = () => {
 
         {/* Content */}
         <div className="lg:col-span-3">
-          <div className="bg-white rounded-2xl p-8 shadow-sm border-2 border-gray-100">
+          {activeTab === 'rooms' && <RoomSettings />}
+          <div className={`bg-white rounded-2xl p-8 shadow-sm border-2 border-gray-100 ${activeTab === 'rooms' ? 'hidden' : ''}`}>
             {activeTab === 'profile' && (
               <div>
                 <h2 className="text-2xl font-bold text-gray-900 mb-6">프로필 정보</h2>

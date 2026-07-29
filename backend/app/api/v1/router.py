@@ -19,6 +19,8 @@ from app.api.v1.endpoints.visits import admin_router as visit_admin_router, fami
 from app.api.v1.endpoints.incidents import router as incidents_router
 from app.api.v1.endpoints.monthly_report import router as monthly_report_router
 from app.api.v1.endpoints.payslips import router as payslips_router
+from app.api.v1.endpoints.assignments import router as assignments_router
+from app.api.v1.endpoints.rooms import router as rooms_router
 from app.api.v1.endpoints.staff_push import router as staff_push_router
 from app.api.v1.endpoints.staff_hr import router as staff_hr_router
 from app.api.v1.endpoints.card_keys import router as card_keys_router
@@ -132,6 +134,8 @@ api_router.include_router(visit_admin_router, prefix="/admin", tags=["admin-visi
 api_router.include_router(incidents_router, prefix="/admin/incidents", tags=["admin-incidents"])
 api_router.include_router(monthly_report_router, prefix="/admin/reports", tags=["admin-reports"])
 api_router.include_router(payslips_router, prefix="/admin/payslips", tags=["admin-payslips"])
+api_router.include_router(assignments_router, prefix="/admin/assignments", tags=["admin-assignments"])
+api_router.include_router(rooms_router, prefix="/admin/rooms", tags=["admin-rooms"])
 api_router.include_router(staff_push_router, prefix="/staff/push", tags=["staff-push"])
 api_router.include_router(staff_hr_router, prefix="/admin/staff-hr", tags=["admin-staff-hr"])
 api_router.include_router(card_keys_router, prefix="/admin/card-keys", tags=["admin-card-keys"])

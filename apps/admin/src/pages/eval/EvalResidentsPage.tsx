@@ -1,4 +1,5 @@
 import StickyToolbar from '../../components/common/StickyToolbar'
+import RoomPicker from '@/components/eval/RoomPicker'
 import { useState, useMemo, useEffect } from 'react'
 import { UserPlus, LogOut, Edit2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw, Trash2 } from 'lucide-react'
 import DateField from '@/components/ui/DateField'
@@ -274,7 +275,8 @@ function BirthDateSelect({ value, onChange }: { value: string; onChange: (v: str
 function ResidentForm({ existing, onClose }: { existing?: LtcResident; onClose:()=>void }) {
   const { addResident, updateResident } = useLtcStore()
   const today = new Date().toISOString().split('T')[0]
-  const [form, setForm] = useState({ name:existing?.name??'', birthDate:existing?.birthDate??'1930-01-01', gender:existing?.gender??'female', admissionDate:existing?.admissionDate??today, careGradeStartDate:existing?.careGradeStartDate??today, floor:existing?.floor??'2층', memo:existing?.memo??'' })
+  const [roomPickOpen, setRoomPickOpen] = useState(false)
+  const [form, setForm] = useState({ name:existing?.name??'', birthDate:existing?.birthDate??'1930-01-01', gender:existing?.gender??'female', admissionDate:existing?.admissionDate??today, careGradeStartDate:existing?.careGradeStartDate??today, floor:existing?.floor??'', room:(existing as any)?.room??'', memo:existing?.memo??'' })
   const [certs, setCerts] = useState<Certification[]>([
     { grade:'3', cert_no:'', start: today, end: endFromStart(today, 2), benefits:[{ type:'시설', from: today }] },
   ])
@@ -314,10 +316,19 @@ function ResidentForm({ existing, onClose }: { existing?: LtcResident; onClose:(
             <select className={ic} value={form.gender} onChange={e=>setForm({...form,gender:e.target.value})}><option value="female">여</option><option value="male">남</option></select>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1.5">생활 층</label>
-            <select className={ic} value={form.floor} onChange={e=>setForm({...form,floor:e.target.value})}>
-              {['1층','2층','3층','4층','5층'].map(f => <option key={f} value={f}>{f}</option>)}
-            </select>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">생활 층 · 호실 <span className="font-normal text-gray-400">(선택)</span></label>
+            <button type="button" onClick={() => setRoomPickOpen(true)}
+              className={`${ic} text-left flex items-center justify-between hover:border-teal-300`}>
+              <span className={form.floor || form.room ? 'text-gray-800 font-semibold' : 'text-gray-400'}>
+                {form.floor || form.room ? `${form.floor}${form.room ? ` ${form.room}호` : ''}` : '미지정 — 눌러서 빈 침대 고르기'}
+              </span>
+              <span className="text-[10px] text-teal-600 font-bold">침대 보기</span>
+            </button>
+            {roomPickOpen && (
+              <RoomPicker current={{ floor: form.floor, room: form.room }}
+                onClose={() => setRoomPickOpen(false)}
+                onPick={(f, r) => { setForm(p => ({ ...p, floor: f, room: r })); setRoomPickOpen(false) }} />
+            )}
           </div>
           <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">입소일 *</label><DateField className={ic} value={form.admissionDate} onChange={v=>setForm({...form,admissionDate:v})} clearable={false}/></div>
           {!existing && <div>
