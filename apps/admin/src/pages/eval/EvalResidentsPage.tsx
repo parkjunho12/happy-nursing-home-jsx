@@ -13,11 +13,12 @@ import { calcAge, isItemDone, daysFromToday } from '@/utils/period'
 import ChecklistDetailModal from '@/components/eval/ChecklistDetailModal'
 import { adminAlbumAPI } from '@/api/albumClient'
 
-type Tab = 'active' | 'discharged' | 'all'
+type Tab = 'active' | 'pending' | 'discharged' | 'all'
 
 export default function EvalResidentsPage() {
   const { residents, checklists, loaded, loadAll, deleteResident } = useLtcStore()
   const [tab, setTab] = useState<Tab>('active')
+  const [quickOpen, setQuickOpen] = useState(false)
   const [floorF, setFloorF] = useState('')
   const [showAdd, setShowAdd] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -35,7 +36,7 @@ export default function EvalResidentsPage() {
 
   const floors = Array.from(new Set(residents.map(r => r.floor).filter(Boolean))).sort() as string[]
   const filtered = residents
-    .filter(r => tab === 'all' ? true : tab === 'active' ? r.status === 'active' : r.status === 'discharged')
+    .filter(r => tab === 'all' ? true : r.status === tab)
     .filter(r => !floorF || r.floor === floorF)
   const resCls = useMemo(() => {
     const map: Record<string, ChecklistItem[]> = {}
@@ -67,6 +68,10 @@ export default function EvalResidentsPage() {
             className="flex items-center gap-1.5 bg-primary-orange text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-primary-orange/90 shadow-sm">
             <UserPlus size={15}/>입소 등록
           </button>
+          <button onClick={()=>setQuickOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-amber-300 bg-amber-50 text-amber-700 text-sm font-bold hover:bg-amber-100">
+            입소 예정자 간단 등록
+          </button>
         </div>
       </div>
 
@@ -89,10 +94,10 @@ export default function EvalResidentsPage() {
       {/* 탭 (상단 고정) */}
       <StickyToolbar>
       <div className="flex gap-1.5">
-        {(['active','discharged','all'] as Tab[]).map(t => (
+        {(['active','pending','discharged','all'] as Tab[]).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${tab===t?'bg-primary-orange text-white':'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-            {t==='active'?`입소 중 (${residents.filter(r=>r.status==='active').length})`:t==='discharged'?`퇴소 (${residents.filter(r=>r.status==='discharged').length})`:`전체 (${residents.length})`}
+            {t==='active'?`입소 중 (${residents.filter(r=>r.status==='active').length})`:t==='pending'?`입소 예정 (${residents.filter(r=>r.status==='pending').length})`:t==='discharged'?`퇴소 (${residents.filter(r=>r.status==='discharged').length})`:`전체 (${residents.length})`}
           </button>
         ))}
         {floors.length > 0 && (
@@ -130,6 +135,7 @@ export default function EvalResidentsPage() {
       {editingId     && <ResidentForm existing={residents.find(r=>r.id===editingId)} onClose={() => setEditingId(null)} />}
       {showDischarge && <DischargeModal residentId={showDischarge} onClose={() => setShowDischarge(null)} />}
       {selectedCl    && <ChecklistDetailModal item={selectedCl} onClose={() => setSelectedCl(null)} />}
+      {quickOpen && <QuickPendingModal onClose={()=>setQuickOpen(false)} />}
       {addGuardianFor && (
         <GuardianAddModal
           residentId={addGuardianFor.id}
@@ -151,7 +157,7 @@ function ResidentCard({ r, expanded, onExpand, onEdit, onDischarge, onDelete, ch
   const hasHigh = checklists.some(c => !isItemDone(c) && c.riskLevel === 'high')
 
   return (
-    <div className={`bg-white rounded-xl border shadow-sm overflow-hidden ${r.status==='discharged'?'opacity-60 border-gray-100':hasHigh?'border-red-200':'border-gray-200'}`}>
+    <div className={`bg-white rounded-xl border shadow-sm overflow-hidden ${r.status==='discharged'?'opacity-60 border-gray-100':r.status==='pending'?'border-amber-200 bg-amber-50/30':hasHigh?'border-red-200':'border-gray-200'}`}>
       <div className="flex items-center gap-3 p-4 cursor-pointer" onClick={onExpand}>
         <div className={`w-10 h-10 rounded-full flex items-center justify-center text-base font-bold flex-shrink-0 ${r.gender==='female'?'bg-pink-100 text-pink-700':'bg-blue-100 text-blue-700'}`}>
           {r.name[0]}
@@ -159,9 +165,14 @@ function ResidentCard({ r, expanded, onExpand, onEdit, onDischarge, onDelete, ch
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-bold text-gray-900">{r.name}</span>
+            {r.status === 'pending' && (
+              <span className="text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-200 rounded px-1.5 py-0.5">
+                {r.admissionDate ? `${Number(r.admissionDate.slice(5, 7))}/${Number(r.admissionDate.slice(8, 10))} 입소 예정` : '입소 예정'}
+              </span>
+            )}
             <span className="text-xs text-gray-500">{r.gender==='female'?'여':'남'} · {age}세</span>
-            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${r.status==='active'?'bg-green-100 text-green-700':'bg-gray-100 text-gray-500'}`}>
-              {r.status==='active'?'입소 중':'퇴소'}
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${r.status==='active'?'bg-green-100 text-green-700':r.status==='pending'?'bg-amber-100 text-amber-700':'bg-gray-100 text-gray-500'}`}>
+              {r.status==='active'?'입소 중':r.status==='pending'?'입소 예정':'퇴소'}
             </span>
             {hasHigh && <AlertTriangle size={13} className="text-red-500"/>}
           </div>
@@ -177,14 +188,16 @@ function ResidentCard({ r, expanded, onExpand, onEdit, onDischarge, onDelete, ch
           </div>
         )}
         <div className="flex items-center gap-2 flex-shrink-0">
-          {r.status==='active' && (
+          {(r.status==='active' || r.status==='pending') && (
             <>
               <button onClick={e=>{e.stopPropagation();onAddGuardian()}}
                 className="flex items-center gap-1 text-xs font-medium text-teal-600 border border-teal-200 px-2.5 py-1.5 rounded-xl hover:bg-teal-50">
                 🌸 보호자
               </button>
               <button onClick={e=>{e.stopPropagation();onEdit()}} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"><Edit2 size={14}/></button>
-              <button onClick={e=>{e.stopPropagation();onDischarge()}} className="flex items-center gap-1 text-xs font-medium text-red-500 border border-red-200 px-2.5 py-1.5 rounded-xl hover:bg-red-50"><LogOut size={12}/>퇴소</button>
+              {r.status==='active' && (
+                <button onClick={e=>{e.stopPropagation();onDischarge()}} className="flex items-center gap-1 text-xs font-medium text-red-500 border border-red-200 px-2.5 py-1.5 rounded-xl hover:bg-red-50"><LogOut size={12}/>퇴소</button>
+              )}
               <button onClick={e=>{e.stopPropagation();onDelete()}} title="수급자 삭제" className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-300 hover:bg-red-50 hover:text-red-500"><Trash2 size={14}/></button>
             </>
           )}
@@ -330,7 +343,10 @@ function ResidentForm({ existing, onClose }: { existing?: LtcResident; onClose:(
                 onPick={(f, r) => { setForm(p => ({ ...p, floor: f, room: r })); setRoomPickOpen(false) }} />
             )}
           </div>
-          <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">입소일 *</label><DateField className={ic} value={form.admissionDate} onChange={v=>setForm({...form,admissionDate:v})} clearable={false}/></div>
+          <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">입소일 *</label>
+            {form.admissionDate > new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) && (
+              <p className="text-[11px] text-amber-600 mb-1">입소일이 미래라 <b>입소 예정자</b>로 등록됩니다 — 입소일이 되면 자동으로 현원 전환</p>
+            )}<DateField className={ic} value={form.admissionDate} onChange={v=>setForm({...form,admissionDate:v})} clearable={false}/></div>
           {!existing && <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">장기요양인정서 <span className="text-gray-400 font-normal">— 등급·유효기간(2/3/4년)·급여(재가↔시설)</span></label>
             <CertificationEditor value={certs} onChange={setCerts} />
@@ -510,6 +526,71 @@ function GuardianAddModal({ residentId, residentName, onClose }: {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+
+/** 입소 예정자 간단 등록 — 성함·예정일이면 끝. 나머지는 입소 확정 후 수정에서 채운다. */
+function QuickPendingModal({ onClose }: { onClose: () => void }) {
+  const { addResident } = useLtcStore()
+  const week = new Date(Date.now() + 8 * 86400e3).toISOString().slice(0, 10)
+  const [name, setName] = useState('')
+  const [date, setDate] = useState(week)
+  const [floor, setFloor] = useState('')
+  const [room, setRoom] = useState('')
+  const [memo, setMemo] = useState('')
+  const [pickOpen, setPickOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10)
+
+  const submit = async () => {
+    if (!name.trim()) { alert('성함을 입력해주세요.'); return }
+    if (!date || date <= today) { alert('입소 예정일은 내일 이후여야 합니다.'); return }
+    setSaving(true)
+    try {
+      await addResident({
+        name: name.trim(), admissionDate: date, careGradeStartDate: date,
+        birthDate: '', gender: '', floor, room, memo,
+        status: 'pending',
+      } as any)
+      onClose()
+      alert(`${name.trim()} 어르신을 입소 예정자로 등록했습니다.\n입소일(${date})이 되면 자동으로 현원이 됩니다.\n생년월일 등 상세 정보는 확정 후 수정에서 채워주세요.`)
+    } catch (e: any) { alert(e?.response?.data?.detail ?? e?.message ?? '등록 실패') }
+    finally { setSaving(false) }
+  }
+
+  const ic = 'w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-200'
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-4 space-y-3" onClick={e => e.stopPropagation()}>
+        <h3 className="font-bold text-gray-900">입소 예정자 간단 등록</h3>
+        <p className="text-xs text-gray-400 -mt-2">성함과 예정일만 있으면 됩니다 — 상세 정보는 입소 확정 후에</p>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">성함 *</label>
+          <input autoFocus value={name} onChange={e => setName(e.target.value)} className={ic} placeholder="예: 홍길동" />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">입소 예정일 *</label>
+          <input type="date" min={today} value={date} onChange={e => setDate(e.target.value)} className={ic} />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">방 미리 잡기 <span className="font-normal text-gray-400">(선택)</span></label>
+          <button type="button" onClick={() => setPickOpen(true)}
+            className={`${ic} text-left ${floor || room ? 'text-gray-800 font-semibold' : 'text-gray-400'}`}>
+            {floor || room ? `${floor}${room ? ` ${room}호` : ''}` : '눌러서 빈 침대 보기'}
+          </button>
+          {pickOpen && (
+            <RoomPicker current={{ floor, room }} onClose={() => setPickOpen(false)}
+              onPick={(f, r) => { setFloor(f); setRoom(r); setPickOpen(false) }} />
+          )}
+        </div>
+        <input value={memo} onChange={e => setMemo(e.target.value)} className={ic} placeholder="메모 (선택 — 보호자 연락처 등)" />
+        <button onClick={submit} disabled={saving}
+          className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold disabled:opacity-50">
+          {saving ? '등록 중…' : '예정자로 등록'}
+        </button>
       </div>
     </div>
   )

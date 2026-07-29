@@ -44,7 +44,7 @@ def _log(db: Session, r: LtcResident, field: str, before: Optional[str],
 def roster(db: Session = Depends(get_db), _: User = Depends(_editor)):
     """층·호실별 명단 + 배정 + 담당별 집계."""
     residents = (db.query(LtcResident)
-                 .filter(LtcResident.status == "active").all())
+                 .filter(LtcResident.status.in_(["active", "pending"])).all())   # 예정자 포함
     asg = {a.resident_id: a for a in db.query(ResidentAssignment).all()}
     rows = []
     for r in residents:

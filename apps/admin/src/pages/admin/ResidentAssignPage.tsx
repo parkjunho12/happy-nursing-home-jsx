@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { History, Loader2, Printer, Users, Wand2, X } from 'lucide-react'
+import { History, Loader2, Printer, Search, Users, Wand2, X } from 'lucide-react'
 import { assignmentAPI, type AssignRow, type StaffOpt, type AssignLog } from '@/api/assignmentClient'
 
 /**
@@ -61,8 +61,30 @@ export default function ResidentAssignPage() {
     try { setLogs(await assignmentAPI.logs(80)) } catch { setLogs([]) }
   }
 
-  const sel = 'px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white w-full'
-  const td = 'border border-gray-200 px-2 py-1.5 text-sm'
+  const td = 'border-b border-gray-100 px-2.5 py-2 text-sm'
+
+  // ── 담당 선택 피커 — 드롭다운 대신 검색 + 담당 수가 보이는 목록 ──
+  const [pick, setPick] = useState<{ rid: string; kind: 'care' | 'rehab'; name: string } | null>(null)
+  const [pickQ, setPickQ] = useState('')
+  const openPick = (rid: string, kind: 'care' | 'rehab', name: string) => { setPick({ rid, kind, name }); setPickQ('') }
+  const loadOf = (kind: 'care' | 'rehab') => {
+    const key = kind === 'care' ? 'care_staff_name' : 'rehab_staff_name'
+    const m = new Map<string, number>()
+    rows.forEach(r => { const n = (r as any)[key]; if (n) m.set(n, (m.get(n) ?? 0) + 1) })
+    return m
+  }
+  const doPick = async (staffId: string | null, staffName: string | null) => {
+    if (!pick) return
+    const { rid, kind } = pick
+    setPick(null)
+    if (kind === 'care') {
+      await assignmentAPI.setCare(rid, staffId)
+      patch(rid, { care_staff_id: staffId, care_staff_name: staffName })
+    } else {
+      await assignmentAPI.setRehab(rid, staffId)
+      patch(rid, { rehab_staff_id: staffId, rehab_staff_name: staffName })
+    }
+  }
 
   // 호실 경계 — 같은 방 첫 행에만 호실 표시 (엑셀 명단과 같은 눈높이)
   let prevRoom = '__'
@@ -73,8 +95,15 @@ export default function ResidentAssignPage() {
       <div className="flex items-center gap-2 flex-wrap mb-1">
         <Users size={20} className="text-teal-600" />
         <h1 className="text-xl font-bold text-gray-900">담당 어르신 명단</h1>
-        <span className="text-sm text-gray-400">현원 <b className="text-gray-700">{rows.length}명</b>
-          {rows.some(r => (r.admission_date ?? '') > today) && ` · 입소 예정 ${rows.filter(r => (r.admission_date ?? '') > today).length}명`}</span>
+        {(() => {
+          const incoming = rows.filter(r => (r.admission_date ?? '') > today).length
+          return (
+            <span className="inline-flex items-center gap-1.5 text-sm">
+              <span className="px-2.5 py-1 rounded-full bg-teal-50 text-teal-700 font-bold border border-teal-100">현원 {rows.length - incoming}명</span>
+              {incoming > 0 && <span className="px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 font-bold border border-amber-100">입소 예정 {incoming}명</span>}
+            </span>
+          )
+        })()}
         <div className="ml-auto flex gap-1.5">
           <button onClick={() => runAuto('care')} disabled={!!autoBusy}
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-teal-200 bg-teal-50 text-teal-700 text-sm font-bold hover:bg-teal-100 disabled:opacity-50">
@@ -144,10 +173,10 @@ export default function ResidentAssignPage() {
                 const incoming = (r.admission_date ?? '') > today
                 return (
                   <tr key={r.resident_id} className={`${first ? 'border-t-2 border-t-gray-300' : ''} ${incoming ? 'bg-amber-50/40' : ''}`}>
-                    <td className={`${td} text-center font-extrabold text-gray-700`}>
+                    <td className={`${td} text-center`}>
                       <input defaultValue={r.room}
                         onBlur={async e => { const v = e.target.value.trim(); if (v !== r.room) { await assignmentAPI.setRoom(r.resident_id, v); patch(r.resident_id, { room: v }) } }}
-                        className="w-12 text-center font-extrabold text-gray-700 bg-transparent focus:outline-none focus:ring-2 focus:ring-teal-200 rounded"
+                        className={`w-12 text-center font-extrabold rounded-lg py-0.5 focus:outline-none focus:ring-2 focus:ring-teal-200 ${first ? 'bg-gray-800 text-white' : 'text-gray-300 bg-transparent'}`}
                         placeholder="-" />
                     </td>
                     <td className={`${td} font-bold text-gray-800`}>
@@ -155,26 +184,18 @@ export default function ResidentAssignPage() {
                       {incoming && <span className="ml-1 text-[10px] font-bold text-amber-600">{Number(r.admission_date!.slice(5, 7))}/{Number(r.admission_date!.slice(8, 10))} 입소</span>}
                     </td>
                     <td className={td}>
-                      <select value={r.care_staff_id ?? ''} className={sel}
-                        onChange={async e => {
-                          const v = e.target.value || null
-                          await assignmentAPI.setCare(r.resident_id, v)
-                          patch(r.resident_id, { care_staff_id: v, care_staff_name: care.find(s => s.id === v)?.name ?? null })
-                        }}>
-                        <option value="">미배정</option>
-                        {care.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                      </select>
+                      <button onClick={() => openPick(r.resident_id, 'care', r.name)}
+                        className={`w-full px-2 py-1.5 text-xs rounded-lg border text-left font-semibold transition-colors ${
+                          r.care_staff_name ? 'border-teal-100 bg-teal-50/60 text-teal-800 hover:bg-teal-50' : 'border-dashed border-gray-300 text-gray-400 hover:border-teal-300'}`}>
+                        {r.care_staff_name ?? '+ 배정'}
+                      </button>
                     </td>
                     <td className={td}>
-                      <select value={r.rehab_staff_id ?? ''} className={sel}
-                        onChange={async e => {
-                          const v = e.target.value || null
-                          await assignmentAPI.setRehab(r.resident_id, v)
-                          patch(r.resident_id, { rehab_staff_id: v, rehab_staff_name: rehab.find(s => s.id === v)?.name ?? null })
-                        }}>
-                        <option value="">미배정</option>
-                        {rehab.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                      </select>
+                      <button onClick={() => openPick(r.resident_id, 'rehab', r.name)}
+                        className={`w-full px-2 py-1.5 text-xs rounded-lg border text-left font-semibold transition-colors ${
+                          r.rehab_staff_name ? 'border-indigo-100 bg-indigo-50/60 text-indigo-800 hover:bg-indigo-50' : 'border-dashed border-gray-300 text-gray-400 hover:border-indigo-300'}`}>
+                        {r.rehab_staff_name ?? '+ 배정'}
+                      </button>
                     </td>
                     <td className={td}>
                       <input defaultValue={r.note ?? ''} placeholder="메모"
@@ -201,13 +222,22 @@ export default function ResidentAssignPage() {
           let pv = '__'
           return (
             <div key={f} className="asg-print-page">
-              <h1 className="text-center text-xl font-extrabold tracking-widest mb-1">담당 어르신 명단</h1>
-              <p className="text-center text-sm font-bold mb-2">&lt; {f} &gt; · 현원 {list.length}명 · {new Date().toLocaleDateString('ko-KR')}</p>
+              <div className="flex items-end justify-between border-b-2 border-gray-900 pb-2 mb-3">
+                <div>
+                  <h1 className="text-2xl font-extrabold tracking-[0.25em]">담당 어르신 명단</h1>
+                  <p className="text-[10px] text-gray-500 mt-0.5">행복한요양원 녹양역점 · 출력 {new Date().toLocaleDateString('ko-KR')}</p>
+                </div>
+                <div className="text-right">
+                  <span className="inline-block px-3 py-1 rounded-lg bg-gray-900 text-white text-base font-extrabold">{f}</span>
+                  <p className="text-[10px] text-gray-500 mt-1">현원 {list.filter(r => (r.admission_date ?? '') <= today).length}명
+                    {list.some(r => (r.admission_date ?? '') > today) && ` · 입소 예정 ${list.filter(r => (r.admission_date ?? '') > today).length}명`}</p>
+                </div>
+              </div>
               <table className="w-full border-collapse">
                 <thead>
                   <tr>
                     {['호실', '성함', '담당 요양팀', '담당 재활팀', '기타'].map(h => (
-                      <th key={h} className="border border-gray-800 bg-gray-100 px-2 py-1.5 text-[11px] font-bold">{h}</th>
+                      <th key={h} className="border border-gray-900 bg-gray-800 text-white px-2 py-2 text-[11px] font-bold">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -228,6 +258,11 @@ export default function ResidentAssignPage() {
                   })}
                 </tbody>
               </table>
+              {/* 담당별 인원 요약 — 종이에서도 균형이 보이게 */}
+              <div className="mt-2 text-[10px] text-gray-600 leading-relaxed">
+                <b>요양팀</b> {(() => { const m = new Map<string, number>(); list.forEach(r => { if (r.care_staff_name) m.set(r.care_staff_name, (m.get(r.care_staff_name) ?? 0) + 1) }); return [...m.entries()].map(([n, c]) => `${n} ${c}`).join(' · ') || '-' })()}
+                <br /><b>재활팀</b> {(() => { const m = new Map<string, number>(); list.forEach(r => { if (r.rehab_staff_name) m.set(r.rehab_staff_name, (m.get(r.rehab_staff_name) ?? 0) + 1) }); return [...m.entries()].map(([n, c]) => `${n} ${c}`).join(' · ') || '-' })()}
+              </div>
             </div>
           )
         })}
@@ -241,6 +276,53 @@ export default function ResidentAssignPage() {
           .asg-print-page th, .asg-print-page td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
       `}</style>
+
+      {/* 담당 선택 — 검색 + 담당 수 보이는 원클릭 배정 */}
+      {pick && (() => {
+        const list = pick.kind === 'care' ? care : rehab
+        const loads = loadOf(pick.kind)
+        const filtered = list.filter(s2 => !pickQ || s2.name.includes(pickQ))
+        const hoverCls = pick.kind === 'care'
+          ? 'hover:bg-teal-50 hover:border-teal-200'
+          : 'hover:bg-indigo-50 hover:border-indigo-200'
+        return (
+          <div className="fixed inset-0 z-[60] bg-black/30 flex items-center justify-center p-4" onClick={() => setPick(null)}>
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-xs max-h-[70vh] overflow-y-auto p-3" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center gap-2 mb-2">
+                <h3 className="text-sm font-bold text-gray-800">{pick.name} — 담당 {pick.kind === 'care' ? '요양팀' : '재활팀'}</h3>
+                <button onClick={() => setPick(null)} className="ml-auto text-gray-300"><X size={16} /></button>
+              </div>
+              <div className="relative mb-2">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-300" />
+                <input autoFocus value={pickQ} onChange={e => setPickQ(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && filtered.length === 1) doPick(filtered[0].id, filtered[0].name)
+                    if (e.key === 'Escape') setPick(null)
+                  }}
+                  placeholder="이름 검색 — 한 명 남으면 Enter"
+                  className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-200" />
+              </div>
+              <div className="space-y-1">
+                <button onClick={() => doPick(null, null)}
+                  className="w-full px-3 py-2 rounded-xl text-left text-xs font-semibold text-gray-400 hover:bg-gray-50 border border-transparent">
+                  미배정으로
+                </button>
+                {filtered.map(s2 => {
+                  const n = loads.get(s2.name) ?? 0
+                  return (
+                    <button key={s2.id} onClick={() => doPick(s2.id, s2.name)}
+                      className={`w-full flex items-center px-3 py-2 rounded-xl text-left text-sm font-semibold text-gray-700 border border-transparent ${hoverCls}`}>
+                      {s2.name}
+                      <span className={`ml-auto text-[11px] font-bold ${n === 0 ? 'text-green-600' : n >= 4 ? 'text-red-400' : 'text-gray-400'}`}>{n}명 담당</span>
+                    </button>
+                  )
+                })}
+                {filtered.length === 0 && <p className="text-xs text-gray-300 text-center py-4">검색 결과 없음</p>}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* 변경 이력 */}
       {histOpen && (
