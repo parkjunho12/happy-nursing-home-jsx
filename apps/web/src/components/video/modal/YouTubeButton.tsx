@@ -11,6 +11,8 @@ interface YouTubeButtonProps {
   buttonText?: string
   variant?: 'primary' | 'secondary' | 'thumbnail'
   className?: string
+  /** 썸네일 위 흰 글씨 제목 오버레이 — 목록형 카드에선 꺼서 썸네일이 잘 보이게 */
+  showTitle?: boolean
 }
 
 export default function YouTubeButton({
@@ -20,6 +22,7 @@ export default function YouTubeButton({
   buttonText = '영상 보기',
   variant = 'primary',
   className = '',
+  showTitle = true,
 }: YouTubeButtonProps) {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [imageError, setImageError] = useState(false)
@@ -64,8 +67,8 @@ export default function YouTubeButton({
               className="h-auto w-full transition-transform duration-300 group-hover:scale-105"
             />
 
-            {/* 오버레이 */}
-            <div className="absolute inset-0 bg-black/30 transition-colors duration-300 group-hover:bg-black/45" />
+            {/* 오버레이 — 제목 없이 쓸 땐 옅게, 썸네일이 주인공 */}
+            <div className={`absolute inset-0 transition-colors duration-300 ${showTitle ? 'bg-black/30 group-hover:bg-black/45' : 'bg-black/10 group-hover:bg-black/25'}`} />
 
             {/* 재생 버튼 */}
             <div className="absolute inset-0 flex items-center justify-center">
@@ -75,7 +78,7 @@ export default function YouTubeButton({
             </div>
 
             {/* 제목 */}
-            {title && (
+            {showTitle && title && (
               <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-4">
                 <h3 className="text-lg font-bold text-white">{title}</h3>
               </div>

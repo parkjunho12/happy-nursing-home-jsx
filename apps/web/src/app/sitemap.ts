@@ -53,6 +53,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   // 블로그
   const blog: MetadataRoute.Sitemap = [
     { url: `${BASE_URL}/blog`, lastModified: now, changeFrequency: 'weekly', priority: 0.7 },
+    { url: `${BASE_URL}/videos`, lastModified: now, changeFrequency: 'weekly', priority: 0.7 },
   ]
 
   // SEO 키워드 랜딩 (/seo/[slug])
