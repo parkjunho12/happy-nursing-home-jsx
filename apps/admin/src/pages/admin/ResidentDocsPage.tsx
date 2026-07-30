@@ -55,6 +55,8 @@ export default function ResidentDocsPage() {
   const [search, setSearch] = useState('')
   const [fee, setFee] = useState('')
   const [floorF, setFloorF] = useState('')
+  // 정렬 — 이 페이지의 목적은 '챙길 어르신 찾기'라 급한 순이 기본이다
+  const [sortMode, setSortMode] = useState<'urgent' | 'name' | 'room' | 'admission'>('name')
   const [careF, setCareF] = useState('')
   const [rulesOn, setRulesOn] = useState(true)    // 작성 기준 안내 행 — 기본 표시 (버튼으로 끌 수 있음)
   const [quick, setQuick] = useState<'all' | 'cert' | 'month' | 'alert'>('all')
@@ -109,10 +111,30 @@ export default function ResidentDocsPage() {
     if (quick === 'month' && !i.renew) return false
     if (quick === 'alert' && alertCount(r) === 0 && !isEmpty(r)) return false
     return true
-  }), [rows, search, fee, floorF, quick])
+  }).sort((a, b) => {
+    if (sortMode === 'name') return (a.name ?? '').localeCompare(b.name ?? '', 'ko')
+    if (sortMode === 'room')
+      return ((a as any).floor ?? '').localeCompare((b as any).floor ?? '') ||
+        ((a as any).room ?? '999').localeCompare((b as any).room ?? '999') ||
+        (a.name ?? '').localeCompare(b.name ?? '', 'ko')
+    if (sortMode === 'admission')
+      return (a.admission_date ?? '9999').localeCompare(b.admission_date ?? '9999')
+    // 급한 순: 만료 → 갱신 기간(만료 임박순) → 조치 필요 건수 많은 순 → 서류 빈 신규 → 나머지 가나다
+    const rank = (r: ResidentDoc) => {
+      const i = docInfo(r)
+      if (i.st.status === 'expired') return 0
+      if (i.st.status === 'renew') return 1
+      if (isEmpty(r)) return 2
+      if (alertCount(r) > 0) return 3
+      return 4
+    }
+    const da = docInfo(a).st.daysToEnd ?? 9999, db2 = docInfo(b).st.daysToEnd ?? 9999
+    return rank(a) - rank(b) || da - db2 || alertCount(b) - alertCount(a) ||
+      (a.name ?? '').localeCompare(b.name ?? '', 'ko')
+  }), [rows, search, fee, floorF, quick, sortMode])
 
-  const th = 'px-2.5 py-2 text-[11px] font-bold text-gray-500 whitespace-nowrap text-center border-b border-gray-200'
-  const td = 'px-2.5 py-2 text-xs align-top border-b border-gray-50'
+  const th = 'px-1.5 py-1.5 text-[11px] font-bold text-gray-500 whitespace-nowrap text-center border-b border-gray-200'
+  const td = 'px-1.5 py-1.5 text-xs align-top border-b border-gray-50'
 
   /**
    * 서류 일시 셀 — '다음에 할 일'이 먼저 보이도록 구성한다.
@@ -284,24 +306,34 @@ export default function ResidentDocsPage() {
         <label className="inline-flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer ml-1">
           <input type="checkbox" checked={showDischarged} onChange={e => setShowDischarged(e.target.checked)} className="accent-teal-600" /> 퇴소 포함
         </label>
-        <span className="text-xs text-gray-400 ml-auto">{filtered.length} / {rows.length}명 · 가나다순</span>
+        <div className="inline-flex bg-gray-100 rounded-xl p-0.5 ml-auto">
+          {([['name', '가나다'], ['urgent', '급한 순'], ['room', '호실'], ['admission', '입소일']] as const).map(([v, label]) => (
+            <button key={v} onClick={() => setSortMode(v)}
+              title={v === 'urgent' ? '만료 → 갱신 기간 → 신규(서류 없음) → 조치 필요 순' : undefined}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${sortMode === v ? 'bg-white text-teal-700 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <span className="text-xs text-gray-400">{filtered.length} / {rows.length}명</span>
       </div>
 
       {loading ? (
         <div className="flex justify-center py-16"><Loader2 className="animate-spin text-gray-300" /></div>
       ) : (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-auto max-h-[72vh]">
-          <table className="w-full border-collapse min-w-[1050px]">
+          <table className="w-full border-collapse">
             <thead className="sticky top-0 z-30 bg-white">
               <tr className="bg-gray-50/90">
-                <th className={`${th} sticky left-0 z-20 bg-gray-50 text-left border-r border-gray-200 min-w-[110px]`}>어르신</th>
-                <th className={th}>입소일</th>
+                <th className={`${th} sticky left-0 z-20 bg-gray-50 text-left border-r border-gray-200 min-w-[110px]`}>어르신 <span className="font-normal text-gray-400">· 입소일</span></th>
                 <th className={`${th} text-left`}>인정서 기간</th>
-                <th className={th}>등급/급여</th>
-                <th className={th}>기준일</th>
-                <th className={`${th} text-left`}>계약서 일시</th>
-                <th className={`${th} text-left`}>계획서 일시</th>
-                <th className={`${th} text-left`}>결과평가 일시</th>
+                <th className={th}>등급/급여 <span className="font-normal text-gray-400">· 기준일</span></th>
+                <th className={`${th} text-left bg-emerald-50/70 text-emerald-800`}>
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 align-middle" />계약서 일시</th>
+                <th className={`${th} text-left bg-sky-50/70 text-sky-800`}>
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-sky-500 mr-1 align-middle" />급여제공 계획서 일시</th>
+                <th className={`${th} text-left bg-fuchsia-50/70 text-fuchsia-800`}>
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-fuchsia-500 mr-1 align-middle" />급여제공 결과평가 일시</th>
                 <th className={th}></th>
               </tr>
               {rulesOn && (() => {
@@ -316,8 +348,11 @@ export default function ResidentDocsPage() {
                     <td className={`${rc} sticky left-0 z-20 bg-amber-50 border-r border-amber-200`}>
                       <div className="whitespace-nowrap">· ㄱㄴㄷ순 정렬</div>
                     </td>
-                    <td className={rc} />
-                    {cell('cert')}{cell('grade')}{cell('base')}{cell('contract')}{cell('plan')}{cell('eval')}
+                    {cell('cert')}
+                    <td className={rc}>
+                      {[...(COL_RULES['grade'] ?? []), ...(COL_RULES['base'] ?? [])].map((t, i) => <div key={i} className="whitespace-nowrap">· {t}</div>)}
+                    </td>
+                    {cell('contract')}{cell('plan')}{cell('eval')}
                     <td className={rc} />
                   </tr>
                 )
@@ -325,11 +360,28 @@ export default function ResidentDocsPage() {
             </thead>
             <tbody>
               {filtered.map(r => (
-                <tr key={r.id} className={`group hover:bg-teal-50/20 ${r.active === false ? 'opacity-50' : ''}`}>
+                <tr key={r.id}
+                  onClick={e => {
+                    // 셀 안의 버튼(펼치기·이력 등)을 눌렀을 땐 행 클릭으로 안 잡는다
+                    if ((e.target as HTMLElement).closest('button, a, input, select')) return
+                    setEditing(r)
+                  }}
+                  title="행을 누르면 수정이 열립니다"
+                  className={`group cursor-pointer hover:bg-teal-50/30 ${r.active === false ? 'opacity-50' : ''} ${(() => {
+                    // ② 행 위험 신호 — 인정서 만료(빨강)·갱신 기간(주황)을 왼쪽 띠로
+                    const st = certState(currentCert(r.certifications ?? []))
+                    return st.status === 'expired' ? 'shadow-[inset_3px_0_0_#dc2626]'
+                      : st.status === 'renew' ? 'shadow-[inset_3px_0_0_#f59e0b]' : ''
+                  })()}`}>
                   <td className={`${td} sticky left-0 z-10 bg-white group-hover:bg-teal-50/40 border-r border-gray-100 whitespace-nowrap`}>
                     <div className="flex items-baseline gap-1.5">
                       <span className="text-[10px] text-gray-300">{rankById.get(r.id)}</span>
                       <span className="text-sm font-bold text-gray-800">{r.name || '-'}</span>
+                      {(r.floor || (r as any).room) && (
+                        <span className="text-[10px] font-semibold text-gray-400">
+                          {[r.floor, (r as any).room ? `${(r as any).room}호` : ''].filter(Boolean).join(' ')}
+                        </span>
+                      )}
                       {r.active === false && <span className="text-[9px] font-bold text-white bg-gray-400 px-1 py-0.5 rounded">퇴소</span>}
                       {isEmpty(r) && <span className="text-[9px] font-bold text-red-600 bg-red-50 border border-red-200 px-1 py-0.5 rounded">서류 미등록</span>}
                       {deriveCare(r.certifications) !== '시설' && (
@@ -358,7 +410,6 @@ export default function ResidentDocsPage() {
                       )
                     })()}
                   </td>
-                  <td className={`${td} text-gray-500 text-center whitespace-nowrap`}>{fmtD(r.admission_date)}</td>
                   <td className={`${td} text-gray-500`}>
                     {r.certifications && r.certifications.length > 0 ? (() => {
                       const certs = r.certifications!
@@ -406,21 +457,21 @@ export default function ResidentDocsPage() {
                       )
                     })() : <span className="text-gray-300">-</span>}
                   </td>
-                  <td className={`${td} text-gray-600 text-center whitespace-pre-line`}>{r.grade || '-'}</td>
-                  <td className={`${td} text-center whitespace-nowrap ${docInfo(r).renew ? 'bg-blue-50' : ''}`}>
-                    {r.base_date ? (
-                      <span className="text-gray-700 font-semibold">
-                        {fmtMD(r.base_date)}
-                        <span className="block text-[10px] text-gray-400 font-normal">(6개월 {plus6(r.base_date)})</span>
-                        {docInfo(r).renew && <span className="inline-block text-[10px] font-bold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full mt-0.5">이번 달</span>}
-                      </span>
-                    ) : <span className="text-gray-300">-</span>}
+                  <td className={`${td} text-gray-600 text-center whitespace-pre-line ${docInfo(r).renew ? 'bg-blue-50' : ''}`}>
+                    {r.grade || '-'}
+                    {r.base_date && (
+                      <div className="text-[10px] text-gray-400 mt-0.5 whitespace-nowrap">
+                        기준 {fmtMD(r.base_date)} <span className="text-gray-300">(6개월 {plus6(r.base_date)})</span>
+                        {docInfo(r).renew && <span className="ml-1 inline-block text-[9px] font-bold text-blue-600 bg-blue-100 px-1 py-0.5 rounded-full">이번 달</span>}
+                      </div>
+                    )}
                   </td>
-                  <td className={`${td} text-gray-500`}><DocCell id={r.id} type="contract" items={r.contract_lines} admission={r.admission_date} /></td>
-                  <td className={`${td} text-gray-500`}><DocCell id={r.id} type="plan" items={r.plan_lines} admission={r.admission_date} /></td>
-                  <td className={`${td} text-gray-500`}><DocCell id={r.id} type="eval" items={r.eval_lines} admission={r.admission_date} /></td>
+                  <td className={`${td} text-gray-500 bg-emerald-50/25`}><DocCell id={r.id} type="contract" items={r.contract_lines} admission={r.admission_date} /></td>
+                  <td className={`${td} text-gray-500 bg-sky-50/25`}><DocCell id={r.id} type="plan" items={r.plan_lines} admission={r.admission_date} /></td>
+                  <td className={`${td} text-gray-500 bg-fuchsia-50/25`}><DocCell id={r.id} type="eval" items={r.eval_lines} admission={r.admission_date} /></td>
                   <td className={`${td} text-center whitespace-nowrap`}>
-                    <button onClick={() => setEditing(r)} className="text-[11px] text-gray-400 hover:text-teal-600 px-1.5 py-0.5 rounded hover:bg-teal-50">수정</button>
+                    <button onClick={() => setEditing(r)}
+                      className="text-[11px] font-bold text-teal-700 bg-teal-50 border border-teal-100 hover:bg-teal-100 px-2.5 py-1 rounded-full">수정</button>
                     <button onClick={() => setHistOpen({ id: r.id, name: r.name || '' })} title="이 어르신의 수정 이력"
                       aria-label="수정 이력" className="ml-0.5 p-1 text-gray-300 hover:text-teal-600 rounded hover:bg-teal-50 align-middle">
                       <History className="w-3.5 h-3.5" />
@@ -449,6 +500,14 @@ export default function ResidentDocsPage() {
 function Field({ label, children }: { label: string; children: any }) {
   return <div><label className="text-xs font-semibold text-gray-500 mb-1 block">{label}</label>{children}</div>
 }
+
+const Sec = ({ n, t, hint }: { n: string; t: string; hint?: string }) => (
+  <div className="flex items-center gap-2 pt-2 mt-1 border-t border-gray-100 first:border-0 first:mt-0 first:pt-0">
+    <span className="w-5 h-5 rounded-full bg-teal-600 text-white text-[11px] font-bold flex items-center justify-center shrink-0">{n}</span>
+    <span className="text-sm font-bold text-gray-800">{t}</span>
+    {hint && <span className="text-[11px] text-gray-400">{hint}</span>}
+  </div>
+)
 
 function DocFormModal({ editing, residents = [], docByResident = new Map<string, ResidentDoc>(), onClose, onSaved }: { editing: ResidentDoc | null; residents?: LtcResident[]; docByResident?: Map<string, ResidentDoc>; onClose: () => void; onSaved: () => void }) {
   const isEdit = !!editing
@@ -539,6 +598,7 @@ function DocFormModal({ editing, residents = [], docByResident = new Map<string,
               </div>
             )
           })()}
+          <Sec n="1" t="기본 정보" />
           <div className="grid grid-cols-3 gap-2">
             <Field label="성함 *"><input value={f.name ?? ''} onChange={e => setF({ ...f, name: e.target.value })} className={inp} autoFocus /></Field>
             <Field label="입소일"><DateField value={f.admission_date} onChange={v => setF({ ...f, admission_date: v })} className={inp} /></Field>
@@ -548,6 +608,7 @@ function DocFormModal({ editing, residents = [], docByResident = new Map<string,
               </select>
             </Field>
           </div>
+          <Sec n="2" t="장기요양인정서" hint="구분(시설·재가)은 여기서 자동으로 정해집니다" />
           <div className="flex items-center gap-2 flex-wrap rounded-xl border border-gray-100 bg-gray-50/70 px-3 py-2">
             <span className="text-xs font-semibold text-gray-500">구분</span>
             <span className={`text-[11px] font-bold px-2 py-0.5 rounded border ${careMeta(deriveCare(f.certifications)).cls}`}>
@@ -584,15 +645,32 @@ function DocFormModal({ editing, residents = [], docByResident = new Map<string,
             </div>
           )}
           <div>
-            <label className="text-xs font-semibold text-gray-500 mb-1.5 block">장기요양인정서 <span className="text-gray-400 font-normal">— 등급·유효기간(2/3/4년)·급여(재가↔시설). 종료 90일 전 갱신</span></label>
+            <label className="text-[11px] text-gray-400 mb-1.5 block">등급 · 유효기간(2/3/4년) · 급여(재가↔시설) — 종료 90일 전부터 갱신</label>
             <CertificationEditor value={f.certifications ?? []} onChange={cs => setF({ ...f, certifications: cs })} />
           </div>
+          <Sec n="3" t="서류 일시" hint="계약서 · 계획서 · 평가 — 아래 버튼이 인정서 기준으로 채워줍니다" />
           <button type="button" onClick={autoFill} className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-teal-200 bg-teal-50 text-teal-700 text-xs font-bold hover:bg-teal-100">
             <RefreshCw className="w-3.5 h-3.5" /> 인정서 기준으로 일시 추가 <span className="font-normal text-teal-500">(기존 기록은 유지)</span>
           </button>
-          <Field label="계약서 일시"><DocEventsEditor type="contract" value={f.contract_lines} onChange={v => setF({ ...f, contract_lines: v })} defaultAddKind="변경" addLabel="+ 변경(변화) 추가" /></Field>
-          <Field label="급여제공계획서 일시"><DocEventsEditor type="plan" value={f.plan_lines} onChange={v => setF({ ...f, plan_lines: v })} defaultAddKind="변화" addLabel="+ 변화 추가" /></Field>
-          <Field label="결과평가 일시"><DocEventsEditor type="eval" value={f.eval_lines} onChange={v => setF({ ...f, eval_lines: v })} defaultAddKind="변화" addLabel="+ 변화 추가" /></Field>
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3">
+            <p className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 mb-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" /> 계약서 일시
+            </p>
+            <DocEventsEditor type="contract" value={f.contract_lines} onChange={v => setF({ ...f, contract_lines: v })} defaultAddKind="변경" addLabel="+ 변경(변화) 추가" />
+          </div>
+          <div className="rounded-xl border border-sky-100 bg-sky-50/40 p-3">
+            <p className="flex items-center gap-1.5 text-xs font-bold text-sky-700 mb-2">
+              <span className="w-2 h-2 rounded-full bg-sky-500" /> 급여제공계획서 일시
+            </p>
+            <DocEventsEditor type="plan" value={f.plan_lines} onChange={v => setF({ ...f, plan_lines: v })} defaultAddKind="변화" addLabel="+ 변화 추가" />
+          </div>
+          <div className="rounded-xl border border-fuchsia-100 bg-fuchsia-50/40 p-3">
+            <p className="flex items-center gap-1.5 text-xs font-bold text-fuchsia-700 mb-2">
+              <span className="w-2 h-2 rounded-full bg-fuchsia-500" /> 급여제공 결과평가 일시
+            </p>
+            <DocEventsEditor type="eval" value={f.eval_lines} onChange={v => setF({ ...f, eval_lines: v })} defaultAddKind="변화" addLabel="+ 변화 추가" />
+          </div>
+          <Sec n="4" t="상태" />
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-gray-500">상태</span>
             <div className="inline-flex bg-gray-100 rounded-lg p-0.5">

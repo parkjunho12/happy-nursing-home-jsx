@@ -109,9 +109,10 @@ def _require(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
-def _view(r: ResidentDocStatus) -> dict:
+def _view(r: ResidentDocStatus, rooms: dict | None = None) -> dict:
     return {
         "id": r.id, "resident_id": r.resident_id, "floor": r.floor, "seq": r.seq,
+        "room": (rooms or {}).get(r.resident_id),   # 호실 — 수급자 명단에서 연동
         "name": r.name, "admission_date": r.admission_date, "grade": r.grade,
         "base_date": r.base_date,
         "cert_periods": r.cert_periods or [],
@@ -313,7 +314,10 @@ def list_records(include_inactive: bool = False, floor: Optional[str] = Query(No
     rows = q.all()
     # 이름 ㄱㄴㄷ 정렬 (파이썬 로케일 무관 코드포인트로도 한글은 가나다순)
     rows.sort(key=lambda r: (r.name or "￿"))
-    return ApiResponse(success=True, data=[_view(r) for r in rows])
+    # 호실 — 수급자 명단에서 한 번에 가져와 붙인다
+    from app.models.eval import LtcResident
+    rooms = {rr.id: rr.room for rr in db.query(LtcResident).all() if rr.room}
+    return ApiResponse(success=True, data=[_view(r, rooms) for r in rows])
 
 
 @router.post("/records")

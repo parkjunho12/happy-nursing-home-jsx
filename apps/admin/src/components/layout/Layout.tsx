@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import MobileHeader from './MobileHeader'
@@ -20,6 +21,9 @@ export default function Layout() {
    *  인쇄 시 그쪽이 잡히면 7월 근무표가 찍혔다. API도 매번 두 번씩 불렀다.)
    */
   const isMobile = useIsMobile()
+  // 사이드바 접기 — 근무표·서류현황처럼 넓은 표는 화면 전부가 필요하다 (선택 기억)
+  const [navHidden, setNavHidden] = useState(() => localStorage.getItem('nav-hidden') === '1')
+  const toggleNav = () => setNavHidden(v => { localStorage.setItem('nav-hidden', v ? '0' : '1'); return !v })
 
   // 직원앱(WebView)이면 FCM 토큰 등록 (토큰 준비 지연 대비 1회 재시도)
   useEffect(() => {
@@ -45,7 +49,13 @@ export default function Layout() {
       ) : (
         /* ── Desktop (md 이상) ── */
         <div className="flex h-screen overflow-hidden">
-          <Sidebar />
+          {!navHidden && <Sidebar />}
+          {/* 메뉴 접기/펼치기 — 항상 같은 자리(좌하단)라 손이 기억한다 */}
+          <button onClick={toggleNav} data-print="off"
+            title={navHidden ? '메뉴 펼치기' : '메뉴 접기 — 표를 넓게 보기'}
+            className="fixed left-3 bottom-3 z-40 w-9 h-9 rounded-xl bg-white border border-gray-200 shadow-md flex items-center justify-center text-gray-500 hover:text-gray-800 hover:border-gray-300 print:hidden">
+            {navHidden ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          </button>
           <main ref={mainRef} className="flex-1 p-6 overflow-x-hidden overflow-y-auto">
             <Outlet />
           </main>

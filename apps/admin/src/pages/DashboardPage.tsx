@@ -10,6 +10,7 @@ import { dashboardAPI, apiClient } from '@/api/client'
 import { expenseAPI } from '@/api/expenseClient'
 import { leaveAPI, swapAPI } from '@/api/leaveClient'
 import { visitAPI } from '@/api/visitClient'
+import { cardKeyAPI } from '@/api/cardKeyClient'
 import { newsAPI, type FacilityNews } from '@/api/newsClient'
 import { useLtcStore } from '@/store/ltc'
 import { useAuthStore } from '@/store/auth'
@@ -61,7 +62,7 @@ export default function DashboardPage() {
   const canChecklist = can('/eval/checklist')
   const [siteStats, setSiteStats] = useState<DashboardStats | null>(null)
   const [loadingSite, setLoadingSite] = useState(true)
-  const [pending, setPending] = useState<{ expense: number; album: number; leave: number; swap: number; visit: number }>({ expense: 0, album: 0, leave: 0, swap: 0, visit: 0 })
+  const [pending, setPending] = useState<{ expense: number; album: number; leave: number; swap: number; visit: number; refund: number }>({ expense: 0, album: 0, leave: 0, swap: 0, visit: 0, refund: 0 })
   const [recentNews, setRecentNews] = useState<FacilityNews[]>([])
 
   const { checklists, occurrences, residents, staffList, loaded, loadAll, toggleComplete, completeOccurrence } = useLtcStore()
@@ -83,7 +84,7 @@ export default function DashboardPage() {
   const canApproveLeave = authUser?.role === 'ADMIN' || authUser?.position === '시설장'
   const canVisit = authUser?.role === 'ADMIN' || ['시설장', '사회복지사'].includes(authUser?.position ?? '')
   const loadPending = async () => {
-    const [exp, alb, news, lv, sw, vs] = await Promise.all([
+    const [exp, alb, news, lv, sw, vs, rf] = await Promise.all([
       can('/expense')
         ? expenseAPI.list({ status: 'pending' }).then(r => r.length).catch(() => 0) : Promise.resolve(0),
       can('/eval/albums')
@@ -96,8 +97,12 @@ export default function DashboardPage() {
         ? swapAPI.list('pending').then(r => r.length).catch(() => 0) : Promise.resolve(0),
       canVisit
         ? visitAPI.list('pending').then(r => r.length).catch(() => 0) : Promise.resolve(0),
+      can('/staff-hr')
+        // 카드는 반납받았는데 보증금을 아직 안 돌려준 건 — 잊기 쉬운 돈 문제라 대시보드로 끌어올린다
+        ? cardKeyAPI.list().then(rows => rows.filter(r => r.returned && r.deposit_date && !r.refunded).length).catch(() => 0)
+        : Promise.resolve(0),
     ])
-    setPending({ expense: exp, album: alb, leave: lv, swap: sw, visit: vs })
+    setPending({ expense: exp, album: alb, leave: lv, swap: sw, visit: vs, refund: rf })
     setRecentNews(news)
   }
 
@@ -333,6 +338,7 @@ export default function DashboardPage() {
     { show: canApproveLeave && pending.leave > 0, label: '휴무 신청 승인 대기', value: pending.leave, unit: '건', to: '/work-schedule', icon: CalendarClock, tone: 'emerald' as const },
     { show: canApproveLeave && pending.swap > 0, label: '근무 맞교대 승인 대기', value: pending.swap, unit: '건', to: '/work-schedule', icon: ArrowLeftRight, tone: 'blue' as const },
     { show: canVisit && pending.visit > 0, label: '면회 예약 확인 대기', value: pending.visit, unit: '건', to: '/schedule', icon: CalendarClock, tone: 'orange' as const },
+    { show: can('/staff-hr') && pending.refund > 0, label: '카드키 보증금 이체 대기', value: pending.refund, unit: '건', to: '/staff-hr', icon: Receipt, tone: 'emerald' as const },
   ].filter(i => i.show)
 
   const runningTasks = todayTasks.filter(t => t.inProgress).slice(0, 2)

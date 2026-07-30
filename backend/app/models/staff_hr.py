@@ -133,6 +133,8 @@ class CardKey(Base):
     returned = Column(Boolean, default=False, index=True)    # 반납 여부
     return_date = Column(String(20), nullable=True)          # 반납 일자
     returner = Column(String(100), nullable=True)            # 반납자
+    refunded = Column(Boolean, default=False)                 # 보증금 이체(반환) 완료
+    refund_date = Column(String(20), nullable=True)           # 이체 일자
     memo = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_kst)
     updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)
