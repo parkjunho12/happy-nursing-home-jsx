@@ -3,7 +3,7 @@ import {
   Star, Settings, ClipboardList, ClipboardCheck, CalendarDays,
   UserRound, ShieldCheck, Sparkles, FileSearch,
   Image as ImageIcon, Users, BookOpen, PenLine, Megaphone, Bell, CalendarClock, HeartHandshake, Briefcase, Soup, Receipt, GraduationCap,
-  type LucideIcon, AlertTriangle, BarChart3,
+  type LucideIcon, AlertTriangle, BarChart3, ChefHat,
 } from 'lucide-react'
 
 /**
@@ -122,6 +122,7 @@ export function getNavConfig(
             { to: '/assignments', icon: Users, label: '담당 어르신 명단' },
             { to: '/enteral', icon: Soup, label: '경관식 관리' },
             { to: '/programs', icon: CalendarDays, label: '프로그램 관리' },
+            { to: '/meals', icon: ChefHat, label: '식단표' },
           ],
         },
         {
@@ -208,6 +209,7 @@ export function getNavConfig(
             { to: '/assignments', icon: Users, label: '담당 어르신 명단' },
             { to: '/enteral', icon: Soup, label: '경관식 관리' },
             { to: '/programs', icon: CalendarDays, label: '프로그램 관리' },
+            { to: '/meals', icon: ChefHat, label: '식단표' },
           ],
         },
         {
@@ -282,6 +284,7 @@ export function getNavConfig(
   ]
   if (isSocialWorker) operItems.push(
     { to: '/programs', icon: CalendarDays, label: '프로그램 관리' },
+    { to: '/meals', icon: ChefHat, label: '식단표' },
     { to: '/notices', icon: Bell, label: '내부 공지 관리' },
     { to: '/facility-news', icon: Megaphone, label: '시설소식' },
     { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },

@@ -60,7 +60,7 @@ export interface ChecklistItem {
 
 export interface LtcResident {
   id: string; name: string; birthDate: string; gender: string
-  admissionDate: string; dischargeDate?: string; careGradeStartDate: string
+  admissionDate: string; admissionTime?: string; dischargeDate?: string; careGradeStartDate: string
   grade?: string; certEnd?: string
   floor?: string
   status: string; memo: string; createdAt: string
@@ -160,7 +160,7 @@ function mapCL(raw: any): ChecklistItem {
 }
 function mapR(raw: any): LtcResident {
   return { id:raw.id, name:raw.name, birthDate:raw.birth_date, gender:raw.gender,
-    admissionDate:raw.admission_date, dischargeDate:raw.discharge_date,
+    admissionDate:raw.admission_date, admissionTime:raw.admission_time??undefined, dischargeDate:raw.discharge_date,
     careGradeStartDate:raw.care_grade_start_date, floor:raw.floor??undefined, room:(raw as any).room??undefined, status:raw.status,
     religion:raw.religion??undefined,
     groupCognitive:raw.group_cognitive??undefined, groupLeisure:raw.group_leisure??undefined, groupPhysical:raw.group_physical??undefined,
@@ -374,7 +374,7 @@ export const useLtcStore = create<LtcState>((set, get) => ({
   },
 
   addResident: async (r) => {
-    const raw = await evalResidentsAPI.create({ name:r.name, birth_date:r.birthDate, gender:r.gender, admission_date:r.admissionDate, care_grade_start_date:r.careGradeStartDate, floor:r.floor, room:(r as any).room, status:(r as any).status, religion:(r as any).religion, group_cognitive:(r as any).groupCognitive, group_leisure:(r as any).groupLeisure, group_physical:(r as any).groupPhysical, certifications:(r as any).certifications, contract_lines:(r as any).contract_lines, plan_lines:(r as any).plan_lines, eval_lines:(r as any).eval_lines, memo:r.memo })
+    const raw = await evalResidentsAPI.create({ name:r.name, birth_date:r.birthDate, gender:r.gender, admission_date:r.admissionDate, admission_time:(r as any).admissionTime, care_grade_start_date:r.careGradeStartDate, floor:r.floor, room:(r as any).room, status:(r as any).status, religion:(r as any).religion, group_cognitive:(r as any).groupCognitive, group_leisure:(r as any).groupLeisure, group_physical:(r as any).groupPhysical, certifications:(r as any).certifications, contract_lines:(r as any).contract_lines, plan_lines:(r as any).plan_lines, eval_lines:(r as any).eval_lines, memo:r.memo })
     const newR = mapR(raw)
     const templates = generateResidentAdmissionChecklists(newR as any)
     const newCls = await evalChecklistAPI.createBulk(templates.map(clPayload as any))
@@ -391,6 +391,7 @@ export const useLtcStore = create<LtcState>((set, get) => ({
     if (u.birthDate !== undefined)          p.birth_date            = u.birthDate
     if (u.gender !== undefined)             p.gender                = u.gender
     if (u.admissionDate !== undefined)      p.admission_date        = u.admissionDate
+    if ((u as any).admissionTime !== undefined) p.admission_time    = (u as any).admissionTime
     if (u.careGradeStartDate !== undefined) p.care_grade_start_date = u.careGradeStartDate
     if (u.floor !== undefined)              p.floor                 = u.floor
     if ((u as any).room !== undefined)      p.room                  = (u as any).room

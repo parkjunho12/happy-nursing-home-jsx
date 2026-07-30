@@ -253,6 +253,7 @@ class LtcResident(Base):
     birth_date = Column(String(20), nullable=False)
     gender = Column(String(10), nullable=False)
     admission_date = Column(String(20), nullable=False)
+    admission_time = Column(String(5), nullable=True)   # 입소 예정 시간 'HH:MM' — 미정이면 null
     discharge_date = Column(String(20), nullable=True)
     care_grade_start_date = Column(String(20), nullable=False)
     floor = Column(String(20), nullable=True, index=True)   # 어르신 생활 층

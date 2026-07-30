@@ -213,6 +213,7 @@ class LtcResidentCreate(BaseModel):
     birth_date:            str
     gender:                str
     admission_date:        str
+    admission_time:        Optional[str] = None
     care_grade_start_date: str
     floor:                 Optional[str] = None
     room:                  Optional[str] = None
@@ -233,6 +234,7 @@ class LtcResidentUpdate(BaseModel):
     birth_date:            Optional[str] = None
     gender:                Optional[str] = None
     admission_date:        Optional[str] = None
+    admission_time:        Optional[str] = None
     care_grade_start_date: Optional[str] = None
     floor:                 Optional[str] = None
     room:                  Optional[str] = None
@@ -249,6 +251,7 @@ class LtcResidentOut(BaseModel):
     birth_date:            str
     gender:                str
     admission_date:        str
+    admission_time:        Optional[str] = None
     discharge_date:        Optional[str] = None
     care_grade_start_date: str
     floor:                 Optional[str] = None
