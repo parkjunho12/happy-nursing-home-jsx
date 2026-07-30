@@ -6,7 +6,7 @@ import CertificationEditor from '@/components/eval/CertificationEditor'
 import DocEventsEditor from '@/components/eval/DocEventsEditor'
 import DocChangesModal from '@/components/eval/DocChangesModal'
 import { CARE_TYPES, careMeta, deriveCare, needsFacilityApply, APPLY_STAGES, stageMeta, stageProgress } from '@/utils/careType'
-import { currentCert, certState, renewalDue, gradeLabel, benefitLabel } from '@/utils/cert'
+import { currentCert, certState, renewalDue, daysUntil, gradeLabel, benefitLabel } from '@/utils/cert'
 import { type DocEvent, type DocType, KINDS, kindMeta, asEvent, fmtYMD, fmtMD, autoDocEvents, appendAuto, todayISO, STATUSES, statusMeta, effStatus, isAlert, isExplicitDone, isImplicitDone } from '@/utils/docEvents'
 import { useLtcStore, type LtcResident } from '@/store/ltc'
 
@@ -290,9 +290,9 @@ export default function ResidentDocsPage() {
       {loading ? (
         <div className="flex justify-center py-16"><Loader2 className="animate-spin text-gray-300" /></div>
       ) : (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-auto max-h-[72vh]">
           <table className="w-full border-collapse min-w-[1050px]">
-            <thead>
+            <thead className="sticky top-0 z-30 bg-white">
               <tr className="bg-gray-50/90">
                 <th className={`${th} sticky left-0 z-20 bg-gray-50 text-left border-r border-gray-200 min-w-[110px]`}>어르신</th>
                 <th className={th}>입소일</th>
@@ -388,7 +388,19 @@ export default function ResidentDocsPage() {
                               {others.length > 0 && <span className="text-[10px] text-indigo-500 ml-1">외 {others.length}건 ▾</span>}
                             </div>
                           )}
-                          {cur.end && <div className="text-[10px] text-gray-400 mt-0.5">갱신기준 {renewalDue(cur.end)}</div>}
+                          {cur.end && (() => {
+                            const st = certState(cur)
+                            const dDue = daysUntil(renewalDue(cur.end))   // 갱신 가능일(만료 90일 전)까지
+                            if (st.status === 'expired')
+                              return <div className="text-[10px] font-bold text-red-600 mt-0.5">만료됨 ({fmtD(cur.end)})</div>
+                            if (st.status === 'renew')
+                              return <div className={`text-[10px] font-bold mt-0.5 ${st.daysToEnd !== null && st.daysToEnd <= 30 ? 'text-red-600' : 'text-amber-600'}`}>
+                                갱신 기간 — 만료 D-{st.daysToEnd}
+                              </div>
+                            return <div className="text-[10px] text-gray-400 mt-0.5">
+                              갱신기준 {renewalDue(cur.end)} <b className="text-gray-500">(D-{dDue})</b>
+                            </div>
+                          })()}
                           {badge && <span className={`inline-block mt-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${badge.c}`}>{badge.t}</span>}
                         </button>
                       )
