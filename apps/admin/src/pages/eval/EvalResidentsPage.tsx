@@ -289,7 +289,7 @@ function ResidentForm({ existing, onClose }: { existing?: LtcResident; onClose:(
   const { addResident, updateResident } = useLtcStore()
   const today = new Date().toISOString().split('T')[0]
   const [roomPickOpen, setRoomPickOpen] = useState(false)
-  const [form, setForm] = useState({ name:existing?.name??'', birthDate:existing?.birthDate??'1930-01-01', gender:existing?.gender??'female', admissionDate:existing?.admissionDate??today, careGradeStartDate:existing?.careGradeStartDate??today, floor:existing?.floor??'', room:(existing as any)?.room??'', memo:existing?.memo??'', religion:existing?.religion??'', groupCognitive:existing?.groupCognitive??'', groupLeisure:existing?.groupLeisure??'', groupPhysical:existing?.groupPhysical??'' })
+  const [form, setForm] = useState({ name:existing?.name??'', birthDate:existing?.birthDate??'1930-01-01', gender:existing?.gender??'female', admissionDate:existing?.admissionDate??today, admissionTime:(existing as any)?.admissionTime??'', careGradeStartDate:existing?.careGradeStartDate??today, floor:existing?.floor??'', room:(existing as any)?.room??'', memo:existing?.memo??'', religion:existing?.religion??'', groupCognitive:existing?.groupCognitive??'', groupLeisure:existing?.groupLeisure??'', groupPhysical:existing?.groupPhysical??'' })
   const [certs, setCerts] = useState<Certification[]>([
     { grade:'3', cert_no:'', start: today, end: endFromStart(today, 2), benefits:[{ type:'시설', from: today }] },
   ])
@@ -366,8 +366,20 @@ function ResidentForm({ existing, onClose }: { existing?: LtcResident; onClose:(
           </div>
           <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">입소일 *</label>
             {form.admissionDate > new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) && (
-              <p className="text-[11px] text-amber-600 mb-1">입소일이 미래라 <b>입소 예정자</b>로 등록됩니다 — 입소일이 되면 자동으로 현원 전환</p>
-            )}<DateField className={ic} value={form.admissionDate} onChange={v=>setForm({...form,admissionDate:v})} clearable={false}/></div>
+              <p className="text-[11px] text-amber-600 mb-1">입소일이 미래라 <b>입소 예정자</b>로 등록됩니다 — 입소일이 되면 자동으로 현원 전환 · 일정 캘린더에도 「입소」로 표시</p>
+            )}<DateField className={ic} value={form.admissionDate} onChange={v=>setForm({...form,admissionDate:v})} clearable={false}/>
+            {form.admissionDate > new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) && (
+              <div className="flex items-center gap-1.5 mt-1.5">
+                <span className="text-[11px] font-semibold text-gray-500 shrink-0">예정 시간</span>
+                <button type="button" onClick={()=>setForm({...form,admissionTime:''})}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border ${!form.admissionTime ? 'bg-amber-100 text-amber-700 border-amber-300' : 'text-gray-400 border-gray-200'}`}>미정</button>
+                <select value={form.admissionTime} onChange={e=>setForm({...form,admissionTime:e.target.value})}
+                  className="flex-1 px-2 py-1.5 text-xs border border-gray-200 rounded-lg">
+                  <option value="">시간 선택 (미정)</option>
+                  {Array.from({length:20},(_,i)=>{const h=Math.floor(i/2)+9;const m=i%2===0?'00':'30';return `${String(h).padStart(2,'0')}:${m}`}).map(t=><option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+            )}</div>
           {!existing && <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">장기요양인정서 <span className="text-gray-400 font-normal">— 등급·유효기간(2/3/4년)·급여(재가↔시설)</span></label>
             <CertificationEditor value={certs} onChange={setCerts} />
@@ -559,6 +571,7 @@ function QuickPendingModal({ onClose }: { onClose: () => void }) {
   const week = new Date(Date.now() + 8 * 86400e3).toISOString().slice(0, 10)
   const [name, setName] = useState('')
   const [date, setDate] = useState(week)
+  const [time, setTime] = useState('')   // 입소 예정 시간 — ''이면 미정
   const [floor, setFloor] = useState('')
   const [room, setRoom] = useState('')
   const [memo, setMemo] = useState('')
@@ -572,7 +585,7 @@ function QuickPendingModal({ onClose }: { onClose: () => void }) {
     setSaving(true)
     try {
       await addResident({
-        name: name.trim(), admissionDate: date, careGradeStartDate: date,
+        name: name.trim(), admissionDate: date, admissionTime: time, careGradeStartDate: date,
         birthDate: '', gender: '', floor, room, memo,
         status: 'pending',
       } as any)
@@ -595,6 +608,17 @@ function QuickPendingModal({ onClose }: { onClose: () => void }) {
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1">입소 예정일 *</label>
           <input type="date" min={today} value={date} onChange={e => setDate(e.target.value)} className={ic} />
+          <div className="flex items-center gap-1.5 mt-1.5">
+            <span className="text-[11px] font-semibold text-gray-500 shrink-0">예정 시간</span>
+            <button type="button" onClick={() => setTime('')}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border ${!time ? 'bg-amber-100 text-amber-700 border-amber-300' : 'text-gray-400 border-gray-200'}`}>미정</button>
+            <select value={time} onChange={e => setTime(e.target.value)}
+              className="flex-1 px-2 py-1.5 text-xs border border-gray-200 rounded-lg">
+              <option value="">시간 선택 (미정)</option>
+              {Array.from({ length: 20 }, (_, i) => { const h = Math.floor(i / 2) + 9; const m = i % 2 === 0 ? '00' : '30'; return `${String(h).padStart(2, '0')}:${m}` }).map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <p className="text-[10px] text-gray-400 mt-1">일정 캘린더에 「입소」 일정으로 자동 등록됩니다 — 미정이면 그날 맨 위에 표시</p>
         </div>
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1">방 미리 잡기 <span className="font-normal text-gray-400">(선택)</span></label>
