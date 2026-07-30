@@ -46,6 +46,7 @@ import SchedulePage from './pages/admin/SchedulePage'
 import IncidentsPage from './pages/admin/IncidentsPage'
 import MonthlyReportPage from './pages/admin/MonthlyReportPage'
 import ResidentAssignPage from './pages/admin/ResidentAssignPage'
+import ProgramPage from './pages/admin/ProgramPage'
 import ExpensePage from './pages/admin/ExpensePage'
 import FacilityNewsPage from './pages/admin/FacilityNewsPage'
 import StaffHrPage from './pages/admin/StaffHrPage'
@@ -155,8 +156,8 @@ function ExpenseRoute({ children }: { children: React.ReactNode }) {
 function SocialWorkerRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
-  if (user?.role !== 'ADMIN' && user?.position !== '사회복지사' && user?.position !== '시설장')
-    return <Navigate to="/eval/checklist" replace />
+  const swOk = user?.role === 'ADMIN' || ['사회복지사', '시설장', '대표', '이사'].includes(user?.position ?? '')
+  if (!swOk) return <Navigate to="/eval/checklist" replace />
   return <>{children}</>
 }
 
@@ -244,9 +245,10 @@ function App() {
             <Route path="work-schedule"           element={<ManagerRoute><WorkSchedulePage /></ManagerRoute>} />
             <Route path="my-schedule"             element={<MySchedulePage />} />
             <Route path="handover"                 element={<HandoverAiPage />} />
-            <Route path="incidents"                element={<ManagerRoute><IncidentsPage /></ManagerRoute>} />
+            <Route path="incidents"                element={<StaffAdminRoute><IncidentsPage /></StaffAdminRoute>} />
             <Route path="monthly-report"           element={<StaffAdminRoute><MonthlyReportPage /></StaffAdminRoute>} />
             <Route path="assignments"              element={<SocialWorkerRoute><ResidentAssignPage /></SocialWorkerRoute>} />
+            <Route path="programs"                 element={<SocialWorkerRoute><ProgramPage /></SocialWorkerRoute>} />
             <Route path="handover/:id"             element={<HandoverDetailPage />} />
             <Route path="resident-docs"            element={<SocialWorkerRoute><ResidentDocsPage /></SocialWorkerRoute>} />
             <Route path="education"                element={<StaffEducationPage />} />

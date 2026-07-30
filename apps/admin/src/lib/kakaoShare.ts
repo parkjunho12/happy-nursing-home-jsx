@@ -121,6 +121,22 @@ export async function shareNoticeText(n: ShareNoticeInput): Promise<void> {
 }
 
 /** 공유 링크로 텍스트만 간단히 보내는 대체 경로(카드 이미지 불필요) */
+/** 이미지 카드 공유 — imageUrl은 반드시 공개 https URL이어야 한다(로컬 경로 불가) */
+export async function shareFeed(title: string, description: string, imageUrl: string, link?: string): Promise<void> {
+  await ensureKakao()
+  const url = link || SHARE_LINK
+  window.Kakao.Share.sendDefault({
+    objectType: 'feed',
+    content: {
+      title,
+      description: description.length > 180 ? description.slice(0, 179) + '…' : description,
+      imageUrl,
+      link: { mobileWebUrl: url, webUrl: url },
+    },
+    buttons: [{ title: '자세히 보기', link: { mobileWebUrl: url, webUrl: url } }],
+  })
+}
+
 export async function shareText(text: string, link?: string): Promise<void> {
   await ensureKakao()
   const url = link || SHARE_LINK

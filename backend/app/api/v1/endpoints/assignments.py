@@ -27,8 +27,8 @@ REHAB_POSITIONS = ("물리치료사",)                # 담당 재활팀 = 물�
 def _editor(current_user: User = Depends(get_current_user)) -> User:
     role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
     pos = getattr(current_user, "position", None) or ""
-    if role != "ADMIN" and pos not in ("시설장", "사회복지사"):
-        raise HTTPException(403, "담당 배정 권한이 없습니다. (관리자·시설장·사회복지사)")
+    if role != "ADMIN" and pos not in ("시설장", "사회복지사", "대표", "이사"):
+        raise HTTPException(403, "담당 배정 권한이 없습니다. (관리자·시설장·사회복지사·대표·이사)")
     return current_user
 
 

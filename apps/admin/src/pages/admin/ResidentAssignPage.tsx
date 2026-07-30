@@ -219,50 +219,96 @@ export default function ResidentAssignPage() {
       <div className="hidden print:block">
         {floors.map(f => {
           const list = rows.filter(r => r.floor === f)
-          let pv = '__'
+          const cur = list.filter(r => (r.admission_date ?? '') <= today).length
+          const incom = list.length - cur
+          // 호실 바뀔 때마다 음영 교차 — 방 단위가 한눈에 들어온다
+          let pv = '__'; let band = 0
+          const dense = list.length >= 25       // 인원이 많으면 자동으로 촘촘하게 (34명도 1장)
+          const careSum = (() => { const m2 = new Map<string, number>(); list.forEach(r => { if (r.care_staff_name) m2.set(r.care_staff_name, (m2.get(r.care_staff_name) ?? 0) + 1) }); return [...m2.entries()].sort((a, b) => b[1] - a[1]) })()
+          const rehabSum = (() => { const m2 = new Map<string, number>(); list.forEach(r => { if (r.rehab_staff_name) m2.set(r.rehab_staff_name, (m2.get(r.rehab_staff_name) ?? 0) + 1) }); return [...m2.entries()].sort((a, b) => b[1] - a[1]) })()
           return (
             <div key={f} className="asg-print-page">
-              <div className="flex items-end justify-between border-b-2 border-gray-900 pb-2 mb-3">
+              {/* 머리글 */}
+              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', borderBottom: '3px solid #0d9488', paddingBottom: dense ? '5px' : '8px', marginBottom: dense ? '6px' : '10px' }}>
                 <div>
-                  <h1 className="text-2xl font-extrabold tracking-[0.25em]">담당 어르신 명단</h1>
-                  <p className="text-[10px] text-gray-500 mt-0.5">행복한요양원 녹양역점 · 출력 {new Date().toLocaleDateString('ko-KR')}</p>
+                  <p style={{ fontSize: '10px', fontWeight: 800, color: '#0d9488', letterSpacing: '0.2em', margin: 0 }}>행복한요양원 · 정성으로 모시겠습니다</p>
+                  <h1 style={{ fontSize: '24px', fontWeight: 900, color: '#111827', margin: '2px 0 0', letterSpacing: '0.08em' }}>담당 어르신 명단</h1>
                 </div>
-                <div className="text-right">
-                  <span className="inline-block px-3 py-1 rounded-lg bg-gray-900 text-white text-base font-extrabold">{f}</span>
-                  <p className="text-[10px] text-gray-500 mt-1">현원 {list.filter(r => (r.admission_date ?? '') <= today).length}명
-                    {list.some(r => (r.admission_date ?? '') > today) && ` · 입소 예정 ${list.filter(r => (r.admission_date ?? '') > today).length}명`}</p>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ display: 'inline-block', padding: '5px 16px', borderRadius: 10, background: '#0d9488', color: 'white', fontSize: '18px', fontWeight: 900 }}>{f}</span>
+                  <p style={{ fontSize: '9.5px', color: '#6b7280', margin: '4px 0 0' }}>
+                    현원 <b style={{ color: '#111827' }}>{cur}명</b>{incom > 0 && <> · 입소 예정 <b style={{ color: '#b45309' }}>{incom}명</b></>} · 출력 {new Date().toLocaleDateString('ko-KR')}
+                  </p>
                 </div>
               </div>
-              <table className="w-full border-collapse">
+              {/* 명단 표 */}
+              <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                <colgroup>
+                  <col style={{ width: '14%' }} /><col style={{ width: '22%' }} />
+                  <col style={{ width: '21%' }} /><col style={{ width: '21%' }} /><col style={{ width: '22%' }} />
+                </colgroup>
                 <thead>
                   <tr>
                     {['호실', '성함', '담당 요양팀', '담당 재활팀', '기타'].map(h => (
-                      <th key={h} className="border border-gray-900 bg-gray-800 text-white px-2 py-2 text-[11px] font-bold">{h}</th>
+                      <th key={h} style={{
+                        border: '1px solid #99f6e4', background: '#ccfbf1', color: '#115e59',
+                        padding: dense ? '3px 4px' : '6px 4px', fontSize: dense ? '10px' : '11px', fontWeight: 800,
+                      }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {list.map(r => {
                     const first = r.room !== pv
-                    pv = r.room
+                    if (first) { pv = r.room; band += 1 }
                     const incoming = (r.admission_date ?? '') > today
+                    const bg = incoming ? '#fffbeb' : band % 2 === 0 ? '#f8fafc' : 'white'
+                    const cell: React.CSSProperties = {
+                      border: '1px solid #e2e8f0', background: bg, lineHeight: 1.25,
+                      padding: dense ? '2px 6px' : '5px 7px', fontSize: dense ? '11px' : '12.5px',
+                    }
                     return (
                       <tr key={r.resident_id} className={first ? 'asg-room-top' : ''}>
-                        <td className="border border-gray-700 px-2 py-1.5 text-center text-sm font-extrabold">{first ? r.room : ''}</td>
-                        <td className="border border-gray-700 px-2 py-1.5 text-sm font-bold">{r.name}</td>
-                        <td className="border border-gray-700 px-2 py-1.5 text-sm text-center">{r.care_staff_name ?? ''}</td>
-                        <td className="border border-gray-700 px-2 py-1.5 text-sm text-center">{r.rehab_staff_name ?? ''}</td>
-                        <td className="border border-gray-700 px-2 py-1.5 text-xs">{[incoming ? `${Number(r.admission_date!.slice(5, 7))}/${Number(r.admission_date!.slice(8, 10))} 입소 예정` : '', r.note ?? ''].filter(Boolean).join(' · ')}</td>
+                        <td style={{ ...cell, textAlign: 'center' }}>
+                          {first && <span style={{
+                            display: 'inline-block', minWidth: 40, borderRadius: 8,
+                            background: '#f0fdfa', border: '1px solid #99f6e4', color: '#0f766e',
+                            padding: dense ? '1px 6px' : '2px 8px',
+                            fontSize: dense ? '11px' : '13px', fontWeight: 900,
+                          }}>{r.room}호</span>}
+                        </td>
+                        <td style={{ ...cell, fontWeight: 800, color: '#111827' }}>
+                          {r.name}
+                          {incoming && <span style={{ marginLeft: 5, fontSize: '9px', fontWeight: 800, color: '#b45309', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 6, padding: '1px 5px', verticalAlign: 'middle' }}>입소 예정</span>}
+                        </td>
+                        <td style={{ ...cell, textAlign: 'center', color: '#334155' }}>{r.care_staff_name ?? <span style={{ color: '#cbd5e1' }}>—</span>}</td>
+                        <td style={{ ...cell, textAlign: 'center', color: '#334155' }}>{r.rehab_staff_name ?? <span style={{ color: '#cbd5e1' }}>—</span>}</td>
+                        <td style={{ ...cell, fontSize: dense ? '9.5px' : '10.5px', color: '#64748b' }}>
+                          {[incoming ? `${Number(r.admission_date!.slice(5, 7))}/${Number(r.admission_date!.slice(8, 10))} 입소` : '', r.note ?? ''].filter(Boolean).join(' · ')}
+                        </td>
                       </tr>
                     )
                   })}
                 </tbody>
               </table>
-              {/* 담당별 인원 요약 — 종이에서도 균형이 보이게 */}
-              <div className="mt-2 text-[10px] text-gray-600 leading-relaxed">
-                <b>요양팀</b> {(() => { const m = new Map<string, number>(); list.forEach(r => { if (r.care_staff_name) m.set(r.care_staff_name, (m.get(r.care_staff_name) ?? 0) + 1) }); return [...m.entries()].map(([n, c]) => `${n} ${c}`).join(' · ') || '-' })()}
-                <br /><b>재활팀</b> {(() => { const m = new Map<string, number>(); list.forEach(r => { if (r.rehab_staff_name) m.set(r.rehab_staff_name, (m.get(r.rehab_staff_name) ?? 0) + 1) }); return [...m.entries()].map(([n, c]) => `${n} ${c}`).join(' · ') || '-' })()}
+              {/* 담당별 인원 요약 — 균형이 종이에서도 보이게 */}
+              <div style={{ display: 'flex', gap: '8px', marginTop: dense ? '6px' : '10px' }}>
+                {[['요양팀', careSum, '#0d9488', '#f0fdfa', '#99f6e4'] as const, ['재활팀', rehabSum, '#7c3aed', '#faf5ff', '#ddd6fe'] as const].map(([label, sum, c, bg2, bd]) => (
+                  <div key={label} style={{ flex: 1, border: `1px solid ${bd}`, background: bg2, borderRadius: 10, padding: dense ? '4px 8px' : '6px 10px' }}>
+                    <p style={{ fontSize: dense ? '9px' : '10px', fontWeight: 900, color: c, margin: '0 0 2px' }}>{label} 담당 현황</p>
+                    <p style={{ fontSize: dense ? '9px' : '10px', color: '#374151', margin: 0, lineHeight: 1.6 }}>
+                      {sum.length === 0 ? '미배정' : sum.map(([n, c2]) => (
+                        <span key={n} style={{ display: 'inline-block', marginRight: 8, whiteSpace: 'nowrap' }}>
+                          {n} <b style={{ color: c }}>{c2}명</b>
+                        </span>
+                      ))}
+                    </p>
+                  </div>
+                ))}
               </div>
+              <p style={{ fontSize: '8.5px', color: '#9ca3af', textAlign: 'right', margin: '6px 2px 0' }}>
+                ※ 담당 변경은 관리자 페이지 「담당 어르신 명단」에서 — 변경 이력이 함께 남습니다 · 행복한요양원
+              </p>
             </div>
           )
         })}
@@ -272,8 +318,10 @@ export default function ResidentAssignPage() {
           @page { size: A4 portrait; margin: 10mm 12mm; }
           .asg-print-page { page-break-after: always; }
           .asg-print-page:last-child { page-break-after: auto; }
-          .asg-room-top td { border-top: 2px solid #111 !important; }
-          .asg-print-page th, .asg-print-page td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .asg-room-top td { border-top: 2px solid #5eead4 !important; }
+          .asg-print-page * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .asg-print-page { break-inside: avoid; }
+          .asg-print-page tr { break-inside: avoid; }
         }
       `}</style>
 

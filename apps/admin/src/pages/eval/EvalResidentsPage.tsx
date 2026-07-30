@@ -289,7 +289,7 @@ function ResidentForm({ existing, onClose }: { existing?: LtcResident; onClose:(
   const { addResident, updateResident } = useLtcStore()
   const today = new Date().toISOString().split('T')[0]
   const [roomPickOpen, setRoomPickOpen] = useState(false)
-  const [form, setForm] = useState({ name:existing?.name??'', birthDate:existing?.birthDate??'1930-01-01', gender:existing?.gender??'female', admissionDate:existing?.admissionDate??today, careGradeStartDate:existing?.careGradeStartDate??today, floor:existing?.floor??'', room:(existing as any)?.room??'', memo:existing?.memo??'' })
+  const [form, setForm] = useState({ name:existing?.name??'', birthDate:existing?.birthDate??'1930-01-01', gender:existing?.gender??'female', admissionDate:existing?.admissionDate??today, careGradeStartDate:existing?.careGradeStartDate??today, floor:existing?.floor??'', room:(existing as any)?.room??'', memo:existing?.memo??'', religion:existing?.religion??'', groupCognitive:existing?.groupCognitive??'', groupLeisure:existing?.groupLeisure??'', groupPhysical:existing?.groupPhysical??'' })
   const [certs, setCerts] = useState<Certification[]>([
     { grade:'3', cert_no:'', start: today, end: endFromStart(today, 2), benefits:[{ type:'시설', from: today }] },
   ])
@@ -342,6 +342,27 @@ function ResidentForm({ existing, onClose }: { existing?: LtcResident; onClose:(
                 onClose={() => setRoomPickOpen(false)}
                 onPick={(f, r) => { setForm(p => ({ ...p, floor: f, room: r })); setRoomPickOpen(false) }} />
             )}
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">종교 · 프로그램 그룹 <span className="font-normal text-gray-400">(선택 — 프로그램 분류에 사용)</span></label>
+            <div className="grid grid-cols-4 gap-1.5">
+              <div>
+                <p className="text-[10px] font-bold text-gray-400 mb-0.5 text-center">종교</p>
+                <select className={ic} value={form.religion} onChange={e=>setForm({...form,religion:e.target.value})}>
+                  <option value="">없음</option>
+                  {['기독교','천주교','불교','원불교','무교','기타'].map(r0=><option key={r0} value={r0}>{r0}</option>)}
+                </select>
+              </div>
+              {([['groupCognitive','인지','text-violet-600'],['groupLeisure','여가','text-sky-600'],['groupPhysical','신체','text-emerald-600']] as const).map(([k,label,cls])=>(
+                <div key={k}>
+                  <p className={`text-[10px] font-bold mb-0.5 text-center ${cls}`}>{label} 그룹</p>
+                  <select className={ic} value={(form as any)[k]} onChange={e=>setForm({...form,[k]:e.target.value})}>
+                    <option value="">없음</option>
+                    {['A','B','C'].map(g=><option key={g} value={g}>{g}그룹</option>)}
+                  </select>
+                </div>
+              ))}
+            </div>
           </div>
           <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">입소일 *</label>
             {form.admissionDate > new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) && (
