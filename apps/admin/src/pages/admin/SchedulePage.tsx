@@ -280,10 +280,11 @@ export default function SchedulePage() {
       if (!l.date) continue
       const cat: CatKey = l.kind === 'admission' ? '입소' : '입사'
       const label = l.kind === 'admission' ? '입소' : '입사'
+      const lt = l.kind === 'admission' && l.time ? l.time : ''   // 입소 예정 시간(미정이면 빈 값)
       out.push({
         key: `l-${l.kind}-${l.id}`, kind: 'lifecycle', category: cat,
-        title: `${label} · ${l.name}`,
-        start: `${l.date}T00:00`, dateKey: l.date, time: '',
+        title: `${label} · ${l.name}${l.kind === 'admission' && l.status === 'pending' && !l.time ? ' (시간 미정)' : ''}`,
+        start: `${l.date}T${lt || '00:00'}`, dateKey: l.date, time: lt,
         location: null, contactName: l.name, contactPhone: null, memo: null, raw: l as any,
       })
     }

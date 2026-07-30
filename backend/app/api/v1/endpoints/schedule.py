@@ -318,7 +318,8 @@ def lifecycle(
             continue
         out.append({
             "id": r.id, "kind": "admission", "name": r.name,
-            "date": r.admission_date, "gender": r.gender, "status": r.status,
+            "date": r.admission_date, "time": getattr(r, "admission_time", None),
+            "gender": r.gender, "status": r.status,
         })
 
     sq = db.query(LtcStaffMember).filter(LtcStaffMember.hire_date.isnot(None))
