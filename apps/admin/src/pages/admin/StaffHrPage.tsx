@@ -611,6 +611,8 @@ function CardKeyTable() {
 
   const inUse = rows.filter(r => !r.returned).length
   const returned = rows.filter(r => r.returned).length
+  // 이체 대기 = 반납했고, 보증금을 냈었는데, 아직 안 돌려준 카드
+  const refundWait = rows.filter(r => r.returned && r.deposit_date && !r.refunded).length
   const filtered = rows.filter(r => showReturned || !r.returned)
 
   const th = 'px-2.5 py-2 text-[11px] font-bold text-gray-500 whitespace-nowrap text-center border-b border-gray-200'
@@ -639,6 +641,17 @@ function CardKeyTable() {
     catch { alert('저장 실패 — 다시 시도해주세요'); load() }
   }
 
+  // 이체(보증금 반환) 토글 — 반납 후 돈까지 돌려줬는지가 진짜 마감이다
+  const toggleRefund = async (c: CardKey) => {
+    const today = new Date().toISOString().split('T')[0]
+    const body = c.refunded
+      ? { refunded: false, refund_date: null }
+      : { refunded: true, refund_date: today }
+    patchRow({ ...c, ...body } as CardKey)
+    try { patchRow(await cardKeyAPI.update(c.id, body)) }
+    catch { alert('저장 실패 — 다시 시도해주세요'); load() }
+  }
+
   const toggleReturn = async (c: CardKey) => {
     const today = new Date().toISOString().split('T')[0]
     const next = !c.returned
@@ -651,10 +664,11 @@ function CardKeyTable() {
 
   return (
     <>
-      <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-4">
+      <div className="grid grid-cols-4 gap-2 sm:gap-3 mb-4">
         <Stat label="총 카드" value={`${rows.length}개`} tone="gray" />
         <Stat label="사용 중" value={`${inUse}개`} tone={inUse ? 'green' : 'gray'} />
         <Stat label="반납" value={`${returned}개`} tone={returned ? 'amber' : 'gray'} />
+        <Stat label="보증금 이체 대기" value={`${refundWait}건`} tone={refundWait ? 'amber' : 'gray'} />
       </div>
 
       <div className="flex items-center gap-2 mb-3 flex-wrap">
@@ -729,6 +743,20 @@ function CardKeyTable() {
                         <span className="text-[10px] font-bold text-green-700 bg-green-50 px-1.5 py-0.5 rounded hover:bg-green-100">사용중</span>
                       )}
                     </button>
+                    {/* 이체 상태 — 반납했고 보증금을 냈던 카드만 정산 대상 */}
+                    {c.returned && (
+                      c.deposit_date ? (
+                        <button type="button"
+                          onClick={e => { e.preventDefault(); e.stopPropagation(); toggleRefund(c) }}
+                          title={c.refunded ? '클릭하면 이체 완료 취소' : '보증금을 돌려줬으면 클릭 — 이체 완료'}
+                          className={`block mx-auto mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded transition-colors ${
+                            c.refunded ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-amber-100 text-amber-700 hover:bg-amber-200 animate-pulse'}`}>
+                          {c.refunded ? `이체 완료 ${fmtD(c.refund_date)}` : '이체 대기'}
+                        </button>
+                      ) : (
+                        <span className="block text-center mt-1 text-[9px] text-gray-300">정산 없음</span>
+                      )
+                    )}
                   </td>
                   <td className={`${td} text-left whitespace-normal max-w-[160px]`}>{val(c.memo)}</td>
                   <td className={td}>

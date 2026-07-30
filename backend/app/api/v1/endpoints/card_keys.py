@@ -32,6 +32,7 @@ def _view(c: CardKey) -> dict:
         "card_number": c.card_number, "holder": c.holder, "staff_id": c.staff_id,
         "deposit_date": c.deposit_date, "deposit_method": c.deposit_method, "deposit_amount": c.deposit_amount,
         "returned": bool(c.returned), "return_date": c.return_date, "returner": c.returner,
+        "refunded": bool(getattr(c, "refunded", False)), "refund_date": getattr(c, "refund_date", None),
         "memo": c.memo,
     }
 
@@ -46,6 +47,8 @@ class CardBody(BaseModel):
     returned: Optional[bool] = None
     return_date: Optional[str] = None
     returner: Optional[str] = None
+    refunded: Optional[bool] = None       # 보증금 이체 완료
+    refund_date: Optional[str] = None
     memo: Optional[str] = None
 
 
@@ -58,7 +61,7 @@ def _apply(c: CardKey, b: CardBody):
     # 납부 취소·반납 취소가 날짜를 지워야 하는데 None 무시로는 안 지워진다
     sent = getattr(b, "model_fields_set", None) or getattr(b, "__fields_set__", set())
     for field in ("card_number", "holder", "staff_id", "deposit_date", "deposit_method",
-                  "deposit_amount", "return_date", "returner", "memo"):
+                  "deposit_amount", "return_date", "returner", "refund_date", "memo"):
         val = getattr(b, field)
         if val is not None:
             setattr(c, field, _clean(val))
@@ -66,6 +69,11 @@ def _apply(c: CardKey, b: CardBody):
             setattr(c, field, None)          # 명시적 null = 값 지우기
     if b.returned is not None:
         c.returned = bool(b.returned)
+        if not b.returned:                 # 반납 취소 = 이체 상태도 원점
+            c.refunded = False
+            c.refund_date = None
+    if b.refunded is not None:
+        c.refunded = bool(b.refunded)
 
 
 @router.get("/records")

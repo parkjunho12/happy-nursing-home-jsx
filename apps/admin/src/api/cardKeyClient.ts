@@ -19,6 +19,8 @@ export interface CardKey {
   returned?: boolean
   return_date?: string | null
   returner?: string | null
+  refunded?: boolean          // 보증금 이체(반환) 완료
+  refund_date?: string | null
   memo?: string | null
 }
 export interface CardInput {
@@ -31,6 +33,8 @@ export interface CardInput {
   returned?: boolean
   return_date?: string | null
   returner?: string | null
+  refunded?: boolean
+  refund_date?: string | null
   memo?: string | null
 }
 
