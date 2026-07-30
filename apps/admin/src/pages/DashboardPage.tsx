@@ -500,7 +500,7 @@ export default function DashboardPage() {
         </div>
       ) : (
         <div className="divide-y divide-gray-50">
-          {dailyTasks.slice(0, isMobile ? 5 : 10).map(task => (
+          {dailyTasks.slice(0, 5).map(task => (
             <DailyTaskRow
               key={task.occId || task.itemId}
               task={task}
@@ -509,10 +509,10 @@ export default function DashboardPage() {
               onClick={() => navigate('/eval/checklist')}
             />
           ))}
-          {dailyTasks.length > (isMobile ? 5 : 10) && (
+          {dailyTasks.length > 5 && (
             <button onClick={() => navigate('/eval/checklist')}
               className="w-full py-3 text-xs text-center text-gray-400 hover:text-primary-orange hover:bg-orange-50 transition-colors">
-              +{dailyTasks.length - (isMobile ? 5 : 10)}건 더 보기
+              +{dailyTasks.length - 5}건 더 보기
             </button>
           )}
         </div>

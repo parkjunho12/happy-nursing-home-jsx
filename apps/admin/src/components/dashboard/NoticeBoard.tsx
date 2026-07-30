@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Megaphone, Pin, Plus, Loader2, Pencil, Trash2, Send, MessageCircle, CheckCircle2, X } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { useAuthStore } from '@/store/auth'
 import { noticeAPI, NOTICE_LEVEL, noticeImageUrl, type InternalNotice, type NoticeAckStatus } from '@/api/noticeClient'
 import { isKakaoShareEnabled, shareNotice } from '@/lib/kakaoShare'
@@ -22,6 +23,8 @@ const rel = (iso?: string | null) => {
 export default function NoticeBoard() {
   const { user } = useAuthStore()
   const canWrite = user?.role === 'ADMIN' || user?.position === '시설장' || user?.position === '사회복지사'
+  // /notices 페이지 접근 권한과 동일 (SocialWorkerRoute)
+  const canSeeAll = user?.role === 'ADMIN' || ['사회복지사', '시설장', '대표', '이사'].includes(user?.position ?? '')
 
   const [list, setList] = useState<InternalNotice[]>([])
   const [loading, setLoading] = useState(true)
@@ -44,9 +47,16 @@ export default function NoticeBoard() {
 
   const load = () => {
     setLoading(true)
-    noticeAPI.list(10).then(setList).catch(() => setList([])).finally(() => setLoading(false))
+    noticeAPI.list(30).then(setList).catch(() => setList([])).finally(() => setLoading(false))
   }
   useEffect(load, [])
+
+  // 대시보드는 요약만 — 고정 공지 1건 + 최근 5건 (나머지는 공지 페이지에서)
+  const pinnedOne = list.find(n => n.pinned)
+  const shown = [
+    ...(pinnedOne ? [pinnedOne] : []),
+    ...list.filter(n => !n.pinned).slice(0, 5),
+  ]
 
   return (
     <section className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -56,14 +66,21 @@ export default function NoticeBoard() {
             <Megaphone size={14} className="text-primary-orange" />
           </div>
           <h2 className="text-sm font-bold text-gray-800">내부 공지</h2>
-          {list.length > 0 && <span className="text-[11px] text-gray-400">{list.length}건</span>}
+          {list.length > 0 && <span className="text-[11px] text-gray-400">최근 {shown.length}건</span>}
         </div>
-        {canWrite && (
-          <button onClick={() => setEditing(null)}
-            className="inline-flex items-center gap-1 text-[11px] font-bold text-primary-orange hover:bg-orange-50 px-2 py-1 rounded-lg">
-            <Plus size={13} /> 공지 등록
-          </button>
-        )}
+        <div className="flex items-center gap-1">
+          {canSeeAll && (
+            <Link to="/notices" className="text-[11px] font-semibold text-gray-400 hover:text-gray-600 px-2 py-1 rounded-lg hover:bg-gray-50">
+              전체 보기 ›
+            </Link>
+          )}
+          {canWrite && (
+            <button onClick={() => setEditing(null)}
+              className="inline-flex items-center gap-1 text-[11px] font-bold text-primary-orange hover:bg-orange-50 px-2 py-1 rounded-lg">
+              <Plus size={13} /> 공지 등록
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="p-3">
@@ -75,7 +92,7 @@ export default function NoticeBoard() {
           </p>
         ) : (
           <ul className="space-y-1.5">
-            {list.map(n => {
+            {shown.map(n => {
               const lv = NOTICE_LEVEL[n.level] ?? NOTICE_LEVEL.info
               const open = openId === n.id
               return (

@@ -1,0 +1,952 @@
+import { useEffect, useRef, useState } from 'react'
+import { CalendarRange, Clock3, Download, Eye, EyeOff, History, Loader2, MessageCircle, Plus, Printer, Save, Trash2, Upload, Users, X } from 'lucide-react'
+import { programAPI, type ProgramMonthData, type ProgramEntry, type ProgramTime } from '@/api/programClient'
+import { evalResidentsAPI } from '@/api/evalClient'
+import { isKakaoShareEnabled, shareText } from '@/lib/kakaoShare'
+
+/**
+ * 프로그램 관리 — 엑셀로 만들던 월간 프로그램표를 그대로 올려 화면·보호자앱으로.
+ *
+ * 흐름: 일정표 엑셀 업로드 → 달력 미리보기 확인 → 게시(보호자앱 노출).
+ * 분류표(그룹별 명단)는 내부용 — 어르신 개인화("오늘 우리 어머니 프로그램")의 근거.
+ */
+const GROUP_CLS: Record<string, string> = {
+  인지: 'bg-violet-50 text-violet-700 border-violet-200',
+  여가: 'bg-sky-50 text-sky-700 border-sky-200',
+  신체: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+}
+const groupCls = (g: string | null) => {
+  if (!g) return 'bg-gray-50 text-gray-600 border-gray-200'
+  for (const k of Object.keys(GROUP_CLS)) if (g.startsWith(k)) return GROUP_CLS[k]
+  return 'bg-amber-50 text-amber-700 border-amber-200'   // 종교·자원봉사 등
+}
+const DOW = ['일', '월', '화', '수', '목', '금', '토']
+
+export default function ProgramPage() {
+  const now = new Date()
+  const [ym, setYm] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
+  const [data, setData] = useState<ProgramMonthData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState<'sch' | null>(null)
+  const [tab, setTab] = useState<'schedule' | 'groups'>('schedule')
+  const [notesEdit, setNotesEdit] = useState<string | null>(null)   // 편집 중 텍스트(줄 단위)
+  // 진행 시간 목록('10:00~10:40') — 일자 수정 드롭다운에 쓰인다
+  const [times, setTimes] = useState<ProgramTime[]>([])
+  const [residents, setResidents] = useState<any[]>([])   // 수급자 등록 기준 분류의 원천
+  const [timesOpen, setTimesOpen] = useState(false)
+  const [timesDraft, setTimesDraft] = useState<ProgramTime[]>([])
+  const [newStart, setNewStart] = useState('')
+  const [newEnd, setNewEnd] = useState('')
+  const [newCats, setNewCats] = useState<Set<string>>(new Set())   // 인지·여가·신체 복수 선택 — 하나씩 기본 시간으로 등록
+  // 그룹명(인지A…)에 맞는 기본 시간
+  const defaultTimeFor = (group: string | null): string | null => {
+    if (!group) return null
+    const cat = ['인지', '여가', '신체'].find(c => group.startsWith(c))
+    if (!cat) return null
+    return times.find(t => t.category === cat)?.time ?? null
+  }
+  const CAT_BADGE: Record<string, string> = {
+    인지: 'bg-violet-100 text-violet-700', 여가: 'bg-sky-100 text-sky-700', 신체: 'bg-emerald-100 text-emerald-700',
+  }
+  // 업로드 월 선택 — 엑셀 하단 탭(26.8월, 26.7월…) 중 어느 달을 가져올지
+  const [pendFile, setPendFile] = useState<File | null>(null)
+  // 오늘 프로그램 카톡 공유
+  const [shareOpen, setShareOpen] = useState(false)
+  const [shareData, setShareData] = useState<ProgramMonthData | null>(null)   // 이번 달(오늘 기준) 일정
+  const [sharePick, setSharePick] = useState<number>(-1)
+  const [shareMsg, setShareMsg] = useState('')
+  const [shareBusy, setShareBusy] = useState(false)
+  // 그룹 분류 수정 — 층별 텍스트(이름 띄어쓰기 구분)
+  const [availMonths, setAvailMonths] = useState<string[]>([])
+  const [pickMonths, setPickMonths] = useState<Set<string>>(new Set())
+  const schRef = useRef<HTMLInputElement>(null)
+  // 일자별 수정 모달 — 모달은 화면에만 반영(draft), 상단 「저장」으로 한꺼번에 서버 저장
+  const [editDay, setEditDay] = useState<{ day: number; entries: ProgramEntry[] } | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [draft, setDraft] = useState<Record<string, ProgramEntry[]>>({})   // day → entries
+  const dirty = Object.keys(draft).length > 0
+  const dayEntries = (day: number): ProgramEntry[] =>
+    draft[String(day)] ?? data?.days[String(day)] ?? []
+  // 변경 이력
+  const [histOpen, setHistOpen] = useState(false)
+  const [grpLogsOpen, setGrpLogsOpen] = useState(false)
+  const [grpLogs, setGrpLogs] = useState<Awaited<ReturnType<typeof programAPI.groupLogs>> | null>(null)
+  const [logs, setLogs] = useState<Awaited<ReturnType<typeof programAPI.logs>> | null>(null)
+
+  const applyDay = () => {   // 모달 → draft (서버 저장은 상단 「저장」에서)
+    if (!editDay) return
+    setDraft(p => ({ ...p, [String(editDay.day)]: editDay.entries }))
+    setEditDay(null)
+  }
+  const saveAll = async () => {
+    if (!dirty) return
+    setSaving(true)
+    try {
+      for (const [d, entries] of Object.entries(draft)) {
+        await programAPI.editDay(ym, Number(d), entries)
+      }
+      setDraft({}); load()
+    } catch (e: any) { alert(e?.response?.data?.detail ?? '저장 실패') }
+    finally { setSaving(false) }
+  }
+  // ── 오늘 프로그램 공유 ──
+  const GROUP_KEY: Record<string, string> = { 인지: 'group_cognitive', 여가: 'group_leisure', 신체: 'group_physical' }
+  const rosterOf = (group: string | null) => {
+    if (!group) return [] as { floor: string; names: string[] }[]
+    const cat = ['인지', '여가', '신체'].find(c => group.startsWith(c))
+    const grade = cat ? group.slice(cat.length).trim() : ''
+    if (!cat || !grade) return []
+    const key = GROUP_KEY[cat]
+    const mem = residents.filter(r0 => r0.status === 'active' && r0[key] === grade)
+    const byFloor = new Map<string, string[]>()
+    mem.forEach(r0 => { const f = r0.floor || '층 미지정'; byFloor.set(f, [...(byFloor.get(f) ?? []), r0.name]) })
+    return [...byFloor.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([floor, names]) => ({ floor, names: names.sort((a, b) => a.localeCompare(b, 'ko')) }))
+  }
+  const shareTemplate = (e: ProgramEntry) => {
+    const head = e.group ? `${e.group}그룹 프로그램 입니다` : '오늘의 프로그램 입니다'
+    const em = emojiFor(e)
+    return [
+      `${em}${head}${em}`,
+      `ㅇ 시간/장소 : ${e.time ?? e.slot}`,
+      `ㅇ 활동명 : ${e.title || e.group || ''}`,
+      '아래 명단에 있는 어르신은 반드시 참여 부탁드립니다',
+    ].join('\n')
+  }
+  const openShare = async () => {
+    const now2 = new Date()
+    const thisYm = `${now2.getFullYear()}-${String(now2.getMonth() + 1).padStart(2, '0')}`
+    setShareOpen(true); setSharePick(-1); setShareMsg('')
+    const d = thisYm === ym ? data : await programAPI.schedule(thisYm).catch(() => null)
+    setShareData(d)
+  }
+  const todayEntries2 = (): ProgramEntry[] => shareData?.days?.[String(new Date().getDate())] ?? []
+  // 범용 명단 이미지 — 프로그램 그룹·종교 공용
+  const drawNamesImage = (title: string, subtitle: string, accent: string,
+                          roster: { floor: string; names: string[] }[]): Promise<Blob> => {
+    const W = 800; const pad = 44
+    const cv = document.createElement('canvas')
+    const g = cv.getContext('2d')!
+    const nameFont = 'bold 34px "Pretendard", "Apple SD Gothic Neo", sans-serif'
+    // 줄 계산
+    const lines: { kind: 'floor' | 'names'; text: string }[] = []
+    g.font = nameFont
+    for (const fl of roster) {
+      lines.push({ kind: 'floor', text: fl.floor })
+      let cur = ''
+      for (const n of fl.names) {
+        const t = cur ? `${cur}   ${n}` : n
+        if (g.measureText(t).width > W - pad * 2 - 20) { lines.push({ kind: 'names', text: cur }); cur = n }
+        else cur = t
+      }
+      if (cur) lines.push({ kind: 'names', text: cur })
+    }
+    const H = 210 + lines.reduce((a, l) => a + (l.kind === 'floor' ? 62 : 52), 0) + 70
+    cv.width = W; cv.height = H
+    // 배경·헤더
+    g.fillStyle = 'white'; g.fillRect(0, 0, W, H)
+    g.fillStyle = accent; g.fillRect(0, 0, W, 130)
+    g.fillStyle = 'white'
+    g.font = 'bold 44px "Pretendard", "Apple SD Gothic Neo", sans-serif'
+    g.fillText(title, pad, 82)
+    g.fillStyle = '#374151'
+    g.font = '600 30px "Pretendard", "Apple SD Gothic Neo", sans-serif'
+    g.fillText(subtitle, pad, 180)
+    let y2 = 240
+    for (const l of lines) {
+      if (l.kind === 'floor') {
+        g.fillStyle = accent
+        g.font = 'bold 28px "Pretendard", "Apple SD Gothic Neo", sans-serif'
+        g.fillText(`▪ ${l.text}`, pad, y2); y2 += 52
+      } else {
+        g.fillStyle = '#111827'; g.font = nameFont
+        g.fillText(l.text, pad + 16, y2); y2 += 52
+      }
+      if (l.kind === 'floor') y2 += 10
+    }
+    g.fillStyle = '#9ca3af'; g.font = '500 22px "Pretendard", "Apple SD Gothic Neo", sans-serif'
+    g.fillText('행복한요양원 — 명단에 계신 어르신은 꼭 참여 부탁드립니다', pad, H - 34)
+    return new Promise((res, rej) => cv.toBlob(b => b ? res(b) : rej(new Error('이미지 생성 실패')), 'image/png'))
+  }
+  const doShareText = async () => {
+    try { await shareText(shareMsg) }
+    catch (e2: any) { alert(e2?.message ?? '카카오 공유를 열 수 없습니다. 모바일 카카오톡에서 시도해주세요.') }
+  }
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = filename
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(a.href), 3000)
+  }
+  const ACCENT: Record<string, string> = { 인지: '#7c3aed', 여가: '#0284c7', 신체: '#059669' }
+  const CAT_EMOJI: Record<string, string> = { 인지: '🧩', 여가: '🎨', 신체: '💪' }
+  const emojiFor = (e: ProgramEntry) => {
+    if (e.kind === '교육') return '📖'
+    const cat = ['인지', '여가', '신체'].find(c => (e.group ?? '').startsWith(c))
+    return (cat && CAT_EMOJI[cat]) || '🌸'
+  }
+  const downloadProgramRoster = async (e: ProgramEntry) => {
+    const roster = rosterOf(e.group)
+    if (roster.length === 0) { alert('이 그룹의 어르신 명단이 없습니다 — 수급자 관리에서 그룹을 지정해주세요.'); return }
+    const cat = ['인지', '여가', '신체'].find(c => (e.group ?? '').startsWith(c))
+    const now3 = new Date()
+    setShareBusy(true)
+    try {
+      const blob = await drawNamesImage(
+        `${emojiFor(e)} ${e.group ? e.group + '그룹' : '오늘의 프로그램'} 참여 명단`,
+        `${now3.getMonth() + 1}월 ${now3.getDate()}일 · ${e.title || ''}${e.time ? ` · ${e.time}` : ''}`,
+        (cat && ACCENT[cat]) || '#0284c7', roster)
+      downloadBlob(blob, `${e.group ?? '오늘프로그램'}_명단_${now3.getMonth() + 1}월${now3.getDate()}일.png`)
+    } finally { setShareBusy(false) }
+  }
+  const downloadGroupRoster = async (title: string, accent: string, roster: { floor: string; names: string[] }[]) => {
+    if (roster.length === 0) return
+    const blob = await drawNamesImage(title, `총 ${roster.reduce((a, f) => a + f.names.length, 0)}명 · ${new Date().toLocaleDateString('ko-KR')} 기준`, accent, roster)
+    downloadBlob(blob, `${title.replace(/[🌸✝️📿🪷⭕🕊️🔖\s]/g, '')}.png`)
+  }
+
+  const openHist = async () => {
+    setHistOpen(true); setLogs(null)
+    try { setLogs(await programAPI.logs(ym)) } catch { setLogs([]) }
+  }
+  const openGrpLogs = async () => {
+    setGrpLogsOpen(true); setGrpLogs(null)
+    try { setGrpLogs(await programAPI.groupLogs()) } catch { setGrpLogs([]) }
+  }
+
+  const load = () => {
+    setLoading(true)
+    Promise.all([
+      programAPI.schedule(ym).catch(() => null),
+      programAPI.times().catch(() => [] as ProgramTime[]),
+      evalResidentsAPI.list().catch(() => []),
+    ]).then(([s, t, rs]) => { setData(s); setTimes(t); setResidents(rs) }).finally(() => setLoading(false))
+  }
+  useEffect(load, [ym])
+
+  const move = (d: number) => {
+    if (dirty && !confirm('저장하지 않은 수정이 있습니다. 버리고 이동할까요?')) return
+    setDraft({})
+    const [y, m] = ym.split('-').map(Number)
+    const nd = new Date(y, m - 1 + d, 1)
+    setYm(`${nd.getFullYear()}-${String(nd.getMonth() + 1).padStart(2, '0')}`)
+  }
+
+  const onSchedule = async (f: File | null) => {
+    if (!f) return
+    setBusy('sch')
+    try {
+      const months = await programAPI.peekSchedule(f)
+      setPendFile(f)
+      setAvailMonths(months)
+      // 기본 선택: 지금 보고 있는 달이 엑셀에 있으면 그 달, 없으면 최신 시트
+      setPickMonths(new Set([months.includes(ym) ? ym : months[0]]))
+    } catch (e: any) { alert(e?.response?.data?.detail ?? '엑셀을 읽지 못했습니다') }
+    finally { setBusy(null) }
+  }
+  const doImport = async () => {
+    if (!pendFile || pickMonths.size === 0) return
+    setBusy('sch')
+    const done: string[] = []
+    try {
+      for (const mm of [...pickMonths].sort()) {
+        const r = await programAPI.uploadSchedule(pendFile, mm)
+        done.push(`${Number(r.month.slice(5, 7))}월 ${r.day_count}일치`)
+      }
+      const last = [...pickMonths].sort().pop()!
+      setPendFile(null); setYm(last)
+      alert(`가져왔습니다 — ${done.join(', ')}.\n미리보기를 확인하고 「게시」를 눌러주세요.`)
+    } catch (e: any) { alert(e?.response?.data?.detail ?? '업로드 실패') }
+    finally { setBusy(null); load() }
+  }
+
+  const togglePublish = async () => {
+    if (!data) return
+    const next = !data.published
+    if (next && !confirm(`${Number(ym.slice(5, 7))}월 프로그램표를 게시할까요?\n보호자앱에서 볼 수 있게 됩니다.`)) return
+    try { await programAPI.publish(ym, next); load() }
+    catch (e: any) { alert(e?.response?.data?.detail ?? '처리 실패') }
+  }
+
+  // 달력 그리드
+  const [y, m] = ym.split('-').map(Number)
+  const total = new Date(y, m, 0).getDate()
+  const firstDow = new Date(y, m - 1, 1).getDay()
+  const cells: (number | null)[] = [...Array(firstDow).fill(null), ...Array.from({ length: total }, (_, i) => i + 1)]
+
+  return (
+    <div className="p-4 md:p-6 max-w-6xl mx-auto">
+      <input ref={schRef} type="file" accept=".xlsx" className="hidden" onChange={e => { onSchedule(e.target.files?.[0] ?? null); e.target.value = '' }} />
+
+      <div className="flex items-center gap-2 flex-wrap mb-1">
+        <CalendarRange size={20} className="text-violet-600" />
+        <h1 className="text-xl font-bold text-gray-900">프로그램 관리</h1>
+        {data && (
+          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${data.published ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-500 border-gray-200'}`}>
+            {data.published ? '게시 중 — 보호자앱 노출' : '비공개 (초안)'}
+          </span>
+        )}
+        <div className="ml-auto flex gap-1.5">
+          {tab === 'schedule' && isKakaoShareEnabled() && (
+            <button onClick={openShare}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#FEE500] hover:brightness-95 text-[#3A1D1D] text-sm font-bold">
+              <MessageCircle size={13} /> 오늘 프로그램 공유
+            </button>
+          )}
+          <button onClick={() => schRef.current?.click()} disabled={busy === 'sch'}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-sm font-bold disabled:opacity-50">
+            {busy === 'sch' ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />} 일정표 엑셀 업로드
+          </button>
+          {tab === 'schedule' && (
+            <button onClick={saveAll} disabled={!dirty || saving}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold ${dirty ? 'bg-violet-600 hover:bg-violet-700 text-white' : 'border border-gray-200 text-gray-300'}`}>
+              {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} 저장{dirty ? ` (${Object.keys(draft).length}일)` : ''}
+            </button>
+          )}
+          {tab === 'schedule' && (
+            <button onClick={() => { setTimesDraft(times); setNewStart(''); setNewEnd(''); setNewCats(new Set()); setTimesOpen(true) }}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-gray-500 text-sm font-semibold hover:bg-gray-50">
+              <Clock3 size={13} /> 시간 관리
+            </button>
+          )}
+          {tab === 'schedule' && data && (
+            <button onClick={() => window.print()}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-gray-500 text-sm font-semibold hover:bg-gray-50">
+              <Printer size={13} /> 출력
+            </button>
+          )}
+          <button onClick={tab === 'groups' ? openGrpLogs : openHist}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-gray-500 text-sm font-semibold hover:bg-gray-50">
+            <History size={13} /> 이력
+          </button>
+          {data && (
+            <button onClick={togglePublish}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold ${data.published ? 'border border-gray-200 text-gray-500 hover:bg-gray-50' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}>
+              {data.published ? <><EyeOff size={13} /> 게시 내리기</> : <><Eye size={13} /> 게시</>}
+            </button>
+          )}
+        </div>
+      </div>
+      <p className="text-xs text-gray-400 mb-3">
+        쓰시던 엑셀 그대로 올리면 됩니다 — 최근 월 시트를 자동으로 읽습니다 · 게시해야 보호자앱에 보여요
+      </p>
+
+      {/* 탭 — 일정표(게시 대상) / 그룹 분류(내부용) */}
+      <div className="flex gap-1.5 mb-3">
+        {([['schedule', '월간 일정표'], ['groups', '그룹 분류 (내부용)']] as const).map(([v, label]) => (
+          <button key={v} onClick={() => setTab(v)}
+            className={`px-4 py-2 rounded-xl text-sm font-bold border transition-all ${tab === v ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-gray-500 border-gray-200'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <style>{`@media print {
+        @page { size: A4 landscape; margin: 7mm; }
+        body * { visibility: hidden; }
+        #pg-sheet, #pg-sheet * { visibility: visible; }
+        #pg-sheet { position: absolute; left: 0; top: 0; width: 100%; display: block !important; }
+        #pg-sheet * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      }`}</style>
+
+      {tab === 'schedule' && <div>
+      {/* 월 이동 */}
+      <div className="flex items-center justify-center gap-3 mb-3">
+        <button onClick={() => move(-1)} className="p-2 rounded-xl border border-gray-200 text-gray-500 print:hidden">‹</button>
+        <span className="text-base font-bold text-gray-800">{y}년 {m}월</span>
+        <button onClick={() => move(1)} className="p-2 rounded-xl border border-gray-200 text-gray-500 print:hidden">›</button>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-16"><Loader2 className="animate-spin text-gray-300" /></div>
+      ) : !data ? (
+        <div className="text-center py-16 text-gray-400 bg-white rounded-2xl border border-gray-100">
+          <p className="text-sm">{m}월 일정표가 아직 없습니다 — 「일정표 엑셀 업로드」로 시작하세요.</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="grid grid-cols-7 border-b border-gray-100">
+            {DOW.map((d, i) => (
+              <div key={d} className={`py-2 text-center text-xs font-bold ${i === 0 ? 'text-red-500' : i === 6 ? 'text-blue-500' : 'text-gray-500'}`}>{d}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7">
+            {cells.map((day, i) => (
+              <div key={i}
+                onClick={day !== null ? () => setEditDay({ day, entries: dayEntries(day).map(e => ({ ...e })) }) : undefined}
+                title={day !== null ? '클릭해서 이날 프로그램 수정' : undefined}
+                className={`min-h-[92px] border-b border-r border-gray-50 p-1.5 ${day === null ? 'bg-gray-50/50' : 'cursor-pointer hover:bg-violet-50/40'}`}>
+                {day !== null && (
+                  <>
+                    <p className={`text-[11px] font-bold mb-1 ${i % 7 === 0 ? 'text-red-500' : i % 7 === 6 ? 'text-blue-500' : 'text-gray-600'}`}>{day}</p>
+                    <div className="space-y-0.5">
+                      {dayEntries(day).filter(e => e.kind !== '교육').map((e: ProgramEntry, j: number) => (
+                        <div key={j} className={`text-[10px] leading-tight px-1 py-0.5 rounded border ${groupCls(e.group)}`}>
+                          {e.time && <b className="mr-0.5">{e.time}</b>}{e.group && <b>[{e.group}]</b>} {e.title}
+                          {e.kind === '자체' && <span className="text-red-500 font-bold"> ♥</span>}
+                        </div>
+                      ))}
+                      {dayEntries(day).filter(e => e.kind === '교육').map((e: ProgramEntry, j: number) => (
+                        <div key={`edu${j}`} className="text-[10px] leading-tight px-1 py-0.5 rounded border bg-pink-50 text-pink-700 border-pink-200 font-semibold">
+                          {e.time && <b className="mr-0.5">{e.time}</b>}📖 {e.title}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ───────── 인쇄 전용 시트 (화면에는 안 보임) ───────── */}
+      {data && (() => {
+        const weeks: (number | null)[][] = []
+        const all = [...cells]
+        while (all.length % 7 !== 0) all.push(null)
+        for (let i = 0; i < all.length; i += 7) weeks.push(all.slice(i, i + 7))
+        const chipStyle = (g: string | null): React.CSSProperties => {
+          if (!g) return { background: '#f8fafc', color: '#475569', borderColor: '#e2e8f0' }
+          if (g.startsWith('인지')) return { background: '#f3e8ff', color: '#6d28d9', borderColor: '#e9d5ff' }
+          if (g.startsWith('여가')) return { background: '#e0f2fe', color: '#0369a1', borderColor: '#bae6fd' }
+          if (g.startsWith('신체')) return { background: '#dcfce7', color: '#15803d', borderColor: '#bbf7d0' }
+          return { background: '#fef3c7', color: '#b45309', borderColor: '#fde68a' }
+        }
+        return (
+          <div id="pg-sheet" className="hidden bg-white" style={{ fontFamily: 'inherit' }}>
+            {/* 머리글 */}
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', borderBottom: '3px solid #7c3aed', paddingBottom: '6px', marginBottom: '8px' }}>
+              <div>
+                <p style={{ fontSize: '10px', fontWeight: 800, color: '#7c3aed', letterSpacing: '0.2em', margin: 0 }}>행복한요양원 · 어르신과 함께하는 한 달</p>
+                <h1 style={{ fontSize: '24px', fontWeight: 900, color: '#1f2937', margin: '2px 0 0' }}>{y}년 {m}월 프로그램 계획표</h1>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', fontSize: '9px', color: '#4b5563', alignItems: 'center' }}>
+                <span><span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: '#f3e8ff', border: '1px solid #d8b4fe', marginRight: 3, verticalAlign: 'middle' }} />인지</span>
+                <span><span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: '#e0f2fe', border: '1px solid #7dd3fc', marginRight: 3, verticalAlign: 'middle' }} />여가</span>
+                <span><span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: '#dcfce7', border: '1px solid #86efac', marginRight: 3, verticalAlign: 'middle' }} />신체</span>
+                <span><span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: '#fce7f3', border: '1px solid #f9a8d4', marginRight: 3, verticalAlign: 'middle' }} />의무교육</span>
+                <span style={{ color: '#dc2626', fontWeight: 800 }}>♥ <span style={{ color: '#4b5563', fontWeight: 400 }}>자체 프로그램</span></span>
+              </div>
+            </div>
+            {/* 달력 표 */}
+            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+              <thead>
+                <tr>
+                  {DOW.map((d, i) => (
+                    <th key={d} style={{
+                      padding: '4px 0', fontSize: '11px', fontWeight: 800, border: '1px solid #e5e7eb',
+                      background: i === 0 ? '#fef2f2' : i === 6 ? '#eff6ff' : '#faf5ff',
+                      color: i === 0 ? '#dc2626' : i === 6 ? '#2563eb' : '#6d28d9',
+                    }}>{d}요일</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {weeks.map((wk, wi) => (
+                  <tr key={wi}>
+                    {wk.map((day, di) => (
+                      <td key={di} style={{
+                        border: '1px solid #e5e7eb', verticalAlign: 'top', padding: '3px 4px',
+                        height: `${Math.max(24, Math.floor(150 / weeks.length))}mm`,
+                        background: day === null ? '#fafafa' : 'white',
+                      }}>
+                        {day !== null && (
+                          <>
+                            <p style={{
+                              fontSize: '13px', fontWeight: 900, margin: '0 0 3px',
+                              color: di === 0 ? '#dc2626' : di === 6 ? '#2563eb' : '#374151',
+                            }}>{day}</p>
+                            {dayEntries(day).filter(e2 => e2.kind !== '교육').map((e2, j) => (
+                              <div key={j} style={{
+                                fontSize: '8.5px', lineHeight: 1.35, padding: '2px 4px', borderRadius: 4,
+                                border: '1px solid', marginBottom: 2, ...chipStyle(e2.group),
+                              }}>
+                                {e2.time && <b style={{ marginRight: 2 }}>{e2.time}</b>}
+                                {e2.group && <b>[{e2.group}]</b>} {e2.title}
+                                {e2.kind === '자체' && <span style={{ color: '#dc2626', fontWeight: 800 }}> ♥</span>}
+                              </div>
+                            ))}
+                            {dayEntries(day).filter(e2 => e2.kind === '교육').map((e2, j) => (
+                              <div key={`e${j}`} style={{
+                                fontSize: '8.5px', lineHeight: 1.35, padding: '2px 4px', borderRadius: 4,
+                                border: '1px solid #f9a8d4', background: '#fce7f3', color: '#be185d',
+                                fontWeight: 700, marginBottom: 2,
+                              }}>
+                                📖 {e2.title}
+                              </div>
+                            ))}
+                          </>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {/* 안내 푸터 */}
+            {(data.notes ?? []).length > 0 && (
+              <div style={{ marginTop: '6px', padding: '6px 10px', background: '#faf5ff', border: '1px solid #ede9fe', borderRadius: 8, columnCount: 2, columnGap: '18px' }}>
+                {(data.notes ?? []).map((n, i2) => (
+                  <p key={i2} style={{ fontSize: '8.5px', color: '#4b5563', margin: '0 0 2px', breakInside: 'avoid' }}>{n}</p>
+                ))}
+              </div>
+            )}
+            <p style={{ fontSize: '8px', color: '#9ca3af', textAlign: 'right', margin: '4px 2px 0' }}>
+              ※ 프로그램은 요양원 사정·기후에 따라 변경될 수 있습니다 · 행복한요양원
+            </p>
+          </div>
+        )
+      })()}
+
+      {data && (
+        <p className="mt-2 text-[11px] text-gray-400 flex items-center gap-3">
+          <span><span className="inline-block w-2.5 h-2.5 rounded-sm bg-pink-200 mr-1 align-middle" />분홍 = 의무교육</span>
+          <span><span className="text-red-500 font-bold">♥</span> = 자체 프로그램 (외부강사 아님)</span>
+        </p>
+      )}
+
+      {/* 운영 규칙 안내 — 엑셀 오른쪽 메모가 그대로 들어온다 */}
+      {data && (
+        <div className="mt-4 bg-violet-50/50 border border-violet-100 rounded-2xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <h2 className="text-sm font-bold text-violet-800">운영 규칙 안내</h2>
+            <button onClick={() => setNotesEdit((data.notes ?? []).join('\n'))}
+              className="ml-auto text-[11px] font-semibold text-violet-500 hover:underline print:hidden">수정</button>
+          </div>
+          {(data.notes ?? []).length === 0
+            ? <p className="text-xs text-gray-400">안내 없음 — 수정을 눌러 적을 수 있어요</p>
+            : <ul className="space-y-0.5">{(data.notes ?? []).map((n, i) => (
+                <li key={i} className="text-xs text-gray-600 leading-relaxed">{n}</li>
+              ))}</ul>}
+        </div>
+      )}
+      </div>}
+
+      {shareOpen && (() => {
+        const list = todayEntries2()
+        const now4 = new Date()
+        return (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setShareOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[88vh] overflow-y-auto p-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-1">
+              <MessageCircle size={15} className="text-[#3A1D1D]" />
+              <h3 className="text-sm font-bold text-gray-800">오늘 프로그램 카톡 공유 <span className="font-normal text-gray-400">— {now4.getMonth() + 1}월 {now4.getDate()}일</span></h3>
+              <button onClick={() => setShareOpen(false)} className="ml-auto text-gray-300"><X size={16} /></button>
+            </div>
+            {list.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-8">오늘 등록된 프로그램이 없습니다.</p>
+            ) : (
+              <>
+                <p className="text-[11px] text-gray-400 mb-2">공유할 프로그램을 고르세요.</p>
+                <div className="space-y-1.5 mb-3">
+                  {list.map((e, i) => (
+                    <button key={i} type="button"
+                      onClick={() => { setSharePick(i); setShareMsg(shareTemplate(e)) }}
+                      className={`w-full text-left px-3 py-2.5 rounded-xl border text-sm font-semibold flex items-center gap-2 ${
+                        sharePick === i ? 'border-violet-400 bg-violet-50 text-violet-800' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                      <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border ${groupCls(e.group)}`}>{e.slot}</span>
+                      {e.group && <b>[{e.group}]</b>} {e.title}
+                      {e.time && <span className="ml-auto text-xs text-gray-400">{e.time}</span>}
+                    </button>
+                  ))}
+                </div>
+                {sharePick >= 0 && (
+                  <>
+                    <p className="text-[11px] font-bold text-gray-500 mb-1">보낼 내용 <span className="font-normal text-gray-400">— 고쳐도 됩니다</span></p>
+                    <textarea value={shareMsg} onChange={e => setShareMsg(e.target.value)} rows={5}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl leading-relaxed mb-2" />
+                    {(() => {
+                      const roster = rosterOf(list[sharePick]?.group ?? null)
+                      const n = roster.reduce((a, f) => a + f.names.length, 0)
+                      return roster.length > 0 ? (
+                        <div className="mb-3 px-3 py-2 rounded-xl bg-gray-50 border border-gray-100">
+                          <p className="text-[11px] font-bold text-gray-500 mb-1">함께 보낼 명단 사진 미리보기 <span className="font-normal text-gray-400">{n}명</span></p>
+                          {roster.map(f => (
+                            <p key={f.floor} className="text-[11px] text-gray-600"><b>{f.floor}</b> {f.names.join(' · ')}</p>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mb-3 text-[11px] text-amber-600">이 그룹의 어르신 명단이 없습니다 — 수급자 관리에서 그룹을 지정하면 명단 사진도 함께 보낼 수 있어요.</p>
+                      )
+                    })()}
+                    <div className="flex gap-1.5">
+                      <button onClick={doShareText}
+                        className="flex-1 py-2.5 rounded-xl bg-[#FEE500] text-[#3A1D1D] text-sm font-bold hover:brightness-95 inline-flex items-center justify-center gap-1.5">
+                        <MessageCircle size={14} /> 카톡으로 글 공유
+                      </button>
+                      <button onClick={() => downloadProgramRoster(list[sharePick])}
+                        disabled={shareBusy || rosterOf(list[sharePick]?.group ?? null).length === 0}
+                        className="flex-1 py-2.5 rounded-xl border-2 border-gray-700 text-gray-800 text-sm font-bold disabled:opacity-40 inline-flex items-center justify-center gap-1.5">
+                        {shareBusy ? <Loader2 size={14} className="animate-spin" /> : <><Download size={14} /> 명단 사진 저장</>}
+                      </button>
+                    </div>
+                    <p className="mt-1.5 text-[10px] text-gray-400">저장한 명단 사진은 카톡방에 직접 첨부해서 올려주세요</p>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+        )
+      })()}
+
+      {pendFile && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setPendFile(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-1">
+              <Upload size={15} className="text-violet-500" />
+              <h3 className="text-sm font-bold text-gray-800">어느 달을 가져올까요?</h3>
+              <button onClick={() => setPendFile(null)} className="ml-auto text-gray-300"><X size={16} /></button>
+            </div>
+            <p className="text-[11px] text-gray-400 mb-3">엑셀 하단 탭에서 찾은 달입니다 — 여러 달을 한 번에 가져올 수 있어요. 이미 있는 달은 덮어씁니다.</p>
+            <div className="grid grid-cols-3 gap-1.5 max-h-64 overflow-y-auto mb-3">
+              {availMonths.map(mm => {
+                const on = pickMonths.has(mm)
+                return (
+                  <button key={mm} type="button"
+                    onClick={() => setPickMonths(p => { const n = new Set(p); if (n.has(mm)) n.delete(mm); else n.add(mm); return n })}
+                    className={`px-2 py-2 rounded-xl text-sm font-bold border ${on ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}>
+                    {mm.slice(2, 4)}년 {Number(mm.slice(5, 7))}월
+                  </button>
+                )
+              })}
+            </div>
+            <button onClick={doImport} disabled={pickMonths.size === 0 || busy === 'sch'}
+              className="w-full py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-sm font-bold disabled:opacity-50">
+              {busy === 'sch' ? <Loader2 size={14} className="animate-spin mx-auto" /> : `${pickMonths.size}개 달 가져오기`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {timesOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setTimesOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-1">
+              <Clock3 size={15} className="text-violet-500" />
+              <h3 className="text-sm font-bold text-gray-800">프로그램 진행 시간 관리</h3>
+              <button onClick={() => setTimesOpen(false)} className="ml-auto text-gray-300"><X size={16} /></button>
+            </div>
+            <p className="text-[11px] text-gray-400 mb-3">
+              인지·여가·신체를 고르고 추가하면 그 그룹의 <b>기본 시간</b>이 됩니다(여러 개 고르면 한 번에 등록). 아무것도 안 고르면 일반 시간으로 목록에만 나옵니다. 시간은 몇 개든 추가할 수 있어요.
+            </p>
+            <ul className="space-y-1 mb-3">
+              {timesDraft.map((t, i) => (
+                <li key={i} className="flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-100 bg-gray-50/50">
+                  <span className="text-sm font-semibold text-gray-700">{t.time}</span>
+                  {t.category && <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${CAT_BADGE[t.category] ?? 'bg-gray-100 text-gray-500'}`}>{t.category} 기본</span>}
+                  <button onClick={() => setTimesDraft(p => p.filter((_, xi) => xi !== i))}
+                    className="ml-auto text-gray-300 hover:text-red-500 p-1"><Trash2 size={13} /></button>
+                </li>
+              ))}
+              {timesDraft.length === 0 && <li className="text-xs text-gray-300 text-center py-3">등록된 시간이 없습니다</li>}
+            </ul>
+            <div className="flex items-center gap-1.5 mb-2">
+              <input type="time" value={newStart} onChange={e => setNewStart(e.target.value)}
+                className="flex-1 px-2 py-2 text-sm border border-gray-200 rounded-xl" />
+              <span className="text-gray-400 text-sm">~</span>
+              <input type="time" value={newEnd} onChange={e => setNewEnd(e.target.value)}
+                className="flex-1 px-2 py-2 text-sm border border-gray-200 rounded-xl" />
+            </div>
+            <div className="flex items-center gap-1.5 mb-3">
+              {['인지', '여가', '신체'].map(c => {
+                const on = newCats.has(c)
+                return (
+                  <button key={c} type="button"
+                    onClick={() => setNewCats(p => { const n = new Set(p); if (n.has(c)) n.delete(c); else n.add(c); return n })}
+                    className={`flex-1 py-1.5 rounded-xl text-xs font-bold border ${on ? `${CAT_BADGE[c]} border-transparent` : 'text-gray-400 border-gray-200'}`}>
+                    {c}{on && ' ✓'}
+                  </button>
+                )
+              })}
+              <button type="button" disabled={!newStart || !newEnd}
+                onClick={() => {
+                  const t = `${newStart}~${newEnd}`
+                  const cats: (string | null)[] = newCats.size === 0 ? [null] : [...newCats]
+                  setTimesDraft(p => {
+                    let next = [...p]
+                    for (const c of cats) {
+                      // 같은 (시간, 카테고리) 중복 제거 + 카테고리 기본 시간은 하나만
+                      next = next.filter(x => !(x.time === t && (x.category ?? null) === c))
+                      if (c) next = next.map(x => x.category === c ? { ...x, category: null } : x)
+                      next.push({ time: t, category: c })
+                    }
+                    return next.sort((a, b) => a.time.localeCompare(b.time) || String(a.category ?? '').localeCompare(String(b.category ?? '')))
+                  })
+                  setNewStart(''); setNewEnd(''); setNewCats(new Set())
+                }}
+                className="shrink-0 px-4 py-1.5 rounded-xl bg-violet-600 text-white text-sm font-bold disabled:opacity-40">
+                추가
+              </button>
+            </div>
+            <button onClick={async () => {
+              try { setTimes(await programAPI.saveTimes(timesDraft)); setTimesOpen(false) }
+              catch (e: any) { alert(e?.response?.data?.detail ?? '저장 실패') }
+            }} className="w-full py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-sm font-bold">저장</button>
+          </div>
+        </div>
+      )}
+
+      {tab === 'schedule' && notesEdit !== null && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setNotesEdit(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-bold text-gray-800 mb-2">운영 규칙 안내 수정 <span className="font-normal text-gray-400">— 한 줄에 하나씩</span></h3>
+            <textarea value={notesEdit} onChange={e => setNotesEdit(e.target.value)} rows={12}
+              className="w-full px-3 py-2 text-xs border border-gray-200 rounded-xl leading-relaxed" />
+            <button onClick={async () => {
+              try { await programAPI.editNotes(ym, notesEdit.split('\n')); setNotesEdit(null); load() }
+              catch (e: any) { alert(e?.response?.data?.detail ?? '저장 실패') }
+            }} className="mt-2 w-full py-2.5 rounded-xl bg-violet-600 text-white text-sm font-bold">저장</button>
+          </div>
+        </div>
+      )}
+
+      {/* 일자별 수정 */}
+      {editDay && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setEditDay(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[85vh] overflow-y-auto p-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-3">
+              <h3 className="text-sm font-bold text-gray-800">{m}월 {editDay.day}일 프로그램 수정</h3>
+              <button onClick={() => setEditDay(null)} className="ml-auto text-gray-300"><X size={16} /></button>
+            </div>
+            <div className="space-y-1.5">
+              {editDay.entries.map((e, i) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <select value={e.slot}
+                    onChange={ev => setEditDay(p => p && { ...p, entries: p.entries.map((x, xi) => xi === i ? { ...x, slot: ev.target.value as '오전' | '오후' } : x) })}
+                    className="w-16 px-1.5 py-2 text-xs border border-gray-200 rounded-lg">
+                    <option>오전</option><option>오후</option>
+                  </select>
+                  <select value={e.time ?? ''}
+                    onChange={ev => setEditDay(p => p && { ...p, entries: p.entries.map((x, xi) => xi === i ? { ...x, time: ev.target.value || null } : x) })}
+                    className="w-[7rem] px-1 py-2 text-xs border border-gray-200 rounded-lg" title="진행 시간 — 「시간 관리」에서 등록">
+                    <option value="">시간 없음</option>
+                    {(() => {
+                      const m2 = new Map<string, string[]>()
+                      times.forEach(t => { m2.set(t.time, [...(m2.get(t.time) ?? []), ...(t.category ? [t.category] : [])]) })
+                      const opts = [...m2.entries()].map(([v, cats]) => ({ v, label: cats.length ? `${v} (${cats.join('·')})` : v }))
+                      if (e.time && !m2.has(e.time)) opts.unshift({ v: e.time, label: e.time })
+                      return opts.map(x2 => <option key={x2.v} value={x2.v}>{x2.label}</option>)
+                    })()}
+                  </select>
+                  <input value={e.group ?? ''} placeholder="그룹"
+                    list="pg-groups"
+                    onChange={ev => setEditDay(p => p && { ...p, entries: p.entries.map((x, xi) => {
+                      if (xi !== i) return x
+                      const g = ev.target.value || null
+                      // 그룹을 고르면 그 카테고리 기본 시간을 자동으로 — 이미 시간을 골랐다면 그대로 둔다
+                      return { ...x, group: g, time: x.time || defaultTimeFor(g) }
+                    }) })}
+                    className="w-20 px-2 py-2 text-xs border border-gray-200 rounded-lg" />
+                  <input value={e.title} placeholder="프로그램명"
+                    onChange={ev => setEditDay(p => p && { ...p, entries: p.entries.map((x, xi) => xi === i ? { ...x, title: ev.target.value } : x) })}
+                    className="flex-1 px-2 py-2 text-xs border border-gray-200 rounded-lg" />
+                  <button type="button"
+                    onClick={() => setEditDay(p => p && { ...p, entries: p.entries.map((x, xi) => xi === i ? { ...x, kind: x.kind === '교육' ? '자체' : x.kind === '자체' ? null : '교육' } : x) })}
+                    className={`shrink-0 text-[10px] font-bold px-1.5 py-1.5 rounded-lg border ${
+                      e.kind === '교육' ? 'bg-pink-50 text-pink-700 border-pink-300'
+                      : e.kind === '자체' ? 'bg-red-50 text-red-600 border-red-200'
+                      : 'text-gray-300 border-gray-200'}`}
+                    title="누를 때마다 일반 → 교육 → 자체♥ 순환">
+                    {e.kind === '자체' ? '자체♥' : '교육'}</button>
+                  <button onClick={() => setEditDay(p => p && { ...p, entries: p.entries.filter((_, xi) => xi !== i) })}
+                    className="text-gray-300 hover:text-red-500 p-1"><Trash2 size={13} /></button>
+                </div>
+              ))}
+              <datalist id="pg-groups">
+                {['인지A', '인지B', '인지C', '여가A', '여가B', '여가C', '신체A', '신체B', '신체C', '기독교', '천주교', '자원봉사', '사회적응'].map(g => <option key={g} value={g} />)}
+              </datalist>
+              <button onClick={() => setEditDay(p => p && { ...p, entries: [...p.entries, { slot: '오후', group: null, title: '' }] })}
+                className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-dashed border-violet-300 bg-violet-50/50 text-violet-700 text-sm font-bold hover:bg-violet-50">
+                <Plus size={14} /> 프로그램 추가
+              </button>
+            </div>
+            <button onClick={applyDay}
+              className="mt-3 w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-sm font-bold">
+              적용 — 상단 「저장」을 눌러야 최종 저장됩니다
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 변경 이력 */}
+      {histOpen && (
+        <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={() => setHistOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[80vh] overflow-y-auto p-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-3">
+              <History size={15} className="text-gray-500" />
+              <h2 className="text-sm font-bold text-gray-800">{m}월 프로그램 변경 이력</h2>
+              <button onClick={() => setHistOpen(false)} className="ml-auto text-gray-300"><X size={16} /></button>
+            </div>
+            {logs === null ? (
+              <div className="flex justify-center py-8"><Loader2 className="animate-spin text-gray-300" size={16} /></div>
+            ) : logs.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-8">이력이 없습니다.</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {logs.map(l => (
+                  <li key={l.id} className="text-xs text-gray-600 border-b border-gray-50 pb-1.5">
+                    <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded mr-1 ${
+                      l.action === '수정' ? 'bg-violet-50 text-violet-700' : l.action === '업로드' ? 'bg-sky-50 text-sky-700' : 'bg-gray-100 text-gray-500'}`}>{l.action}{l.day ? ` ${Number(l.day)}일` : ''}</span>
+                    {l.summary}
+                    <span className="block text-[10px] text-gray-300">
+                      {l.changed_by ?? ''} · {l.at ? new Date(l.at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 분류(그룹·종교) 변경 이력 */}
+      {grpLogsOpen && (
+        <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={() => setGrpLogsOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[80vh] overflow-y-auto p-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-3">
+              <History size={15} className="text-gray-500" />
+              <h2 className="text-sm font-bold text-gray-800">그룹 · 종교 변경 이력</h2>
+              <button onClick={() => setGrpLogsOpen(false)} className="ml-auto text-gray-300"><X size={16} /></button>
+            </div>
+            {grpLogs === null ? (
+              <div className="flex justify-center py-8"><Loader2 className="animate-spin text-gray-300" size={16} /></div>
+            ) : grpLogs.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-8">이력이 없습니다 — 수급자 관리에서 그룹·종교를 바꾸면 여기에 남습니다.</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {grpLogs.map(l => {
+                  const FIELD_CLS: Record<string, string> = {
+                    인지: 'bg-violet-50 text-violet-700', 여가: 'bg-sky-50 text-sky-700',
+                    신체: 'bg-emerald-50 text-emerald-700', 종교: 'bg-amber-50 text-amber-700',
+                  }
+                  const fmt = (v: string | null) => v ?? '미지정'
+                  return (
+                    <li key={l.id} className="text-xs text-gray-600 border-b border-gray-50 pb-1.5">
+                      <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded mr-1 ${FIELD_CLS[l.field] ?? 'bg-gray-100 text-gray-500'}`}>{l.field}</span>
+                      <b>{l.resident_name}</b> — {fmt(l.before)} <span className="text-gray-300">→</span> <b>{fmt(l.after)}</b>
+                      <span className="block text-[10px] text-gray-300">
+                        {l.changed_by ?? ''} · {l.at ? new Date(l.at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 그룹 분류 (내부용) */}
+      {tab === 'groups' && (() => {
+        const act = residents.filter(r0 => r0.status === 'active')
+        const CATS = [
+          ['인지', 'group_cognitive', 'bg-violet-50 text-violet-700 border-violet-200'],
+          ['여가', 'group_leisure', 'bg-sky-50 text-sky-700 border-sky-200'],
+          ['신체', 'group_physical', 'bg-emerald-50 text-emerald-700 border-emerald-200'],
+        ] as const
+        const byKo = (a: any, b: any) => String(a.name).localeCompare(String(b.name), 'ko')
+        const floorLabel = (r0: any) => r0.floor || '층 미지정'
+        const REL_META: Record<string, { emoji: string; cls: string }> = {
+          기독교: { emoji: '✝️', cls: 'bg-sky-50 border-sky-200 text-sky-800' },
+          천주교: { emoji: '📿', cls: 'bg-indigo-50 border-indigo-200 text-indigo-800' },
+          불교: { emoji: '🪷', cls: 'bg-orange-50 border-orange-200 text-orange-800' },
+          원불교: { emoji: '⭕', cls: 'bg-stone-50 border-stone-200 text-stone-700' },
+          무교: { emoji: '🕊️', cls: 'bg-gray-50 border-gray-200 text-gray-600' },
+          기타: { emoji: '🔖', cls: 'bg-gray-50 border-gray-200 text-gray-600' },
+        }
+        const relMap = new Map<string, any[]>()
+        act.forEach(r0 => { if (r0.religion) relMap.set(r0.religion, [...(relMap.get(r0.religion) ?? []), r0]) })
+        const relOrder = ['기독교', '천주교', '불교', '원불교', '무교', '기타']
+        const rels = [...relMap.entries()].sort((a, b) => {
+          const ia = relOrder.indexOf(a[0]); const ib = relOrder.indexOf(b[0])
+          return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib)
+        })
+        const anyData = act.some(r0 => r0.religion || r0.group_cognitive || r0.group_leisure || r0.group_physical)
+        return (
+        <div className="mt-4 bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
+            <Users size={15} className="text-teal-600" />
+            <h2 className="text-sm font-bold text-gray-800">수급자 등록 기준 <span className="font-normal text-gray-400">— 수급자 관리에서 입력한 그룹·종교 (실시간)</span></h2>
+            <div className="ml-auto flex gap-1.5 flex-wrap">
+              {CATS.map(([c, key, cls]) => (
+                <span key={c} className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${cls}`}>
+                  {c} {act.filter(r0 => r0[key]).length}명
+                  <span className="font-semibold opacity-60"> / 미지정 {act.filter(r0 => !r0[key]).length}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+          {!anyData ? (
+            <p className="text-xs text-gray-400 text-center py-6">
+              아직 입력된 데이터가 없습니다 — 수급자 관리에서 어르신 수정을 열어 종교·그룹을 선택해주세요.
+            </p>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                {CATS.map(([c, key, cls]) => (
+                  <div key={c} className="space-y-1.5">
+                    {['A', 'B', 'C'].map(gr => {
+                      const mem = act.filter(r0 => r0[key] === gr).sort(byKo)
+                      if (mem.length === 0) return null
+                      const byFloor = new Map<string, any[]>()
+                      mem.forEach(r0 => { const f = floorLabel(r0); byFloor.set(f, [...(byFloor.get(f) ?? []), r0]) })
+                      const roster = [...byFloor.entries()].sort((a2, b2) => a2[0].localeCompare(b2[0]))
+                        .map(([floor, ms]) => ({ floor, names: ms.map((r0: any) => r0.name) }))
+                      return (
+                        <div key={gr} className={`rounded-xl border p-2.5 ${cls}`}>
+                          <div className="flex items-center mb-1">
+                            <p className="text-xs font-extrabold">{c} {gr}그룹 <span className="font-semibold opacity-70">{mem.length}명</span></p>
+                            <button onClick={() => downloadGroupRoster(`${({ 인지: '🧩', 여가: '🎨', 신체: '💪' } as Record<string, string>)[c] ?? '🌸'} ${c}${gr}그룹 어르신 명단`, ACCENT[c] ?? '#0284c7', roster)}
+                              title="명단 사진으로 저장" className="ml-auto opacity-40 hover:opacity-100 p-0.5"><Download size={12} /></button>
+                          </div>
+                          {[...byFloor.keys()].sort().map(f => (
+                            <div key={f} className="flex gap-1.5 items-start mb-0.5">
+                              <span className="shrink-0 text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-white/70">{f}</span>
+                              <p className="text-[11px] leading-relaxed flex-1">{byFloor.get(f)!.map(r0 => r0.name).join(' · ')}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ))}
+              </div>
+              {/* 종교 — 한눈에 들어오는 카드 */}
+              {rels.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-xs font-bold text-gray-500 mb-1.5">종교 활동</p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {rels.map(([name, mem]) => {
+                      const meta = REL_META[name] ?? REL_META.기타
+                      const byFl = new Map<string, string[]>()
+                      ;[...mem].sort(byKo).forEach((r0: any) => { const f = r0.floor || '층 미지정'; byFl.set(f, [...(byFl.get(f) ?? []), r0.name]) })
+                      const roster = [...byFl.entries()].sort((a2, b2) => a2[0].localeCompare(b2[0])).map(([floor, ns]) => ({ floor, names: ns }))
+                      return (
+                        <div key={name} className={`rounded-xl border p-2.5 ${meta.cls}`}>
+                          <div className="flex items-center mb-1">
+                            <p className="text-xs font-extrabold">
+                              <span className="text-base mr-1 align-middle">{meta.emoji}</span>
+                              {name} <span className="font-semibold opacity-70">{mem.length}명</span>
+                            </p>
+                            <button onClick={() => downloadGroupRoster(`${meta.emoji} ${name} 어르신 명단`, '#b45309', roster)}
+                              title="명단 사진으로 저장" className="ml-auto opacity-40 hover:opacity-100 p-0.5"><Download size={12} /></button>
+                          </div>
+                          <p className="text-[11px] leading-relaxed">{[...mem].sort(byKo).map((r0: any) => r0.name).join(' · ')}</p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+        )
+      })()}
+
+    </div>
+  )
+}

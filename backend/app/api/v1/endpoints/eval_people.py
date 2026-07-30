@@ -57,6 +57,8 @@ def create_ltc_resident(
         status = "pending" if (data.get("admission_date") or "")[:10] > _today else "active"
     r = LtcResident(**data, status=status)
     db.add(r)
+    _log_group_changes(db, r.name, {},
+                       {k: data.get(k) for k in GROUP_LOG_FIELDS}, _)
     db.commit()
     db.refresh(r)
 
@@ -123,18 +125,37 @@ def get_ltc_resident(rid: str, db: Session = Depends(get_db), _: User = Depends(
     return ApiResponse(success=True, data=LtcResidentOut.model_validate(r).model_dump())
 
 
+GROUP_LOG_FIELDS = {"group_cognitive": "인지", "group_leisure": "여가",
+                    "group_physical": "신체", "religion": "종교"}
+
+
+def _log_group_changes(db, name: str, before: dict, after: dict, who):
+    """그룹·종교가 실제로 바뀐 것만 이력으로 남긴다."""
+    from app.models.program import ProgramGroupLog
+    for key, label in GROUP_LOG_FIELDS.items():
+        b = (before.get(key) or None) or None
+        a = (after.get(key) or None) or None
+        if b != a:
+            db.add(ProgramGroupLog(resident_name=name, field=label,
+                                   before=b, after=a,
+                                   changed_by=getattr(who, "name", None)))
+
+
 @residents_router.patch("/{rid}", response_model=ApiResponse)
 def update_ltc_resident(
     rid: str,
     payload: LtcResidentUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     r = db.query(LtcResident).filter(LtcResident.id == rid).first()
     if not r:
         raise HTTPException(404, "Not found")
+    before = {k: getattr(r, k, None) for k in GROUP_LOG_FIELDS}
     for k, v in payload.model_dump(exclude_none=True).items():
         setattr(r, k, v)
+    _log_group_changes(db, r.name, before,
+                       {k: getattr(r, k, None) for k in GROUP_LOG_FIELDS}, current_user)
     db.commit()
     db.refresh(r)
     # 층 변경 시 연동된 서류현황에도 반영

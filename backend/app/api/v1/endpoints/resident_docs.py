@@ -104,8 +104,8 @@ def _require(current_user: User = Depends(get_current_user)) -> User:
     role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
     pos = getattr(current_user, "position", None)
     pos = pos.value if hasattr(pos, "value") else str(pos or "")
-    if role != "ADMIN" and pos not in ("사회복지사", "시설장"):
-        raise HTTPException(403, "어르신 서류 현황 권한이 없습니다. (관리자·사회복지사·시설장)")
+    if role != "ADMIN" and pos not in ("사회복지사", "시설장", "대표", "이사"):
+        raise HTTPException(403, "어르신 서류 현황 권한이 없습니다. (관리자·사회복지사·시설장·대표·이사)")
     return current_user
 
 

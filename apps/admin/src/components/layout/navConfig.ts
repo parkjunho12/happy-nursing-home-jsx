@@ -115,26 +115,42 @@ export function getNavConfig(
       showDashboard: true,
       sections: [
         {
-          label: '운영',
+          label: '어르신',
           items: [
-            { to: '/contacts', icon: MessageSquare, label: '상담 관리' },
             { to: '/eval/residents', icon: UserRound, label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined },
             { to: '/resident-docs', icon: ClipboardList, label: '어르신 서류현황' },
             { to: '/assignments', icon: Users, label: '담당 어르신 명단' },
+            { to: '/enteral', icon: Soup, label: '경관식 관리' },
+            { to: '/programs', icon: CalendarDays, label: '프로그램 관리' },
+          ],
+        },
+        {
+          label: '직원 · 근무',
+          items: [
             { to: '/eval/staff', icon: UserCog, label: '직원 관리', badge: activeStaff > 0 ? `${activeStaff}명` : undefined },
             { to: '/staff-hr', icon: FileText, label: '직원 상세' },
-            { to: '/staffing', icon: Users, label: '인력배치 시뮬레이터' },
-            { to: '/monthly-report', icon: BarChart3, label: '월간 운영 리포트' },
-            { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
-            { to: '/my-schedule', icon: CalendarDays, label: '내 근무표' },
             { to: '/work-schedule', icon: CalendarClock, label: '근무표' },
+            { to: '/my-schedule', icon: CalendarDays, label: '내 근무표' },
+            { to: '/staffing', icon: Users, label: '인력배치 시뮬레이터' },
+            { to: '/recruitment', icon: Briefcase, label: '채용 관리' },
+          ],
+        },
+        {
+          label: '일정 · 소통',
+          items: [
+            { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
+            { to: '/notices', icon: Bell, label: '내부 공지 관리' },
+            { to: '/facility-news', icon: Megaphone, label: '시설소식' },
+            { to: '/contacts', icon: MessageSquare, label: '상담 관리' },
+            { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
+          ],
+        },
+        {
+          label: '기록 · 안전',
+          items: [
             { to: '/handover', icon: ClipboardCheck, label: '인수인계 AI' },
             { to: '/incidents', icon: AlertTriangle, label: '낙상·사고 보고서' },
-            { to: '/facility-news', icon: Megaphone, label: '시설소식' },
-            { to: '/notices', icon: Bell, label: '내부 공지 관리' },
-            { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
-            { to: '/recruitment', icon: Briefcase, label: '채용 관리' },
-            { to: '/enteral', icon: Soup, label: '경관식 관리' },
+            { to: '/monthly-report', icon: BarChart3, label: '월간 운영 리포트' },
           ],
         },
         {
@@ -185,26 +201,42 @@ export function getNavConfig(
       showDashboard: true,
       sections: [
         {
-          label: '운영',
+          label: '어르신',
           items: [
-            { to: '/contacts', icon: MessageSquare, label: '상담 관리' },
             { to: '/eval/residents', icon: UserRound, label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined },
             { to: '/resident-docs', icon: ClipboardList, label: '어르신 서류현황' },
             { to: '/assignments', icon: Users, label: '담당 어르신 명단' },
+            { to: '/enteral', icon: Soup, label: '경관식 관리' },
+            { to: '/programs', icon: CalendarDays, label: '프로그램 관리' },
+          ],
+        },
+        {
+          label: '직원 · 근무',
+          items: [
             { to: '/eval/staff', icon: UserCog, label: '직원 관리', badge: activeStaff > 0 ? `${activeStaff}명` : undefined },
             { to: '/staff-hr', icon: FileText, label: '직원 상세' },
-            { to: '/staffing', icon: Users, label: '인력배치 시뮬레이터' },
-            { to: '/monthly-report', icon: BarChart3, label: '월간 운영 리포트' },
-            { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
-            { to: '/my-schedule', icon: CalendarDays, label: '내 근무표' },
             { to: '/work-schedule', icon: CalendarClock, label: '근무표' },
+            { to: '/my-schedule', icon: CalendarDays, label: '내 근무표' },
+            { to: '/staffing', icon: Users, label: '인력배치 시뮬레이터' },
+            { to: '/recruitment', icon: Briefcase, label: '채용 관리' },
+          ],
+        },
+        {
+          label: '일정 · 소통',
+          items: [
+            { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
+            { to: '/notices', icon: Bell, label: '내부 공지 관리' },
+            { to: '/facility-news', icon: Megaphone, label: '시설소식' },
+            { to: '/contacts', icon: MessageSquare, label: '상담 관리' },
+            { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
+          ],
+        },
+        {
+          label: '기록 · 안전',
+          items: [
             { to: '/handover', icon: ClipboardCheck, label: '인수인계 AI' },
             { to: '/incidents', icon: AlertTriangle, label: '낙상·사고 보고서' },
-            { to: '/facility-news', icon: Megaphone, label: '시설소식' },
-            { to: '/notices', icon: Bell, label: '내부 공지 관리' },
-            { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
-            { to: '/recruitment', icon: Briefcase, label: '채용 관리' },
-            { to: '/enteral', icon: Soup, label: '경관식 관리' },
+            { to: '/monthly-report', icon: BarChart3, label: '월간 운영 리포트' },
           ],
         },
         {
@@ -249,13 +281,19 @@ export function getNavConfig(
     { to: '/my-schedule', icon: CalendarDays, label: '내 근무표' },
   ]
   if (isSocialWorker) operItems.push(
+    { to: '/programs', icon: CalendarDays, label: '프로그램 관리' },
     { to: '/notices', icon: Bell, label: '내부 공지 관리' },
     { to: '/facility-news', icon: Megaphone, label: '시설소식' },
     { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
   )
   if (isManager) operItems.push(
+    { to: '/eval/residents', icon: UserRound, label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined },
+    { to: '/resident-docs', icon: ClipboardList, label: '어르신 서류현황' },
+    { to: '/assignments', icon: Users, label: '담당 어르신 명단' },
     { to: '/eval/staff', icon: UserCog, label: '직원 관리', badge: activeStaff > 0 ? `${activeStaff}명` : undefined },
     { to: '/staff-hr', icon: FileText, label: '직원 상세' },
+    { to: '/incidents', icon: AlertTriangle, label: '낙상·사고 보고서' },
+    { to: '/monthly-report', icon: BarChart3, label: '월간 운영 리포트' },
   )
   if (canEnteral) operItems.push({ to: '/enteral', icon: Soup, label: '경관식 관리' })
   const canHandover = ['사회복지사', '간호사', '간호조무사', '시설장'].includes(user?.position ?? '')

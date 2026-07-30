@@ -257,6 +257,10 @@ class LtcResident(Base):
     care_grade_start_date = Column(String(20), nullable=False)
     floor = Column(String(20), nullable=True, index=True)   # 어르신 생활 층
     room = Column(String(10), nullable=True, index=True)    # 호실 (예: 201) — 담당 명단의 뼈대
+    religion = Column(String(20), nullable=True)            # 종교 (기독교·천주교·불교·무교 등)
+    group_cognitive = Column(String(2), nullable=True)      # 인지 프로그램 그룹 A/B/C
+    group_leisure = Column(String(2), nullable=True)        # 여가 프로그램 그룹 A/B/C
+    group_physical = Column(String(2), nullable=True)       # 신체 프로그램 그룹 A/B/C
     status = Column(String(20), default="active", index=True)
     memo = Column(Text, default="")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
