@@ -45,6 +45,7 @@ export interface LifecycleEvent {
   kind: 'admission' | 'hire'
   name: string
   date: string          // YYYY-MM-DD
+  time?: string | null  // 입소 예정 시간 'HH:MM' — 없으면 미정
   gender?: string | null
   status?: string | null
 }

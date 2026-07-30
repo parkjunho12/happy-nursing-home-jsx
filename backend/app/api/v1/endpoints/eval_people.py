@@ -59,7 +59,6 @@ def create_ltc_resident(
     db.add(r)
     _log_group_changes(db, r.name, {},
                        {k: data.get(k) for k in GROUP_LOG_FIELDS}, _)
-    _sync_admission_event(db, r)
     db.commit()
     db.refresh(r)
 
@@ -130,42 +129,6 @@ GROUP_LOG_FIELDS = {"group_cognitive": "인지", "group_leisure": "여가",
                     "group_physical": "신체", "religion": "종교"}
 
 
-def _sync_admission_event(db, r):
-    """입소 예정자 → 일정 캘린더 '입소' 일정 자동 생성·갱신.
-    시간 미정은 00:00 저장 규약(달력에 '미정' 표시)을 따른다."""
-    import re as _re
-    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
-    from app.models.schedule import ScheduleEvent
-    title = f"{r.name} 어르신 입소"
-    ev = (db.query(ScheduleEvent)
-          .filter(ScheduleEvent.category == "입소", ScheduleEvent.title == title,
-                  ScheduleEvent.status == "scheduled").first())
-    if getattr(r, "status", None) != "pending":
-        return
-    d = (r.admission_date or "")[:10]
-    if not _re.match(r"^\d{4}-\d{2}-\d{2}$", d):
-        return
-    t = (getattr(r, "admission_time", None) or "").strip()
-    hh, mm = (int(t[:2]), int(t[3:5])) if _re.match(r"^\d{2}:\d{2}$", t) else (0, 0)
-    start = _dt(int(d[:4]), int(d[5:7]), int(d[8:10]), hh, mm,
-                tzinfo=_tz(_td(hours=9)))
-    if ev:
-        ev.start_at = start
-    else:
-        db.add(ScheduleEvent(category="입소", title=title, start_at=start,
-                             memo="입소 예정 등록에서 자동 생성", created_by="자동"))
-
-
-def _cancel_admission_event(db, r):
-    from app.models.schedule import ScheduleEvent
-    ev = (db.query(ScheduleEvent)
-          .filter(ScheduleEvent.category == "입소",
-                  ScheduleEvent.title == f"{r.name} 어르신 입소",
-                  ScheduleEvent.status == "scheduled").first())
-    if ev:
-        ev.status = "canceled"
-
-
 def _log_group_changes(db, name: str, before: dict, after: dict, who):
     """그룹·종교가 실제로 바뀐 것만 이력으로 남긴다."""
     from app.models.program import ProgramGroupLog
@@ -193,7 +156,6 @@ def update_ltc_resident(
         setattr(r, k, v)
     _log_group_changes(db, r.name, before,
                        {k: getattr(r, k, None) for k in GROUP_LOG_FIELDS}, current_user)
-    _sync_admission_event(db, r)
     db.commit()
     db.refresh(r)
     # 층 변경 시 연동된 서류현황에도 반영
@@ -241,9 +203,6 @@ def delete_ltc_resident(rid: str, db: Session = Depends(get_db), _: User = Depen
     r = db.query(LtcResident).filter(LtcResident.id == rid).first()
     if not r:
         raise HTTPException(404, "Not found")
-    if getattr(r, "status", None) == "pending":
-        _cancel_admission_event(db, r)   # 예정자 삭제 → 캘린더 입소 일정 취소
-
     from app.models.resident_docs import ResidentDocStatus
     from app.models.eval import ChecklistItem, ChecklistOccurrence, CompletionRecord
     try:
