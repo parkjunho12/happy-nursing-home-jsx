@@ -35,11 +35,12 @@ export const programAPI = {
   peekSchedule: (file: File) =>
     apiClient.post(`${BASE}/peek-schedule`, form(file), { headers: { 'Content-Type': undefined as any } })
       .then(unwrap<{ months: string[] }>).then(r => r.months),
-  uploadSchedule: (file: File, month?: string) => {
+  uploadSchedule: (file: File, month?: string, preview?: boolean) => {
     const f = form(file)
     if (month) f.append('month', month)
+    if (preview) f.append('preview', 'true')
     return apiClient.post(`${BASE}/upload-schedule`, f, { headers: { 'Content-Type': undefined as any } })
-      .then(unwrap<{ month: string; sheet: string; day_count: number; published: boolean }>)
+      .then(unwrap<{ month: string; sheet: string; day_count: number; published?: boolean; preview?: boolean; days?: Record<string, ProgramEntry[]>; notes?: string[] }>)
   },
   schedule: (month: string) =>
     apiClient.get(`${BASE}/schedule`, { params: { month } }).then(unwrap<ProgramMonthData | null>),

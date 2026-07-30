@@ -79,9 +79,10 @@ async def peek_schedule(file: UploadFile = File(...), _: User = Depends(_editor)
 
 @router.post("/upload-schedule")
 async def upload_schedule(file: UploadFile = File(...), month: Optional[str] = Form(None),
+                          preview: bool = Form(False),
                           db: Session = Depends(get_db),
                           current_user: User = Depends(_editor)):
-    """일정표 엑셀 업로드 — month('YYYY-MM') 시트를 파싱해 저장(없으면 최신 시트, 같은 달은 교체)."""
+    """일정표 엑셀 업로드 — preview=true면 저장 없이 파싱 결과만 돌려준다(「저장」 눌러야 반영)."""
     data = await file.read()
     from app.services.program_parser import parse_schedule_xlsx
     try:
@@ -99,6 +100,12 @@ async def upload_schedule(file: UploadFile = File(...), month: Optional[str] = F
                 cat = next((c for c in TIME_CATS if (e.get("group") or "").startswith(c)), None)
                 if cat and cat in defaults:
                     e["time"] = defaults[cat]
+    if preview:   # 화면 미리보기용 — DB에 아무것도 쓰지 않는다
+        return ApiResponse(success=True, data={
+            "month": parsed["month"], "sheet": parsed["sheet"],
+            "day_count": len(parsed["days"]), "preview": True,
+            "days": parsed["days"], "notes": parsed.get("notes") or [],
+        })
     row = db.query(ProgramMonth).filter(ProgramMonth.month == parsed["month"]).first()
     if not row:
         row = ProgramMonth(month=parsed["month"])
