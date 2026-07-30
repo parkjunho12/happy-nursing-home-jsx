@@ -64,9 +64,14 @@ export default function ProgramPage() {
   const [editDay, setEditDay] = useState<{ day: number; entries: ProgramEntry[] } | null>(null)
   const [saving, setSaving] = useState(false)
   const [draft, setDraft] = useState<Record<string, ProgramEntry[]>>({})   // day → entries
-  const dirty = Object.keys(draft).length > 0
+  // 엑셀 업로드 미리보기 — 「저장」을 눌러야 서버에 반영된다
+  const [upPreview, setUpPreview] = useState<Record<string, { days: Record<string, ProgramEntry[]>; notes: string[] }>>({})
+  const upPreviewRef = useRef(upPreview)
+  upPreviewRef.current = upPreview
+  const [commitFile, setCommitFile] = useState<File | null>(null)
+  const dirty = Object.keys(draft).length > 0 || Object.keys(upPreview).length > 0
   const dayEntries = (day: number): ProgramEntry[] =>
-    draft[String(day)] ?? data?.days[String(day)] ?? []
+    draft[String(day)] ?? upPreview[ym]?.days[String(day)] ?? data?.days[String(day)] ?? []
   // 변경 이력
   const [histOpen, setHistOpen] = useState(false)
   const [grpLogsOpen, setGrpLogsOpen] = useState(false)
@@ -82,10 +87,17 @@ export default function ProgramPage() {
     if (!dirty) return
     setSaving(true)
     try {
+      // 1) 업로드 미리보기 → 실제 저장
+      const months = Object.keys(upPreview).sort()
+      if (months.length > 0 && commitFile) {
+        for (const mm of months) await programAPI.uploadSchedule(commitFile, mm)
+      }
+      // 2) 일자별 수정 → 저장
       for (const [d, entries] of Object.entries(draft)) {
         await programAPI.editDay(ym, Number(d), entries)
       }
-      setDraft({}); load()
+      setDraft({}); setUpPreview({}); upPreviewRef.current = {}; setCommitFile(null)
+      load()
     } catch (e: any) { alert(e?.response?.data?.detail ?? '저장 실패') }
     finally { setSaving(false) }
   }
@@ -221,12 +233,16 @@ export default function ProgramPage() {
       programAPI.schedule(ym).catch(() => null),
       programAPI.times().catch(() => [] as ProgramTime[]),
       evalResidentsAPI.list().catch(() => []),
-    ]).then(([s, t, rs]) => { setData(s); setTimes(t); setResidents(rs) }).finally(() => setLoading(false))
+    ]).then(([s, t, rs]) => {
+      const pv = upPreviewRef.current[ym]
+      setData(pv ? { month: ym, days: pv.days, notes: pv.notes, published: s?.published ?? false } : s)
+      setTimes(t); setResidents(rs)
+    }).finally(() => setLoading(false))
   }
   useEffect(load, [ym])
 
   const move = (d: number) => {
-    if (dirty && !confirm('저장하지 않은 수정이 있습니다. 버리고 이동할까요?')) return
+    if (Object.keys(draft).length > 0 && !confirm('저장하지 않은 일자 수정이 있습니다. 버리고 이동할까요?')) return
     setDraft({})
     const [y, m] = ym.split('-').map(Number)
     const nd = new Date(y, m - 1 + d, 1)
@@ -250,15 +266,21 @@ export default function ProgramPage() {
     setBusy('sch')
     const done: string[] = []
     try {
+      const pv: typeof upPreview = { ...upPreview }
       for (const mm of [...pickMonths].sort()) {
-        const r = await programAPI.uploadSchedule(pendFile, mm)
+        const r = await programAPI.uploadSchedule(pendFile, mm, true)   // 미리보기 — 저장 안 함
+        pv[r.month] = { days: r.days ?? {}, notes: r.notes ?? [] }
         done.push(`${Number(r.month.slice(5, 7))}월 ${r.day_count}일치`)
       }
+      setUpPreview(pv); upPreviewRef.current = pv
+      setCommitFile(pendFile)
       const last = [...pickMonths].sort().pop()!
       setPendFile(null); setYm(last)
-      alert(`가져왔습니다 — ${done.join(', ')}.\n미리보기를 확인하고 「게시」를 눌러주세요.`)
+      const first = pv[last]
+      setData({ month: last, days: first.days, notes: first.notes, published: false })
+      alert(`화면에 불러왔습니다 — ${done.join(', ')}.\n내용 확인 후 상단 「저장」을 눌러야 실제로 반영됩니다.`)
     } catch (e: any) { alert(e?.response?.data?.detail ?? '업로드 실패') }
-    finally { setBusy(null); load() }
+    finally { setBusy(null) }
   }
 
   const togglePublish = async () => {
@@ -287,6 +309,11 @@ export default function ProgramPage() {
             {data.published ? '게시 중 — 보호자앱 노출' : '비공개 (초안)'}
           </span>
         )}
+        {upPreview[ym] && (
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full border bg-amber-50 text-amber-700 border-amber-200 animate-pulse">
+            저장 전 미리보기 — 「저장」을 눌러야 반영
+          </span>
+        )}
         <div className="ml-auto flex gap-1.5">
           {tab === 'schedule' && isKakaoShareEnabled() && (
             <button onClick={openShare}
@@ -301,7 +328,13 @@ export default function ProgramPage() {
           {tab === 'schedule' && (
             <button onClick={saveAll} disabled={!dirty || saving}
               className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold ${dirty ? 'bg-violet-600 hover:bg-violet-700 text-white' : 'border border-gray-200 text-gray-300'}`}>
-              {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} 저장{dirty ? ` (${Object.keys(draft).length}일)` : ''}
+              {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} 저장{(() => {
+                const parts: string[] = []
+                const um = Object.keys(upPreview).length
+                if (um) parts.push(`업로드 ${um}개월`)
+                if (Object.keys(draft).length) parts.push(`${Object.keys(draft).length}일`)
+                return parts.length ? ` (${parts.join(' + ')})` : ''
+              })()}
             </button>
           )}
           {tab === 'schedule' && (
