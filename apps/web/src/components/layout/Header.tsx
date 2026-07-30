@@ -8,8 +8,7 @@ import {
   Home, Building2, Sparkles, Wallet, MapPin, Map, TrainFront,
   Star, BookOpen, HeartHandshake, Images, MessageCircle,
   type LucideIcon,
-  Briefcase,
-} from 'lucide-react'
+  Briefcase, Youtube } from 'lucide-react'
 import { SITE_INFO } from '@/lib/constants'
 import Image from 'next/image'
 
@@ -42,6 +41,7 @@ const NAV: NavGroup[] = [
     children: [
       { href: '/reviews', label: '이용 후기', icon: Star, desc: '보호자님들의 이야기' },
       { href: '/blog', label: '블로그', icon: BookOpen, desc: '일상·소식' },
+      { href: '/videos', label: '영상', icon: Youtube, desc: '어르신 일상 영상' },
     ],
   },
   {
