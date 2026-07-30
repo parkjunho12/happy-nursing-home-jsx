@@ -10,6 +10,7 @@ import { ReviewsSection } from '@/components/home/ReviewsAndGallery'
 import { GallerySection } from '@/components/home/GallerySection'
 import AlbumPreviewSection from '@/components/home/AlbumPreviewSection'
 import LiveCareSection from '@/components/home/LiveCareSection'
+import LatestVideosSection from '@/components/home/LatestVideosSection'
 import ContactFormSection from '@/components/home/ContactFormSection'
 import YouTubeButton from '@/components/video/modal/YouTubeButton'
 
@@ -57,6 +58,9 @@ export default function HomePage() {
 
       {/* 보호자 앨범 안내 - Video Tour 바로 아래 (신뢰 강화) */}
       <AlbumPreviewSection />
+
+      {/* 최신 영상 캐러셀 — 유튜브 채널 자동 연동 */}
+      <LatestVideosSection />
 
       {/* Quick Contact Bar - 빠른 상담 접근 */}
       <QuickContact />
