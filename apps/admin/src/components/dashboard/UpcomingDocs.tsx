@@ -17,7 +17,7 @@ const dday = (iso: string) =>
 
 /** 서류 3종이 공유하는 행 */
 interface TaskRow { docId: string; idx: number; name: string; date: string; kind?: string | null; d: number; care?: string | null }
-interface CertRow { docId: string; name: string; end: string; due: string; d: number; expired: boolean; care?: string | null }
+interface CertRow { docId: string; name: string; end: string; due: string; d: number; expired: boolean; care?: string | null; upcoming?: boolean; dToDue?: number }
 
 type DocField = 'plan_lines' | 'contract_lines' | 'eval_lines'
 type TabKey = 'plan' | 'contract' | 'eval' | 'cert' | 'apply'
@@ -102,9 +102,19 @@ export default function UpcomingDocs() {
       if (st.status === 'renew' || st.status === 'expired') {
         out.push({ docId: r.id, name: r.name ?? '-', end: cur.end, due: renewalDue(cur.end),
                    d: dday(cur.end), expired: st.status === 'expired', care: deriveCare(r.certifications) })
+      } else if (st.status === 'ok') {
+        // 아직 90일 밖 — 갱신 기간 진입까지 45일 이내면 '준비' 줄로 미리 보여준다.
+        // 진입하고 나서 서두르는 것보다, 진입 전에 보호자 안내·서류 준비가 먼저다.
+        const dToDue = dday(renewalDue(cur.end))
+        if (dToDue >= 0 && dToDue <= 45) {
+          out.push({ docId: r.id, name: r.name ?? '-', end: cur.end, due: renewalDue(cur.end),
+                     d: dday(cur.end), expired: false, care: deriveCare(r.certifications),
+                     upcoming: true, dToDue })
+        }
       }
     })
-    return out.sort((a, b) => a.d - b.d)
+    // 만료·갱신 중이 먼저, 준비는 뒤에
+    return out.sort((a, b) => Number(!!a.upcoming) - Number(!!b.upcoming) || a.d - b.d)
   }, [rows])
 
   // 재가·등급외(신청예정) 어르신 중 확인일이 지났거나 확인일이 안 잡힌 분
@@ -249,14 +259,16 @@ export default function UpcomingDocs() {
             <p className="text-xs text-gray-400 text-center py-8">인정서 만료 90일 이내인 어르신이 없습니다 👍</p>
           ) : (
             <>
-              <p className="text-[10px] text-gray-400 px-1 pb-1.5">인정서 <b>만료 90일 이내</b> — 갱신 신청 대상</p>
+              <p className="text-[10px] text-gray-400 px-1 pb-1.5">색 배지 = <b>갱신 기간(만료 90일 이내)</b> · 회색 = 갱신 기간 진입까지 D-day (미리 준비)</p>
               <ul className="space-y-1 md:max-h-[220px] md:overflow-y-auto md:pr-0.5">
                 {certs.map(c => (
                   <li key={c.docId} onClick={() => navigate('/resident-docs')}
                     className="flex items-center gap-2.5 px-1.5 md:px-2.5 py-2 min-h-[44px] rounded-xl hover:bg-amber-50/60 cursor-pointer">
                     <span className={`w-12 shrink-0 text-center text-[11px] font-extrabold rounded-lg py-1 ${
-                      c.expired ? 'bg-red-500 text-white' : c.d <= 30 ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-700'}`}>
-                      {c.expired ? '만료' : `D-${c.d}`}
+                      c.expired ? 'bg-red-500 text-white'
+                      : c.upcoming ? 'bg-gray-100 text-gray-500'
+                      : c.d <= 30 ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-700'}`}>
+                      {c.expired ? '만료' : c.upcoming ? `D-${c.dToDue}` : `D-${c.d}`}
                     </span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-800 truncate flex items-center gap-1">
@@ -265,7 +277,9 @@ export default function UpcomingDocs() {
                       <p className="text-[10px] text-gray-400">
                         {c.expired
                           ? <span className="text-red-500 font-semibold">만료 지남 · {fmt(c.end)}</span>
-                          : <>만료 {fmt(c.end)} · 갱신기준일 {fmt(c.due)} 지남</>}
+                          : c.upcoming
+                            ? <>갱신 기간 진입 {fmt(c.due)} — <b className="text-gray-500">미리 준비</b> · 만료 {fmt(c.end)}</>
+                            : <>갱신 기간 — 만료 {fmt(c.end)}까지 D-{c.d}</>}
                       </p>
                     </div>
                   </li>
