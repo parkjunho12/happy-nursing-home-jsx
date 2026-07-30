@@ -29,11 +29,14 @@ export default function DocEventsEditor({ type, value, onChange, addLabel = '+ �
   const pastCount = items.filter(isPast).length
 
   const patch = (i: number, p: Partial<DocEvent>) => onChange(items.map((x, xi) => xi === i ? { ...x, ...p } : x))
-  // 새 행은 오늘 날짜로 '맨 위'에 — 끝에 빈 행으로 생기면 어디 생겼는지 못 찾는다
+  // 새 행은 오늘 날짜로, 리스트 전체를 날짜순 정렬한 자리에 끼워 넣는다 —
+  // 어디 생겼는지는 2초 하이라이트가 알려준다
   const [flashI, setFlashI] = useState<number | null>(null)
   const add = () => {
-    onChange([{ date: today, memo: '', kind: defaultAddKind ?? defaultKind(type) }, ...items])
-    setFlashI(0)
+    const item = { date: today, memo: '', kind: defaultAddKind ?? defaultKind(type) }
+    const next = [...items, item].sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'))
+    onChange(next)
+    setFlashI(next.indexOf(item))
     setTimeout(() => setFlashI(null), 2000)
   }
   const rm = (i: number) => onChange(items.filter((_, xi) => xi !== i))
