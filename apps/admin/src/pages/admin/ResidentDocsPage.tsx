@@ -656,19 +656,19 @@ function DocFormModal({ editing, residents = [], docByResident = new Map<string,
             <p className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 mb-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500" /> 계약서 일시
             </p>
-            <DocEventsEditor type="contract" value={f.contract_lines} onChange={v => setF({ ...f, contract_lines: v })} defaultAddKind="변경" addLabel="+ 변경(변화) 추가" />
+            <DocEventsEditor type="contract" value={f.contract_lines} onChange={v => setF({ ...f, contract_lines: v })} defaultAddKind="변경" addLabel="+ 일시 추가" />
           </div>
           <div className="rounded-xl border border-sky-100 bg-sky-50/40 p-3">
             <p className="flex items-center gap-1.5 text-xs font-bold text-sky-700 mb-2">
               <span className="w-2 h-2 rounded-full bg-sky-500" /> 급여제공계획서 일시
             </p>
-            <DocEventsEditor type="plan" value={f.plan_lines} onChange={v => setF({ ...f, plan_lines: v })} defaultAddKind="변화" addLabel="+ 변화 추가" />
+            <DocEventsEditor type="plan" value={f.plan_lines} onChange={v => setF({ ...f, plan_lines: v })} defaultAddKind="변화" addLabel="+ 일시 추가" />
           </div>
           <div className="rounded-xl border border-fuchsia-100 bg-fuchsia-50/40 p-3">
             <p className="flex items-center gap-1.5 text-xs font-bold text-fuchsia-700 mb-2">
               <span className="w-2 h-2 rounded-full bg-fuchsia-500" /> 급여제공 결과평가 일시
             </p>
-            <DocEventsEditor type="eval" value={f.eval_lines} onChange={v => setF({ ...f, eval_lines: v })} defaultAddKind="변화" addLabel="+ 변화 추가" />
+            <DocEventsEditor type="eval" value={f.eval_lines} onChange={v => setF({ ...f, eval_lines: v })} defaultAddKind="변화" addLabel="+ 일시 추가" />
           </div>
           <Sec n="4" t="상태" />
           <div className="flex items-center gap-2">
