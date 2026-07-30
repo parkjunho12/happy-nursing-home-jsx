@@ -411,3 +411,68 @@ def get_public_notice(nid: str, db: Session = Depends(get_db)):
         "author_name": n.author_name,
         "created_at": n.created_at.isoformat() if n.created_at else None,
     })
+
+
+@router.get("/care-status")
+def care_status(db: Session = Depends(get_db)):
+    """홈페이지 신뢰 신호 — 프로그램표·식단표가 계속 갱신되고 있다는 '메타데이터만' 공개.
+
+    상세 내용(메뉴·프로그램명·어르신 정보)은 절대 내보내지 않는다 — 건수·기간·갱신 시각뿐.
+    """
+    from app.models.program import ProgramMonth
+    from app.models.meal import MealWeek
+
+    program = None
+    pm = (db.query(ProgramMonth)
+          .filter(ProgramMonth.published == True)   # noqa: E712
+          .order_by(ProgramMonth.month.desc()).first())
+    if pm:
+        program = {
+            "month": pm.month,                       # 'YYYY-MM'
+            "day_count": len(pm.days or {}),
+            "updated_at": pm.updated_at.isoformat() if pm.updated_at else None,
+        }
+
+    meal = None
+    mw = db.query(MealWeek).order_by(MealWeek.start.desc()).first()
+    if mw:
+        meal = {
+            "week_start": mw.start, "week_end": mw.end,
+            "day_count": len(mw.days or {}),
+            "updated_at": mw.updated_at.isoformat() if mw.updated_at else None,
+        }
+
+    # ── '오늘의 한 조각' 티저 — 오늘 것 한두 개만 실데이터로, 나머지는 개수만 ──
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    today = _dt.now(_tz(_td(hours=9)))
+    today_iso = today.strftime("%Y-%m-%d")
+
+    program_today = None
+    pm_today = (db.query(ProgramMonth)
+                .filter(ProgramMonth.month == today_iso[:7],
+                        ProgramMonth.published == True).first())   # noqa: E712
+    if pm_today:
+        entries = (pm_today.days or {}).get(str(today.day)) or []
+        titled = [e for e in entries if (e.get("title") or "").strip()]
+        if titled:
+            picks = []
+            for e in titled[:2]:
+                cat = next((c for c in ("인지", "여가", "신체") if (e.get("group") or "").startswith(c)), None)
+                label = f"{cat} 활동 · {e['title']}" if cat else e["title"]
+                picks.append(f"{e.get('slot', '')} {label}".strip())
+            program_today = {"items": picks, "total": len(titled)}
+
+    meal_today = None
+    if mw and (mw.days or {}).get(today_iso):
+        d = mw.days[today_iso]
+        lunch = d.get("점심") or []
+        # [0]=밥/죽, [1]=국, [2]=메인 — 국·메인만 살짝, 반찬은 개수로
+        picks = [x for x in lunch[1:3] if x]
+        snack = (d.get("간식(오후)") or d.get("간식(오전)") or [None])[0]
+        if picks:
+            meal_today = {"lunch": picks, "side_count": max(0, len(lunch) - 3), "snack": snack}
+
+    return ApiResponse(success=True, data={
+        "program": program, "meal": meal,
+        "today": {"program": program_today, "meal": meal_today},
+    })
