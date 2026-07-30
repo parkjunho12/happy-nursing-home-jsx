@@ -9,6 +9,7 @@ import {
 import { ReviewsSection } from '@/components/home/ReviewsAndGallery'
 import { GallerySection } from '@/components/home/GallerySection'
 import AlbumPreviewSection from '@/components/home/AlbumPreviewSection'
+import LiveCareSection from '@/components/home/LiveCareSection'
 import ContactFormSection from '@/components/home/ContactFormSection'
 import YouTubeButton from '@/components/video/modal/YouTubeButton'
 
@@ -50,6 +51,9 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* 살아있는 일정 — 프로그램·식단이 계속 갱신되고 있다는 신뢰 신호 (상세는 비공개) */}
+      <LiveCareSection />
 
       {/* 보호자 앨범 안내 - Video Tour 바로 아래 (신뢰 강화) */}
       <AlbumPreviewSection />
