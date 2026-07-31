@@ -1,6 +1,7 @@
 import DateField from '@/components/ui/DateField'
 import StickyToolbar from '../../components/common/StickyToolbar'
 import { useState, useMemo, useEffect } from 'react'
+import { useAuthStore } from '@/store/auth'
 import { UserPlus, UserMinus, Edit2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw, CalendarOff, X, Trash2 } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
 import type { LtcStaff } from '@/store/ltc'
@@ -131,8 +132,10 @@ export default function EvalStaffPage() {
               onResign={() => setShowResign(s.id)}
               onLeave={() => setLeaveFor(s.id)}
               onDelete={async () => {
-                const label = s.status==='pending' ? '입사 예정을 취소하고 완전히 삭제' : '기록을 완전히 삭제'
-                if (!confirm(`${s.name} 님의 ${label}할까요?\n체크리스트·근로계약 기록도 함께 지워지며 되돌릴 수 없습니다.`)) return
+                const label = s.status==='pending' ? '입사 예정을 취소하고 완전히 삭제'
+                  : s.status==='active' ? '⚠ 재직 중인 직원입니다. 정말 완전히 삭제'
+                  : '기록을 완전히 삭제'
+                if (!confirm(`${s.name} 님의 ${label}할까요?\n체크리스트·근로계약 기록도 함께 지워지며 되돌릴 수 없습니다.${s.status==='active' ? '\n(퇴사가 목적이라면 「퇴사」 버튼을 이용해주세요)' : ''}`)) return
                 try { await useLtcStore.getState().deleteStaff(s.id) }
                 catch (e: any) { alert(e?.response?.data?.detail ?? e?.message ?? '삭제 실패') }
               }}
@@ -155,6 +158,7 @@ function StaffCard({ s, expanded, onExpand, onEdit, onResign, onLeave, onDelete,
   s: LtcStaff; expanded:boolean; onExpand:()=>void; onEdit:()=>void; onResign:()=>void; onLeave:()=>void; onDelete:()=>void;
   checklists: ChecklistItem[]; onClClick:(c:ChecklistItem)=>void;
 }) {
+  const isAdmin = useAuthStore(st => st.user?.role === 'ADMIN')
   const age = calcAge(s.birthDate)
   const done = checklists.filter(c => isItemDone(c)).length
   const total = checklists.length
@@ -199,9 +203,9 @@ function StaffCard({ s, expanded, onExpand, onEdit, onResign, onLeave, onDelete,
           {s.status==='pending' && (
             <button onClick={e=>{e.stopPropagation();onEdit()}} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"><Edit2 size={14}/></button>
           )}
-          {s.status!=='active' && (
+          {(s.status!=='active' || isAdmin) && (
             <button onClick={e=>{e.stopPropagation();onDelete()}}
-              title={s.status==='pending' ? '입사 취소 — 완전 삭제' : '기록 완전 삭제'}
+              title={s.status==='pending' ? '입사 취소 — 완전 삭제' : s.status==='active' ? '완전 삭제 (ADMIN 전용)' : '기록 완전 삭제'}
               className="flex items-center gap-1 text-xs font-medium text-red-500 border border-red-200 px-2.5 py-1.5 rounded-xl hover:bg-red-50"><Trash2 size={12}/>삭제</button>
           )}
           {expanded ? <ChevronUp size={16} className="text-gray-400"/> : <ChevronDown size={16} className="text-gray-400"/>}

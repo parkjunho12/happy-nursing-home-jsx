@@ -326,11 +326,16 @@ def update_ltc_staff(
 
 
 @staff_router.delete("/{sid}", response_model=ApiResponse)
-def delete_ltc_staff(sid: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    """직원 완전 삭제 — 입사 예정 취소 등. 체크리스트·HR 표도 함께 정리한다."""
+def delete_ltc_staff(sid: str, db: Session = Depends(get_db),
+                     current_user: User = Depends(get_current_user)):
+    """직원 완전 삭제 — 입사 예정 취소 등. 재직 중 직원은 ADMIN만 지울 수 있다."""
     s = db.query(LtcStaffMember).filter(LtcStaffMember.id == sid).first()
     if not s:
         raise HTTPException(404, "Not found")
+    if s.status == "active":
+        role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+        if role != "ADMIN":
+            raise HTTPException(403, "재직 중인 직원 삭제는 ADMIN만 가능합니다. (퇴사 처리를 이용해주세요)")
     try:
         item_ids = [i.id for i in db.query(ChecklistItem.id)
                     .filter(ChecklistItem.person_id == sid).all()]
