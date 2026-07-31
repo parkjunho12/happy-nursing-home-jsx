@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { CalendarRange, Loader2, Minus, Plus, ZoomIn } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { CalendarRange, Loader2, Maximize2, Minus, Plus, ZoomIn } from 'lucide-react'
 import { workScheduleAPI, type WorkScheduleDoc, type HolidayInfo } from '@/api/workScheduleClient'
 import { sortScheduleStaff } from '@/components/schedule/shared'
 import { useLtcStore } from '@/store/ltc'
@@ -25,6 +25,48 @@ export default function WorkScheduleViewPage() {
   const [loading, setLoading] = useState(true)
   const [zoom, setZoom] = useState(1)
   const { staffList, loaded, loadAll } = useLtcStore()
+  const boxRef = useRef<HTMLDivElement>(null)      // 스크롤 컨테이너
+  const innerRef = useRef<HTMLDivElement>(null)    // zoom 적용 대상
+  const zoomRef = useRef(zoom); zoomRef.current = zoom
+  const pinchRef = useRef<{ dist: number; zoom: number } | null>(null)
+  const fitted = useRef(false)
+
+  const clampZoom = (z: number) => Math.min(2, Math.max(0.3, z))
+  /** 전체 폭이 화면에 딱 들어오는 배율 — 한눈에 보기 */
+  const fitToScreen = () => {
+    const box = boxRef.current, inner = innerRef.current
+    if (!box || !inner) return
+    const natural = inner.scrollWidth / zoomRef.current   // zoom이 반영된 폭 → 원래 폭 역산
+    if (natural > 0) setZoom(clampZoom(+(box.clientWidth / natural).toFixed(2)))
+  }
+
+  // 손가락 두 개 핀치 줌 — passive:false로 브라우저 스크롤과 충돌 방지
+  useEffect(() => {
+    const box = boxRef.current
+    if (!box) return
+    const dist = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
+    const start = (e: TouchEvent) => {
+      if (e.touches.length === 2) pinchRef.current = { dist: dist(e.touches), zoom: zoomRef.current }
+    }
+    const move = (e: TouchEvent) => {
+      const p = pinchRef.current
+      if (p && e.touches.length === 2) {
+        e.preventDefault()
+        setZoom(clampZoom(+(p.zoom * dist(e.touches) / p.dist).toFixed(2)))
+      }
+    }
+    const end = () => { pinchRef.current = null }
+    box.addEventListener('touchstart', start, { passive: true })
+    box.addEventListener('touchmove', move, { passive: false })
+    box.addEventListener('touchend', end)
+    box.addEventListener('touchcancel', end)
+    return () => {
+      box.removeEventListener('touchstart', start)
+      box.removeEventListener('touchmove', move)
+      box.removeEventListener('touchend', end)
+      box.removeEventListener('touchcancel', end)
+    }
+  }, [loading])   // 컨테이너가 생긴 뒤 부착
 
   useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
   useEffect(() => {
@@ -34,6 +76,12 @@ export default function WorkScheduleViewPage() {
       workScheduleAPI.holidays(ym).catch(() => ({} as Record<string, HolidayInfo>)),
     ]).then(([d, h]) => { setDoc(d); setHols(h) }).finally(() => setLoading(false))
   }, [ym])
+
+  useEffect(() => {   // 모바일 첫 진입 — 한눈에 들어오게 자동 맞춤
+    if (loading || fitted.current || !doc) return
+    if (window.innerWidth < 768) requestAnimationFrame(fitToScreen)
+    fitted.current = true
+  }, [loading, doc])
 
   const move = (d: number) => {
     const [y, m] = ym.split('-').map(Number)
@@ -85,11 +133,15 @@ export default function WorkScheduleViewPage() {
         {/* 줌 */}
         <div className="ml-auto flex items-center gap-1 bg-white border border-gray-200 rounded-xl px-1.5 py-1">
           <ZoomIn size={13} className="text-gray-400" />
-          <button onClick={() => setZoom(z => Math.max(0.5, +(z - 0.1).toFixed(1)))}
+          <button onClick={() => setZoom(z => clampZoom(+(z - 0.1).toFixed(1)))}
             className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-50 text-gray-500"><Minus size={14} /></button>
           <button onClick={() => setZoom(1)} className="text-xs font-bold text-gray-600 w-11 text-center">{Math.round(zoom * 100)}%</button>
-          <button onClick={() => setZoom(z => Math.min(1.5, +(z + 0.1).toFixed(1)))}
+          <button onClick={() => setZoom(z => clampZoom(+(z + 0.1).toFixed(1)))}
             className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-50 text-gray-500"><Plus size={14} /></button>
+          <button onClick={fitToScreen} title="한 화면에 맞추기"
+            className="flex items-center gap-1 px-2 h-8 rounded-lg bg-indigo-50 text-indigo-600 text-[11px] font-bold hover:bg-indigo-100">
+            <Maximize2 size={12} /> 한눈에
+          </button>
         </div>
       </div>
 
@@ -108,9 +160,9 @@ export default function WorkScheduleViewPage() {
         </div>
       ) : (
         <>
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-auto max-h-[74vh]"
-            style={{ WebkitOverflowScrolling: 'touch' }}>
-            <div style={{ zoom }}>
+          <div ref={boxRef} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-auto max-h-[74vh]"
+            style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y' }}>
+            <div ref={innerRef} style={{ zoom }}>
               <table className="border-collapse" style={{ minWidth: 'max-content' }}>
                 <thead className="sticky top-0 z-20">
                   <tr className="bg-gray-50">
@@ -160,7 +212,7 @@ export default function WorkScheduleViewPage() {
           </div>
           <p className="mt-2 text-[11px] text-gray-400 leading-relaxed">
             D 주간 08:50~18:00 · M 06:50~16:00 · N 야간 17:50~익일 09:00 · <span className="text-rose-500 font-bold">休</span> 연차 ·
-            숫자 코드는 시간대 근무 — 수정은 PC 「근무표」에서
+            숫자 코드는 시간대 근무 — 손가락 두 개로 확대·축소, 「한눈에」로 전체 보기 · 수정은 PC 「근무표」에서
             {doc?.updated_at && ` · 저장 ${new Date(doc.updated_at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`}
           </p>
         </>

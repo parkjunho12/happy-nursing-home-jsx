@@ -341,7 +341,7 @@ def delete_ltc_staff(sid: str, db: Session = Depends(get_db),
                     .filter(ChecklistItem.person_id == sid).all()]
         if item_ids:
             from app.models.eval import ChecklistOccurrence, CompletionRecord
-            db.query(CompletionRecord).filter(CompletionRecord.checklist_item_id.in_(item_ids)).delete(synchronize_session=False)
+            db.query(CompletionRecord).filter(CompletionRecord.checklist_id.in_(item_ids)).delete(synchronize_session=False)
             db.query(ChecklistOccurrence).filter(ChecklistOccurrence.checklist_item_id.in_(item_ids)).delete(synchronize_session=False)
             db.query(ChecklistItem).filter(ChecklistItem.id.in_(item_ids)).delete(synchronize_session=False)
     except Exception:
