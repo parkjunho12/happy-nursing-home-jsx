@@ -30,6 +30,16 @@ def _manager(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
+def _viewer(current_user: User = Depends(get_current_user)) -> User:
+    """읽기 전용 — 대표·이사도 전체 근무표를 볼 수 있다(수정은 _manager만)."""
+    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    pos = getattr(current_user, "position", None)
+    pos = pos.value if hasattr(pos, "value") else str(pos or "")
+    if role != "ADMIN" and pos not in ("시설장", "대표", "이사"):
+        raise HTTPException(403, "근무표 열람 권한이 없습니다.")
+    return current_user
+
+
 def _prev_ym(ym: str) -> str:
     y, m = int(ym[:4]), int(ym[5:7])
     m -= 1
@@ -193,7 +203,7 @@ def save_config(body: ConfigBody, db: Session = Depends(get_db), current_user: U
 
 
 @router.get("/holidays")
-def month_holidays(month: str = Query(...), db: Session = Depends(get_db), _: User = Depends(_manager)):
+def month_holidays(month: str = Query(...), db: Session = Depends(get_db), _: User = Depends(_viewer)):
     """해당 월의 공휴일 { 'YYYY-MM-DD': {name, kind} }.
 
     kind='paid' = 근로자의 날처럼 관공서 공휴일은 아니지만 유급휴일인 날.
@@ -232,7 +242,7 @@ def month_holidays(month: str = Query(...), db: Session = Depends(get_db), _: Us
 
 
 @router.get("")
-def get_schedule(month: str = Query(...), db: Session = Depends(get_db), _: User = Depends(_manager)):
+def get_schedule(month: str = Query(...), db: Session = Depends(get_db), _: User = Depends(_viewer)):
     if not _YM.match(month or ""):
         raise HTTPException(400, "month 형식은 YYYY-MM 이어야 합니다.")
     w = db.query(WorkSchedule).filter(WorkSchedule.year_month == month).first()
