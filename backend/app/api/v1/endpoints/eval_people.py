@@ -235,6 +235,16 @@ def delete_ltc_resident(rid: str, db: Session = Depends(get_db), _: User = Depen
 @staff_router.get("", response_model=ApiResponse)
 def list_ltc_staff(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     rows = db.query(LtcStaffMember).order_by(LtcStaffMember.created_at.desc()).all()
+    # 입사 예정자 — 입사일이 되면 자동으로 현직 전환
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    today = _dt.now(_tz(_td(hours=9))).strftime("%Y-%m-%d")
+    changed = False
+    for m in rows:
+        if m.status == "pending" and (m.hire_date or "")[:10] <= today:
+            m.status = "active"
+            changed = True
+    if changed:
+        db.commit()
     return ApiResponse(success=True, data=[LtcStaffOut.model_validate(s).model_dump() for s in rows])
 
 
@@ -244,7 +254,11 @@ def create_ltc_staff(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    s = LtcStaffMember(**payload.model_dump(), status="active")
+    data = payload.model_dump()
+    from datetime import datetime as _dt2, timezone as _tz2, timedelta as _td2
+    _today = _dt2.now(_tz2(_td2(hours=9))).strftime("%Y-%m-%d")
+    status = "pending" if (data.get("hire_date") or "")[:10] > _today else "active"
+    s = LtcStaffMember(**data, status=status)
     db.add(s)
     db.commit()
     db.refresh(s)
@@ -309,6 +323,33 @@ def update_ltc_staff(
     db.commit()
     db.refresh(s)
     return ApiResponse(success=True, data=LtcStaffOut.model_validate(s).model_dump())
+
+
+@staff_router.delete("/{sid}", response_model=ApiResponse)
+def delete_ltc_staff(sid: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """직원 완전 삭제 — 입사 예정 취소 등. 체크리스트·HR 표도 함께 정리한다."""
+    s = db.query(LtcStaffMember).filter(LtcStaffMember.id == sid).first()
+    if not s:
+        raise HTTPException(404, "Not found")
+    try:
+        item_ids = [i.id for i in db.query(ChecklistItem.id)
+                    .filter(ChecklistItem.person_id == sid).all()]
+        if item_ids:
+            from app.models.eval import ChecklistOccurrence, CompletionRecord
+            db.query(CompletionRecord).filter(CompletionRecord.checklist_item_id.in_(item_ids)).delete(synchronize_session=False)
+            db.query(ChecklistOccurrence).filter(ChecklistOccurrence.checklist_item_id.in_(item_ids)).delete(synchronize_session=False)
+            db.query(ChecklistItem).filter(ChecklistItem.id.in_(item_ids)).delete(synchronize_session=False)
+    except Exception:
+        db.rollback()
+        raise HTTPException(500, "연관 체크리스트 정리에 실패했습니다.")
+    try:
+        from app.models.staff_hr import StaffHrRecord
+        db.query(StaffHrRecord).filter(StaffHrRecord.staff_id == sid).delete(synchronize_session=False)
+    except Exception:
+        pass
+    db.delete(s)
+    db.commit()
+    return ApiResponse(success=True, message="삭제되었습니다.")
 
 
 @staff_router.post("/{sid}/resign", response_model=ApiResponse)

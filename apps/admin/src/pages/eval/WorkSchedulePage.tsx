@@ -233,7 +233,7 @@ export default function WorkSchedulePage() {
         const resign = (s.resignDate || '').slice(0, 10)
         if (!hired) return false
         if (resign) return resign >= monthStart                               // 그달까지는 근무
-        return s.status === 'active'
+        return s.status === 'active' || s.status === 'pending'                // 입사 예정자도 다음 달 근무표엔 포함
       })
       .map(s => {
         const r = rowMap.get(s.id)
