@@ -1,7 +1,7 @@
 import DateField from '@/components/ui/DateField'
 import StickyToolbar from '../../components/common/StickyToolbar'
 import { useState, useMemo, useEffect } from 'react'
-import { UserPlus, UserMinus, Edit2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw, CalendarOff, X } from 'lucide-react'
+import { UserPlus, UserMinus, Edit2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw, CalendarOff, X, Trash2 } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
 import type { LtcStaff } from '@/store/ltc'
 import type { ChecklistItem } from '@/utils/period'
@@ -9,7 +9,7 @@ import { calcAge, isItemDone, daysFromToday } from '@/utils/period'
 import ChecklistDetailModal from '@/components/eval/ChecklistDetailModal'
 import { STAFF_POSITIONS } from '@/constants/positions'
 
-type Tab = 'active' | 'resigned' | 'all'
+type Tab = 'active' | 'pending' | 'resigned' | 'all'
 
 const todayISO = () => new Date().toISOString().split('T')[0]
 export const isOnLeave = (s: LtcStaff, on = todayISO()) =>
@@ -31,7 +31,7 @@ export default function EvalStaffPage() {
 
   const positions = useMemo(() => Array.from(new Set(staffList.map(s => s.position).filter(Boolean))) as string[], [staffList])
   const filtered = useMemo(() => staffList
-    .filter(s => tab==='all' ? true : tab==='active' ? s.status==='active' : s.status==='resigned')
+    .filter(s => tab==='all' ? true : s.status===tab)
     .filter(s => !search || s.name.includes(search) || (s.position ?? '').includes(search))
     .filter(s => !posFilter || s.position === posFilter)
     .sort((a, b) => (a.hireDate || '9999').localeCompare(b.hireDate || '9999')),
@@ -72,7 +72,13 @@ export default function EvalStaffPage() {
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-orange-50 rounded-xl p-4 border border-white shadow-sm">
           <p className="text-xs text-gray-500 mb-1">재직 중</p>
-          <p className="text-2xl font-bold text-gray-900">{staffList.filter(s=>s.status==='active').length}명</p>
+          <p className="text-2xl font-bold text-gray-900">{staffList.filter(s=>s.status==='active').length}명
+            {staffList.some(s=>s.status==='pending') && (
+              <span className="ml-2 text-xs font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full align-middle">
+                +입사 예정 {staffList.filter(s=>s.status==='pending').length}
+              </span>
+            )}
+          </p>
         </div>
         <div className="bg-gray-50 rounded-xl p-4 border border-white shadow-sm">
           <p className="text-xs text-gray-500 mb-1">퇴사</p>
@@ -87,12 +93,17 @@ export default function EvalStaffPage() {
       {/* 탭 (상단 고정) */}
       <StickyToolbar>
       <div className="flex flex-wrap items-center gap-1.5">
-        {(['active','resigned','all'] as Tab[]).map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${tab===t?'bg-primary-orange text-white':'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-            {t==='active'?`재직 중 (${staffList.filter(s=>s.status==='active').length})`:t==='resigned'?`퇴사 (${staffList.filter(s=>s.status==='resigned').length})`:`전체 (${staffList.length})`}
-          </button>
-        ))}
+        {(['active','pending','resigned','all'] as Tab[]).map(t => {
+          const cnt = t==='all' ? staffList.length : staffList.filter(s=>s.status===t).length
+          if (t==='pending' && cnt===0 && tab!=='pending') return null
+          const label = t==='active'?'재직 중':t==='pending'?'입사 예정':t==='resigned'?'퇴사':'전체'
+          return (
+            <button key={t} onClick={() => setTab(t)}
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${tab===t?'bg-primary-orange text-white':t==='pending'?'bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100':'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+              {label} ({cnt})
+            </button>
+          )
+        })}
         <div className="w-px h-6 bg-gray-200 mx-1" />
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="이름·직종 검색"
           className="px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-orange/40 w-36" />
@@ -119,6 +130,12 @@ export default function EvalStaffPage() {
               onEdit={() => setEditingId(s.id)}
               onResign={() => setShowResign(s.id)}
               onLeave={() => setLeaveFor(s.id)}
+              onDelete={async () => {
+                const label = s.status==='pending' ? '입사 예정을 취소하고 완전히 삭제' : '기록을 완전히 삭제'
+                if (!confirm(`${s.name} 님의 ${label}할까요?\n체크리스트·근로계약 기록도 함께 지워지며 되돌릴 수 없습니다.`)) return
+                try { await useLtcStore.getState().deleteStaff(s.id) }
+                catch (e: any) { alert(e?.response?.data?.detail ?? e?.message ?? '삭제 실패') }
+              }}
               checklists={staffCls[s.id]??[]}
               onClClick={setSelectedCl} />
           ))}
@@ -134,8 +151,8 @@ export default function EvalStaffPage() {
   )
 }
 
-function StaffCard({ s, expanded, onExpand, onEdit, onResign, onLeave, checklists, onClClick }: {
-  s: LtcStaff; expanded:boolean; onExpand:()=>void; onEdit:()=>void; onResign:()=>void; onLeave:()=>void;
+function StaffCard({ s, expanded, onExpand, onEdit, onResign, onLeave, onDelete, checklists, onClClick }: {
+  s: LtcStaff; expanded:boolean; onExpand:()=>void; onEdit:()=>void; onResign:()=>void; onLeave:()=>void; onDelete:()=>void;
   checklists: ChecklistItem[]; onClClick:(c:ChecklistItem)=>void;
 }) {
   const age = calcAge(s.birthDate)
@@ -157,7 +174,7 @@ function StaffCard({ s, expanded, onExpand, onEdit, onResign, onLeave, checklist
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-bold text-gray-900">{s.name}</span>
             <span className="text-xs text-gray-500">{s.gender==='female'?'여':'남'} · {age}세</span>
-            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${s.status==='active'?'bg-green-100 text-green-700':'bg-gray-100 text-gray-500'}`}>{s.status==='active'?'재직 중':'퇴사'}</span>
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${s.status==='active'?'bg-green-100 text-green-700':s.status==='pending'?'bg-amber-100 text-amber-700':'bg-gray-100 text-gray-500'}`}>{s.status==='active'?'재직 중':s.status==='pending'?'입사 예정':'퇴사'}</span>
             {isOnLeave(s) && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">휴직 중</span>}
             {s.memo && <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{s.memo}</span>}
           </div>
@@ -178,6 +195,14 @@ function StaffCard({ s, expanded, onExpand, onEdit, onResign, onLeave, checklist
               <button onClick={e=>{e.stopPropagation();onLeave()}} className="flex items-center gap-1 text-xs font-medium text-amber-600 border border-amber-200 px-2.5 py-1.5 rounded-xl hover:bg-amber-50"><CalendarOff size={12}/>휴직</button>
               <button onClick={e=>{e.stopPropagation();onResign()}} className="flex items-center gap-1 text-xs font-medium text-orange-500 border border-orange-200 px-2.5 py-1.5 rounded-xl hover:bg-orange-50"><UserMinus size={12}/>퇴사</button>
             </>
+          )}
+          {s.status==='pending' && (
+            <button onClick={e=>{e.stopPropagation();onEdit()}} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"><Edit2 size={14}/></button>
+          )}
+          {s.status!=='active' && (
+            <button onClick={e=>{e.stopPropagation();onDelete()}}
+              title={s.status==='pending' ? '입사 취소 — 완전 삭제' : '기록 완전 삭제'}
+              className="flex items-center gap-1 text-xs font-medium text-red-500 border border-red-200 px-2.5 py-1.5 rounded-xl hover:bg-red-50"><Trash2 size={12}/>삭제</button>
           )}
           {expanded ? <ChevronUp size={16} className="text-gray-400"/> : <ChevronDown size={16} className="text-gray-400"/>}
         </div>
@@ -267,7 +292,11 @@ function StaffForm({ existing, onClose }: { existing?: LtcStaff; onClose:()=>voi
               <select className={ic} value={form.gender} onChange={e=>setForm({...form,gender:e.target.value})}><option value="female">여</option><option value="male">남</option></select>
             </div>
           </div>
-          <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">입사일 *</label><DateField className={ic} value={form.hireDate} onChange={v=>setForm({...form,hireDate:v})} clearable={false}/></div>
+          <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">입사일 *</label>
+            {form.hireDate > new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) && (
+              <p className="text-[11px] text-amber-600 mb-1">입사일이 미래라 <b>입사 예정</b>으로 등록됩니다 — 입사일이 되면 자동으로 재직 전환, 취소되면 목록에서 삭제하시면 돼요</p>
+            )}
+            <DateField className={ic} value={form.hireDate} onChange={v=>setForm({...form,hireDate:v})} clearable={false}/></div>
           <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">직종 *</label>
             <select className={ic} value={form.position} onChange={e=>setForm({...form,position:e.target.value})}>
               <option value="">직종 선택</option>

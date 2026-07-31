@@ -229,6 +229,7 @@ interface LtcState {
   addStaff:          (s: Omit<LtcStaff,'id'|'createdAt'>) => Promise<void>
   updateStaff:       (id: string, u: Partial<LtcStaff>) => Promise<void>
   resignStaff:       (id: string, date: string) => Promise<void>
+  deleteStaff:       (id: string) => Promise<void>
   updateSettings:    (u: Partial<EvalSettings>) => Promise<void>
 }
 
@@ -462,6 +463,13 @@ export const useLtcStore = create<LtcState>((set, get) => ({
     if (u.memo !== undefined)      p.memo       = u.memo
     const raw = await evalStaffAPI.update(id, p)
     set(st => ({ staffList: st.staffList.map(s => s.id===id ? mapS(raw) : s) }))
+  },
+  deleteStaff: async (id) => {
+    await evalStaffAPI.remove(id)
+    set(st => ({
+      staffList:  st.staffList.filter(s => s.id !== id),
+      checklists: st.checklists.filter(c => c.personId !== id),
+    }))
   },
   resignStaff: async (id, date) => {
     const raw = await evalStaffAPI.resign(id, date)

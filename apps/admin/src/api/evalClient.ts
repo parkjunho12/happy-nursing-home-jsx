@@ -102,6 +102,10 @@ export const evalStaffAPI = {
     const res = await apiClient.patch(`/api/v1/eval/staff/${id}`, d)
     return unwrap<any>(res)
   },
+  remove: async (id: string) => {
+    const res = await apiClient.delete(`/api/v1/eval/staff/${id}`)
+    return unwrap<any>(res)
+  },
   resign: async (id: string, resign_date: string) => {
     const res = await apiClient.post(`/api/v1/eval/staff/${id}/resign`, { resign_date })
     return unwrap<any>(res)
