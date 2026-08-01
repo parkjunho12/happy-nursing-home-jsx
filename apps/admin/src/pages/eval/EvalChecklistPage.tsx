@@ -73,7 +73,7 @@ export default function EvalChecklistPage() {
   } = useLtcStore()
 
   const { user } = useAuthStore()
-  const isAdmin = user?.role === 'ADMIN'
+  const isAdmin = user?.role === 'ADMIN' || user?.position === '시설장'   // 시설장도 발행·담당자 지정·전체 팔로우
 
   const [assigneeOptions, setAssigneeOptions] = useState<
     Array<{ id: string; name: string; position?: string | null }>

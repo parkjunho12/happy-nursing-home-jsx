@@ -86,7 +86,7 @@ export default function DashboardPage() {
   const loadPending = async () => {
     const [exp, alb, news, lv, sw, vs, rf] = await Promise.all([
       can('/expense')
-        ? expenseAPI.list({ status: 'pending' }).then(r => r.length).catch(() => 0) : Promise.resolve(0),
+        ? expenseAPI.list({}).then(r => r.filter(x => x.status === 'pending' || x.status === 'manager_approved').length).catch(() => 0) : Promise.resolve(0),
       can('/eval/albums')
         ? apiClient.get('/api/v1/admin/pending-media').then((r: any) => (r.data?.data ?? []).length).catch(() => 0) : Promise.resolve(0),
       can('/facility-news')

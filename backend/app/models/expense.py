@@ -45,7 +45,8 @@ class ExpenseRequest(Base):
     purchased_at = Column(String(20), nullable=True)            # 구매일 YYYY-MM-DD
     memo = Column(Text, nullable=True)
 
-    status = Column(String(20), nullable=False, default="pending", index=True)  # pending/approved/rejected
+    # pending(신청) → manager_approved(시설장 1차 승인) → approved(최종) / rejected
+    status = Column(String(20), nullable=False, default="pending", index=True)
     reject_reason = Column(Text, nullable=True)
 
     requester_id = Column(String, nullable=True, index=True)
@@ -53,6 +54,9 @@ class ExpenseRequest(Base):
     approver_id = Column(String, nullable=True)
     approver_name = Column(String(100), nullable=True)
     approved_at = Column(DateTime(timezone=True), nullable=True)
+    manager_id = Column(String, nullable=True)                     # 시설장 1차 승인자
+    manager_name = Column(String(100), nullable=True)
+    manager_approved_at = Column(DateTime(timezone=True), nullable=True)
 
     created_at = Column(DateTime(timezone=True), default=now_kst, index=True)
     updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)
