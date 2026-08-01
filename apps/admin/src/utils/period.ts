@@ -174,7 +174,11 @@ export function getPeriodEnd(freq: Frequency, date: Date = new Date(), cfg: Recu
       const s = getWeekStart(date)
       const e = new Date(s); e.setDate(e.getDate() + 6); return e
     }
-    case 'monthly':     return new Date(y, m + 1, 0)
+    case 'monthly': {
+      // 선택적 기간 지정 — '매월 X일부터 Y일까지'. 종료일 없으면 월 말일.
+      if (cfg.dueDay) return clampDay(y, m, cfg.dueDay)
+      return new Date(y, m + 1, 0)
+    }
     case 'quarterly':   return new Date(y, Math.floor(m / 3) * 3 + 3, 0)
     case 'half-yearly': return new Date(y, m < 6 ? 6 : 12, 0)
     case 'yearly':      return new Date(y, 11, 31)

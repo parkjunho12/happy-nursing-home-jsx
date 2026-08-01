@@ -80,6 +80,7 @@ export default function ChecklistFormModal({ existing, onClose }: Props) {
     personType:         (existing?.personType        ?? 'facility') as string,
     recurWeekday:       (existing?.recurWeekday     ?? 0) as number,
     recurWeekOfMonth:   (existing?.recurWeekOfMonth ?? 1) as number,
+    monthlyRange:       !!(existing?.frequency === 'monthly' && (existing?.recurDay || existing?.recurDueDay)),
     recurDay:           (existing?.recurDay         ?? 1) as number,
     recurDueDay:        (existing?.recurDueDay      ?? 25) as number,
   })
@@ -145,8 +146,8 @@ export default function ChecklistFormModal({ existing, onClose }: Props) {
         personType:         form.personId ? form.personType : 'facility',
         recurWeekday:       (isWeeklyDow || isMonthlyNthDow) ? Number(form.recurWeekday) : null,
         recurWeekOfMonth:   isMonthlyNthDow ? Number(form.recurWeekOfMonth) : null,
-        recurDay:           isMonthlyDay ? Number(form.recurDay) : null,
-        recurDueDay:        isMonthlyDay ? Number(form.recurDueDay) : null,
+        recurDay:           isMonthlyDay ? Number(form.recurDay) : (form.frequency === 'monthly' && form.monthlyRange ? Number(form.recurDay) : null),
+        recurDueDay:        isMonthlyDay ? Number(form.recurDueDay) : (form.frequency === 'monthly' && form.monthlyRange ? Number(form.recurDueDay) : null),
       }
 
       if (isEdit && existing) {
@@ -318,6 +319,39 @@ export default function ChecklistFormModal({ existing, onClose }: Props) {
                 <p className="col-span-2 text-[11px] text-purple-700">
                   매월 {form.recurDay}일에 생성되어 {form.recurDueDay}일까지가 기한입니다.
                 </p>
+              </div>
+            )}
+
+            {/* 월별 — 선택적 기간 지정 (매월 X일부터 Y일까지) */}
+            {form.frequency === 'monthly' && (
+              <div className="bg-purple-50 border border-purple-200 rounded-xl p-3.5 space-y-2">
+                <label className="flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer">
+                  <input type="checkbox" checked={form.monthlyRange}
+                    onChange={e => setForm({ ...form, monthlyRange: e.target.checked })}
+                    className="w-4 h-4 accent-purple-600" />
+                  기간 지정 — 매월 언제부터 언제까지 해야 하는 업무예요
+                </label>
+                {form.monthlyRange && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">시작일 (매월)</label>
+                      <select className={ic} value={form.recurDay}
+                        onChange={e => setForm({ ...form, recurDay: Number(e.target.value) })}>
+                        {Array.from({ length: 31 }, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}일</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">종료일 (매월)</label>
+                      <select className={ic} value={form.recurDueDay}
+                        onChange={e => setForm({ ...form, recurDueDay: Number(e.target.value) })}>
+                        {Array.from({ length: 31 }, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}일</option>)}
+                      </select>
+                    </div>
+                    <p className="col-span-2 text-[11px] text-purple-700">
+                      매월 <b>{form.recurDay}일 ~ {form.recurDueDay}일</b> 사이에 완료해야 하는 항목으로 표시됩니다 — 달력 보기에도 이 기간이 막대로 나와요.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 

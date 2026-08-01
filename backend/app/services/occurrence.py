@@ -191,10 +191,15 @@ def get_period_bounds(freq: str, d: date, cfg: Optional[dict] = None) -> Tuple[d
         return start, start + timedelta(days=6)   # ~ 토요일
 
     if freq == 'monthly':
-        start = date(d.year, d.month, 1)
-        if d.month == 12:
-            return start, date(d.year, 12, 31)
-        return start, date(d.year, d.month + 1, 1) - timedelta(days=1)
+        # 선택적 기간 지정 — '매월 X일부터 Y일까지'. 없으면 월 전체.
+        month_end = date(d.year, 12, 31) if d.month == 12 else date(d.year, d.month + 1, 1) - timedelta(days=1)
+        start_day = cfg.get('day')
+        due_day = cfg.get('due_day')
+        start = _clamp_day(d.year, d.month, int(start_day)) if start_day else date(d.year, d.month, 1)
+        due = _clamp_day(d.year, d.month, int(due_day)) if due_day else month_end
+        if due < start:
+            due = start
+        return start, due
 
     if freq == 'quarterly':
         q  = (d.month - 1) // 3

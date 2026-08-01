@@ -8,7 +8,7 @@ function unwrap<T>(res: any): T {
 }
 
 export interface ContractPeriod { start?: string | null; end?: string | null }
-export type DocKey = 'health' | 'criminal' | 'cert' | 'resident' | 'family' | 'id_copy' | 'bankbook' | 'insurance' | 'withholding' | 'subholiday' | 'compleave' | 'privacy'
+export type DocKey = 'health' | 'criminal' | 'cert' | 'resident' | 'family' | 'id_copy' | 'bankbook' | 'insurance' | 'withholding' | 'subholiday' | 'compleave' | 'privacy' | 'cctv' | 'pension'
 
 export interface HrRecord {
   id: string
@@ -51,9 +51,10 @@ export const DOC_FIELDS: { key: DocKey; label: string; short: string }[] = [
   { key: 'bankbook',  label: '통장 사본',                short: '통장' },
   { key: 'insurance', label: '건강보험자격득실확인서',   short: '자격득실' },
   { key: 'withholding', label: '원천징수 동의서',          short: '원천징수' },
-  { key: 'subholiday',  label: '대체휴일 합의서',          short: '대체휴일' },
-  { key: 'compleave',   label: '보상휴가 합의서',          short: '보상휴가' },
-  { key: 'privacy',     label: '개인정보 동의서',          short: '개인정보' },
+  { key: 'subholiday',  label: '근로자 대표 합의서',       short: '근로자대표' },
+  { key: 'privacy',     label: '정보보호 서약서',          short: '정보보호' },
+  { key: 'cctv',        label: 'CCTV 동의서',              short: 'CCTV' },
+  { key: 'pension',     label: '퇴직연금',                 short: '퇴직연금' },
 ]
 
 export const hrAPI = {

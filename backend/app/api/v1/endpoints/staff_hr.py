@@ -38,8 +38,9 @@ def _view(r: StaffHrRecord) -> dict:
             "health": r.doc_health, "criminal": r.doc_criminal, "cert": r.doc_cert,
             "resident": r.doc_resident, "family": r.doc_family, "id_copy": r.doc_id_copy,
             "bankbook": r.doc_bankbook, "insurance": r.doc_insurance,
-            "withholding": r.doc_withholding, "subholiday": r.doc_subholiday,
-            "compleave": r.doc_compleave, "privacy": r.doc_privacy,
+            "withholding": r.doc_withholding,
+            "subholiday": r.doc_subholiday if r.doc_subholiday is not None else r.doc_compleave,
+            "privacy": r.doc_privacy, "cctv": r.doc_cctv, "pension": r.doc_pension,
         },
         "doc_note": r.doc_note,
     }
@@ -108,6 +109,7 @@ def _apply(r: StaffHrRecord, body: HrBody):
              "resident": "doc_resident", "family": "doc_family", "id_copy": "doc_id_copy",
              "bankbook": "doc_bankbook", "insurance": "doc_insurance",
              "withholding": "doc_withholding", "subholiday": "doc_subholiday",
+             "cctv": "doc_cctv", "pension": "doc_pension",
              "compleave": "doc_compleave", "privacy": "doc_privacy"}
         for k, col in m.items():
             if k in body.docs:
