@@ -148,12 +148,12 @@ def _uploader_names(db: Session, media_list) -> dict:
 
 
 def _require_can_manage_guardians(current_user: User):
-    """ADMIN 또는 사회복지사만 보호자 계정 관리 가능"""
+    """보호자 계정 관리 — ADMIN · 사회복지사 · 시설장"""
     if current_user.role == 'ADMIN':
         return
-    if getattr(current_user, 'position', None) == '사회복지사':
+    if getattr(current_user, 'position', None) in ('사회복지사', '시설장'):
         return
-    raise HTTPException(403, "보호자 계정 관리 권한이 없습니다. ADMIN 또는 사회복지사만 접근 가능합니다.")
+    raise HTTPException(403, "보호자 계정 관리 권한이 없습니다. (ADMIN·사회복지사·시설장)")
 
 @admin_router.get("/guardians")
 def list_guardians(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
