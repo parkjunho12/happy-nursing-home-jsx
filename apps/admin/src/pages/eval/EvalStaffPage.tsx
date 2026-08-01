@@ -203,6 +203,15 @@ function StaffCard({ s, expanded, onExpand, onEdit, onResign, onLeave, onDelete,
           {s.status==='pending' && (
             <button onClick={e=>{e.stopPropagation();onEdit()}} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"><Edit2 size={14}/></button>
           )}
+          {s.status==='resigned' && (
+            <button onClick={async e=>{
+              e.stopPropagation()
+              if (!confirm(`${s.name} 님의 퇴사를 취소하고 재직으로 복귀시킬까요?\n퇴사 때 중단됐던 체크리스트도 다시 살아납니다.`)) return
+              try { await useLtcStore.getState().unresignStaff(s.id) }
+              catch (e2: any) { alert(e2?.response?.data?.detail ?? e2?.message ?? '복귀 실패') }
+            }}
+              className="flex items-center gap-1 text-xs font-medium text-emerald-600 border border-emerald-200 px-2.5 py-1.5 rounded-xl hover:bg-emerald-50"><RotateCcw size={12}/>퇴사 취소</button>
+          )}
           {(s.status!=='active' || isAdmin) && (
             <button onClick={e=>{e.stopPropagation();onDelete()}}
               title={s.status==='pending' ? '입사 취소 — 완전 삭제' : s.status==='active' ? '완전 삭제 (ADMIN 전용)' : '기록 완전 삭제'}
