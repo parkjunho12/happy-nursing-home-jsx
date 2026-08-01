@@ -340,62 +340,130 @@ export default function ResidentDetailPage() {
           .filter(g => g.items.length > 0)
         const etc = cls.filter(c => splitClTitle(c.title).tag === null)
         if (etc.length) groups.push({ tag: '', no: groups.length + 1, label: '기타', fam: 'work', accent: '', bar: '', items: etc } as any)
-        const FAMC: Record<string, string> = { work: '#0369a1', docs: '#4338ca', it: '#6d28d9', cond: '#c2410c' }
+        // 계열별 파스텔 팔레트 — 인쇄에서 부드럽게
+        const FAMP: Record<string, { bg: string; edge: string; text: string }> = {
+          work: { bg: '#eff8ff', edge: '#38bdf8', text: '#075985' },
+          docs: { bg: '#eef2ff', edge: '#818cf8', text: '#3730a3' },
+          it:   { bg: '#f5f3ff', edge: '#a78bfa', text: '#5b21b6' },
+          cond: { bg: '#fff7ed', edge: '#fb923c', text: '#9a3412' },
+        }
         const teamOf = (c: any) => c.assignee === '간호팀' ? '간호' : c.assignee === '물리치료사' ? '물리' : '복지'
-        const TEAMC: Record<string, string> = { 간호: '#e11d48', 물리: '#2563eb', 복지: '#0d9488' }
+        const TEAMC: Record<string, { c: string; bg: string }> = {
+          간호: { c: '#be123c', bg: '#ffe4e6' }, 물리: { c: '#1d4ed8', bg: '#dbeafe' }, 복지: { c: '#0f766e', bg: '#ccfbf1' },
+        }
+        const pct = cls.length ? Math.round((done / cls.length) * 100) : 0
+        const teamStat = (['간호', '물리', '복지'] as const).map(t => {
+          const list = cls.filter(c => teamOf(c) === t)
+          return { t, d: list.filter(isItemDone).length, n: list.length }
+        }).filter(x => x.n > 0)
         return (
-          <div id="cl-print" className="hidden bg-white">
-            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', borderBottom: '2.5px solid #0d9488', paddingBottom: 4, marginBottom: 6 }}>
-              <div>
-                <p style={{ fontSize: 8, fontWeight: 800, color: '#0d9488', letterSpacing: '0.15em', margin: 0 }}>행복한요양원 · 입소 (서류/준비) 체크리스트</p>
-                <h1 style={{ fontSize: 17, fontWeight: 900, color: '#111827', margin: '1px 0 0' }}>
-                  {r.name} <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280' }}>{r.gender === 'female' ? '여' : '남'} · {r.floor ?? ''}{r.room ? ` ${r.room}호` : ''} · 입소 {r.admissionDate}</span>
-                </h1>
-              </div>
-              <div style={{ textAlign: 'right', fontSize: 8, color: '#6b7280' }}>
-                <p style={{ margin: 0 }}>진행 <b style={{ color: '#111827' }}>{done}/{cls.length}</b> · 출력 {new Date().toLocaleDateString('ko-KR')}</p>
-                <p style={{ margin: '1px 0 0' }}>
-                  <span style={{ color: TEAMC['간호'], fontWeight: 800 }}>■</span> 간호팀&nbsp;
-                  <span style={{ color: TEAMC['물리'], fontWeight: 800 }}>■</span> 물리치료사&nbsp;
-                  <span style={{ color: TEAMC['복지'], fontWeight: 800 }}>■</span> 복지팀
+          <div id="cl-print" className="hidden bg-white" style={{ fontFamily: 'inherit' }}>
+            {/* ── 머리글: 좌 상아이덴티티 · 우 진행 요약 ── */}
+            <div style={{ display: 'flex', alignItems: 'stretch', gap: 10, marginBottom: 7 }}>
+              <div style={{ width: 4, borderRadius: 3, background: 'linear-gradient(#14b8a6, #0d9488)' }} />
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 7.5, fontWeight: 800, color: '#0d9488', letterSpacing: '0.22em', margin: 0 }}>
+                  행복한요양원 녹양역점 · 입소 (서류/준비) 체크리스트
+                </p>
+                <p style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', margin: '1px 0 0', letterSpacing: '0.02em' }}>
+                  {r.name}
+                  <span style={{ fontSize: 10, fontWeight: 600, color: '#64748b', marginLeft: 7 }}>
+                    {r.gender === 'female' ? '여' : '남'} · 만 {calcAge(r.birthDate)}세
+                    {(r.floor || r.room) && ` · ${r.floor ?? ''}${r.room ? ` ${r.room}호` : ''}`} · 입소 {r.admissionDate}
+                  </span>
                 </p>
               </div>
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ margin: 0, fontSize: 16, fontWeight: 900, color: pct === 100 ? '#16a34a' : '#0d9488', lineHeight: 1 }}>
+                  {pct}<span style={{ fontSize: 9 }}>%</span>
+                  <span style={{ fontSize: 8, fontWeight: 700, color: '#94a3b8', marginLeft: 4 }}>{done}/{cls.length} 완료</span>
+                </p>
+                <div style={{ width: 130, height: 5, background: '#f1f5f9', borderRadius: 3, marginTop: 3, marginLeft: 'auto', overflow: 'hidden' }}>
+                  <div style={{ width: `${pct}%`, height: 5, borderRadius: 3, background: pct === 100 ? '#22c55e' : 'linear-gradient(90deg,#2dd4bf,#0d9488)' }} />
+                </div>
+                <p style={{ margin: '3px 0 0', fontSize: 7, color: '#94a3b8' }}>출력 {new Date().toLocaleDateString('ko-KR')}</p>
+              </div>
             </div>
-            <div style={{ columnCount: 2, columnGap: 12 }}>
-              {groups.map(g => (
-                <div key={g.tag || '기타'} style={{ marginBottom: 5 }}>
-                  <p style={{
-                    breakInside: 'avoid', breakAfter: 'avoid', fontSize: 8.5, fontWeight: 900, margin: '0 0 2px',
-                    padding: '2px 5px', borderRadius: 4, color: 'white',
-                    background: FAMC[(g as any).fam] ?? '#4b5563',
-                  }}>{g.no}. {g.label} <span style={{ fontWeight: 600, opacity: 0.85 }}>({g.items.filter(isItemDone).length}/{g.items.length})</span></p>
-                  {g.items.map(c => {
-                    const ok = isItemDone(c)
-                    const t = teamOf(c)
-                    return (
-                      <div key={c.id} style={{ breakInside: 'avoid', display: 'flex', alignItems: 'flex-start', gap: 3, padding: '1px 1px', fontSize: 7.6, lineHeight: 1.3, borderBottom: '0.5px solid #f3f4f6' }}>
-                        <span style={{
-                          width: 8, height: 8, marginTop: 1, flexShrink: 0, borderRadius: 2,
-                          border: `1.2px solid ${ok ? '#16a34a' : '#9ca3af'}`,
-                          background: ok ? '#16a34a' : 'white',
-                          color: 'white', fontSize: 6.5, fontWeight: 900, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        }}>{ok ? '✓' : ''}</span>
-                        <span style={{ width: 14, flexShrink: 0, fontSize: 6.5, fontWeight: 800, color: TEAMC[t] }}>{t}</span>
-                        <span style={{ flex: 1, color: ok ? '#9ca3af' : '#1f2937', textDecoration: ok ? 'line-through' : 'none', fontWeight: 600 }}>
-                          {splitClTitle(c.title).text}
-                        </span>
-                        <span style={{ flexShrink: 0, fontSize: 6.5, color: '#6b7280', fontWeight: 700 }}>
-                          {ok ? `${(c as any).completedBy ?? ''}${c.completedDate ? ` ${Number(c.completedDate.slice(5, 7))}/${Number(c.completedDate.slice(8, 10))}` : ''}`
-                            : c.dueDate ? `~${Number(c.dueDate.slice(5, 7))}/${Number(c.dueDate.slice(8, 10))}` : ''}
-                        </span>
-                      </div>
-                    )
-                  })}
+
+            {/* ── 팀 요약 칩 ── */}
+            <div style={{ display: 'flex', gap: 5, marginBottom: 7 }}>
+              {teamStat.map(x => (
+                <span key={x.t} style={{
+                  fontSize: 7.5, fontWeight: 800, color: TEAMC[x.t].c, background: TEAMC[x.t].bg,
+                  border: `0.8px solid ${TEAMC[x.t].c}33`, borderRadius: 999, padding: '2px 8px',
+                }}>
+                  {x.t === '간호' ? '간호팀' : x.t === '물리' ? '물리치료사' : '복지팀'} {x.d}/{x.n}
+                </span>
+              ))}
+              <span style={{ marginLeft: 'auto', fontSize: 7, color: '#94a3b8', alignSelf: 'center' }}>
+                ✓ 완료(담당자 · 날짜) · <span style={{ color: '#b45309', fontWeight: 700 }}>~날짜</span> = 기한
+              </span>
+            </div>
+
+            {/* ── 본문: 2단 컬럼 ── */}
+            <div style={{ columnCount: 2, columnGap: 14 }}>
+              {groups.map(g => {
+                const pal = FAMP[(g as any).fam] ?? { bg: '#f8fafc', edge: '#94a3b8', text: '#334155' }
+                const gd = g.items.filter(isItemDone).length
+                return (
+                  <div key={g.tag || '기타'} style={{ marginBottom: 6 }}>
+                    <div style={{
+                      breakInside: 'avoid', breakAfter: 'avoid', display: 'flex', alignItems: 'center', gap: 4,
+                      background: pal.bg, borderLeft: `3px solid ${pal.edge}`, borderRadius: '3px 6px 6px 3px',
+                      padding: '2.5px 6px', marginBottom: 2.5,
+                    }}>
+                      <span style={{ fontSize: 8.5, fontWeight: 900, color: pal.text }}>{g.no}. {g.label}</span>
+                      <span style={{ marginLeft: 'auto', fontSize: 7, fontWeight: 800, color: gd === g.items.length ? '#16a34a' : pal.text, opacity: 0.75 }}>
+                        {gd === g.items.length ? '✓ 완료' : `${gd}/${g.items.length}`}
+                      </span>
+                    </div>
+                    {g.items.map(c => {
+                      const ok = isItemDone(c)
+                      const t = teamOf(c)
+                      return (
+                        <div key={c.id} style={{
+                          breakInside: 'avoid', display: 'flex', alignItems: 'flex-start', gap: 3.5,
+                          padding: '1.4px 2px 1.4px 4px', fontSize: 7.6, lineHeight: 1.35,
+                          borderBottom: '0.5px solid #f1f5f9',
+                          background: ok ? '#fafffe' : 'transparent',
+                        }}>
+                          <span style={{
+                            width: 8.5, height: 8.5, marginTop: 0.8, flexShrink: 0, borderRadius: 2.5,
+                            border: `1.2px solid ${ok ? '#16a34a' : '#cbd5e1'}`,
+                            background: ok ? '#16a34a' : 'white',
+                            color: 'white', fontSize: 6.5, fontWeight: 900,
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          }}>{ok ? '✓' : ''}</span>
+                          <span style={{
+                            flexShrink: 0, fontSize: 6.2, fontWeight: 800, marginTop: 1,
+                            color: TEAMC[t].c, background: TEAMC[t].bg, borderRadius: 3, padding: '0 3px',
+                          }}>{t}</span>
+                          <span style={{ flex: 1, color: ok ? '#94a3b8' : '#1e293b', textDecoration: ok ? 'line-through' : 'none', fontWeight: 600 }}>
+                            {splitClTitle(c.title).text}
+                          </span>
+                          <span style={{ flexShrink: 0, fontSize: 6.4, fontWeight: 700, marginTop: 0.8,
+                            color: ok ? '#16a34a' : c.dueDate ? '#b45309' : '#cbd5e1' }}>
+                            {ok ? `${(c as any).completedBy ?? ''}${c.completedDate ? ` · ${Number(c.completedDate.slice(5, 7))}/${Number(c.completedDate.slice(8, 10))}` : ''}`
+                              : c.dueDate ? `~${Number(c.dueDate.slice(5, 7))}/${Number(c.dueDate.slice(8, 10))}` : ''}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* ── 확인 서명란 ── */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginTop: 6 }}>
+              {['복지팀', '간호팀', '시설장'].map(role => (
+                <div key={role} style={{ width: 76, border: '0.8px solid #e2e8f0', borderRadius: 6, padding: '3px 6px 10px' }}>
+                  <p style={{ margin: 0, fontSize: 6.5, fontWeight: 800, color: '#64748b' }}>{role} 확인</p>
                 </div>
               ))}
             </div>
-            <p style={{ fontSize: 6.5, color: '#9ca3af', textAlign: 'right', margin: '3px 0 0' }}>
-              ✓ 완료(담당자·날짜) · ~날짜 = 기한 · 행복한요양원 관리자 페이지에서 자동 출력
+            <p style={{ fontSize: 6.2, color: '#cbd5e1', textAlign: 'center', margin: '4px 0 0' }}>
+              행복한요양원 관리자 페이지에서 자동 생성된 문서입니다
             </p>
           </div>
         )
