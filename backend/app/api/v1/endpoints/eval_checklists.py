@@ -109,9 +109,11 @@ def list_checklists(
         q = q.filter(ChecklistItem.person_id == person_id)
 
     role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    pos = getattr(current_user, "position", None)
+    pos = pos.value if hasattr(pos, "value") else str(pos or "")
 
-    # 핵심: STAFF는 본인에게 배정된 것만
-    if role != "ADMIN":
+    # 핵심: STAFF는 본인에게 배정된 것만 — 시설장은 발행·팔로우를 위해 전체 열람
+    if role != "ADMIN" and pos != "시설장":
         q = q.filter(ChecklistItem.assigned_user_id == current_user.id)
 
     items = q.order_by(ChecklistItem.created_at).all()

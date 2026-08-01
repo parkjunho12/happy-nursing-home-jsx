@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Printer, Save, Eraser, Loader2, CalendarDays, Wand2, Users, History, Sparkles, Inbox } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Printer, Save, Eraser, Loader2, CalendarDays, Wand2, Users, History, Sparkles, Inbox , Trash2 } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
 import { workScheduleAPI, type ScheduleData, type ScheduleRow, type HolidayInfo } from '@/api/workScheduleClient'
 import { calcBase, DAILY_HOURS } from '@/utils/baseHours'
@@ -693,6 +693,15 @@ export default function WorkSchedulePage() {
           <button onClick={() => setBrush('')} className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-bold border ${brush === '' ? 'bg-gray-200 text-gray-700 ring-2 ring-offset-1 ring-gray-300' : 'bg-white border-gray-200 text-gray-400'}`}>
             <Eraser className="w-3 h-3" /> 지우기
           </button>
+          <button onClick={() => {
+            const filled = Object.values(data).reduce((a, m2) => a + Object.keys(m2 || {}).length, 0)
+            if (filled === 0) { alert('지울 근무가 없습니다.'); return }
+            if (!confirm(`${Number(ym.slice(5, 7))}월 근무 ${filled}칸을 전부 지울까요?\n(조 편성·비고는 남고, 「저장」을 눌러야 서버에 반영됩니다)`)) return
+            setData({})
+          }}
+            className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-bold border border-red-200 text-red-500 hover:bg-red-50">
+            <Trash2 className="w-3 h-3" /> 전체 지우기
+          </button>
           <span className="text-[11px] text-gray-400 ml-2">칸을 누르거나 끌면 칠해집니다 · 두 번 누르면 직접 입력 · 선택 후 <b>D M N H O C</b> 키와 방향키로도 편성됩니다</span>
         </div>
 
@@ -815,7 +824,21 @@ export default function WorkSchedulePage() {
                       {s.pos || '-'}
                     </td>
                     <td className={`${td} text-gray-500`}>{s.team || ''}</td>
-                    <td className={`${td} ws-name sticky left-0 z-10 bg-white font-bold text-gray-800`}>{s.name}</td>
+                    <td className={`${td} ws-name sticky left-0 z-10 bg-white font-bold text-gray-800 group/nm relative`}>
+                      {s.name}
+                      <button type="button" tabIndex={-1}
+                        onClick={e => {
+                          e.stopPropagation()
+                          const n = Object.keys(data[s.id] ?? {}).length
+                          if (n === 0) { alert(`${s.name} 님은 지울 근무가 없습니다.`); return }
+                          if (!confirm(`${s.name} 님의 이번 달 근무 ${n}칸을 지울까요?`)) return
+                          setData(prev => { const nx = { ...prev }; delete nx[s.id]; return nx })
+                        }}
+                        title="이 줄 근무 전체 지우기"
+                        className="absolute right-0.5 top-1/2 -translate-y-1/2 opacity-0 group-hover/nm:opacity-100 print:hidden p-0.5 text-gray-300 hover:text-red-500 transition-opacity">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </td>
                     {days.map(({ day, dow }, di) => {
                       const v = data[s.id]?.[String(day)] ?? ''
                       const mt = meta(v)

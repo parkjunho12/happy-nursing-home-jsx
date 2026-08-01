@@ -71,7 +71,7 @@ export const leaveAPI = {
       .then(unwrap<{ requests: LeaveRequest[]; used_annual: number; year: string }>),
   cancel: (id: string) => apiClient.delete(`${BASE}/requests/${id}`).then(r => r.data),
   list: (month?: string, status: LeaveStatus | '' = 'pending') =>
-    apiClient.get(`${BASE}/requests`, { params: { ...(month ? { month } : {}), ...(status ? { status } : {}) } })
+    apiClient.get(`${BASE}/requests`, { params: { ...(month ? { month } : {}), status } })
       .then(unwrap<LeaveRequest[]>),
   decide: (id: string, approve: boolean, note?: string) =>
     apiClient.patch(`${BASE}/requests/${id}`, { approve, note }).then(unwrap<LeaveRequest & { schedule_written?: boolean }>),

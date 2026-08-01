@@ -21,11 +21,12 @@ const fmtDate = (iso?: string | null) => {
 
 const STATUS: Record<ExpenseStatus, { label: string; chip: string; dot: string }> = {
   pending:  { label: '대기',  chip: 'bg-amber-50 text-amber-700 border-amber-200',   dot: 'bg-amber-500' },
+  manager_approved: { label: '시설장 승인 · 최종 대기', chip: 'bg-sky-50 text-sky-700 border-sky-200', dot: 'bg-sky-500' },
   approved: { label: '승인',  chip: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
   rejected: { label: '반려',  chip: 'bg-rose-50 text-rose-600 border-rose-200',      dot: 'bg-rose-500' },
 }
 const STATUS_TABS: ({ v: '' | ExpenseStatus; label: string })[] = [
-  { v: '', label: '전체' }, { v: 'pending', label: '대기' },
+  { v: '', label: '전체' }, { v: 'pending', label: '대기' }, { v: 'manager_approved', label: '최종 대기' },
   { v: 'approved', label: '승인' }, { v: 'rejected', label: '반려' },
 ]
 
@@ -370,9 +371,15 @@ function DetailModal({ r, onClose, onChanged, onEdit }:
         </div>
         {r.memo && <p className="text-sm text-gray-500 bg-gray-50 rounded-lg p-2.5 whitespace-pre-wrap">{r.memo}</p>}
 
+        {r.manager_name && (r.status === 'manager_approved' || r.status === 'approved') && (
+          <div className="bg-sky-50 text-sky-700 rounded-lg p-2.5 text-xs flex items-center gap-1.5">
+            <Check className="w-4 h-4" /> 1차 — {r.manager_name} 시설장 승인 · {fmtDate(r.manager_approved_at)}
+            {r.status === 'manager_approved' && <span className="ml-auto font-bold">관리자 최종 승인 대기</span>}
+          </div>
+        )}
         {r.status === 'approved' && r.approver_name && (
           <div className="bg-emerald-50 text-emerald-700 rounded-lg p-2.5 text-xs flex items-center gap-1.5">
-            <Check className="w-4 h-4" /> {r.approver_name}님 승인 · {fmtDate(r.approved_at)}
+            <Check className="w-4 h-4" /> {r.manager_name ? '최종 — ' : ''}{r.approver_name}님 승인 · {fmtDate(r.approved_at)}
           </div>
         )}
         {r.status === 'rejected' && (

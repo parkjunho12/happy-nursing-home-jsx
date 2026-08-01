@@ -47,9 +47,20 @@ def _require_submitter(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
-def _is_approver(u: User) -> bool:
+def _is_final_approver(u: User) -> bool:
+    """최종 승인 — ADMIN·대표·이사·사무국장"""
     role, pos = _role_pos(u)
     return role == "ADMIN" or pos in APPROVER_POSITIONS
+
+
+def _is_manager(u: User) -> bool:
+    """1차 승인 — 시설장"""
+    _, pos = _role_pos(u)
+    return pos == "시설장"
+
+
+def _is_approver(u: User) -> bool:
+    return _is_final_approver(u) or _is_manager(u)
 
 
 def _require_approver(current_user: User = Depends(get_current_user)) -> User:
@@ -85,7 +96,11 @@ def _view(e: ExpenseRequest, viewer: User) -> dict:
         "approved_at": _kst(e.approved_at).isoformat() if e.approved_at else None,
         "created_at": _kst(e.created_at).isoformat() if e.created_at else None,
         "attachments": [_att_view(a) for a in (e.attachments or [])],
-        "can_approve": _is_approver(viewer) and e.status == "pending",
+        "manager_name": e.manager_name,
+        "manager_approved_at": _kst(e.manager_approved_at),
+        # 시설장: 신청 건 1차 승인 / 최종 승인자: 신청·1차 승인 건 모두 처리 가능
+        "can_approve": (_is_manager(viewer) and not _is_final_approver(viewer) and e.status == "pending")
+                       or (_is_final_approver(viewer) and e.status in ("pending", "manager_approved")),
         "can_edit": (e.requester_id == viewer.id and e.status == "pending") or _is_approver(viewer),
         "is_mine": e.requester_id == viewer.id,
     }
@@ -252,12 +267,22 @@ def approve_request(rid: str, db: Session = Depends(get_db),
     e = db.query(ExpenseRequest).filter(ExpenseRequest.id == rid).first()
     if not e:
         raise HTTPException(404, "지출결의를 찾을 수 없습니다.")
-    if e.status != "pending":
-        raise HTTPException(400, "이미 처리된 건입니다.")
-    e.status = "approved"
-    e.approver_id = current_user.id
-    e.approver_name = getattr(current_user, "name", None)
-    e.approved_at = now_kst()
+    if _is_final_approver(current_user):
+        # 최종 승인 — 신청 직후든 시설장 승인 후든 가능
+        if e.status not in ("pending", "manager_approved"):
+            raise HTTPException(400, "이미 처리된 건입니다.")
+        e.status = "approved"
+        e.approver_id = current_user.id
+        e.approver_name = getattr(current_user, "name", None)
+        e.approved_at = now_kst()
+    else:
+        # 시설장 1차 승인 → ADMIN 최종 대기로 올라간다
+        if e.status != "pending":
+            raise HTTPException(400, "이미 처리된 건입니다.")
+        e.status = "manager_approved"
+        e.manager_id = current_user.id
+        e.manager_name = getattr(current_user, "name", None)
+        e.manager_approved_at = now_kst()
     e.reject_reason = None
     db.commit(); db.refresh(e)
     return ApiResponse(success=True, data=_view(e, current_user))
@@ -269,7 +294,8 @@ def reject_request(rid: str, reason: str = Form(...), db: Session = Depends(get_
     e = db.query(ExpenseRequest).filter(ExpenseRequest.id == rid).first()
     if not e:
         raise HTTPException(404, "지출결의를 찾을 수 없습니다.")
-    if e.status != "pending":
+    allowed = ("pending", "manager_approved") if _is_final_approver(current_user) else ("pending",)
+    if e.status not in allowed:
         raise HTTPException(400, "이미 처리된 건입니다.")
     if not reason.strip():
         raise HTTPException(400, "반려 사유를 입력해주세요.")
@@ -311,7 +337,7 @@ def summary(
     )
     rows = base.all()
     approved = [r for r in rows if r.status == "approved"]
-    pending = [r for r in rows if r.status == "pending"]
+    pending = [r for r in rows if r.status in ("pending", "manager_approved")]
     rejected = [r for r in rows if r.status == "rejected"]
 
     by_cat = {}

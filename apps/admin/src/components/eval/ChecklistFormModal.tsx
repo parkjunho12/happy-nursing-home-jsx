@@ -47,7 +47,7 @@ export default function ChecklistFormModal({ existing, onClose }: Props) {
     Array<{ id: string; name: string; position?: string | null }>
   >([])
   // 신규 생성 시: 관리자는 '지정 안 함'(기존 동작 유지), 직원은 본인이 기본값
-  const isAdmin = user?.role === 'ADMIN'
+  const isAdmin = user?.role === 'ADMIN' || user?.position === '시설장'   // 시설장도 발행·담당자 지정·전체 팔로우
   const [assignedUserId, setAssignedUserId] = useState<string>(
     (existing as any)?.assigned_user_id ?? (isAdmin ? '' : (user?.id ?? '')),
   )

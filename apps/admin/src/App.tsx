@@ -54,6 +54,7 @@ import ResidentDocsPage from './pages/admin/ResidentDocsPage'
 import InternalNoticesPage from './pages/admin/InternalNoticesPage'
 import MealPlanPage from './pages/admin/MealPlanPage'
 import WorkScheduleViewPage from './pages/eval/WorkScheduleViewPage'
+import RequestHistoryPage from './pages/admin/RequestHistoryPage'
 import StaffEducationPage from './pages/StaffEducationPage'
 import WorkGuidePage from './pages/WorkGuidePage'
 import GuidePage from './pages/GuidePage'
@@ -247,6 +248,7 @@ function App() {
             <Route path="staffing"                 element={<ManagerRoute><StaffingSimulatorPage /></ManagerRoute>} />
             <Route path="work-schedule"           element={<ManagerRoute><WorkSchedulePage /></ManagerRoute>} />
             <Route path="work-schedule-view"      element={<StaffAdminRoute><WorkScheduleViewPage /></StaffAdminRoute>} />
+            <Route path="leave-history"           element={<ManagerRoute><RequestHistoryPage /></ManagerRoute>} />
             <Route path="my-schedule"             element={<MySchedulePage />} />
             <Route path="handover"                 element={<HandoverAiPage />} />
             <Route path="incidents"                element={<StaffAdminRoute><IncidentsPage /></StaffAdminRoute>} />

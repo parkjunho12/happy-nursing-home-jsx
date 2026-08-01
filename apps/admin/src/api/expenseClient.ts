@@ -11,7 +11,7 @@ function unwrap<T>(res: any): T {
 // multipart 전송: Content-Type을 undefined로 두면 브라우저가 boundary 포함해 자동 지정
 const formHeaders = { headers: { 'Content-Type': undefined as any } }
 
-export type ExpenseStatus = 'pending' | 'approved' | 'rejected'
+export type ExpenseStatus = 'pending' | 'manager_approved' | 'approved' | 'rejected'
 
 export interface ExpenseAttachment {
   id: string
@@ -36,6 +36,8 @@ export interface ExpenseRequest {
   requester_name?: string | null
   approver_name?: string | null
   approved_at?: string | null
+  manager_name?: string | null
+  manager_approved_at?: string | null
   created_at?: string | null
   attachments: ExpenseAttachment[]
   can_approve: boolean
