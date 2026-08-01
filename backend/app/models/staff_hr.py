@@ -26,9 +26,10 @@ DOC_FIELDS = [
     ("bankbook",  "통장 사본"),
     ("insurance", "건강보험자격득실확인서"),
     ("withholding", "원천징수 동의서"),
-    ("subholiday", "대체휴일 합의서"),
-    ("compleave", "보상휴가 합의서"),
-    ("privacy", "개인정보 동의서"),
+    ("subholiday", "근로자 대표 합의서"),   # (구) 대체휴일+보상휴가 합의서 통합
+    ("privacy", "정보보호 서약서"),
+    ("cctv", "CCTV 동의서"),
+    ("pension", "퇴직연금"),
 ]
 
 
@@ -58,9 +59,11 @@ class StaffHrRecord(Base):
     doc_bankbook = Column(Boolean, nullable=True)
     doc_insurance = Column(Boolean, nullable=True)
     doc_withholding = Column(Boolean, nullable=True)     # 원천징수 동의서
-    doc_subholiday = Column(Boolean, nullable=True)      # 대체휴일 합의서
-    doc_compleave = Column(Boolean, nullable=True)       # 보상휴가 합의서
-    doc_privacy = Column(Boolean, nullable=True)         # 개인정보 동의서
+    doc_subholiday = Column(Boolean, nullable=True)      # 근로자 대표 합의서 (구 대체휴일+보상휴가)
+    doc_compleave = Column(Boolean, nullable=True)       # (구) 보상휴가 — subholiday로 통합, 읽기 폴백용
+    doc_privacy = Column(Boolean, nullable=True)         # 정보보호 서약서 (구 개인정보 동의서)
+    doc_cctv = Column(Boolean, nullable=True)            # CCTV 동의서
+    doc_pension = Column(Boolean, nullable=True)         # 퇴직연금
     doc_note = Column(Text, nullable=True)                # 서류 기타
 
     created_at = Column(DateTime(timezone=True), default=now_kst)

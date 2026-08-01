@@ -8,12 +8,14 @@ import {
   User,
   RotateCcw,
   Plus, Zap,
+  CalendarDays,
 } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
 import { useAuthStore } from '@/store/auth'
 import { apiClient } from '@/api/client'
 import ChecklistDetailModal from '@/components/eval/ChecklistDetailModal'
 import ChecklistFormModal from '@/components/eval/ChecklistFormModal'
+import ChecklistCalendarModal from '@/components/eval/ChecklistCalendarModal'
 import type { ChecklistItem } from '@/utils/period'
 import {
   FREQUENCY_LABELS,
@@ -81,6 +83,7 @@ export default function EvalChecklistPage() {
   const [editItem, setEditItem] = useState<ChecklistItem | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [quickOpen, setQuickOpen] = useState(false)
+  const [calOpen, setCalOpen] = useState(false)
   const [activeFreq, setActiveFreq] = useState<string>('all')
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState<'all' | 'done' | 'todo'>('all')
@@ -386,6 +389,12 @@ export default function EvalChecklistPage() {
 
         <div className="flex gap-2">
           <button
+            onClick={() => setCalOpen(true)}
+            className="flex items-center gap-1.5 text-sm text-purple-700 bg-purple-50 border border-purple-200 rounded-lg px-3 py-1.5 hover:bg-purple-100 font-semibold"
+          >
+            <CalendarDays size={14} /> 달력
+          </button>
+          <button
             onClick={() => setQuickOpen(true)}
             className="flex items-center gap-1.5 text-sm text-white bg-primary-orange rounded-lg px-3 py-1.5 hover:bg-primary-orange/90 font-semibold shadow-sm"
           >
@@ -545,6 +554,8 @@ export default function EvalChecklistPage() {
       {selectedItem && (
         <ChecklistDetailModal item={selectedItem} onClose={() => setSelectedItem(null)} />
       )}
+
+      {calOpen && <ChecklistCalendarModal onClose={() => setCalOpen(false)} />}
 
       {quickOpen && (
         <QuickTicketModal options={assigneeOptions} onClose={() => setQuickOpen(false)} onCreated={() => { setQuickOpen(false); loadAll() }} />
