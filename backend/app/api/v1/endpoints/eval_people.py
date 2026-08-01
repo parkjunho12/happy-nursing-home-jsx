@@ -325,6 +325,35 @@ def update_ltc_staff(
     return ApiResponse(success=True, data=LtcStaffOut.model_validate(s).model_dump())
 
 
+@staff_router.post("/{sid}/unresign", response_model=ApiResponse)
+def unresign_ltc_staff(sid: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """퇴사 취소 — 재직으로 복귀. 퇴사 때 비활성화된 미완료 체크리스트·HR 행도 되살린다."""
+    s = db.query(LtcStaffMember).filter(LtcStaffMember.id == sid).first()
+    if not s:
+        raise HTTPException(404, "Not found")
+    if s.status != "resigned":
+        raise HTTPException(409, "퇴사 상태가 아닙니다.")
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    today = _dt.now(_tz(_td(hours=9))).strftime("%Y-%m-%d")
+    s.status = "pending" if (s.hire_date or "")[:10] > today else "active"
+    s.resign_date = None
+    # 퇴사 처리 때 껐던 미완료 체크리스트 복구
+    db.execute(
+        update(ChecklistItem)
+        .where(ChecklistItem.person_id == sid, ChecklistItem.completed == False,
+               ChecklistItem.active == False)
+        .values(active=True)
+    )
+    try:
+        from app.models.staff_hr import StaffHrRecord
+        db.query(StaffHrRecord).filter(StaffHrRecord.staff_id == sid).update({"active": True})
+    except Exception:
+        pass
+    db.commit()
+    db.refresh(s)
+    return ApiResponse(success=True, data=LtcStaffOut.model_validate(s).model_dump())
+
+
 @staff_router.delete("/{sid}", response_model=ApiResponse)
 def delete_ltc_staff(sid: str, db: Session = Depends(get_db),
                      current_user: User = Depends(get_current_user)):
