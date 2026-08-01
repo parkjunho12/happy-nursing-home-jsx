@@ -160,7 +160,8 @@ export default function EvalCalendarPage() {
 
   // ── 마감 임박순 목록 (항목별 가장 임박한 occurrence) ────────────────
   const upcoming = useMemo(() => {
-    if (!hasOccurrences) return [] as { occ: ChecklistOccurrence; item: ChecklistItem | undefined; daysLeft: number }[]
+    type UpRow = { occ: ChecklistOccurrence; item: ReturnType<typeof itemMap.get>; daysLeft: number }
+    if (!hasOccurrences) return [] as UpRow[]
     const byItem = new Map<string, ChecklistOccurrence>()
     occurrences.forEach(o => {
       const item = itemMap.get(o.checklistItemId)

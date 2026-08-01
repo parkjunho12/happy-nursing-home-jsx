@@ -51,6 +51,7 @@ export interface ChecklistItem {
   completionHistory: CompletionRecord[]
   occurrences: ChecklistOccurrence[]   // 신규 — 없으면 [], 있으면 우선 사용
   dueDate?: string         // one_time 기한
+  completedBy?: string     // 마지막 완료 처리 담당자
   personId?: string
   personName?: string
   personType?: string
@@ -89,6 +90,7 @@ export interface ChecklistOccurrence {
   frequency: string
   scheduledDate: string
   dueDate: string
+  completedBy?: string
   status: 'pending' | 'completed' | 'overdue' | 'in_progress'
   startedBy?: string
   completedDate?: string
@@ -108,6 +110,7 @@ function mapOcc(raw: any): ChecklistOccurrence {
     frequency:       normalizeFrequency(raw.frequency),
     scheduledDate:   raw.scheduled_date,
     dueDate:         raw.due_date,
+    completedBy:     raw.completed_by ?? undefined,
     status:          raw.status,
     startedBy:       raw.started_by ?? undefined,
     completedDate:   raw.completed_date ?? undefined,
@@ -141,6 +144,9 @@ function mapCL(raw: any): ChecklistItem {
     attachmentName:  raw.attachment_name  ?? '',
     completed:       raw.completed        ?? false,
     completedDate:   raw.completed_date   ?? undefined,
+    completedBy:     raw.completed_by
+      ?? [...(raw.occurrences ?? [])].reverse().find((oc: any) => oc.status === 'completed' && oc.completed_by)?.completed_by
+      ?? undefined,
     lastCheckedDate: raw.last_checked_date ?? undefined,
     personId:        raw.person_id        ?? undefined,
     personName:      raw.person_name      ?? undefined,
@@ -317,7 +323,7 @@ export const useLtcStore = create<LtcState>((set, get) => ({
     if (u.title !== undefined)            p.title             = u.title
     if (u.description !== undefined)      p.description       = u.description
     if (u.frequency !== undefined)        p.frequency         = u.frequency
-    if ((u as any).dueDate !== undefined) p.due_date          = (u as any).dueDate || null
+    if ((u as any).dueDate !== undefined) p.due_date          = (u as any).dueDate || ''   // ''=기한 해제(서버 규약)
     if (u.relatedDomainId !== undefined)  p.related_domain_id = u.relatedDomainId
     if (u.relatedCategoryId !== undefined)p.related_category_id = u.relatedCategoryId
     if (u.relatedIndicatorId !== undefined) p.related_indicator_id = u.relatedIndicatorId
@@ -378,7 +384,7 @@ export const useLtcStore = create<LtcState>((set, get) => ({
   addResident: async (r) => {
     const raw = await evalResidentsAPI.create({ name:r.name, birth_date:r.birthDate, gender:r.gender, admission_date:r.admissionDate, admission_time:(r as any).admissionTime, care_grade_start_date:r.careGradeStartDate, floor:r.floor, room:(r as any).room, status:(r as any).status, religion:(r as any).religion, group_cognitive:(r as any).groupCognitive, group_leisure:(r as any).groupLeisure, group_physical:(r as any).groupPhysical, certifications:(r as any).certifications, contract_lines:(r as any).contract_lines, plan_lines:(r as any).plan_lines, eval_lines:(r as any).eval_lines, memo:r.memo })
     const newR = mapR(raw)
-    const templates = generateResidentAdmissionChecklists(newR as any)
+    const templates = generateResidentAdmissionChecklists(newR as any, (r as any).intakeFlags ?? {})
     const newCls = await evalChecklistAPI.createBulk(templates.map(clPayload as any))
     const newItemIds = newCls.map((c: any) => c.id)
     set(s => ({ residents:[newR,...s.residents], checklists:[...s.checklists,...newCls.map(mapCL)] }))

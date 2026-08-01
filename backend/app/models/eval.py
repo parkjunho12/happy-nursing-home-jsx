@@ -231,6 +231,7 @@ class ChecklistOccurrence(Base):
     memo = Column(Text, default="")
     attachment_name = Column(String(200), default="")
     started_by = Column(String(100), nullable=True)      # 진행 중 착수자
+    completed_by = Column(String(100), nullable=True)     # 완료 처리한 담당자
     started_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(

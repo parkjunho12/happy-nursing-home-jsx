@@ -55,6 +55,7 @@ import InternalNoticesPage from './pages/admin/InternalNoticesPage'
 import MealPlanPage from './pages/admin/MealPlanPage'
 import WorkScheduleViewPage from './pages/eval/WorkScheduleViewPage'
 import RequestHistoryPage from './pages/admin/RequestHistoryPage'
+import ResidentDetailPage from './pages/eval/ResidentDetailPage'
 import StaffEducationPage from './pages/StaffEducationPage'
 import WorkGuidePage from './pages/WorkGuidePage'
 import GuidePage from './pages/GuidePage'
@@ -275,6 +276,7 @@ function App() {
             {/* 사회복지사 + ADMIN — 수급자/직원 관리 */}
             <Route path="eval/blog-ai-writer" element={<BlogWriterRoute><BlogAiWriterPage /></BlogWriterRoute>} />
             <Route path="eval/residents" element={<SocialWorkerRoute><EvalResidentsPage /></SocialWorkerRoute>} />
+            <Route path="eval/residents/:id" element={<SocialWorkerRoute><ResidentDetailPage /></SocialWorkerRoute>} />
             <Route path="eval/staff"     element={<StaffAdminRoute><EvalStaffPage /></StaffAdminRoute>} />
 
             {/* ADMIN 전용 */}
