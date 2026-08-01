@@ -236,7 +236,8 @@ export interface ChecklistItem {
   completedDate?: string
   completionHistory: CompletionRecord[]
   occurrences: OccurrenceRecord[]   // occurrence 기반 완료 이력 (없으면 [])
-  dueDate?: string         // one_time 기한 (YYYY-MM-DD)
+  dueDate?: string         // one_time 기한
+  completedBy?: string     // 마지막 완료 처리 담당자 (YYYY-MM-DD)
   personId?: string
   personName?: string
   personType?: string

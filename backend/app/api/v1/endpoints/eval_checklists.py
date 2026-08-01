@@ -61,6 +61,7 @@ def _cl_to_out(item: ChecklistItem) -> dict:
             "due_date":          o.due_date,
             "status":            o.status,
             "started_by":        getattr(o, "started_by", None),
+            "completed_by":      getattr(o, "completed_by", None),
             "completed_date":    o.completed_date,
             "memo":              o.memo or "",
             "attachment_name":   o.attachment_name or "",
@@ -74,6 +75,8 @@ def _cl_to_out(item: ChecklistItem) -> dict:
     d["frequency"] = _normalize_freq(d.get("frequency"))
     d["completion_history"] = history
     d["occurrences"]        = occs
+    done_occs = [oc for oc in occs if oc["status"] == "completed" and oc.get("completed_by")]
+    d["completed_by"] = done_occs[-1]["completed_by"] if done_occs else None
     # due_date는 마이그레이션 전에는 컬럼이 없을 수 있으므로 안전하게 처리
     if "due_date" not in d:
         d["due_date"] = getattr(item, "due_date", None)
@@ -263,6 +266,8 @@ def update_checklist(
     if not item:
         raise HTTPException(404, "Not found")
     updates = payload.model_dump(exclude_none=True)
+    if updates.get("due_date") == "":   # 빈 문자열 = 기한 해제
+        updates["due_date"] = None
     if "frequency" in updates:
         updates["frequency"] = _normalize_freq(updates["frequency"])
     # FK 컬럼은 빈 문자열('')이 FK 제약 위반을 유발 → None 으로 정규화
@@ -378,7 +383,7 @@ def toggle_complete(
     item_id: str,
     payload: ToggleRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """
     완료/취소 토글.
@@ -416,8 +421,10 @@ def toggle_complete(
         occ = get_or_create_occurrence(db, item, target_date if is_one_time else None)
         if item.completed:
             complete_occurrence(db, occ, today_str, payload.memo, payload.attachment_name)
+            occ.completed_by = getattr(current_user, "name", None)   # 누가 체크했는지
         else:
             uncomplete_occurrence(db, occ)
+            occ.completed_by = None
 
     else:
         # ── 반복 주기 ─────────────────────────────────────────────────────
@@ -433,6 +440,7 @@ def toggle_complete(
         if not desired:
             # 미완료로 설정
             uncomplete_occurrence(db, occ)
+            occ.completed_by = None
             item.completed = False
             item.completed_date = None
             # CompletionRecord도 제거 (기존 호환)
@@ -444,6 +452,7 @@ def toggle_complete(
         else:
             # 미완료 → 완료
             complete_occurrence(db, occ, today_str, payload.memo, payload.attachment_name)
+            occ.completed_by = getattr(current_user, "name", None)
             item.completed = True
             item.completed_date = today_str
             # CompletionRecord 추가 (기존 호환, 없을 때만)

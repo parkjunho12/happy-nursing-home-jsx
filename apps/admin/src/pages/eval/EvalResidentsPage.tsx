@@ -1,6 +1,7 @@
 import StickyToolbar from '../../components/common/StickyToolbar'
 import RoomPicker from '@/components/eval/RoomPicker'
 import { useState, useMemo, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { UserPlus, LogOut, Edit2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw, Trash2 } from 'lucide-react'
 import DateField from '@/components/ui/DateField'
 import CertificationEditor from '@/components/eval/CertificationEditor'
@@ -22,6 +23,7 @@ export default function EvalResidentsPage() {
   const [floorF, setFloorF] = useState('')
   const [showAdd, setShowAdd] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const navigate = useNavigate()
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [showDischarge, setShowDischarge] = useState<string | null>(null)
   const [selectedCl, setSelectedCl] = useState<ChecklistItem | null>(null)
@@ -121,6 +123,7 @@ export default function EvalResidentsPage() {
             <ResidentCard key={r.id} r={r}
               expanded={expandedId===r.id}
               onExpand={() => setExpandedId(expandedId===r.id ? null : r.id)}
+              onDetail={() => navigate(`/eval/residents/${r.id}`)}
               onEdit={() => setEditingId(r.id)}
               onDischarge={() => setShowDischarge(r.id)}
               onDelete={() => handleDeleteResident(r)}
@@ -147,8 +150,8 @@ export default function EvalResidentsPage() {
   )
 }
 
-function ResidentCard({ r, expanded, onExpand, onEdit, onDischarge, onDelete, checklists, onClClick, onAddGuardian }: {
-  r: LtcResident; expanded:boolean; onExpand:()=>void; onEdit:()=>void; onDischarge:()=>void; onDelete:()=>void;
+function ResidentCard({ r, expanded, onExpand, onEdit, onDischarge, onDelete, onDetail, checklists, onClClick, onAddGuardian }: {
+  r: LtcResident; expanded:boolean; onExpand:()=>void; onEdit:()=>void; onDischarge:()=>void; onDelete:()=>void; onDetail:()=>void;
   checklists: ChecklistItem[]; onClClick:(c:ChecklistItem)=>void; onAddGuardian:()=>void;
 }) {
   const age = calcAge(r.birthDate)
@@ -190,6 +193,10 @@ function ResidentCard({ r, expanded, onExpand, onEdit, onDischarge, onDelete, ch
         <div className="flex items-center gap-2 flex-shrink-0">
           {(r.status==='active' || r.status==='pending') && (
             <>
+              <button onClick={e=>{e.stopPropagation();onDetail()}}
+                className="flex items-center gap-1 text-xs font-medium text-gray-600 border border-gray-200 px-2.5 py-1.5 rounded-xl hover:bg-gray-50">
+                상세
+              </button>
               <button onClick={e=>{e.stopPropagation();onAddGuardian()}}
                 className="flex items-center gap-1 text-xs font-medium text-teal-600 border border-teal-200 px-2.5 py-1.5 rounded-xl hover:bg-teal-50">
                 🌸 보호자
@@ -290,6 +297,7 @@ function ResidentForm({ existing, onClose }: { existing?: LtcResident; onClose:(
   const today = new Date().toISOString().split('T')[0]
   const [roomPickOpen, setRoomPickOpen] = useState(false)
   const [form, setForm] = useState({ name:existing?.name??'', birthDate:existing?.birthDate??'1930-01-01', gender:existing?.gender??'female', admissionDate:existing?.admissionDate??today, admissionTime:(existing as any)?.admissionTime??'', careGradeStartDate:existing?.careGradeStartDate??today, floor:existing?.floor??'', room:(existing as any)?.room??'', memo:existing?.memo??'', religion:existing?.religion??'', groupCognitive:existing?.groupCognitive??'', groupLeisure:existing?.groupLeisure??'', groupPhysical:existing?.groupPhysical??'' })
+  const [flags, setFlags] = useState({ basicMedical: false, restraint: false, pressureSore: false, positioning: false })
   const [certs, setCerts] = useState<Certification[]>([
     { grade:'3', cert_no:'', start: today, end: endFromStart(today, 2), benefits:[{ type:'시설', from: today }] },
   ])
@@ -303,7 +311,7 @@ function ResidentForm({ existing, onClose }: { existing?: LtcResident; onClose:(
     const auto = autoDocEvents(certifications, form.admissionDate)
     try {
       if(existing) await updateResident(existing.id, form)
-      else await addResident({...form, careGradeStartDate, certifications, contract_lines:auto.contract, plan_lines:auto.plan, eval_lines:auto.eval, status:'active'} as any)
+      else await addResident({...form, careGradeStartDate, certifications, contract_lines:auto.contract, plan_lines:auto.plan, eval_lines:auto.eval, status:'active', intakeFlags: flags} as any)
       onClose()
     }
     finally { setLoading(false) }
@@ -317,7 +325,7 @@ function ResidentForm({ existing, onClose }: { existing?: LtcResident; onClose:(
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
         </div>
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          {!existing && <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 text-xs text-orange-700">✨ 등록 시 입소 관련 체크리스트 <strong>12건</strong>이 자동 생성됩니다.</div>}
+          {!existing && <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 text-xs text-orange-700">✨ 등록 시 입소 (서류/준비) 체크리스트가 자동 생성됩니다 — 아래 <b>대상자 구분</b>에 따라 항목이 늘어나요.</div>}
           <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">성명 *</label><input required className={ic} value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="홍길동"/></div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">생년월일 *</label>
@@ -385,6 +393,25 @@ function ResidentForm({ existing, onClose }: { existing?: LtcResident; onClose:(
             <CertificationEditor value={certs} onChange={setCerts} />
             <p className="text-xs text-gray-400 mt-1">등록 시 어르신 서류현황에 자동 반영됩니다. (종료 90일 전 갱신 알림)</p>
           </div>}
+          {!existing && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">대상자 구분 <span className="font-normal text-gray-400">— 해당하면 전용 체크리스트가 함께 생성됩니다</span></label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {([
+                  ['basicMedical', '기초 · 의료 대상자', '이용신청서·의뢰서 2건'],
+                  ['restraint', '신체 제재 대상자', '신체제재 등록·서명 등 5건'],
+                  ['positioning', '체위변경(다음날 업무)', '욕창방지 도구·체위변경 3건'],
+                  ['pressureSore', '욕창 대상자', '욕창 간호 기록 등 2건'],
+                ] as const).map(([k, label, hint]) => (
+                  <button key={k} type="button" onClick={() => setFlags(f => ({ ...f, [k]: !f[k] }))}
+                    className={`text-left px-3 py-2 rounded-xl border text-xs transition-colors ${(flags as any)[k] ? 'bg-teal-50 border-teal-300 text-teal-800' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                    <span className="font-bold">{(flags as any)[k] ? '✓ ' : ''}{label}</span>
+                    <span className="block text-[10px] opacity-70 mt-0.5">{hint}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">메모</label><textarea className={ic} rows={2} value={form.memo} onChange={e=>setForm({...form,memo:e.target.value})} placeholder="예: 1등급, 낙상 고위험"/></div>
           <div className="flex gap-3 pt-2">
             <button type="submit" disabled={loading} className="flex-1 bg-primary-orange text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-primary-orange/90 disabled:opacity-50">{loading?'처리 중...':existing?'수정':'입소 등록'}</button>
