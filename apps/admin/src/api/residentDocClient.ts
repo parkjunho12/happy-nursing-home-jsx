@@ -21,6 +21,8 @@ export interface ResidentDoc {
   apply_stage?: string | null     // 시설급여 신청 단계
   apply_note?: string | null
   guardian_notified_at?: string | null
+  renew_applied_at?: string | null
+  renew_base_end?: string | null
   seq: number
   name?: string | null
   admission_date?: string | null
@@ -42,6 +44,8 @@ export interface DocInput {
   apply_stage?: string | null
   apply_note?: string | null
   guardian_notified_at?: string | null
+  renew_applied_at?: string | null
+  renew_base_end?: string | null
   name?: string | null
   admission_date?: string | null
   grade?: string | null

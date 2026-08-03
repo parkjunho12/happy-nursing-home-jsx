@@ -78,6 +78,22 @@ export function getNavConfig(
     badge: todayTodo > 0 ? `${todayTodo}` : undefined,
   }
 
+  // 영양사 — 대시보드 · 일정 캘린더(사회복지사 수준 카테고리) · 식단표
+  if (user?.role !== 'ADMIN' && user?.position === '영양사') {
+    return {
+      showDashboard: true,
+      sections: [
+        {
+          label: '운영',
+          items: [
+            { to: '/schedule', icon: CalendarClock, label: '일정 캘린더' },
+            { to: '/meals', icon: ChefHat, label: '식단표' },
+          ],
+        },
+      ],
+    }
+  }
+
   // 앨범담당 — 앨범만
   if (isAlbumOnly) {
     return {
@@ -345,6 +361,13 @@ export function getMobileTabs(user: NavUser | null): NavItem[] {
   const pos = user?.position ?? ''
   if (pos === '앨범담당') {
     return [{ to: '/eval/albums', icon: ImageIcon, label: '보호자 앨범' }]
+  }
+  if (pos === '영양사') {
+    return [
+      { to: '/',         icon: LayoutDashboard, label: '홈' },
+      { to: '/schedule', icon: CalendarDays,    label: '일정' },
+      { to: '/meals',    icon: ChefHat,         label: '식단표' },
+    ]
   }
   const isCaregiver = user?.role === 'STAFF' && pos === '요양보호사'
   if (isCaregiver) {

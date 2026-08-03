@@ -17,7 +17,7 @@ const dday = (iso: string) =>
 
 /** 서류 3종이 공유하는 행 */
 interface TaskRow { docId: string; idx: number; name: string; date: string; kind?: string | null; d: number; care?: string | null }
-interface CertRow { docId: string; name: string; end: string; due: string; d: number; expired: boolean; care?: string | null; upcoming?: boolean; dToDue?: number }
+interface CertRow { docId: string; name: string; end: string; due: string; d: number; expired: boolean; care?: string | null; upcoming?: boolean; dToDue?: number; renewing?: boolean }
 
 type DocField = 'plan_lines' | 'contract_lines' | 'eval_lines'
 type TabKey = 'plan' | 'contract' | 'eval' | 'cert' | 'apply'
@@ -73,6 +73,18 @@ export default function UpcomingDocs() {
     } finally { setDoneBusy(null) }
   }
 
+  const [renewBusy, setRenewBusy] = useState<string | null>(null)
+  const applyRenew = async (c: CertRow) => {
+    if (!confirm(`${c.name} 어르신 인정서 갱신을 신청했나요?\n「갱신 신청 중」으로 표시되고, 새 인정서가 등록되면 자동으로 사라집니다.`)) return
+    setRenewBusy(c.docId)
+    const todayIso = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10)
+    try {
+      const saved = await residentDocAPI.update(c.docId, { renew_applied_at: todayIso, renew_base_end: c.end } as any)
+      setRows(prev => prev.map(r => r.id === c.docId ? { ...r, ...saved } : r))
+    } catch (e: any) { setErr(e?.message ?? '갱신 신청 저장 실패') }
+    finally { setRenewBusy(null) }
+  }
+
   /** 미완료 일시 → 지연 먼저, 그다음 임박순 */
   const collect = (field: DocField): TaskRow[] => {
     const out: TaskRow[] = []
@@ -100,8 +112,10 @@ export default function UpcomingDocs() {
       const st = certState(cur)
       if (!cur?.end) return
       if (st.status === 'renew' || st.status === 'expired') {
+        const renewing = !!(r as any).renew_applied_at
+          && (!(r as any).renew_base_end || cur.end <= (r as any).renew_base_end)
         out.push({ docId: r.id, name: r.name ?? '-', end: cur.end, due: renewalDue(cur.end),
-                   d: dday(cur.end), expired: st.status === 'expired', care: deriveCare(r.certifications) })
+                   d: dday(cur.end), expired: st.status === 'expired', care: deriveCare(r.certifications), renewing })
       } else if (st.status === 'ok') {
         // 아직 90일 밖 — 갱신 기간 진입까지 45일 이내면 '준비' 줄로 미리 보여준다.
         // 진입하고 나서 서두르는 것보다, 진입 전에 보호자 안내·서류 준비가 먼저다.
@@ -282,6 +296,16 @@ export default function UpcomingDocs() {
                             : <>갱신 기간 — 만료 {fmt(c.end)}까지 D-{c.d}</>}
                       </p>
                     </div>
+                    {c.renewing ? (
+                      <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full bg-sky-100 text-sky-700">
+                        <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse" /> 갱신 신청 중
+                      </span>
+                    ) : !c.upcoming && (
+                      <button onClick={e => { e.stopPropagation(); applyRenew(c) }} disabled={renewBusy === c.docId}
+                        className="shrink-0 text-[10px] font-bold text-sky-600 border border-sky-200 px-2 py-1 rounded-full hover:bg-sky-50 disabled:opacity-40">
+                        {renewBusy === c.docId ? '저장 중…' : '갱신 신청 →'}
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>

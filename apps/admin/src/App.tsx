@@ -157,6 +157,15 @@ function ExpenseRoute({ children }: { children: React.ReactNode }) {
 
 
 // 사회복지사 또는 ADMIN만 접근 가능
+function MealRoute({ children }: { children: React.ReactNode }) {
+  // 식단표 — 사회복지사급 + 영양사
+  const { isAuthenticated, user } = useAuthStore()
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  const ok = user?.role === 'ADMIN' || ['사회복지사', '시설장', '대표', '이사', '영양사'].includes(user?.position ?? '')
+  if (!ok) return <Navigate to="/eval/checklist" replace />
+  return <>{children}</>
+}
+
 function ResidentCareRoute({ children }: { children: React.ReactNode }) {
   // 수급자 관리·상세 — 케어팀(간호팀장·물리치료사)도 체크리스트 확인·토글을 위해 접근
   const { isAuthenticated, user } = useAuthStore()
@@ -253,7 +262,7 @@ function App() {
             <Route path="expense"                  element={<ExpenseRoute><ExpensePage /></ExpenseRoute>} />
             <Route path="facility-news"            element={<SocialWorkerRoute><FacilityNewsPage /></SocialWorkerRoute>} />
             <Route path="notices"                  element={<SocialWorkerRoute><InternalNoticesPage /></SocialWorkerRoute>} />
-            <Route path="meals"                    element={<SocialWorkerRoute><MealPlanPage /></SocialWorkerRoute>} />
+            <Route path="meals"                    element={<MealRoute><MealPlanPage /></MealRoute>} />
             <Route path="staff-hr"                 element={<StaffAdminRoute><StaffHrPage /></StaffAdminRoute>} />
             <Route path="staffing"                 element={<ManagerRoute><StaffingSimulatorPage /></ManagerRoute>} />
             <Route path="work-schedule"           element={<ManagerRoute><WorkSchedulePage /></ManagerRoute>} />

@@ -22,7 +22,7 @@ _YMD = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 def _editor(current_user: User = Depends(get_current_user)) -> User:
     role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
     pos = getattr(current_user, "position", None) or ""
-    if role != "ADMIN" and pos not in ("시설장", "사회복지사", "대표", "이사"):
+    if role != "ADMIN" and pos not in ("시설장", "사회복지사", "대표", "이사", "영양사"):
         raise HTTPException(403, "식단표 관리 권한이 없습니다.")
     return current_user
 
