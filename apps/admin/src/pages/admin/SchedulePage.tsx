@@ -937,6 +937,10 @@ function DetailModal({ ev, onClose, onChanged, onGoRecruit, onEdit }: { ev: UEve
               {ev.location && <p className="flex items-center gap-2"><MapPin className="w-4 h-4 text-gray-400" /> {ev.location}</p>}
               {ev.contactPhone && <p className="flex items-center gap-2"><Phone className="w-4 h-4 text-gray-400" /> {ev.contactName ? `${ev.contactName} · ` : ''}{ev.contactPhone}</p>}
               {ev.memo && <p className="text-gray-500 bg-gray-50 rounded-lg p-2.5 whitespace-pre-wrap">{ev.memo}</p>}
+              {/* 등록자 — ADMIN에게만 */}
+              {useAuthStore.getState().user?.role === 'ADMIN' && ev.kind === 'event' && (ev.raw as any)?.created_by && (
+                <p className="text-[11px] text-gray-400">등록: {(ev.raw as any).created_by}</p>
+              )}
             </div>
             {isInterview && (
               <div className="bg-violet-50 rounded-lg p-3 text-xs text-violet-700 flex items-start gap-2">
