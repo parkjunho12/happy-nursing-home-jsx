@@ -121,6 +121,8 @@ def _view(r: ResidentDocStatus, rooms: dict | None = None) -> dict:
         "care_type": r.care_type or "시설",
         "followup_date": r.followup_date,
         "apply_stage": r.apply_stage,
+        "renew_applied_at": getattr(r, "renew_applied_at", None),
+        "renew_base_end": getattr(r, "renew_base_end", None),
         "apply_note": r.apply_note,
         "guardian_notified_at": r.guardian_notified_at,
         "plan_lines": r.plan_lines or [],
@@ -135,6 +137,8 @@ class DocBody(BaseModel):
     care_type: Optional[str] = None
     followup_date: Optional[str] = None
     apply_stage: Optional[str] = None
+    renew_applied_at: Optional[str] = None
+    renew_base_end: Optional[str] = None
     apply_note: Optional[str] = None
     guardian_notified_at: Optional[str] = None
     name: Optional[str] = None
@@ -154,6 +158,8 @@ def _apply(r: ResidentDocStatus, b: DocBody):
     if b.floor is not None: r.floor = b.floor or None
     if b.followup_date is not None: r.followup_date = b.followup_date or None
     if b.apply_stage is not None: r.apply_stage = b.apply_stage or None
+    if b.renew_applied_at is not None: r.renew_applied_at = b.renew_applied_at or None
+    if b.renew_base_end is not None: r.renew_base_end = b.renew_base_end or None
     if b.apply_note is not None: r.apply_note = b.apply_note or None
     if b.guardian_notified_at is not None: r.guardian_notified_at = b.guardian_notified_at or None
     if b.name is not None: r.name = b.name or None

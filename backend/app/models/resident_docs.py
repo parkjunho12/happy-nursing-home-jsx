@@ -28,6 +28,8 @@ class ResidentDocStatus(Base):
     apply_stage = Column(String(20), nullable=True)
     apply_note = Column(Text, nullable=True)                  # 진행 메모(예: 의사소견서 제출 필요)
     guardian_notified_at = Column(String(20), nullable=True)  # 보호자에게 마지막으로 안내한 날 ISO
+    renew_applied_at = Column(String(20), nullable=True)       # 인정서 갱신 신청일 ISO
+    renew_base_end = Column(String(20), nullable=True)         # 신청 당시 인정서 종료일 — 새 인정서 등록되면 자동 해제 판정용
     seq = Column(Integer, default=0)
 
     name = Column(String(100), nullable=True, index=True)     # 어르신 성함

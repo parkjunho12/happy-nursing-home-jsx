@@ -142,7 +142,10 @@ export default function SchedulePage() {
   const visibleCats = useMemo(() => {
     if (authUser?.role !== 'ADMIN' && authUser?.position === '요양보호사')
       return new Set<CatKey>(['행사', '기타', '교육', '생신', '생일', '외래·병원', '면회', '외출', '외박'])
-    const nav = getNavConfig(authUser)
+    // 영양사 — 사회복지사가 보는 범위와 동일하게 (메뉴는 좁아도 캘린더 가시성은 사회복지사 기준)
+    const navUser = authUser?.role !== 'ADMIN' && authUser?.position === '영양사'
+      ? { ...authUser, position: '사회복지사' } : authUser
+    const nav = getNavConfig(navUser)
     const routes = new Set<string>(nav.sections.flatMap(sec => sec.items.map(i => i.to)))
     return new Set<CatKey>(ALL_CATS.filter(c =>
       c === '연차촉진' ? canPromo : (CAT_ROUTE[c] === null || routes.has(CAT_ROUTE[c]!))))

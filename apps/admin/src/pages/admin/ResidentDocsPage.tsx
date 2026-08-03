@@ -419,6 +419,9 @@ export default function ResidentDocsPage() {
                       const st = certState(cur)
                       const badge = st.status === 'expired' ? { t: '만료 지남', c: 'bg-red-100 text-red-600' }
                         : st.status === 'renew' ? { t: `갱신대상 D-${Math.max(0, st.daysToEnd ?? 0)}`, c: 'bg-amber-100 text-amber-700' } : null
+                      // 갱신 신청 진행 — 새 인정서(종료일이 신청 당시보다 뒤)가 등록되면 자동 해제
+                      const renewing = !!(r as any).renew_applied_at
+                        && (!(r as any).renew_base_end || !cur.end || cur.end <= (r as any).renew_base_end)
                       const key = `${r.id}|cert`, open = exp.has(key)
                       const line = (c: typeof cur) => `${gradeLabel(c)}${benefitLabel(c) ? ' · ' + benefitLabel(c) : ''}`
                       return (
@@ -452,7 +455,29 @@ export default function ResidentDocsPage() {
                               갱신기준 {renewalDue(cur.end)} <b className="text-gray-500">(D-{dDue})</b>
                             </div>
                           })()}
-                          {badge && <span className={`inline-block mt-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${badge.c}`}>{badge.t}</span>}
+                          {renewing ? (
+                            <span className="inline-flex items-center gap-1 mt-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700">
+                              <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse" />
+                              갱신 신청 중 · {fmtD((r as any).renew_applied_at)}
+                            </span>
+                          ) : badge && (
+                            <span className="inline-flex items-center gap-1 mt-0.5">
+                              <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded-full ${badge.c}`}>{badge.t}</span>
+                              <span role="button"
+                                onClick={async e => {
+                                  e.stopPropagation()
+                                  if (!confirm(`${r.name} 어르신 인정서 갱신을 신청했나요?\n「갱신 신청 중」으로 표시되고, 새 인정서가 등록되면 자동으로 사라집니다.`)) return
+                                  const todayIso = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10)
+                                  try {
+                                    await residentDocAPI.update(r.id, { renew_applied_at: todayIso, renew_base_end: cur.end ?? '' } as any)
+                                    load()
+                                  } catch (e2: any) { alert(e2?.response?.data?.detail ?? '저장 실패') }
+                                }}
+                                className="text-[10px] font-bold text-sky-600 border border-sky-200 px-1.5 py-0.5 rounded-full hover:bg-sky-50 cursor-pointer">
+                                갱신 신청 →
+                              </span>
+                            </span>
+                          )}
                         </button>
                       )
                     })() : <span className="text-gray-300">-</span>}
