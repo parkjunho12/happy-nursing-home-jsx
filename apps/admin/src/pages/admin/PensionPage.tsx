@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Landmark, Loader2, Save } from 'lucide-react'
-import { pensionAPI, type PensionRow } from '@/api/pensionClient'
+import { pensionAPI, pensionRefundAPI, type PensionRow, type PensionRefundRow } from '@/api/pensionClient'
 
 /**
  * 퇴직연금(DC) 적립 관리 — 직원별 월 부담금 발생·은행 입금 대장.
@@ -18,6 +18,8 @@ export default function PensionPage() {
   const [loading, setLoading] = useState(true)
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const [saving, setSaving] = useState(false)
+  const [refunds, setRefunds] = useState<PensionRefundRow[]>([])
+  const [refBusy, setRefBusy] = useState<string | null>(null)
 
   const load = () => {
     setLoading(true)
@@ -33,6 +35,7 @@ export default function PensionPage() {
       })
       setDrafts(d)
     }).catch(() => setRows([])).finally(() => setLoading(false))
+    pensionRefundAPI.list().then(setRefunds).catch(() => setRefunds([]))
   }
   useEffect(load, [ym])
 
@@ -114,6 +117,12 @@ export default function PensionPage() {
             <span className={`font-bold ${totals.cumA - totals.cumD > 0 ? 'text-red-600' : 'text-gray-500'}`}>누적 미납</span>{' '}
             <b className="text-gray-800">{won(Math.max(0, totals.cumA - totals.cumD))}원</b>
           </div>
+          {refunds.some(r => !r.refund_date) && (
+            <div className="px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-xs">
+              <span className="text-amber-700 font-bold">환급 대기</span>{' '}
+              <b className="text-gray-800">{refunds.filter(r => !r.refund_date).length}명 · {won(refunds.filter(r => !r.refund_date).reduce((a, r) => a + r.cum_deposited, 0))}원</b>
+            </div>
+          )}
         </div>
       </div>
 
@@ -186,6 +195,56 @@ export default function PensionPage() {
           </table>
         </div>
       )}
+      {/* ── 퇴사자 환급 — 적립금이 시설 통장으로 돌아오는 구조 ── */}
+      {refunds.length > 0 && (
+        <div className="mt-4 bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+          <h2 className="text-sm font-bold text-gray-800 mb-1">퇴사자 환급</h2>
+          <p className="text-[11px] text-gray-400 mb-3">퇴사하면 적립해온 누적금이 시설 통장으로 환급됩니다 — 입금 확인 후 금액·일자를 기록하세요.</p>
+          <ul className="space-y-1.5">
+            {refunds.map(r => {
+              const pending = !r.refund_date
+              return (
+                <li key={r.staff_id} className={`flex items-center gap-2.5 px-3 py-2 rounded-xl border text-sm ${pending ? 'bg-amber-50/60 border-amber-200' : 'bg-gray-50/50 border-gray-100'}`}>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-gray-800">{r.name} <span className="text-[10px] font-semibold text-gray-400">{r.position ?? ''} · 퇴사 {r.resign_date ?? '-'}</span></p>
+                    <p className="text-[11px] text-gray-500">누적 적립 <b className="text-gray-700">{won(r.cum_deposited)}원</b></p>
+                  </div>
+                  {pending ? (
+                    <>
+                      <span className="shrink-0 text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">환급 대기</span>
+                      <button disabled={refBusy === r.staff_id}
+                        onClick={async () => {
+                          const amt = prompt(`${r.name} 님 환급 입금액(원)을 입력하세요.\n누적 적립: ${won(r.cum_deposited)}원`, String(r.cum_deposited))
+                          if (amt === null) return
+                          const n = Number(amt.replace(/[^\d]/g, ''))
+                          if (!n) { alert('금액을 확인해주세요.'); return }
+                          setRefBusy(r.staff_id)
+                          const todayIso = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10)
+                          try {
+                            await pensionRefundAPI.save(r.staff_id, { amount: n, refund_date: todayIso })
+                            setRefunds(await pensionRefundAPI.list())
+                          } catch (e: any) { alert(e?.response?.data?.detail ?? '저장 실패') }
+                          finally { setRefBusy(null) }
+                        }}
+                        className="shrink-0 text-xs font-bold text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-xl hover:bg-emerald-50 disabled:opacity-40">
+                        {refBusy === r.staff_id ? '저장 중…' : '환급 확인'}
+                      </button>
+                    </>
+                  ) : (
+                    <span className="shrink-0 inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
+                      ✓ 환급 완료 {won(r.refund_amount)}원 · {r.refund_date}
+                      {r.refund_amount != null && r.refund_amount !== r.cum_deposited && (
+                        <span className="text-amber-600">(적립 대비 {r.refund_amount > r.cum_deposited ? '+' : ''}{won(r.refund_amount - r.cum_deposited)})</span>
+                      )}
+                    </span>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
+
       <p className="mt-2 text-[11px] text-gray-400 leading-relaxed">
         노란 임금 칸 = 미입력(직전 달 임금이 회색으로 제안됨) · 부담금은 임금÷12 자동 계산 후 상여 반영 등 직접 수정 가능 ·
         누적 수치는 저장된 모든 달의 합계 — 미납액이 빨간색이면 입금이 부족한 상태입니다 · 저장 버튼을 눌러야 반영됩니다

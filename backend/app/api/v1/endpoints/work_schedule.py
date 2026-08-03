@@ -202,6 +202,132 @@ def save_config(body: ConfigBody, db: Session = Depends(get_db), current_user: U
     })
 
 
+@router.get("/export")
+def export_schedule(month: str = Query(...), db: Session = Depends(get_db), _: User = Depends(_viewer)):
+    """저장된 근무표 최종본을 엑셀(.xlsx)로 — 화면과 같은 배치·색상."""
+    if not _YM.match(month or ""):
+        raise HTTPException(400, "month 형식은 YYYY-MM 이어야 합니다.")
+    w = db.query(WorkSchedule).filter(WorkSchedule.year_month == month).first()
+    if not w or not (w.data or {}):
+        raise HTTPException(404, "저장된 근무표가 없습니다.")
+
+    import io as _io
+    import calendar as _cal
+    from datetime import date as _date
+    from fastapi.responses import StreamingResponse
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+    y, m = int(month[:4]), int(month[5:7])
+    total = _cal.monthrange(y, m)[1]
+    names = {s2.id: s2.name for s2 in db.query(LtcStaffMember).all()}
+    poss = {s2.id: (s2.position or "") for s2 in db.query(LtcStaffMember).all()}
+
+    # 공휴일 (빨간 날만)
+    holidays = set()
+    try:
+        from app.services import staffing as S
+        rows_h = []
+        try:
+            rows_h = [{"date": r.date, "name": r.name, "kind": r.kind}
+                      for r in db.query(HolidayCalendar).filter(HolidayCalendar.active == True).all()]  # noqa: E712
+        except Exception:
+            pass
+        kinds = {r["date"]: (r.get("kind") or "public") for r in rows_h}
+        for d, n in (S.get_korean_holidays(y, None, rows_h) or {}).items():
+            if d.startswith(month) and not (n in ("근로자의 날",) or kinds.get(d) == "paid"):
+                holidays.add(int(d[8:10]))
+    except Exception:
+        pass
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"{m}월 근무표"
+
+    thin = Side(style="thin", color="D1D5DB")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    center = Alignment(horizontal="center", vertical="center")
+
+    CODE_FILL = {
+        "D": "E0F2FE", "M": "D1FAE5", "N": "E0E7FF", "休": "FFE4E6",
+        "대휴": "FEF3C7", "초과휴": "FEF3C7", "AD": "CCFBF1", "PD": "CCFBF1",
+    }
+    HEAD_FILL = PatternFill("solid", fgColor="F3F4F6")
+    SUN_FILL = PatternFill("solid", fgColor="FEE2E2")
+    SAT_FILL = PatternFill("solid", fgColor="DBEAFE")
+
+    # 제목
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=3 + total)
+    tc = ws.cell(row=1, column=1, value=f"행복한요양원 {y}년 {m}월 근무표")
+    tc.font = Font(size=14, bold=True)
+    tc.alignment = Alignment(horizontal="left", vertical="center")
+
+    # 머리행
+    heads = ["직종", "조", "성명"] + [str(d) for d in range(1, total + 1)]
+    for ci, h in enumerate(heads, start=1):
+        c = ws.cell(row=2, column=ci, value=h)
+        c.font = Font(size=9, bold=True)
+        c.alignment = center
+        c.border = border
+        c.fill = HEAD_FILL
+        if ci > 3:
+            day = ci - 3
+            dow = _date(y, m, day).weekday()   # 0=월
+            if dow == 6 or day in holidays:
+                c.fill = SUN_FILL
+                c.font = Font(size=9, bold=True, color="DC2626")
+            elif dow == 5:
+                c.fill = SAT_FILL
+                c.font = Font(size=9, bold=True, color="2563EB")
+
+    # 본문 — 저장된 rows 순서(화면 정렬 그대로)
+    r_i = 3
+    for row in (w.rows or []):
+        sid = row.get("staff_id")
+        codes = (w.data or {}).get(sid) or {}
+        if not codes and sid not in names:
+            continue
+        vals = [row.get("position") or poss.get(sid, ""), row.get("team") or "", names.get(sid, "(퇴사)")]
+        for ci, v in enumerate(vals, start=1):
+            c = ws.cell(row=r_i, column=ci, value=v)
+            c.font = Font(size=9, bold=(ci == 3))
+            c.alignment = center
+            c.border = border
+        for day in range(1, total + 1):
+            code = codes.get(str(day), "")
+            c = ws.cell(row=r_i, column=3 + day, value=code)
+            c.font = Font(size=9)
+            c.alignment = center
+            c.border = border
+            fill = CODE_FILL.get(code)
+            if fill:
+                c.fill = PatternFill("solid", fgColor=fill)
+            else:
+                dow = _date(y, m, day).weekday()
+                if dow == 6 or day in holidays:
+                    c.fill = PatternFill("solid", fgColor="FEF2F2")
+                elif dow == 5:
+                    c.fill = PatternFill("solid", fgColor="EFF6FF")
+        r_i += 1
+
+    # 폭·행 높이
+    ws.column_dimensions["A"].width = 11
+    ws.column_dimensions["B"].width = 6
+    ws.column_dimensions["C"].width = 9
+    from openpyxl.utils import get_column_letter
+    for d in range(1, total + 1):
+        ws.column_dimensions[get_column_letter(3 + d)].width = 4.2
+    ws.freeze_panes = "D3"
+
+    buf = _io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"work_schedule_{month}.xlsx"
+    return StreamingResponse(
+        buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+
 @router.get("/holidays")
 def month_holidays(month: str = Query(...), db: Session = Depends(get_db), _: User = Depends(_viewer)):
     """해당 월의 공휴일 { 'YYYY-MM-DD': {name, kind} }.

@@ -30,3 +30,20 @@ export const pensionAPI = {
     deposit_date?: string | null; memo?: string | null
   }) => apiClient.put(`${BASE}/${month}/${staffId}`, b).then(unwrap<any>),
 }
+
+export interface PensionRefundRow {
+  staff_id: string
+  name: string
+  position?: string | null
+  resign_date?: string | null
+  cum_deposited: number
+  refund_amount?: number | null
+  refund_date?: string | null
+  memo?: string | null
+}
+
+export const pensionRefundAPI = {
+  list: () => apiClient.get(`${BASE}/refunds`).then(unwrap<PensionRefundRow[]>),
+  save: (staffId: string, b: { amount?: number | null; refund_date?: string | null; memo?: string | null }) =>
+    apiClient.put(`${BASE}/refunds/${staffId}`, b).then(unwrap<any>),
+}

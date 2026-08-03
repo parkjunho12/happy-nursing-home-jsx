@@ -359,8 +359,14 @@ export default function ResidentAssignPage() {
                   const n = loads.get(s2.name) ?? 0
                   return (
                     <button key={s2.id} onClick={() => doPick(s2.id, s2.name)}
-                      className={`w-full flex items-center px-3 py-2 rounded-xl text-left text-sm font-semibold text-gray-700 border border-transparent ${hoverCls}`}>
+                      className={`w-full flex items-center gap-1.5 px-3 py-2 rounded-xl text-left text-sm font-semibold text-gray-700 border border-transparent ${hoverCls}`}>
                       {s2.name}
+                      {s2.pending && (
+                        <span className="text-[9px] font-bold text-amber-700 bg-amber-100 border border-amber-200 px-1 py-0.5 rounded"
+                          title={s2.hire_date ? `입사 예정 ${s2.hire_date}` : '입사 예정'}>
+                          {s2.hire_date ? `${Number(s2.hire_date.slice(5, 7))}/${Number(s2.hire_date.slice(8, 10))} 입사` : '입사 예정'}
+                        </span>
+                      )}
                       <span className={`ml-auto text-[11px] font-bold ${n === 0 ? 'text-green-600' : n >= 4 ? 'text-red-400' : 'text-gray-400'}`}>{n}명 담당</span>
                     </button>
                   )

@@ -61,9 +61,12 @@ def roster(db: Session = Depends(get_db), _: User = Depends(_editor)):
         })
     rows.sort(key=lambda x: (x["floor"], x["room"] or "999", x["name"]))
 
-    staff = db.query(LtcStaffMember).filter(LtcStaffMember.status == "active").all()
-    care = [{"id": s.id, "name": s.name} for s in staff if (s.position or "") in CARE_POSITIONS]
-    rehab = [{"id": s.id, "name": s.name} for s in staff if (s.position or "") in REHAB_POSITIONS]
+    # 입사 예정자도 포함 — 새로 오실 선생님을 미리 배정해둘 수 있게
+    staff = db.query(LtcStaffMember).filter(LtcStaffMember.status.in_(["active", "pending"])).all()
+    care = [{"id": s.id, "name": s.name, "pending": s.status == "pending", "hire_date": s.hire_date}
+            for s in staff if (s.position or "") in CARE_POSITIONS]
+    rehab = [{"id": s.id, "name": s.name, "pending": s.status == "pending", "hire_date": s.hire_date}
+             for s in staff if (s.position or "") in REHAB_POSITIONS]
     return ApiResponse(success=True, data={"rows": rows, "care_staff": care, "rehab_staff": rehab})
 
 

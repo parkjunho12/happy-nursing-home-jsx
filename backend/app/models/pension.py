@@ -34,3 +34,17 @@ class PensionEntry(Base):
     memo         = Column(Text, nullable=True)
     updated_by   = Column(String(100), nullable=True)
     updated_at   = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)
+
+
+class PensionRefund(Base):
+    """퇴사자 환급 — 퇴사하면 그동안 적립한 누적금이 시설 통장으로 환급되는 구조.
+    환급이 확인될 때까지 '환급 대기'로 관리한다."""
+    __tablename__ = "pension_refunds"
+
+    id          = Column(String, primary_key=True, default=_uuid)
+    staff_id    = Column(String, nullable=False, unique=True, index=True)
+    amount      = Column(Integer, nullable=True)      # 환급 금액(원)
+    refund_date = Column(String(10), nullable=True)   # 환급 입금일 ISO
+    memo        = Column(Text, nullable=True)
+    updated_by  = Column(String(100), nullable=True)
+    updated_at  = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)
