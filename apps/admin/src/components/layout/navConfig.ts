@@ -310,6 +310,10 @@ export function getNavConfig(
     { to: '/eval/calendar', icon: CalendarDays, label: '평가 캘린더' },
     { to: '/education', icon: GraduationCap, label: '직원 교육' },
   ]
+  const isCareTeam = ['간호팀장', '물리치료사'].includes(user?.position ?? '')
+  if (isCareTeam && !isSocialWorker) {
+    evalItems.push({ to: '/eval/residents', icon: UserRound, label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined })
+  }
   if (isSocialWorker) {
     evalItems.push(
       { to: '/eval/residents', icon: UserRound, label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined },

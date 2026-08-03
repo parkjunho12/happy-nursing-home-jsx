@@ -198,8 +198,13 @@ def discharge_ltc_resident(
 
 
 @residents_router.delete("/{rid}", response_model=ApiResponse)
-def delete_ltc_resident(rid: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def delete_ltc_resident(rid: str, db: Session = Depends(get_db),
+                        current_user: User = Depends(get_current_user)):
     """수급자 완전 삭제 — 연관 데이터(체크리스트·수행기록·서류현황)도 함께 정리."""
+    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    pos = getattr(current_user, "position", None) or ""
+    if role != "ADMIN" and pos not in ("사회복지사", "시설장", "대표", "이사"):
+        raise HTTPException(403, "수급자 삭제 권한이 없습니다.")
     r = db.query(LtcResident).filter(LtcResident.id == rid).first()
     if not r:
         raise HTTPException(404, "Not found")

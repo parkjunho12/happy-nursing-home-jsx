@@ -157,6 +157,15 @@ function ExpenseRoute({ children }: { children: React.ReactNode }) {
 
 
 // 사회복지사 또는 ADMIN만 접근 가능
+function ResidentCareRoute({ children }: { children: React.ReactNode }) {
+  // 수급자 관리·상세 — 케어팀(간호팀장·물리치료사)도 체크리스트 확인·토글을 위해 접근
+  const { isAuthenticated, user } = useAuthStore()
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  const ok = user?.role === 'ADMIN' || ['사회복지사', '시설장', '대표', '이사', '간호팀장', '물리치료사'].includes(user?.position ?? '')
+  if (!ok) return <Navigate to="/eval/checklist" replace />
+  return <>{children}</>
+}
+
 function SocialWorkerRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
@@ -275,8 +284,8 @@ function App() {
 
             {/* 사회복지사 + ADMIN — 수급자/직원 관리 */}
             <Route path="eval/blog-ai-writer" element={<BlogWriterRoute><BlogAiWriterPage /></BlogWriterRoute>} />
-            <Route path="eval/residents" element={<SocialWorkerRoute><EvalResidentsPage /></SocialWorkerRoute>} />
-            <Route path="eval/residents/:id" element={<SocialWorkerRoute><ResidentDetailPage /></SocialWorkerRoute>} />
+            <Route path="eval/residents" element={<ResidentCareRoute><EvalResidentsPage /></ResidentCareRoute>} />
+            <Route path="eval/residents/:id" element={<ResidentCareRoute><ResidentDetailPage /></ResidentCareRoute>} />
             <Route path="eval/staff"     element={<StaffAdminRoute><EvalStaffPage /></StaffAdminRoute>} />
 
             {/* ADMIN 전용 */}
