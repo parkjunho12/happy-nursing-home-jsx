@@ -9,7 +9,7 @@ import { Link2, Link2Off } from 'lucide-react'
 const POSITIONS = [
   '대표', '시설장', '이사',
   '사회복지사', '간호사', '간호조무사',
-  '물리치료사', '요양보호사', '요양팀장', '앨범담당',
+  '물리치료사', '요양보호사', '요양팀장', '영양사', '앨범담당',
 ] as const
 
 const ROLES = [
