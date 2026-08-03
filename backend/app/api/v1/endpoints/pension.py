@@ -16,7 +16,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
 from app.models.eval import LtcStaffMember
-from app.models.pension import PensionEntry
+from app.models.pension import PensionEntry, PensionRefund
 from app.schemas.response import ApiResponse
 
 router = APIRouter()
@@ -89,6 +89,60 @@ def list_month(month: str = Query(...), db: Session = Depends(get_db), _: User =
         })
     out.sort(key=lambda x: ((x["hire_date"] or "9999"), x["name"] or ""))
     return ApiResponse(success=True, data={"month": month, "rows": out})
+
+
+@router.get("/refunds")
+def list_refunds(db: Session = Depends(get_db), _: User = Depends(_hr)):
+    """퇴사자 환급 현황 — 적립금이 있는 퇴사자는 환급 확인 전까지 '대기'."""
+    resigned = db.query(LtcStaffMember).filter(LtcStaffMember.status == "resigned").all()
+    ids = [s.id for s in resigned]
+    dep = {}
+    if ids:
+        for sid, d in (db.query(PensionEntry.staff_id,
+                                func.coalesce(func.sum(PensionEntry.deposited), 0))
+                       .filter(PensionEntry.staff_id.in_(ids))
+                       .group_by(PensionEntry.staff_id).all()):
+            dep[sid] = int(d or 0)
+    refunds = {r.staff_id: r for r in db.query(PensionRefund).filter(PensionRefund.staff_id.in_(ids)).all()} if ids else {}
+    out = []
+    for s in resigned:
+        total = dep.get(s.id, 0)
+        r = refunds.get(s.id)
+        if total <= 0 and not r:
+            continue   # 적립 이력 없는 퇴사자는 표시하지 않는다
+        out.append({
+            "staff_id": s.id, "name": s.name, "position": s.position,
+            "resign_date": s.resign_date, "cum_deposited": total,
+            "refund_amount": r.amount if r else None,
+            "refund_date": r.refund_date if r else None,
+            "memo": r.memo if r else None,
+        })
+    # 환급 안 된 사람 먼저, 퇴사일 최신순
+    out.sort(key=lambda x: (bool(x["refund_date"]), x["resign_date"] or ""), reverse=False)
+    out.sort(key=lambda x: bool(x["refund_date"]))
+    return ApiResponse(success=True, data=out)
+
+
+class RefundBody(BaseModel):
+    amount: Optional[int] = None
+    refund_date: Optional[str] = None
+    memo: Optional[str] = None
+
+
+@router.put("/refunds/{staff_id}")
+def upsert_refund(staff_id: str, body: RefundBody,
+                  db: Session = Depends(get_db), current_user: User = Depends(_hr)):
+    r = db.query(PensionRefund).filter(PensionRefund.staff_id == staff_id).first()
+    if not r:
+        r = PensionRefund(staff_id=staff_id)
+        db.add(r)
+    r.amount = body.amount
+    r.refund_date = (body.refund_date or "").strip() or None
+    r.memo = (body.memo or "").strip() or None
+    r.updated_by = getattr(current_user, "name", None)
+    db.commit()
+    return ApiResponse(success=True, data={"staff_id": staff_id, "amount": r.amount,
+                                           "refund_date": r.refund_date, "memo": r.memo})
 
 
 class EntryBody(BaseModel):

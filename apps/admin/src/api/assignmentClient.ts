@@ -18,7 +18,7 @@ export interface AssignRow {
   rehab_staff_name?: string | null
   note?: string | null
 }
-export interface StaffOpt { id: string; name: string }
+export interface StaffOpt { id: string; name: string; pending?: boolean; hire_date?: string | null }
 export interface AssignLog {
   id: string; resident_name?: string | null; field: string
   before?: string | null; after?: string | null; changed_by?: string | null; at?: string | null

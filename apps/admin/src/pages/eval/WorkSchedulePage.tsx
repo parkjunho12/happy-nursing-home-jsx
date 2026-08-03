@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Printer, Save, Eraser, Loader2, CalendarDays, Wand2, Users, History, Sparkles, Inbox , Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Printer, Save, Eraser, Loader2, CalendarDays, Wand2, Users, History, Sparkles, Inbox, Trash2, FileSpreadsheet } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
+import { apiClient } from '@/api/client'
 import { workScheduleAPI, type ScheduleData, type ScheduleRow, type HolidayInfo } from '@/api/workScheduleClient'
 import { calcBase, DAILY_HOURS } from '@/utils/baseHours'
 import ScheduleHistoryModal from '@/components/schedule/ScheduleHistoryModal'
@@ -578,6 +579,26 @@ export default function WorkSchedulePage() {
             </button>
             <button onClick={() => setHistOpen(true)} className="inline-flex items-center gap-1.5 px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">
               <History className="w-4 h-4" /> 저장 이력
+            </button>
+            <button
+              onClick={async () => {
+                try {
+                  const res = await apiClient.get(`/api/v1/admin/work-schedule/export`, {
+                    params: { month: ym }, responseType: 'blob',
+                  })
+                  const url = URL.createObjectURL(res.data)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = `근무표_${ym}.xlsx`
+                  a.click()
+                  setTimeout(() => URL.revokeObjectURL(url), 3000)
+                } catch {
+                  alert('저장된 근무표가 없거나 다운로드에 실패했습니다. 먼저 「저장」을 해주세요.')
+                }
+              }}
+              title="저장된 최종본을 엑셀로 — 색상·정렬 포함"
+              className="inline-flex items-center gap-1.5 px-3 py-2.5 border border-emerald-200 bg-emerald-50 rounded-xl text-sm font-semibold text-emerald-700 hover:bg-emerald-100">
+              <FileSpreadsheet className="w-4 h-4" /> 엑셀
             </button>
             <div className="inline-flex rounded-xl border border-gray-200 overflow-hidden">
               <button onClick={() => printAs(false)} title="시간 집계를 빼고 근무만 크게 — 벽에 붙이는 용도"
