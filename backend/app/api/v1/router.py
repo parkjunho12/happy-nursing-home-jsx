@@ -23,6 +23,7 @@ from app.api.v1.endpoints.assignments import router as assignments_router
 from app.api.v1.endpoints.rooms import router as rooms_router
 from app.api.v1.endpoints.programs import router as programs_router, family_router as programs_family_router
 from app.api.v1.endpoints.meals import router as meals_router
+from app.api.v1.endpoints.pension import router as pension_router
 from app.api.v1.endpoints.staff_push import router as staff_push_router
 from app.api.v1.endpoints.staff_hr import router as staff_hr_router
 from app.api.v1.endpoints.card_keys import router as card_keys_router
@@ -141,6 +142,7 @@ api_router.include_router(rooms_router, prefix="/admin/rooms", tags=["admin-room
 api_router.include_router(programs_router, prefix="/admin/programs", tags=["admin-programs"])
 api_router.include_router(programs_family_router, prefix="/family", tags=["family-programs"])
 api_router.include_router(meals_router, prefix="/admin/meals", tags=["admin-meals"])
+api_router.include_router(pension_router, prefix="/admin/pension", tags=["admin-pension"])
 api_router.include_router(staff_push_router, prefix="/staff/push", tags=["staff-push"])
 api_router.include_router(staff_hr_router, prefix="/admin/staff-hr", tags=["admin-staff-hr"])
 api_router.include_router(card_keys_router, prefix="/admin/card-keys", tags=["admin-card-keys"])

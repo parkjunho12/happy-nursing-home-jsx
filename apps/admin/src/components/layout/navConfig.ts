@@ -3,7 +3,7 @@ import {
   Star, Settings, ClipboardList, ClipboardCheck, CalendarDays,
   UserRound, ShieldCheck, Sparkles, FileSearch,
   Image as ImageIcon, Users, BookOpen, PenLine, Megaphone, Bell, CalendarClock, HeartHandshake, Briefcase, Soup, Receipt, GraduationCap,
-  type LucideIcon, AlertTriangle, BarChart3, ChefHat,
+  type LucideIcon, AlertTriangle, BarChart3, ChefHat, Landmark,
 } from 'lucide-react'
 
 /**
@@ -14,6 +14,7 @@ export const MOBILE_HIDDEN = new Set<string>([
   '/work-schedule',        // 근무표 편성·인쇄 — 31열 표
   '/staffing',             // 인력배치 시뮬레이터
   '/staff-hr',             // 직원 상세 서류
+  '/pension',              // 퇴직연금 대장 — 표 중심
   '/resident-docs',        // 어르신 서류현황 표
   '/eval/record-audit',    // 제공기록지 검수
   '/eval/record-guide',
@@ -146,6 +147,7 @@ export function getNavConfig(
           items: [
             { to: '/eval/staff', icon: UserCog, label: '직원 관리', badge: activeStaff > 0 ? `${activeStaff}명` : undefined },
             { to: '/staff-hr', icon: FileText, label: '직원 상세' },
+            { to: '/pension', icon: Landmark, label: '퇴직연금' },
             { to: '/work-schedule', icon: CalendarClock, label: '근무표' },
             { to: '/work-schedule-view', icon: CalendarClock, label: '전체 근무표 보기' },
             { to: '/my-schedule', icon: CalendarDays, label: '내 근무표' },
@@ -235,6 +237,7 @@ export function getNavConfig(
           items: [
             { to: '/eval/staff', icon: UserCog, label: '직원 관리', badge: activeStaff > 0 ? `${activeStaff}명` : undefined },
             { to: '/staff-hr', icon: FileText, label: '직원 상세' },
+            { to: '/pension', icon: Landmark, label: '퇴직연금' },
             { to: '/work-schedule', icon: CalendarClock, label: '근무표' },
             { to: '/work-schedule-view', icon: CalendarClock, label: '전체 근무표 보기' },
             { to: '/my-schedule', icon: CalendarDays, label: '내 근무표' },
