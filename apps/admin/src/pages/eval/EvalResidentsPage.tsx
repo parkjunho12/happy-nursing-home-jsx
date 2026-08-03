@@ -2,6 +2,7 @@ import StickyToolbar from '../../components/common/StickyToolbar'
 import RoomPicker from '@/components/eval/RoomPicker'
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuthStore } from '@/store/auth'
 import { UserPlus, LogOut, Edit2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw, Trash2 } from 'lucide-react'
 import DateField from '@/components/ui/DateField'
 import CertificationEditor from '@/components/eval/CertificationEditor'
@@ -154,6 +155,8 @@ function ResidentCard({ r, expanded, onExpand, onEdit, onDischarge, onDelete, on
   r: LtcResident; expanded:boolean; onExpand:()=>void; onEdit:()=>void; onDischarge:()=>void; onDelete:()=>void; onDetail:()=>void;
   checklists: ChecklistItem[]; onClClick:(c:ChecklistItem)=>void; onAddGuardian:()=>void;
 }) {
+  // 케어팀(간호팀장·물리치료사)은 열람·체크 중심 — 삭제는 숨긴다
+  const canDelete = useAuthStore(st => st.user?.role === 'ADMIN' || ['사회복지사', '시설장', '대표', '이사'].includes(st.user?.position ?? ''))
   const age = calcAge(r.birthDate)
   const done = checklists.filter(c => isItemDone(c)).length
   const total = checklists.length
@@ -205,7 +208,9 @@ function ResidentCard({ r, expanded, onExpand, onEdit, onDischarge, onDelete, on
               {r.status==='active' && (
                 <button onClick={e=>{e.stopPropagation();onDischarge()}} className="flex items-center gap-1 text-xs font-medium text-red-500 border border-red-200 px-2.5 py-1.5 rounded-xl hover:bg-red-50"><LogOut size={12}/>퇴소</button>
               )}
-              <button onClick={e=>{e.stopPropagation();onDelete()}} title="수급자 삭제" className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-300 hover:bg-red-50 hover:text-red-500"><Trash2 size={14}/></button>
+              {canDelete && (
+                <button onClick={e=>{e.stopPropagation();onDelete()}} title="수급자 삭제" className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-300 hover:bg-red-50 hover:text-red-500"><Trash2 size={14}/></button>
+              )}
             </>
           )}
           {expanded ? <ChevronUp size={16} className="text-gray-400"/> : <ChevronDown size={16} className="text-gray-400"/>}

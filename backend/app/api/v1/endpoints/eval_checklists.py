@@ -115,9 +115,15 @@ def list_checklists(
     pos = getattr(current_user, "position", None)
     pos = pos.value if hasattr(pos, "value") else str(pos or "")
 
-    # 핵심: STAFF는 본인에게 배정된 것만 — 시설장은 발행·팔로우를 위해 전체 열람
+    # 핵심: STAFF는 본인에게 배정된 것만 — 시설장은 전체,
+    # 사회복지사·간호팀장·물리치료사는 인물(수급자·직원) 연결 항목까지 열람
     if role != "ADMIN" and pos != "시설장":
-        q = q.filter(ChecklistItem.assigned_user_id == current_user.id)
+        if pos in ("사회복지사", "간호팀장", "물리치료사"):
+            from sqlalchemy import or_
+            q = q.filter(or_(ChecklistItem.assigned_user_id == current_user.id,
+                             ChecklistItem.person_id.isnot(None)))
+        else:
+            q = q.filter(ChecklistItem.assigned_user_id == current_user.id)
 
     items = q.order_by(ChecklistItem.created_at).all()
 
