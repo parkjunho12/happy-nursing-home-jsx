@@ -1,5 +1,6 @@
+import { useMemo, useState } from 'react'
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, LogOut, BookOpen, Compass } from 'lucide-react'
+import { LayoutDashboard, LogOut, BookOpen, Compass, Search, Star, X } from 'lucide-react'
 import { useAuthStore } from '@/store/auth'
 import { useLtcStore } from '@/store/ltc'
 import { todayKST, isItemDone } from '@/utils/period'
@@ -43,6 +44,16 @@ export default function Sidebar({ mobile = false, onNavigate }: SidebarProps) {
   }
 
   const nav = getNavConfig(user, counts)
+  // 메뉴 검색 + 즐겨찾기 (localStorage에 기억)
+  const [menuQ, setMenuQ] = useState('')
+  const [favs, setFavs] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('nav-favs') || '[]') } catch { return [] }
+  })
+  const toggleFav = (to: string) => setFavs(p => {
+    const n = p.includes(to) ? p.filter(x => x !== to) : [...p, to]
+    localStorage.setItem('nav-favs', JSON.stringify(n))
+    return n
+  })
   // 모바일 드로어에서는 PC 전용(넓은 표·인쇄) 메뉴를 걷어낸다
   const sections = nav.sections
     .map(sec => mobile ? { ...sec, items: sec.items.filter(i => !MOBILE_HIDDEN.has(i.to)) } : sec)
@@ -56,7 +67,7 @@ export default function Sidebar({ mobile = false, onNavigate }: SidebarProps) {
       to={item.to}
       end={item.to === '/'}
       onClick={handleNav}
-      className={({ isActive }) => `${linkBase} ${isActive ? linkActive : linkInactive}`}
+      className={({ isActive }) => `group ${linkBase} ${isActive ? linkActive : linkInactive}`}
     >
       <item.icon size={16} className="flex-shrink-0" />
       <span className="flex-1 truncate">{item.label}</span>
@@ -65,8 +76,19 @@ export default function Sidebar({ mobile = false, onNavigate }: SidebarProps) {
           {item.badge}
         </span>
       )}
+      <span role="button" tabIndex={-1}
+        onClick={e => { e.preventDefault(); e.stopPropagation(); toggleFav(item.to) }}
+        title={favs.includes(item.to) ? '즐겨찾기 해제' : '즐겨찾기 — 맨 위에 고정'}
+        className={`shrink-0 p-0.5 rounded transition-opacity ${favs.includes(item.to) ? 'text-amber-400' : 'text-gray-200 opacity-0 group-hover:opacity-100 hover:text-amber-400'}`}>
+        <Star size={13} fill={favs.includes(item.to) ? 'currentColor' : 'none'} />
+      </span>
     </NavLink>
   )
+
+  // 전체 항목 평탄화 — 검색·즐겨찾기용
+  const allItems = useMemo(() => sections.flatMap(sec => sec.items), [sections])
+  const favItems = favs.map(to => allItems.find(i => i.to === to)).filter(Boolean) as NavItemT[]
+  const searched = menuQ ? allItems.filter(i => i.label.toLowerCase().includes(menuQ.toLowerCase())) : null
 
   return (
     <aside
@@ -89,6 +111,35 @@ export default function Sidebar({ mobile = false, onNavigate }: SidebarProps) {
       </div>
 
       <nav className="flex-1 px-3 py-3 overflow-y-auto">
+        {/* 메뉴 검색 */}
+        <div className="relative mb-2">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-300" />
+          <input value={menuQ} onChange={e => setMenuQ(e.target.value)} placeholder="메뉴 검색"
+            className="w-full pl-8 pr-7 py-2 text-sm border border-gray-100 bg-gray-50/70 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-orange/30 focus:bg-white" />
+          {menuQ && (
+            <button onClick={() => setMenuQ('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500"><X size={13} /></button>
+          )}
+        </div>
+
+        {searched ? (
+          /* 검색 결과 — 섹션 무시하고 평탄 목록 */
+          <div className="space-y-0.5">
+            {searched.map(item => <NavItem key={item.to} item={item} />)}
+            {searched.length === 0 && <p className="px-3 py-4 text-xs text-gray-300 text-center">‘{menuQ}’ 메뉴 없음</p>}
+          </div>
+        ) : (
+        <>
+        {/* 즐겨찾기 — 맨 위 고정 */}
+        {favItems.length > 0 && (
+          <div className="mb-2 pb-2 border-b border-amber-100">
+            <p className="px-3 pb-1 text-[11px] font-bold text-amber-500 tracking-wider flex items-center gap-1">
+              <Star size={10} fill="currentColor" /> 즐겨찾기
+            </p>
+            <div className="space-y-0.5">
+              {favItems.map(item => <NavItem key={`fav-${item.to}`} item={item} />)}
+            </div>
+          </div>
+        )}
         {nav.showDashboard && (
           <NavLink
             to="/"
@@ -112,6 +163,8 @@ export default function Sidebar({ mobile = false, onNavigate }: SidebarProps) {
             </div>
           )
         })}
+        </>
+        )}
       </nav>
 
       <div className="px-3 py-2 border-t border-gray-50 space-y-0.5">
