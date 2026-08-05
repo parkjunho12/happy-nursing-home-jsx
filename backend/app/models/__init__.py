@@ -101,3 +101,4 @@ from app.models.handover import HandoverReport  # noqa: F401
 from app.models.leave import LeaveRequest, SwapRequest  # noqa: F401
 from app.models.meal import MealWeek  # noqa: F401
 from app.models.pension import PensionEntry, PensionRefund  # noqa: F401
+from app.models.audit_check import AuditRound, AuditItem  # noqa: F401
