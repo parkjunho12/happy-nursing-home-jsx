@@ -32,8 +32,21 @@ export default function AuditCheckPage() {
   const [newOpen, setNewOpen] = useState(false)
   const [newDate, setNewDate] = useState('')
   const [newTitle, setNewTitle] = useState('')
-  const [staffNames, setStaffNames] = useState<string[]>([])
+  const [staffOpts, setStaffOpts] = useState<{ name: string; position?: string | null }[]>([])
+  const posOf = (name?: string | null) => staffOpts.find(o2 => o2.name === name)?.position ?? null
   const [assignFor, setAssignFor] = useState<AuditItem | null>(null)
+  // 일괄 담당 지정 — 선택 모드
+  const [bulkMode, setBulkMode] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkPickOpen, setBulkPickOpen] = useState(false)
+  const toggleSel = (id: string) => setSelected(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const doBulkAssign = async (name: string | null) => {
+    try {
+      await auditCheckAPI.bulkAssign([...selected], name)
+      setItems(prev => prev.map(i => selected.has(i.id) ? { ...i, assignee_name: name } : i))
+      setBulkPickOpen(false); setSelected(new Set()); setBulkMode(false)
+    } catch (e: any) { alert(e?.response?.data?.detail ?? '일괄 지정 실패') }
+  }
 
   const loadRounds = async (selectLast = false) => {
     setLoading(true)
@@ -49,8 +62,13 @@ export default function AuditCheckPage() {
     apiClient.get('/api/v1/users/assignee-options')
       .then(res => {
         const data = Array.isArray(res.data) ? res.data : (res.data as any)?.data ?? []
-        setStaffNames([...new Set<string>(data.map((u: any) => u.name).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko')))
-      }).catch(() => setStaffNames([]))
+        const seen = new Set<string>()
+        const opts = data
+          .filter((u: any) => u.name && !seen.has(u.name) && seen.add(u.name))
+          .map((u: any) => ({ name: u.name as string, position: (u.position ?? null) as string | null }))
+          .sort((a: any, b: any) => a.name.localeCompare(b.name, 'ko'))
+        setStaffOpts(opts)
+      }).catch(() => setStaffOpts([]))
   }, [])
   useEffect(() => {
     if (!cur) { setItems([]); return }
@@ -140,6 +158,10 @@ export default function AuditCheckPage() {
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${onlyMine ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-gray-500 border-gray-200'}`}>
                   내 담당만
                 </button>
+                <button onClick={() => { setBulkMode(v => !v); setSelected(new Set()) }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${bulkMode ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-500 border-gray-200'}`}>
+                  {bulkMode ? '선택 취소' : '일괄 담당 지정'}
+                </button>
                 <div className="relative ml-auto">
                   <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-300" />
                   <input value={q} onChange={e => setQ(e.target.value)} placeholder="항목·담당자 검색"
@@ -172,6 +194,16 @@ export default function AuditCheckPage() {
                           <span className={`text-[11px] font-bold ${sd === list.length ? 'text-green-600' : 'text-gray-400'}`}>
                             {sd === list.length ? '✓ 완료' : `${sd}/${list.length}`}
                           </span>
+                          {bulkMode && (
+                            <button onClick={() => setSelected(p => {
+                              const n = new Set(p)
+                              const all = list.every(i => n.has(i.id))
+                              list.forEach(i => all ? n.delete(i.id) : n.add(i.id))
+                              return n
+                            })} className="text-[10px] font-bold text-indigo-600 border border-indigo-200 px-2 py-0.5 rounded-full hover:bg-indigo-50">
+                              {list.every(i => selected.has(i.id)) ? '영역 해제' : '영역 전체 선택'}
+                            </button>
+                          )}
                           <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden max-w-[120px] ml-auto">
                             <div className={`h-1.5 rounded-full ${sd === list.length ? 'bg-green-400' : isFinal ? 'bg-rose-400' : 'bg-indigo-400'}`}
                               style={{ width: `${(sd / list.length) * 100}%` }} />
@@ -186,9 +218,15 @@ export default function AuditCheckPage() {
                                 {showSub && i.sub && (
                                   <p className="px-4 pt-2 pb-1 text-[11px] font-extrabold text-gray-400">▸ {i.sub}</p>
                                 )}
-                                <li className={`flex items-center gap-2.5 px-4 py-2 ${i.checked ? 'bg-green-50/40' : ''}`}>
-                                  <button type="button" disabled={busyId === i.id}
-                                    onClick={() => patch(i.id, { checked: !i.checked })}
+                                <li onClick={bulkMode ? () => toggleSel(i.id) : undefined}
+                                  className={`flex items-center gap-2.5 px-4 py-2 ${i.checked ? 'bg-green-50/40' : ''} ${bulkMode ? 'cursor-pointer' : ''} ${bulkMode && selected.has(i.id) ? 'bg-indigo-50 ring-1 ring-inset ring-indigo-200' : ''}`}>
+                                  {bulkMode && (
+                                    <span className={`w-4 h-4 rounded border-2 shrink-0 flex items-center justify-center ${selected.has(i.id) ? 'bg-indigo-500 border-indigo-500' : 'border-gray-300 bg-white'}`}>
+                                      {selected.has(i.id) && <span className="text-white text-[9px] font-black leading-none">✓</span>}
+                                    </span>
+                                  )}
+                                  <button type="button" disabled={busyId === i.id || bulkMode}
+                                    onClick={e => { e.stopPropagation(); patch(i.id, { checked: !i.checked }) }}
                                     className={`w-5 h-5 rounded-md border-2 shrink-0 flex items-center justify-center transition-colors ${i.checked ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-green-400 bg-white'} ${busyId === i.id ? 'opacity-40' : ''}`}>
                                     {i.checked && <span className="text-white text-[11px] font-black leading-none">✓</span>}
                                   </button>
@@ -201,13 +239,16 @@ export default function AuditCheckPage() {
                                       ✓ {i.checked_by}{i.checked_at && ` ${fmtDate(i.checked_at.slice(0, 10))}`}
                                     </span>
                                   )}
-                                  <button type="button" onClick={() => setAssignFor(i)}
+                                  <button type="button" onClick={e => { e.stopPropagation(); if (!bulkMode) setAssignFor(i) }}
                                     className={`shrink-0 text-[10px] font-bold px-2 py-1 rounded-full border ${i.assignee_name ? 'text-teal-700 bg-teal-50 border-teal-200' : 'text-gray-300 border-gray-200 hover:text-gray-500'}`}>
-                                    {i.assignee_name ?? '담당 지정'}
+                                    {i.assignee_name
+                                      ? <>{i.assignee_name}{posOf(i.assignee_name) && <span className="font-semibold opacity-60"> · {posOf(i.assignee_name)}</span>}</>
+                                      : '담당 지정'}
                                   </button>
                                   {isAdmin && (
                                     <button type="button" title="항목 삭제 (이번 회차에서만)"
-                                      onClick={async () => {
+                                      onClick={async e => {
+                                        e.stopPropagation()
                                         if (!confirm(`「${i.title}」 항목을 이 회차에서 삭제할까요?\n(다음 회차를 만들면 다시 생성됩니다)`)) return
                                         try {
                                           await auditCheckAPI.removeItem(i.id)
@@ -237,6 +278,39 @@ export default function AuditCheckPage() {
             </>
           )}
         </>
+      )}
+
+      {/* 일괄 지정 하단 바 */}
+      {bulkMode && selected.size > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 bg-gray-900 text-white rounded-2xl shadow-2xl px-4 py-2.5">
+          <span className="text-sm font-bold">{selected.size}개 선택</span>
+          <button onClick={() => setBulkPickOpen(true)}
+            className="px-3 py-1.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-xs font-bold">담당자 지정</button>
+          <button onClick={() => doBulkAssign(null)}
+            className="px-3 py-1.5 rounded-xl bg-gray-700 hover:bg-gray-600 text-xs font-bold">담당 해제</button>
+          <button onClick={() => setSelected(new Set())} className="p-1 text-gray-400 hover:text-white"><X size={14} /></button>
+        </div>
+      )}
+
+      {/* 일괄 담당자 선택 */}
+      {bulkPickOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setBulkPickOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-xs max-h-[70vh] overflow-y-auto p-3" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-2">
+              <h3 className="text-sm font-bold text-gray-800">{selected.size}개 항목 담당자 지정</h3>
+              <button onClick={() => setBulkPickOpen(false)} className="ml-auto text-gray-300"><X size={16} /></button>
+            </div>
+            <div className="space-y-1">
+              {staffOpts.map(o2 => (
+                <button key={o2.name} onClick={() => doBulkAssign(o2.name)}
+                  className="w-full flex items-center px-3 py-2 rounded-xl text-left text-sm font-semibold text-gray-700 hover:bg-teal-50">
+                  {o2.name}
+                  {o2.position && <span className="ml-auto text-[11px] font-semibold text-gray-400">{o2.position}</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 새 점검 일정 */}
@@ -281,10 +355,11 @@ export default function AuditCheckPage() {
             <div className="space-y-1">
               <button onClick={() => { patch(assignFor.id, { assignee_name: '' }); setAssignFor(null) }}
                 className="w-full px-3 py-2 rounded-xl text-left text-xs font-semibold text-gray-400 hover:bg-gray-50">담당 해제</button>
-              {staffNames.map(n => (
-                <button key={n} onClick={() => { patch(assignFor.id, { assignee_name: n }); setAssignFor(null) }}
-                  className={`w-full px-3 py-2 rounded-xl text-left text-sm font-semibold hover:bg-teal-50 ${assignFor.assignee_name === n ? 'text-teal-700 bg-teal-50' : 'text-gray-700'}`}>
-                  {n}
+              {staffOpts.map(o2 => (
+                <button key={o2.name} onClick={() => { patch(assignFor.id, { assignee_name: o2.name }); setAssignFor(null) }}
+                  className={`w-full flex items-center px-3 py-2 rounded-xl text-left text-sm font-semibold hover:bg-teal-50 ${assignFor.assignee_name === o2.name ? 'text-teal-700 bg-teal-50' : 'text-gray-700'}`}>
+                  {o2.name}
+                  {o2.position && <span className="ml-auto text-[11px] font-semibold text-gray-400">{o2.position}</span>}
                 </button>
               ))}
             </div>

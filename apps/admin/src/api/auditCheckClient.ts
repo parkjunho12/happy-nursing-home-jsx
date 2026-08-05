@@ -20,6 +20,9 @@ export const auditCheckAPI = {
     apiClient.post(`${BASE}/rounds`, { date, title }).then(unwrap<{ id: string }>),
   removeRound: (id: string) => apiClient.delete(`${BASE}/rounds/${id}`).then(r => r.data),
   items: (roundId: string) => apiClient.get(`${BASE}/rounds/${roundId}/items`).then(unwrap<AuditItem[]>),
+  bulkAssign: (ids: string[], assigneeName: string | null) =>
+    apiClient.post(`${BASE}/items/bulk-assign`, { ids, assignee_name: assigneeName ?? '' })
+      .then(unwrap<{ count: number; assignee_name: string | null }>),
   removeItem: (id: string) => apiClient.delete(`${BASE}/items/${id}`).then(r => r.data),
   patch: (id: string, b: { checked?: boolean; assignee_name?: string; note?: string }) =>
     apiClient.patch(`${BASE}/items/${id}`, b).then(unwrap<Partial<AuditItem> & { id: string }>),
