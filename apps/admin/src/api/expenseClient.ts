@@ -53,6 +53,7 @@ export interface ExpenseMeta {
   payment_methods: string[]
   deposit_accounts?: string[]
   withdraw_accounts?: string[]
+  cards?: string[]
   is_approver: boolean
 }
 export interface ExpenseSummary {
@@ -77,9 +78,11 @@ export const expenseAPI = {
   create: (fd: FormData) => apiClient.post(`${BASE}/requests`, fd, formHeaders).then(unwrap<ExpenseRequest>),
   update: (id: string, fd: FormData) => apiClient.patch(`${BASE}/requests/${id}`, fd, formHeaders).then(unwrap<ExpenseRequest>),
   approve: (id: string) => apiClient.post(`${BASE}/requests/${id}/approve`).then(unwrap<ExpenseRequest>),
-  accounts: () => apiClient.get(`${BASE}/accounts`).then(unwrap<{ withdraw: string[]; deposit: string[] }>),
-  saveAccounts: (b: { withdraw_accounts?: string[]; deposit_accounts?: string[] }) =>
-    apiClient.put(`${BASE}/accounts`, b).then(unwrap<{ withdraw: string[]; deposit: string[] }>),
+  accounts: () => apiClient.get(`${BASE}/accounts`).then(unwrap<{ withdraw: string[]; deposit: string[]; cards: string[] }>),
+  saveAccounts: (b: { withdraw_accounts?: string[]; deposit_accounts?: string[]; cards?: string[] }) =>
+    apiClient.put(`${BASE}/accounts`, b).then(unwrap<{ withdraw: string[]; deposit: string[]; cards: string[] }>),
+  addDepositAccount: (account: string) =>
+    apiClient.post(`${BASE}/accounts/deposit`, { account }).then(unwrap<{ deposit: string[] }>),
   markPaid: (id: string, paid = true) => {
     const fd = new FormData(); fd.append('paid', String(paid))
     return apiClient.post(`${BASE}/requests/${id}/paid`, fd).then(unwrap<any>)
