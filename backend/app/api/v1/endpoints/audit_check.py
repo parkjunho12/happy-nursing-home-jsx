@@ -18,6 +18,15 @@ from app.schemas.response import ApiResponse
 router = APIRouter()
 
 
+def _viewer(current_user: User = Depends(get_current_user)) -> User:
+    """열람·체크 — 요양보호사·앨범담당 제외 전 직원"""
+    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    pos = getattr(current_user, "position", None) or ""
+    if role != "ADMIN" and pos in ("요양보호사", "앨범담당"):
+        raise HTTPException(403, "지도점검 체크리스트 접근 권한이 없습니다.")
+    return current_user
+
+
 def _manager(current_user: User = Depends(get_current_user)) -> User:
     role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
     pos = getattr(current_user, "position", None) or ""
@@ -27,7 +36,7 @@ def _manager(current_user: User = Depends(get_current_user)) -> User:
 
 
 @router.get("/rounds")
-def list_rounds(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def list_rounds(db: Session = Depends(get_db), _: User = Depends(_viewer)):
     rounds = db.query(AuditRound).order_by(AuditRound.date.desc()).all()
     # 진행률 함께
     out = []
@@ -69,7 +78,7 @@ def delete_round(rid: str, db: Session = Depends(get_db), _: User = Depends(_man
 
 
 @router.get("/rounds/{rid}/items")
-def list_items(rid: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def list_items(rid: str, db: Session = Depends(get_db), _: User = Depends(_viewer)):
     rows = (db.query(AuditItem).filter(AuditItem.round_id == rid)
             .order_by(AuditItem.order).all())
     return ApiResponse(success=True, data=[{
@@ -89,7 +98,7 @@ class ItemBody(BaseModel):
 
 @router.patch("/items/{iid}")
 def patch_item(iid: str, body: ItemBody, db: Session = Depends(get_db),
-               current_user: User = Depends(get_current_user)):
+               current_user: User = Depends(_viewer)):
     i = db.query(AuditItem).filter(AuditItem.id == iid).first()
     if not i:
         raise HTTPException(404, "항목을 찾을 수 없습니다.")
