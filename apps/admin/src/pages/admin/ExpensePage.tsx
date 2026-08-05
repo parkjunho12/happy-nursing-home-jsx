@@ -106,9 +106,18 @@ export default function ExpensePage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
             <Stat label="승인 총액" value={won(summary?.approved_total ?? 0)} sub={`${summary?.approved_count ?? 0}건`} tone="emerald" />
             <Stat label="대기 금액" value={won(summary?.pending_total ?? 0)} sub={`${summary?.pending_count ?? 0}건`} tone="amber" />
+            <Stat label="지급 대기(이체 전)" value={won(summary?.unpaid_total ?? 0)} sub={`${summary?.unpaid_count ?? 0}건`} tone="amber" />
             <Stat label="반려" value={`${summary?.rejected_count ?? 0}건`} tone="rose" />
             <Stat label="이번 달 합계건수" value={`${(summary?.approved_count ?? 0) + (summary?.pending_count ?? 0) + (summary?.rejected_count ?? 0)}건`} tone="gray" />
           </div>
+          {(summary?.by_withdraw_account ?? []).length > 0 && (
+            <p className="mt-2 text-[11px] text-gray-500 flex flex-wrap gap-x-3 gap-y-1">
+              <b className="text-gray-400">출금 통장별 승인액</b>
+              {(summary?.by_withdraw_account ?? []).map(x => (
+                <span key={x.account}>{x.account} <b className="text-gray-700">{won(x.amount)}원</b></span>
+              ))}
+            </p>
+          )}
           {(summary?.by_category?.length ?? 0) > 0 && (
             <div>
               <p className="text-xs font-semibold text-gray-400 mb-1.5">계정과목별 (승인 기준)</p>
@@ -176,7 +185,12 @@ export default function ExpensePage() {
             </div>
             <div className="text-right shrink-0">
               <p className="text-sm font-extrabold text-gray-900">{won(r.amount)}</p>
-              {r.payment_method && <p className="text-[11px] text-gray-400">{r.payment_method}</p>}
+              {r.payment_method && <p className="text-[11px] text-gray-400">{r.payment_method}{r.withdraw_account ? ` · ${r.withdraw_account}` : ''}</p>}
+              {r.status === 'approved' && (
+                r.paid_at
+                  ? <p className="text-[10px] font-bold text-sky-600">💸 이체 완료</p>
+                  : <p className="text-[10px] font-bold text-amber-600">⏳ 지급 대기</p>
+              )}
             </div>
           </button>
         ))}
@@ -227,6 +241,8 @@ function ExpenseFormModal({ meta, editing, onClose, onSaved }:
   const [vendor, setVendor] = useState(editing?.vendor ?? '')
   const [category, setCategory] = useState(editing?.category ?? (meta?.categories[0] ?? '기타'))
   const [payment, setPayment] = useState(editing?.payment_method ?? (meta?.payment_methods[0] ?? ''))
+  const [depositAcc, setDepositAcc] = useState(editing?.deposit_account ?? '')
+  const [withdrawAcc, setWithdrawAcc] = useState(editing?.withdraw_account ?? '')
   const [purchasedAt, setPurchasedAt] = useState(editing?.purchased_at ?? ymd(new Date()))
   const [memo, setMemo] = useState(editing?.memo ?? '')
   const [files, setFiles] = useState<File[]>([])
@@ -248,6 +264,8 @@ function ExpenseFormModal({ meta, editing, onClose, onSaved }:
       fd.append('vendor', vendor)
       fd.append('category', category)
       fd.append('payment_method', payment)
+      fd.append('deposit_account', depositAcc)
+      fd.append('withdraw_account', withdrawAcc)
       fd.append('purchased_at', purchasedAt)
       fd.append('memo', memo)
       files.forEach(f => fd.append('files', f))
@@ -276,6 +294,23 @@ function ExpenseFormModal({ meta, editing, onClose, onSaved }:
           <Field label="계정과목">
             <select value={category} onChange={e => setCategory(e.target.value)} className="einp">
               {meta?.categories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </Field>
+          <Field label="출금 통장 (돈 나가는 시설 계좌)">
+            <select value={withdrawAcc} onChange={e => setWithdrawAcc(e.target.value)}
+              className="inp w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl">
+              <option value="">선택 안 함</option>
+              {[...new Set([...(withdrawAcc ? [withdrawAcc] : []), ...(meta?.withdraw_accounts ?? [])])].map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+            {(meta?.withdraw_accounts ?? []).length === 0 && (
+              <p className="text-[10px] text-gray-400 mt-0.5">계좌 목록이 비어 있어요 — ADMIN이 설정에서 추가합니다</p>
+            )}
+          </Field>
+          <Field label="입금 통장 (거래처가 받을 계좌)">
+            <select value={depositAcc} onChange={e => setDepositAcc(e.target.value)}
+              className="inp w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl">
+              <option value="">선택 안 함</option>
+              {[...new Set([...(depositAcc ? [depositAcc] : []), ...(meta?.deposit_accounts ?? [])])].map(a => <option key={a} value={a}>{a}</option>)}
             </select>
           </Field>
           <Field label="결제수단">
@@ -371,6 +406,12 @@ function DetailModal({ r, onClose, onChanged, onEdit }:
         </div>
         {r.memo && <p className="text-sm text-gray-500 bg-gray-50 rounded-lg p-2.5 whitespace-pre-wrap">{r.memo}</p>}
 
+        {(r.withdraw_account || r.deposit_account) && (
+          <div className="bg-gray-50 rounded-lg p-2.5 text-xs text-gray-600 space-y-0.5">
+            {r.withdraw_account && <p><b className="text-gray-400 font-semibold">출금</b> {r.withdraw_account}</p>}
+            {r.deposit_account && <p><b className="text-gray-400 font-semibold">입금</b> {r.deposit_account}</p>}
+          </div>
+        )}
         {r.manager_name && (r.status === 'manager_approved' || r.status === 'approved') && (
           <div className="bg-sky-50 text-sky-700 rounded-lg p-2.5 text-xs flex items-center gap-1.5">
             <Check className="w-4 h-4" /> 1차 — {r.manager_name} 시설장 승인 · {fmtDate(r.manager_approved_at)}
@@ -381,6 +422,27 @@ function DetailModal({ r, onClose, onChanged, onEdit }:
           <div className="bg-emerald-50 text-emerald-700 rounded-lg p-2.5 text-xs flex items-center gap-1.5">
             <Check className="w-4 h-4" /> {r.manager_name ? '최종 — ' : ''}{r.approver_name}님 승인 · {fmtDate(r.approved_at)}
           </div>
+        )}
+        {r.status === 'approved' && (
+          r.paid_at ? (
+            <div className="bg-sky-50 text-sky-700 rounded-lg p-2.5 text-xs flex items-center gap-1.5">
+              💸 이체 완료 — {r.paid_by} · {fmtDate(r.paid_at)}
+              <button onClick={async () => {
+                if (!confirm('이체 완료를 취소할까요?')) return
+                try { await expenseAPI.markPaid(r.id, false); onChanged() }
+                catch (e: any) { alert(e?.response?.data?.detail ?? '처리 실패') }
+              }} className="ml-auto text-[10px] font-bold text-sky-500 hover:underline">취소</button>
+            </div>
+          ) : (
+            <div className="bg-amber-50 text-amber-700 rounded-lg p-2.5 text-xs flex items-center gap-1.5">
+              ⏳ 지급 대기 — 승인은 됐지만 아직 이체 전입니다
+              <button onClick={async () => {
+                if (!confirm(`${won(r.amount)}원 이체를 완료했나요?\n지급 완료로 기록됩니다.`)) return
+                try { await expenseAPI.markPaid(r.id, true); onChanged() }
+                catch (e: any) { alert(e?.response?.data?.detail ?? '처리 실패 (최종 승인권자만 가능)') }
+              }} className="ml-auto text-[10px] font-bold text-white bg-amber-500 hover:bg-amber-600 px-2 py-1 rounded-lg">이체 완료</button>
+            </div>
+          )
         )}
         {r.status === 'rejected' && (
           <div className="bg-rose-50 text-rose-600 rounded-lg p-2.5 text-xs">
