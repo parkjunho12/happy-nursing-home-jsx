@@ -159,6 +159,15 @@ function ExpenseRoute({ children }: { children: React.ReactNode }) {
 
 
 // 사회복지사 또는 ADMIN만 접근 가능
+function AuditCheckRoute({ children }: { children: React.ReactNode }) {
+  // 지도점검 체크리스트 — 요양보호사·앨범담당 제외 전 직원
+  const { isAuthenticated, user } = useAuthStore()
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  if (user?.role !== 'ADMIN' && ['요양보호사', '앨범담당'].includes(user?.position ?? ''))
+    return <Navigate to="/eval/checklist" replace />
+  return <>{children}</>
+}
+
 function MealRoute({ children }: { children: React.ReactNode }) {
   // 식단표 — 사회복지사급 + 영양사
   const { isAuthenticated, user } = useAuthStore()
@@ -271,7 +280,7 @@ function App() {
             <Route path="work-schedule-view"      element={<StaffAdminRoute><WorkScheduleViewPage /></StaffAdminRoute>} />
             <Route path="leave-history"           element={<ManagerRoute><RequestHistoryPage /></ManagerRoute>} />
             <Route path="pension"                 element={<StaffAdminRoute><PensionPage /></StaffAdminRoute>} />
-            <Route path="audit-check"             element={<AuditCheckPage />} />
+            <Route path="audit-check"             element={<AuditCheckRoute><AuditCheckPage /></AuditCheckRoute>} />
             <Route path="my-schedule"             element={<MySchedulePage />} />
             <Route path="handover"                 element={<HandoverAiPage />} />
             <Route path="incidents"                element={<StaffAdminRoute><IncidentsPage /></StaffAdminRoute>} />
