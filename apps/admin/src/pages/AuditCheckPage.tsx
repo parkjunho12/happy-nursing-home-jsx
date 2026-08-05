@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CalendarPlus, ClipboardCheck, Loader2, Search, Trash2, X } from 'lucide-react'
+import { CalendarPlus, ClipboardCheck, Loader2, MessageCircle, Search, Trash2, X } from 'lucide-react'
+import { isKakaoShareEnabled, shareText } from '@/lib/kakaoShare'
 import { useAuthStore } from '@/store/auth'
 import { apiClient } from '@/api/client'
 import { auditCheckAPI, type AuditRound, type AuditItem } from '@/api/auditCheckClient'
@@ -89,6 +90,38 @@ export default function AuditCheckPage() {
     finally { setBusyId(null) }
   }
 
+  const [batchSec, setBatchSec] = useState<string | null>(null)
+  const checkAllSection = async (sec: string, list: AuditItem[]) => {
+    const todo = list.filter(i => !i.checked)
+    if (todo.length === 0) return
+    if (!confirm(`「${sec}」 미완료 ${todo.length}건을 전부 완료 처리할까요?\n체크한 담당자로 내 이름이 기록됩니다.`)) return
+    setBatchSec(sec)
+    try {
+      for (const i of todo) {
+        const r = await auditCheckAPI.patch(i.id, { checked: true })
+        setItems(prev => prev.map(x => x.id === i.id ? { ...x, ...r } : x))
+      }
+      setRounds(prev => prev.map(rd => rd.id !== cur ? rd : { ...rd, done: rd.done + todo.length }))
+    } catch (e: any) { alert(e?.response?.data?.detail ?? '일괄 처리 중 오류') }
+    finally { setBatchSec(null) }
+  }
+
+  const shareSummary = async () => {
+    if (!round) return
+    const undoneBySec = SECTION_ORDER
+      .map(sec => ({ sec, n: items.filter(i => i.section === sec && !i.checked).length }))
+      .filter(x => x.n > 0)
+    const short = (sec: string) => sec.replace('지도점검 전 최종 확인', '최종확인').split(' ')[0].replace('·', '/').slice(0, 5)
+    const lines = [
+      `📋 지도점검 체크리스트 (${fmtDate(round.date)} 점검)`,
+      `진행 ${done}/${items.length} (${pct}%)`,
+      undoneBySec.length === 0 ? '✅ 전 항목 완료!' : `남은 항목: ${undoneBySec.map(x => `${short(x.sec)} ${x.n}`).join(' · ')}`,
+      '관리자 페이지 → 지도점검 체크리스트에서 내 담당 항목을 확인해주세요',
+    ]
+    try { await shareText(lines.join('\n')) }
+    catch (e: any) { alert(e?.message ?? '카카오 공유를 열 수 없습니다. 모바일 카카오톡에서 시도해주세요.') }
+  }
+
   const filtered = useMemo(() => items
     .filter(i => !onlyTodo || !i.checked)
     .filter(i => !onlyMine || i.assignee_name === user?.name)
@@ -109,12 +142,20 @@ export default function AuditCheckPage() {
         <ClipboardCheck size={20} className="text-indigo-600" />
         <h1 className="text-xl font-bold text-gray-900">지도점검 종합 체크리스트</h1>
         <span className="text-[11px] text-gray-400">공단 지도점검 대비 152항목 — 다 같이 나눠 준비해요</span>
-        {canManage && (
-          <button onClick={() => { setNewDate(''); setNewTitle(''); setNewOpen(true) }}
-            className="ml-auto inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold">
-            <CalendarPlus size={13} /> 새 점검 일정
-          </button>
-        )}
+        <div className="ml-auto flex gap-1.5">
+          {isKakaoShareEnabled() && rounds.length > 0 && (
+            <button onClick={shareSummary}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#FEE500] hover:brightness-95 text-[#3A1D1D] text-sm font-bold">
+              <MessageCircle size={13} /> 카톡 공유
+            </button>
+          )}
+          {canManage && (
+            <button onClick={() => { setNewDate(''); setNewTitle(''); setNewOpen(true) }}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold">
+              <CalendarPlus size={13} /> 새 점검 일정
+            </button>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -194,6 +235,12 @@ export default function AuditCheckPage() {
                           <span className={`text-[11px] font-bold ${sd === list.length ? 'text-green-600' : 'text-gray-400'}`}>
                             {sd === list.length ? '✓ 완료' : `${sd}/${list.length}`}
                           </span>
+                          {!bulkMode && sd < list.length && (
+                            <button onClick={() => checkAllSection(sec, list)} disabled={batchSec !== null}
+                              className="text-[10px] font-bold text-indigo-600 border border-indigo-200 px-2 py-0.5 rounded-full hover:bg-indigo-50 disabled:opacity-40">
+                              {batchSec === sec ? <Loader2 size={10} className="animate-spin" /> : '전체 체크'}
+                            </button>
+                          )}
                           {bulkMode && (
                             <button onClick={() => setSelected(p => {
                               const n = new Set(p)
