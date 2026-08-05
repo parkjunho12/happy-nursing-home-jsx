@@ -105,6 +105,22 @@ def delete_item(iid: str, db: Session = Depends(get_db),
     return ApiResponse(success=True, message="삭제되었습니다.")
 
 
+class BulkAssignBody(BaseModel):
+    ids: list
+    assignee_name: Optional[str] = None   # ''/None = 해제
+
+
+@router.post("/items/bulk-assign")
+def bulk_assign(body: BulkAssignBody, db: Session = Depends(get_db),
+                _: User = Depends(_viewer)):
+    """여러 항목 담당자 일괄 지정."""
+    name = (body.assignee_name or "").strip() or None
+    n = (db.query(AuditItem).filter(AuditItem.id.in_(body.ids or []))
+         .update({"assignee_name": name}, synchronize_session=False))
+    db.commit()
+    return ApiResponse(success=True, data={"count": n, "assignee_name": name})
+
+
 class ItemBody(BaseModel):
     checked: Optional[bool] = None
     assignee_name: Optional[str] = None   # '' = 해제
