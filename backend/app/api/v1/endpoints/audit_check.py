@@ -90,6 +90,21 @@ def list_items(rid: str, db: Session = Depends(get_db), _: User = Depends(_viewe
     } for i in rows])
 
 
+@router.delete("/items/{iid}")
+def delete_item(iid: str, db: Session = Depends(get_db),
+                current_user: User = Depends(get_current_user)):
+    """항목 삭제 — ADMIN 전용 (이번 회차에서만 빠진다. 다음 회차엔 다시 생성됨)."""
+    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    if role != "ADMIN":
+        raise HTTPException(403, "항목 삭제는 ADMIN만 가능합니다.")
+    i = db.query(AuditItem).filter(AuditItem.id == iid).first()
+    if not i:
+        raise HTTPException(404, "항목을 찾을 수 없습니다.")
+    db.delete(i)
+    db.commit()
+    return ApiResponse(success=True, message="삭제되었습니다.")
+
+
 class ItemBody(BaseModel):
     checked: Optional[bool] = None
     assignee_name: Optional[str] = None   # '' = 해제
