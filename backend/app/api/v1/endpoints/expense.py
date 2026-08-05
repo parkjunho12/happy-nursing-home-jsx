@@ -89,6 +89,9 @@ def _view(e: ExpenseRequest, viewer: User) -> dict:
     return {
         "id": e.id, "title": e.title, "amount": e.amount, "vendor": e.vendor,
         "category": e.category, "payment_method": e.payment_method,
+        "deposit_account": e.deposit_account, "withdraw_account": e.withdraw_account,
+        "paid_at": _kst(e.paid_at).isoformat() if e.paid_at else None,
+        "paid_by": e.paid_by,
         "purchased_at": e.purchased_at, "memo": e.memo,
         "status": e.status, "reject_reason": e.reject_reason,
         "requester_id": e.requester_id, "requester_name": e.requester_name,
@@ -131,6 +134,8 @@ def meta(current_user: User = Depends(_require_submitter)):
     return ApiResponse(success=True, data={
         "categories": EXPENSE_CATEGORIES,
         "payment_methods": PAYMENT_METHODS,
+        "deposit_accounts": _account_setting(db)["deposit"],
+        "withdraw_accounts": _account_setting(db)["withdraw"],
         "is_approver": _is_approver(current_user),
     })
 
@@ -172,6 +177,51 @@ def get_request(rid: str, db: Session = Depends(get_db),
     return ApiResponse(success=True, data=_view(e, current_user))
 
 
+def _account_setting(db: Session) -> dict:
+    row = db.query(ExpenseAccountSetting).first()
+    return {"withdraw": (row.withdraw_accounts if row else None) or [],
+            "deposit": (row.deposit_accounts if row else None) or []}
+
+
+class AccountsBody(BaseModel):
+    withdraw_accounts: Optional[list] = None
+    deposit_accounts: Optional[list] = None
+
+
+@router.get("/accounts")
+def get_accounts(db: Session = Depends(get_db), _: User = Depends(_require_submitter)):
+    return ApiResponse(success=True, data=_account_setting(db))
+
+
+@router.put("/accounts")
+def save_accounts(body: AccountsBody, db: Session = Depends(get_db),
+                  current_user: User = Depends(get_current_user)):
+    """계좌 목록 관리 — ADMIN 전용. 신청 폼의 드롭다운 소스가 된다."""
+    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    if role != "ADMIN":
+        raise HTTPException(403, "계좌 목록은 ADMIN만 관리할 수 있습니다.")
+    row = db.query(ExpenseAccountSetting).first()
+    if not row:
+        row = ExpenseAccountSetting()
+        db.add(row)
+    def clean(v):
+        if v is None:
+            return None
+        out, seen = [], set()
+        for x in v:
+            t = str(x).strip()
+            if t and t not in seen:
+                out.append(t); seen.add(t)
+        return out
+    if body.withdraw_accounts is not None:
+        row.withdraw_accounts = clean(body.withdraw_accounts)
+    if body.deposit_accounts is not None:
+        row.deposit_accounts = clean(body.deposit_accounts)
+    row.updated_by = getattr(current_user, "name", None)
+    db.commit()
+    return ApiResponse(success=True, data=_account_setting(db))
+
+
 @router.post("/requests")
 def create_request(
     title: str = Form(...),
@@ -179,6 +229,8 @@ def create_request(
     vendor: Optional[str] = Form(None),
     category: str = Form("기타"),
     payment_method: Optional[str] = Form(None),
+    deposit_account: Optional[str] = Form(None),
+    withdraw_account: Optional[str] = Form(None),
     purchased_at: Optional[str] = Form(None),
     memo: Optional[str] = Form(None),
     files: Optional[List[UploadFile]] = File(None),
@@ -194,6 +246,8 @@ def create_request(
         vendor=(vendor or "").strip() or None,
         category=category if category in EXPENSE_CATEGORIES else "기타",
         payment_method=payment_method or None,
+        deposit_account=(deposit_account or "").strip() or None,
+        withdraw_account=(withdraw_account or "").strip() or None,
         purchased_at=purchased_at or None,
         memo=(memo or "").strip() or None,
         status="pending",
@@ -216,6 +270,8 @@ def update_request(
     vendor: Optional[str] = Form(None),
     category: Optional[str] = Form(None),
     payment_method: Optional[str] = Form(None),
+    deposit_account: Optional[str] = Form(None),
+    withdraw_account: Optional[str] = Form(None),
     purchased_at: Optional[str] = Form(None),
     memo: Optional[str] = Form(None),
     files: Optional[List[UploadFile]] = File(None),
@@ -239,6 +295,10 @@ def update_request(
         e.category = category
     if payment_method is not None:
         e.payment_method = payment_method or None
+    if deposit_account is not None:
+        e.deposit_account = deposit_account.strip() or None
+    if withdraw_account is not None:
+        e.withdraw_account = withdraw_account.strip() or None
     if purchased_at is not None:
         e.purchased_at = purchased_at or None
     if memo is not None:
@@ -284,6 +344,27 @@ def approve_request(rid: str, db: Session = Depends(get_db),
         e.manager_name = getattr(current_user, "name", None)
         e.manager_approved_at = now_kst()
     e.reject_reason = None
+    db.commit(); db.refresh(e)
+    return ApiResponse(success=True, data=_view(e, current_user))
+
+
+@router.post("/requests/{rid}/paid")
+def mark_paid(rid: str, paid: bool = Form(True), db: Session = Depends(get_db),
+              current_user: User = Depends(_require_approver)):
+    """이체(지급) 완료 표시 — 승인된 건만. 회계상 '승인 ≠ 지급'을 구분한다."""
+    if not _is_final_approver(current_user):
+        raise HTTPException(403, "지급 확인은 최종 승인권자만 가능합니다.")
+    e = db.query(ExpenseRequest).filter(ExpenseRequest.id == rid).first()
+    if not e:
+        raise HTTPException(404, "지출결의를 찾을 수 없습니다.")
+    if e.status != "approved":
+        raise HTTPException(400, "승인 완료된 건만 지급 처리할 수 있습니다.")
+    if paid:
+        e.paid_at = now_kst()
+        e.paid_by = getattr(current_user, "name", None)
+    else:
+        e.paid_at = None
+        e.paid_by = None
     db.commit(); db.refresh(e)
     return ApiResponse(success=True, data=_view(e, current_user))
 
@@ -346,8 +427,17 @@ def summary(
     by_category = [{"category": c, "amount": a} for c, a in
                    sorted(by_cat.items(), key=lambda x: -x[1])]
 
+    by_wa = {}
+    for r in approved:
+        key = r.withdraw_account or "미지정"
+        by_wa[key] = by_wa.get(key, 0) + (r.amount or 0)
+    unpaid = [r for r in approved if not r.paid_at]
     return ApiResponse(success=True, data={
         "year": year, "month": month,
+        "by_withdraw_account": [{"account": k, "amount": v} for k, v in
+                                sorted(by_wa.items(), key=lambda x: -x[1])],
+        "unpaid_total": sum(r.amount or 0 for r in unpaid),
+        "unpaid_count": len(unpaid),
         "approved_total": sum(r.amount or 0 for r in approved),
         "approved_count": len(approved),
         "pending_total": sum(r.amount or 0 for r in pending),

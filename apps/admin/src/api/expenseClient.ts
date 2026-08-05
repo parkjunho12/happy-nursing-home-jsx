@@ -28,6 +28,10 @@ export interface ExpenseRequest {
   vendor?: string | null
   category: string
   payment_method?: string | null
+  deposit_account?: string | null
+  withdraw_account?: string | null
+  paid_at?: string | null
+  paid_by?: string | null
   purchased_at?: string | null
   memo?: string | null
   status: ExpenseStatus
@@ -47,12 +51,17 @@ export interface ExpenseRequest {
 export interface ExpenseMeta {
   categories: string[]
   payment_methods: string[]
+  deposit_accounts?: string[]
+  withdraw_accounts?: string[]
   is_approver: boolean
 }
 export interface ExpenseSummary {
   year: number
   month: number
   approved_total: number
+  unpaid_total?: number
+  unpaid_count?: number
+  by_withdraw_account?: { account: string; amount: number }[]
   approved_count: number
   pending_total: number
   pending_count: number
@@ -68,6 +77,13 @@ export const expenseAPI = {
   create: (fd: FormData) => apiClient.post(`${BASE}/requests`, fd, formHeaders).then(unwrap<ExpenseRequest>),
   update: (id: string, fd: FormData) => apiClient.patch(`${BASE}/requests/${id}`, fd, formHeaders).then(unwrap<ExpenseRequest>),
   approve: (id: string) => apiClient.post(`${BASE}/requests/${id}/approve`).then(unwrap<ExpenseRequest>),
+  accounts: () => apiClient.get(`${BASE}/accounts`).then(unwrap<{ withdraw: string[]; deposit: string[] }>),
+  saveAccounts: (b: { withdraw_accounts?: string[]; deposit_accounts?: string[] }) =>
+    apiClient.put(`${BASE}/accounts`, b).then(unwrap<{ withdraw: string[]; deposit: string[] }>),
+  markPaid: (id: string, paid = true) => {
+    const fd = new FormData(); fd.append('paid', String(paid))
+    return apiClient.post(`${BASE}/requests/${id}/paid`, fd).then(unwrap<any>)
+  },
   reject: (id: string, reason: string) => {
     const fd = new FormData(); fd.append('reason', reason)
     return apiClient.post(`${BASE}/requests/${id}/reject`, fd, formHeaders).then(unwrap<ExpenseRequest>)
