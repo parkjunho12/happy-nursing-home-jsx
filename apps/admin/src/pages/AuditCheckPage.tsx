@@ -19,6 +19,7 @@ const fmtDate = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10)
 export default function AuditCheckPage() {
   const { user } = useAuthStore()
   const canManage = user?.role === 'ADMIN' || user?.position === '시설장'
+  const isAdmin = user?.role === 'ADMIN'
   const [rounds, setRounds] = useState<AuditRound[]>([])
   const [cur, setCur] = useState<string | null>(null)
   const [items, setItems] = useState<AuditItem[]>([])
@@ -204,6 +205,22 @@ export default function AuditCheckPage() {
                                     className={`shrink-0 text-[10px] font-bold px-2 py-1 rounded-full border ${i.assignee_name ? 'text-teal-700 bg-teal-50 border-teal-200' : 'text-gray-300 border-gray-200 hover:text-gray-500'}`}>
                                     {i.assignee_name ?? '담당 지정'}
                                   </button>
+                                  {isAdmin && (
+                                    <button type="button" title="항목 삭제 (이번 회차에서만)"
+                                      onClick={async () => {
+                                        if (!confirm(`「${i.title}」 항목을 이 회차에서 삭제할까요?\n(다음 회차를 만들면 다시 생성됩니다)`)) return
+                                        try {
+                                          await auditCheckAPI.removeItem(i.id)
+                                          setItems(prev => prev.filter(x => x.id !== i.id))
+                                          setRounds(prev => prev.map(rd => rd.id !== cur ? rd : {
+                                            ...rd, total: rd.total - 1, done: rd.done - (i.checked ? 1 : 0),
+                                          }))
+                                        } catch (e: any) { alert(e?.response?.data?.detail ?? '삭제 실패') }
+                                      }}
+                                      className="shrink-0 p-1 text-gray-200 hover:text-red-500 rounded">
+                                      <Trash2 size={12} />
+                                    </button>
+                                  )}
                                 </li>
                               </div>
                             )
