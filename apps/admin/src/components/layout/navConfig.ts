@@ -115,6 +115,7 @@ export function getNavConfig(
           label: '업무',
           items: [
             checklistItem,
+            { to: '/audit-check', icon: ShieldCheck, label: '지도점검 체크리스트' },
             { to: '/eval/calendar', icon: CalendarDays, label: '체크 캘린더' },
             { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
             { to: '/my-schedule', icon: CalendarDays, label: '내 근무표' },
@@ -326,6 +327,7 @@ export function getNavConfig(
 
   const evalItems: NavItem[] = [
     checklistItem,
+    { to: '/audit-check', icon: ShieldCheck, label: '지도점검 체크리스트' },
     { to: '/eval/calendar', icon: CalendarDays, label: '평가 캘린더' },
     { to: '/education', icon: GraduationCap, label: '직원 교육' },
   ]
