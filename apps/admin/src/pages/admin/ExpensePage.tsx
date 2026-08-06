@@ -312,7 +312,8 @@ function ExpenseFormModal({ meta, editing, onClose, onSaved }:
               <select value={withdrawAcc} onChange={e => setWithdrawAcc(e.target.value)}
                 className="inp w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl">
                 <option value="">선택 안 함</option>
-                {[...new Set([...(withdrawAcc ? [withdrawAcc] : []), ...(meta?.cards ?? [])])].map(a => <option key={a} value={a}>{a}</option>)}
+                {withdrawAcc && !(meta?.cards ?? []).some(c => c.account === withdrawAcc) && <option value={withdrawAcc}>{withdrawAcc}</option>}
+                {(meta?.cards ?? []).map(c => <option key={c.account} value={c.account}>{c.account}{c.memo ? ` — ${c.memo}` : ''}</option>)}
               </select>
               {(meta?.cards ?? []).length === 0 && (
                 <p className="text-[10px] text-gray-400 mt-0.5">카드 목록이 비어 있어요 — ADMIN이 설정 → 지출 계좌 관리에서 추가합니다</p>
@@ -324,7 +325,8 @@ function ExpenseFormModal({ meta, editing, onClose, onSaved }:
                 <select value={withdrawAcc} onChange={e => setWithdrawAcc(e.target.value)}
                   className="inp w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl">
                   <option value="">선택 안 함</option>
-                  {[...new Set([...(withdrawAcc ? [withdrawAcc] : []), ...(meta?.withdraw_accounts ?? [])])].map(a => <option key={a} value={a}>{a}</option>)}
+                  {withdrawAcc && !(meta?.withdraw_accounts ?? []).some(c => c.account === withdrawAcc) && <option value={withdrawAcc}>{withdrawAcc}</option>}
+                  {(meta?.withdraw_accounts ?? []).map(c => <option key={c.account} value={c.account}>{c.account}{c.memo ? ` — ${c.memo}` : ''}</option>)}
                 </select>
                 {(meta?.withdraw_accounts ?? []).length === 0 && (
                   <p className="text-[10px] text-gray-400 mt-0.5">시설 계좌는 ADMIN이 설정에서 추가합니다</p>
@@ -334,8 +336,8 @@ function ExpenseFormModal({ meta, editing, onClose, onSaved }:
                 <input value={depositAcc} onChange={e => setDepositAcc(e.target.value)} list="exp-dep"
                   placeholder="직접 입력 — 예: 국민 123-**-4567 (○○상사)"
                   className="inp w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl" />
-                <datalist id="exp-dep">{(meta?.deposit_accounts ?? []).map(a => <option key={a} value={a} />)}</datalist>
-                {depositAcc.trim() && !(meta?.deposit_accounts ?? []).includes(depositAcc.trim()) && (
+                <datalist id="exp-dep">{(meta?.deposit_accounts ?? []).map(c => <option key={c.account} value={c.account}>{c.memo ?? ''}</option>)}</datalist>
+                {depositAcc.trim() && !(meta?.deposit_accounts ?? []).some(c => c.account === depositAcc.trim()) && (
                   <label className="flex items-center gap-1.5 mt-1 text-[11px] text-gray-500 cursor-pointer">
                     <input type="checkbox" checked={saveDeposit} onChange={e => setSaveDeposit(e.target.checked)} className="w-3.5 h-3.5 accent-teal-600" />
                     이 계좌를 자주 쓰는 통장에 추가

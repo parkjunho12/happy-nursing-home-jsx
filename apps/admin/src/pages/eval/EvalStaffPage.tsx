@@ -1,6 +1,7 @@
 import DateField from '@/components/ui/DateField'
 import StickyToolbar from '../../components/common/StickyToolbar'
 import { useState, useMemo, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/auth'
 import { UserPlus, UserMinus, Edit2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw, CalendarOff, X, Trash2 } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
@@ -18,6 +19,7 @@ export const isOnLeave = (s: LtcStaff, on = todayISO()) =>
 
 export default function EvalStaffPage() {
   const { staffList, checklists, loaded, loadAll } = useLtcStore()
+  const navigate = useNavigate()
   const [tab, setTab] = useState<Tab>('active')
   const [showAdd, setShowAdd] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -131,6 +133,7 @@ export default function EvalStaffPage() {
               onEdit={() => setEditingId(s.id)}
               onResign={() => setShowResign(s.id)}
               onLeave={() => setLeaveFor(s.id)}
+              onDetail={() => navigate(`/eval/staff/${s.id}`)}
               onDelete={async () => {
                 const label = s.status==='pending' ? '입사 예정을 취소하고 완전히 삭제'
                   : s.status==='active' ? '⚠ 재직 중인 직원입니다. 정말 완전히 삭제'
@@ -154,8 +157,8 @@ export default function EvalStaffPage() {
   )
 }
 
-function StaffCard({ s, expanded, onExpand, onEdit, onResign, onLeave, onDelete, checklists, onClClick }: {
-  s: LtcStaff; expanded:boolean; onExpand:()=>void; onEdit:()=>void; onResign:()=>void; onLeave:()=>void; onDelete:()=>void;
+function StaffCard({ s, expanded, onExpand, onEdit, onResign, onLeave, onDelete, onDetail, checklists, onClClick }: {
+  s: LtcStaff; expanded:boolean; onExpand:()=>void; onEdit:()=>void; onResign:()=>void; onLeave:()=>void; onDelete:()=>void; onDetail:()=>void;
   checklists: ChecklistItem[]; onClClick:(c:ChecklistItem)=>void;
 }) {
   const isAdmin = useAuthStore(st => st.user?.role === 'ADMIN')
@@ -193,6 +196,8 @@ function StaffCard({ s, expanded, onExpand, onEdit, onResign, onLeave, onDelete,
           </div>
         )}
         <div className="flex items-center gap-2 flex-shrink-0">
+          <button onClick={e=>{e.stopPropagation();onDetail()}}
+            className="flex items-center gap-1 text-xs font-medium text-gray-600 border border-gray-200 px-2.5 py-1.5 rounded-xl hover:bg-gray-50">상세</button>
           {s.status==='active' && (
             <>
               <button onClick={e=>{e.stopPropagation();onEdit()}} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"><Edit2 size={14}/></button>

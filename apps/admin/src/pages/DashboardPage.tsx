@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { dashboardAPI, apiClient } from '@/api/client'
 import { expenseAPI } from '@/api/expenseClient'
+import { scheduleAPI } from '@/api/scheduleClient'
 import { leaveAPI, swapAPI } from '@/api/leaveClient'
 import { visitAPI } from '@/api/visitClient'
 import { cardKeyAPI } from '@/api/cardKeyClient'
@@ -22,7 +23,7 @@ import ResidentTrendChart from '@/components/dashboard/ResidentTrendChart'
 import { useIsMobile } from '@/hooks/useMediaQuery'
 import { getNavConfig } from '@/components/layout/navConfig'
 import type { DashboardStats } from '@/types'
-import { RECURRING, FREQUENCY_LABELS, getPeriodEnd, todayKST, todayDateKST, getCurrentPeriodKey, daysFromToday } from '@/utils/period'
+import { RECURRING, FREQUENCY_LABELS, getPeriodEnd, todayKST, todayDateKST, getCurrentPeriodKey, daysFromToday , isItemDone } from '@/utils/period'
 
 // ── 타입 ──────────────────────────────────────────────────────────────────
 interface TodayTask {
@@ -32,6 +33,8 @@ interface TodayTask {
   frequency: string
   riskLevel: string
   personName?: string
+  personId?: string
+  personType?: string
   assignee?: string
   isEvent: boolean
   daysOverdue: number   // 0 = 오늘 기한, 양수 = n일 지남
@@ -62,7 +65,7 @@ export default function DashboardPage() {
   const canChecklist = can('/eval/checklist')
   const [siteStats, setSiteStats] = useState<DashboardStats | null>(null)
   const [loadingSite, setLoadingSite] = useState(true)
-  const [pending, setPending] = useState<{ expense: number; album: number; leave: number; swap: number; visit: number; refund: number }>({ expense: 0, album: 0, leave: 0, swap: 0, visit: 0, refund: 0 })
+  const [pending, setPending] = useState<{ expense: number; album: number; leave: number; swap: number; visit: number; refund: number; returning: number }>({ expense: 0, album: 0, leave: 0, swap: 0, visit: 0, refund: 0, returning: 0 })
   const [recentNews, setRecentNews] = useState<FacilityNews[]>([])
 
   const { checklists, occurrences, residents, staffList, loaded, loadAll, toggleComplete, completeOccurrence } = useLtcStore()
@@ -84,7 +87,7 @@ export default function DashboardPage() {
   const canApproveLeave = authUser?.role === 'ADMIN' || authUser?.position === '시설장'
   const canVisit = authUser?.role === 'ADMIN' || ['시설장', '사회복지사'].includes(authUser?.position ?? '')
   const loadPending = async () => {
-    const [exp, alb, news, lv, sw, vs, rf] = await Promise.all([
+    const [exp, alb, news, lv, sw, vs, rf, rt] = await Promise.all([
       can('/expense')
         ? expenseAPI.list({}).then(r => r.filter(x => x.status === 'pending' || x.status === 'manager_approved').length).catch(() => 0) : Promise.resolve(0),
       can('/eval/albums')
@@ -101,14 +104,26 @@ export default function DashboardPage() {
         // 카드는 반납받았는데 보증금을 아직 안 돌려준 건 — 잊기 쉬운 돈 문제라 대시보드로 끌어올린다
         ? cardKeyAPI.list().then(rows => rows.filter(r => r.returned && r.deposit_date && !r.refunded).length).catch(() => 0)
         : Promise.resolve(0),
+      // 귀원 미기록 — 시작일이 지난 외출·외박·외래 중 실제 귀원이 안 적힌 건
+      can('/schedule')
+        ? (() => {
+            const now2 = new Date(Date.now() + 9 * 3600e3)
+            const start = new Date(now2); start.setDate(start.getDate() - 14)
+            return scheduleAPI.events({ start_date: start.toISOString().slice(0, 10), end_date: now2.toISOString().slice(0, 10) })
+              .then(rows => rows.filter((e: any) => ['외출', '외박', '외래·병원'].includes(e.category)
+                && e.status !== 'canceled' && !e.returned_at
+                && (e.start_at ?? '').slice(0, 10) <= now2.toISOString().slice(0, 10)).length)
+              .catch(() => 0)
+          })()
+        : Promise.resolve(0),
     ])
-    setPending({ expense: exp, album: alb, leave: lv, swap: sw, visit: vs, refund: rf })
+    setPending({ expense: exp, album: alb, leave: lv, swap: sw, visit: vs, refund: rf, returning: rt })
     setRecentNews(news)
   }
 
   // ── occurrence 기반: 오늘 해야 할 것 ────────────────────────────────────
   // pending/overdue 중 due_date <= 오늘인 occurrence = 해야 하는데 안 한 것
-  const { todayTasks, urgentTasks, eventPendingTasks } = useMemo(() => {
+  const { todayTasks, urgentTasks, admissionTasks, hireTasks } = useMemo(() => {
     // occurrence가 아직 없으면 (sync 전) checklists fallback
     const hasOccurrences = occurrences.length > 0
 
@@ -154,6 +169,8 @@ export default function DashboardPage() {
             frequency: item.frequency,
             riskLevel: item.riskLevel,
             personName: item.personName,
+            personId: item.personId,
+            personType: item.personType,
             assignee: item.assignee,
             isEvent,
             daysOverdue,
@@ -163,9 +180,7 @@ export default function DashboardPage() {
             startedBy: o.startedBy,
           }
 
-          if (isEvent) {
-            eventT.push(task)
-          } else {
+          if (!isEvent) {   // 이벤트(입소·입사)는 아래에서 상세 페이지와 동일 기준으로 따로 계산
             todayT.push(task)
             if (item.riskLevel === 'high') urgentT.push(task)
           }
@@ -196,28 +211,42 @@ export default function DashboardPage() {
             frequency: c.frequency,
             riskLevel: c.riskLevel,
             personName: c.personName,
+            personId: c.personId,
+            personType: c.personType,
             assignee: c.assignee,
             isEvent,
             daysOverdue: 0,
           }
-          if (isEvent) eventT.push(task)
-          else {
+          if (!isEvent) {
             todayT.push(task)
             if (c.riskLevel === 'high') urgentT.push(task)
           }
         })
     }
 
+    // ── 이벤트(입소·퇴소·입사) 미완료 — 수급자 상세 페이지와 완전히 같은 기준(isItemDone) ──
+    checklists
+      .filter(c => c.active && ['on_admission', 'on_discharge', 'on_hire'].includes(c.frequency))
+      .filter(c => !isItemDone(c))
+      .forEach(c => {
+        eventT.push({
+          occId: '', itemId: c.id, title: c.title, frequency: c.frequency,
+          riskLevel: c.riskLevel, personName: c.personName,
+          personId: c.personId, personType: c.personType,
+          assignee: c.assignee, isEvent: true,
+          daysOverdue: c.dueDate ? Math.max(0, -daysFromToday(c.dueDate)) : 0,
+        })
+      })
+
+    const sorted = eventT.sort((a, b) => b.daysOverdue - a.daysOverdue)
     return {
       todayTasks:        todayT.sort((a, b) => (b.riskLevel==='high'?1:0)-(a.riskLevel==='high'?1:0)),
       urgentTasks:       urgentT,
-      eventPendingTasks: eventT.sort((a, b) => b.daysOverdue - a.daysOverdue),
+      admissionTasks:    sorted.filter(t => t.frequency !== 'on_hire'),
+      hireTasks:         sorted.filter(t => t.frequency === 'on_hire'),
     }
   }, [occurrences, checklists])
 
-  // 일일 vs 비일일(주별+월별+...) 분리
-  const dailyTasks    = todayTasks.filter(t => t.frequency === 'daily')
-  const nonDailyTasks = todayTasks.filter(t => t.frequency !== 'daily')
 
   // ── occurrence 기반: 주기별 완료 현황 ────────────────────────────────────
   const periodProgress = useMemo(() => {
@@ -310,14 +339,40 @@ export default function DashboardPage() {
   }, [residents, staffList, activeResidents])
   // 주기별 완료 현황의 분모 → 반복(RECURRING) 항목만. 입소·퇴소·입사·일회성 티켓 제외
   const totalActive     = checklists.filter(c => c.active && (RECURRING as readonly string[]).includes(c.frequency)).length
-  const totalDone       = occurrences.length > 0
-    ? occurrences.filter(o =>
-        o.status === 'completed' &&
-        !['on_admission', 'on_discharge', 'on_hire'].includes(o.frequency) &&
-        o.scheduledDate <= todayStr && o.dueDate >= todayStr).length
-    : 0
 
   const [toggling, setToggling] = useState<string | null>(null)
+
+  // 나에게 할당된 업무 — 지연 먼저, 그다음 D-day 가까운 순 (최대 6개)
+  const myTasks = useMemo(() => {
+    if (!authUser?.id) return [] as (TodayTask & { dueDate: string })[]
+    const itemMap = new Map(checklists.map(c => [c.id, c]))
+    const latest = new Map<string, typeof occurrences[0]>()
+    occurrences
+      .filter(o => o.status === 'pending' || o.status === 'overdue' || o.status === 'in_progress')
+      .filter(o => o.frequency === 'one_time' || o.status === 'overdue' || (o.scheduledDate <= todayStr && o.dueDate >= todayStr))
+      .forEach(o => {
+        const ex = latest.get(o.checklistItemId)
+        if (!ex || o.dueDate > ex.dueDate) latest.set(o.checklistItemId, o)
+      })
+    const out: (TodayTask & { dueDate: string })[] = []
+    latest.forEach(o => {
+      const item = itemMap.get(o.checklistItemId)
+      if (!item || !item.active) return
+      if ((item as any).assigned_user_id !== authUser.id) return
+      out.push({
+        occId: o.id, itemId: item.id, title: item.title, frequency: item.frequency,
+        riskLevel: item.riskLevel, personName: item.personName,
+        personId: item.personId, personType: item.personType,
+        assignee: item.assignee, isEvent: false,
+        daysOverdue: Math.max(0, -daysFromToday(o.dueDate)),
+        inProgress: o.status === 'in_progress',
+        dueDate: o.dueDate,
+      })
+    })
+    return out
+      .sort((a, b) => (b.daysOverdue - a.daysOverdue) || a.dueDate.localeCompare(b.dueDate))
+      .slice(0, 6)
+  }, [checklists, occurrences, authUser?.id, todayStr])
 
   const handleToggle = async (occId: string, itemId: string) => {
     setToggling(occId || itemId)
@@ -338,6 +393,7 @@ export default function DashboardPage() {
     { show: canApproveLeave && pending.leave > 0, label: '휴무 신청 승인 대기', value: pending.leave, unit: '건', to: '/work-schedule', icon: CalendarClock, tone: 'emerald' as const },
     { show: canApproveLeave && pending.swap > 0, label: '근무 맞교대 승인 대기', value: pending.swap, unit: '건', to: '/work-schedule', icon: ArrowLeftRight, tone: 'blue' as const },
     { show: canVisit && pending.visit > 0, label: '면회 예약 확인 대기', value: pending.visit, unit: '건', to: '/schedule', icon: CalendarClock, tone: 'orange' as const },
+    { show: can('/schedule') && pending.returning > 0, label: '귀원 기록 대기 (외출·외박·외래)', value: pending.returning, unit: '건', to: '/schedule', icon: CalendarClock, tone: 'orange' as const },
     { show: can('/staff-hr') && pending.refund > 0, label: '카드키 보증금 이체 대기', value: pending.refund, unit: '건', to: '/staff-hr', icon: Receipt, tone: 'emerald' as const },
   ].filter(i => i.show)
 
@@ -476,132 +532,104 @@ export default function DashboardPage() {
   const secDocs = can('/resident-docs') ? <UpcomingDocs /> : null
 
   // 일일 업무 체크 — 모바일 최우선 액션
-  const secDaily = !canChecklist ? null : (
+  // 나에게 할당된 업무 체크 — 지연 우선, D-day 오름차순 6개
+  const secMine = !canChecklist ? null : (
     <section className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
       <div className="flex items-center justify-between px-4 md:px-5 py-3 md:py-3.5 border-b border-gray-50">
         <div className="flex items-center gap-2 min-w-0">
           <Clock size={15} className="text-primary-orange shrink-0"/>
-          <h2 className="text-sm font-bold text-gray-800 shrink-0">일일 업무 체크</h2>
+          <h2 className="text-sm font-bold text-gray-800 shrink-0">나에게 할당된 업무</h2>
           <span className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${
-            dailyTasks.length===0 ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
-          }`}>
-            {dailyTasks.length===0 ? '✓ 완료' : `${dailyTasks.length}건`}
+            myTasks.length === 0 ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+            {myTasks.length === 0 ? '✓ 완료' : `${myTasks.length}건`}
           </span>
         </div>
         <button onClick={() => navigate('/eval/checklist')} className="text-xs text-gray-400 hover:text-primary-orange flex items-center gap-0.5 shrink-0">
           전체보기<ChevronRight size={13}/>
         </button>
       </div>
-      {dailyTasks.length === 0 ? (
+      {myTasks.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-8 md:py-10">
           <CheckCircle2 size={32} className="mb-2 text-green-400"/>
-          <p className="text-sm font-medium text-green-600">일일 업무 모두 완료!</p>
-          {totalDone > 0 && <p className="text-xs text-gray-400 mt-1">오늘 완료 {totalDone}건</p>}
+          <p className="text-sm font-medium text-green-600">내 담당 업무 모두 완료!</p>
         </div>
       ) : (
         <div className="divide-y divide-gray-50">
-          {dailyTasks.slice(0, 5).map(task => (
-            <DailyTaskRow
-              key={task.occId || task.itemId}
-              task={task}
-              toggling={toggling}
-              onToggle={() => handleToggle(task.occId, task.itemId)}
-              onClick={() => navigate('/eval/checklist')}
-            />
+          {myTasks.map(task => (
+            <div key={task.occId || task.itemId} className="flex items-center gap-1 md:gap-3 px-2 md:px-4 py-1.5 md:py-2.5 hover:bg-orange-50/30 transition-colors">
+              <button onClick={() => handleToggle(task.occId, task.itemId)} disabled={toggling === (task.occId || task.itemId)}
+                aria-label="완료 처리"
+                className="w-11 h-11 md:w-9 md:h-9 shrink-0 flex items-center justify-center rounded-full active:bg-orange-100 disabled:opacity-50">
+                <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                  toggling === (task.occId || task.itemId) ? 'border-primary-orange' : 'border-gray-300 hover:border-primary-orange hover:bg-orange-50'}`}>
+                  {toggling === (task.occId || task.itemId) && <div className="w-2.5 h-2.5 border border-primary-orange border-t-transparent rounded-full animate-spin"/>}
+                </span>
+              </button>
+              <div className="flex-1 min-w-0 cursor-pointer py-1"
+                onClick={() => {
+                  if (task.personType === 'resident' && task.personId) navigate(`/eval/residents/${task.personId}`)
+                  else if (task.personType === 'staff' && task.personId) navigate(`/eval/staff/${task.personId}`)
+                  else navigate('/eval/checklist')
+                }}>
+                <p className="text-sm font-medium text-gray-800 truncate">{task.title}</p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-[10px] text-gray-400">{FREQUENCY_LABELS[task.frequency] ?? task.frequency}</span>
+                  {task.personName && <span className="text-[10px] text-purple-500 font-medium">👤 {task.personName}</span>}
+                </div>
+              </div>
+              <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                task.daysOverdue > 0 ? 'bg-red-100 text-red-600'
+                : daysFromToday(task.dueDate) === 0 ? 'bg-amber-100 text-amber-700'
+                : daysFromToday(task.dueDate) <= 3 ? 'bg-orange-50 text-orange-600' : 'bg-gray-100 text-gray-500'}`}>
+                {task.daysOverdue > 0 ? `지연 ${task.daysOverdue}일` : daysFromToday(task.dueDate) === 0 ? '오늘까지' : `D-${daysFromToday(task.dueDate)}`}
+              </span>
+              <ChevronRight size={13} className="text-gray-300 shrink-0"/>
+            </div>
           ))}
-          {dailyTasks.length > 5 && (
-            <button onClick={() => navigate('/eval/checklist')}
-              className="w-full py-3 text-xs text-center text-gray-400 hover:text-primary-orange hover:bg-orange-50 transition-colors">
-              +{dailyTasks.length - 5}건 더 보기
-            </button>
-          )}
         </div>
       )}
     </section>
   )
 
-  // 정기 업무
-  const secPeriodic = (!canChecklist || nonDailyTasks.length === 0) ? null : (
-    <section className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between px-4 md:px-5 py-3 md:py-3.5 border-b border-gray-50">
-        <div className="flex items-center gap-2 min-w-0">
-          <TrendingUp size={15} className="text-indigo-500 shrink-0"/>
-          <h2 className="text-sm font-bold text-gray-800 truncate">진행 중인 정기 업무</h2>
-          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 shrink-0">
-            {nonDailyTasks.length}건
-          </span>
+  // 이벤트 미완료 — 입소(어르신)와 입사(직원)를 나눠서
+  const canHire = authUser?.role === 'ADMIN' || ['대표', '이사', '시설장'].includes(authUser?.position ?? '')
+  const eventSection = (tasks: TodayTask[], title: string, tone: 'purple' | 'sky') => {
+    const T = tone === 'purple'
+      ? { border: 'border-purple-100', headBd: 'border-purple-50', headBg: 'bg-purple-50/50', icon: 'text-purple-500', badge: 'bg-purple-100 text-purple-700', hover: 'hover:text-purple-600 hover:bg-purple-50' }
+      : { border: 'border-sky-100', headBd: 'border-sky-50', headBg: 'bg-sky-50/50', icon: 'text-sky-500', badge: 'bg-sky-100 text-sky-700', hover: 'hover:text-sky-600 hover:bg-sky-50' }
+    return (
+      <section className={`bg-white rounded-2xl border ${T.border} shadow-sm overflow-hidden`}>
+        <div className={`flex items-center justify-between px-4 md:px-5 py-3 md:py-3.5 border-b ${T.headBd} ${T.headBg}`}>
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertTriangle size={14} className={`${T.icon} shrink-0`}/>
+            <h2 className="text-sm font-bold text-gray-800 truncate">{title}</h2>
+            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${T.badge} shrink-0`}>{tasks.length}건</span>
+          </div>
         </div>
-        <button onClick={() => navigate('/eval/checklist')} className="text-xs text-gray-400 hover:text-indigo-500 flex items-center gap-0.5 shrink-0">
-          전체보기<ChevronRight size={13}/>
-        </button>
-      </div>
-      <div className="p-3 md:p-4">
-        {(['weekly','monthly','quarterly','half-yearly','yearly'] as const).map(freq => {
-          const tasks = nonDailyTasks.filter(t => t.frequency === freq)
-          if (tasks.length === 0) return null
-          const label = FREQUENCY_LABELS[freq]
-          const hasUrgent = tasks.some(t => t.riskLevel === 'high')
-          return (
-            <button key={freq} onClick={() => navigate('/eval/checklist')}
-              className={`w-full flex items-center gap-2.5 md:gap-3 px-3 md:px-4 py-3 rounded-xl mb-2 text-left transition-colors hover:brightness-95 ${
-                hasUrgent ? 'bg-red-50 border border-red-100' : 'bg-gray-50 border border-gray-100'
-              }`}>
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-sm ${
-                hasUrgent ? 'bg-red-100' : 'bg-indigo-100'
-              }`}>
-                {freq==='weekly'?'주':freq==='monthly'?'월':freq==='quarterly'?'분':freq==='half-yearly'?'반':'연'}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-800">{label}</p>
-                <p className="text-xs text-gray-500 mt-0.5 truncate">
-                  {tasks.map(t => t.title).slice(0, 2).join(', ')}
-                  {tasks.length > 2 ? ` 외 ${tasks.length - 2}건` : ''}
-                </p>
-              </div>
-              <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${
-                  hasUrgent ? 'bg-red-100 text-red-700' : 'bg-indigo-100 text-indigo-700'
-                }`}>
-                  {tasks.length}건
-                </span>
-                {hasUrgent && <span className="text-[10px] text-red-500 font-medium">⚠ 위험</span>}
-              </div>
-              <ChevronRight size={14} className="text-gray-300 flex-shrink-0"/>
+        <div className="divide-y divide-gray-50">
+          {tasks.slice(0, 5).map(task => (
+            <EventTaskRow key={task.occId || task.itemId} task={task}
+              onClick={() => {
+                if (task.personType === 'resident' && task.personId) navigate(`/eval/residents/${task.personId}`)
+                else if (task.personType === 'staff' && task.personId) navigate(`/eval/staff/${task.personId}`)
+                else if (task.personType === 'staff') navigate('/eval/staff')
+                else navigate('/eval/checklist')
+              }} />
+          ))}
+          {tasks.length > 5 && (
+            <button onClick={() => navigate(tasks[0]?.personType === 'staff' ? '/eval/staff' : '/eval/residents')}
+              className={`w-full py-3 text-xs text-center text-gray-400 transition-colors ${T.hover}`}>
+              +{tasks.length - 5}건 더 보기
             </button>
-          )
-        })}
-      </div>
-    </section>
-  )
-
-  // 이벤트 미완료 누적
-  const secEvents = (!canChecklist || eventPendingTasks.length === 0) ? null : (
-    <section className="bg-white rounded-2xl border border-purple-100 shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between px-4 md:px-5 py-3 md:py-3.5 border-b border-purple-50 bg-purple-50/50">
-        <div className="flex items-center gap-2 min-w-0">
-          <AlertTriangle size={14} className="text-purple-500 shrink-0"/>
-          <h2 className="text-sm font-bold text-gray-800 truncate">입소·입사 관련 미완료</h2>
-          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 shrink-0">
-            {eventPendingTasks.length}건
-          </span>
+          )}
         </div>
-        <button onClick={() => navigate('/eval/checklist')} className="text-xs text-gray-400 hover:text-purple-600 flex items-center gap-0.5 shrink-0">
-          전체보기<ChevronRight size={13}/>
-        </button>
-      </div>
-      <div className="divide-y divide-gray-50">
-        {eventPendingTasks.slice(0, 5).map(task => (
-          <EventTaskRow key={task.occId || task.itemId} task={task} onClick={() => navigate('/eval/checklist')}/>
-        ))}
-        {eventPendingTasks.length > 5 && (
-          <button onClick={() => navigate('/eval/checklist')}
-            className="w-full py-3 text-xs text-center text-gray-400 hover:text-purple-600 hover:bg-purple-50 transition-colors">
-            +{eventPendingTasks.length - 5}건 더 보기
-          </button>
-        )}
-      </div>
-    </section>
-  )
+      </section>
+    )
+  }
+  const secAdmission = (!canChecklist || admissionTasks.length === 0) ? null
+    : eventSection(admissionTasks, '입소 관련 미완료', 'purple')
+  const secHire = (!canChecklist || !canHire || hireTasks.length === 0) ? null
+    : eventSection(hireTasks, '입사 관련 미완료', 'sky')
 
   // 최근 시설소식
   const secNews = (!can('/facility-news') || recentNews.length === 0) ? null : (
@@ -746,9 +774,9 @@ export default function DashboardPage() {
         {secPending}
         {secNotices}
         {secDocs}
-        {secDaily}
-        {secPeriodic}
-        {secEvents}
+        {secMine}
+        {secAdmission}
+          {secHire}
         {secStaffing}
         {secChart}
         {secNews}
@@ -775,9 +803,9 @@ export default function DashboardPage() {
 
       <div className="grid lg:grid-cols-5 gap-4">
         <div className="lg:col-span-3 space-y-4">
-          {secDaily}
-          {secPeriodic}
-          {secEvents}
+          {secMine}
+          {secAdmission}
+          {secHire}
         </div>
         <div className="lg:col-span-2 space-y-4">
           {secNotices}
@@ -847,41 +875,6 @@ function StatBadge({ label, value, unit, extra, tone, icon, onClick }: {
 }
 
 
-function DailyTaskRow({ task, toggling, onToggle, onClick }: {
-  task: TodayTask; toggling: string | null; onToggle: ()=>void; onClick: ()=>void
-}) {
-  const isBusy = toggling === (task.occId || task.itemId)
-  return (
-    <div className="flex items-center gap-1 md:gap-3 px-2 md:px-5 py-1.5 md:py-3 hover:bg-orange-50/30 transition-colors">
-      {/* 토글 버튼 — 시각 20px, 터치영역 44px (WCAG 2.5.8 / HIG 44pt) */}
-      <button
-        onClick={e => { e.stopPropagation(); onToggle() }}
-        disabled={isBusy}
-        aria-label="완료 처리"
-        className="w-11 h-11 md:w-9 md:h-9 -ml-1 md:ml-0 shrink-0 flex items-center justify-center rounded-full active:bg-orange-100 transition-colors disabled:opacity-50">
-        <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
-          isBusy ? 'border-primary-orange' : 'border-gray-300 hover:border-primary-orange hover:bg-orange-50'
-        }`}>
-          {isBusy && <div className="w-2.5 h-2.5 border border-primary-orange border-t-transparent rounded-full animate-spin"/>}
-        </span>
-      </button>
-      {/* 내용 */}
-      <div className="flex-1 min-w-0 cursor-pointer py-1.5 md:py-0" onClick={onClick}>
-        <p className="text-sm font-medium text-gray-800 truncate">{task.title}</p>
-        <div className="flex items-center gap-2 mt-0.5">
-          {task.personName && <span className="text-[10px] text-purple-500 font-medium">👤 {task.personName}</span>}
-          {task.assignee && !task.personName && <span className="text-[10px] text-gray-400">{task.assignee}</span>}
-          {task.daysOverdue > 0 && (
-            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-              task.daysOverdue>=7 ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'
-            }`}>{task.daysOverdue}일 지남</span>
-          )}
-        </div>
-      </div>
-      {task.riskLevel==='high' && <AlertTriangle size={13} className="text-red-400 flex-shrink-0"/>}
-    </div>
-  )
-}
 
 
 function EventTaskRow({ task, onClick }: { task: TodayTask; onClick: () => void }) {
@@ -900,6 +893,7 @@ function EventTaskRow({ task, onClick }: { task: TodayTask; onClick: () => void 
           task.daysOverdue>=14 ? 'bg-red-100 text-red-600' : task.daysOverdue>=7 ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-500'
         }`}>{task.daysOverdue}일째</span>
       )}
+      <ChevronRight size={13} className="text-gray-300 flex-shrink-0" />
     </button>
   )
 }

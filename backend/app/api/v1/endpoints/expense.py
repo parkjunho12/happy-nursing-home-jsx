@@ -179,11 +179,25 @@ def get_request(rid: str, db: Session = Depends(get_db),
     return ApiResponse(success=True, data=_view(e, current_user))
 
 
+def _norm_accounts(raw) -> list:
+    """문자열/객체 혼용 저장분을 [{account, memo}]로 — 계좌값 기준 중복 제거."""
+    out, seen = [], set()
+    for x in (raw or []):
+        if isinstance(x, dict):
+            acc = str(x.get("account") or "").strip()
+            memo = str(x.get("memo") or "").strip() or None
+        else:
+            acc, memo = str(x).strip(), None
+        if acc and acc not in seen:
+            out.append({"account": acc, "memo": memo}); seen.add(acc)
+    return out
+
+
 def _account_setting(db: Session) -> dict:
     row = db.query(ExpenseAccountSetting).first()
-    return {"withdraw": (row.withdraw_accounts if row else None) or [],
-            "deposit": (row.deposit_accounts if row else None) or [],
-            "cards": (row.cards if row else None) or []}
+    return {"withdraw": _norm_accounts(row.withdraw_accounts if row else None),
+            "deposit": _norm_accounts(row.deposit_accounts if row else None),
+            "cards": _norm_accounts(row.cards if row else None)}
 
 
 class AccountsBody(BaseModel):
@@ -208,21 +222,12 @@ def save_accounts(body: AccountsBody, db: Session = Depends(get_db),
     if not row:
         row = ExpenseAccountSetting()
         db.add(row)
-    def clean(v):
-        if v is None:
-            return None
-        out, seen = [], set()
-        for x in v:
-            t = str(x).strip()
-            if t and t not in seen:
-                out.append(t); seen.add(t)
-        return out
     if body.withdraw_accounts is not None:
-        row.withdraw_accounts = clean(body.withdraw_accounts)
+        row.withdraw_accounts = _norm_accounts(body.withdraw_accounts)
     if body.deposit_accounts is not None:
-        row.deposit_accounts = clean(body.deposit_accounts)
+        row.deposit_accounts = _norm_accounts(body.deposit_accounts)
     if body.cards is not None:
-        row.cards = clean(body.cards)
+        row.cards = _norm_accounts(body.cards)
     row.updated_by = getattr(current_user, "name", None)
     db.commit()
     return ApiResponse(success=True, data=_account_setting(db))
@@ -230,6 +235,7 @@ def save_accounts(body: AccountsBody, db: Session = Depends(get_db),
 
 class DepositAddBody(BaseModel):
     account: str
+    memo: Optional[str] = None
 
 
 @router.post("/accounts/deposit")
@@ -243,13 +249,13 @@ def add_deposit_account(body: DepositAddBody, db: Session = Depends(get_db),
     if not row:
         row = ExpenseAccountSetting()
         db.add(row)
-    cur = list(row.deposit_accounts or [])
-    if t not in cur:
-        cur.append(t)
+    cur = _norm_accounts(row.deposit_accounts)
+    if t not in {c["account"] for c in cur}:
+        cur.append({"account": t, "memo": (body.memo or "").strip() or None})
         row.deposit_accounts = cur
         row.updated_by = getattr(current_user, "name", None)
         db.commit()
-    return ApiResponse(success=True, data={"deposit": row.deposit_accounts or []})
+    return ApiResponse(success=True, data={"deposit": _norm_accounts(row.deposit_accounts)})
 
 
 @router.post("/requests")

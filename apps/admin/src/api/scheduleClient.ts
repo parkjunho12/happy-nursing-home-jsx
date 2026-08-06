@@ -24,6 +24,8 @@ export interface ScheduleEvent {
   status: string
   created_by?: string | null
   created_by_id?: string | null
+  returned_at?: string | null
+  returned_by?: string | null
   notice_id?: string | null      // 연결된 공개 공지 — 일정 수정 시 함께 갱신됨
   can_edit?: boolean
   created_at?: string | null
@@ -79,6 +81,8 @@ export interface EduCalEvent {
 }
 
 export const scheduleAPI = {
+  markReturned: (id: string, b: { returned_at?: string; clear?: boolean } = {}) =>
+    apiClient.post(`${BASE}/events/${id}/returned`, b).then(unwrap<{ id: string; returned_at: string | null; returned_by: string | null }>),
   events: (params?: { start_date?: string; end_date?: string; category?: string }) =>
     apiClient.get(`${BASE}/events`, { params: params ?? {} }).then(unwrap<ScheduleEvent[]>),
   createEvent: (body: EventInput) => apiClient.post(`${BASE}/events`, body).then(unwrap<ScheduleEvent>),
