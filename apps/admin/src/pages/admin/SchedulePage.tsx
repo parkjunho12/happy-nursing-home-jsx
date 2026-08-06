@@ -9,6 +9,7 @@ import { birthdaysInRange } from '@/utils/birthdays'
 import { ledgerAPI, type LedgerRow } from '@/api/leaveClient'
 import { visitAPI } from '@/api/visitClient'
 import VisitInboxPanel from '@/components/schedule/VisitInboxPanel'
+import ReturnInboxPanel from '@/components/schedule/ReturnInboxPanel'
 import { useAuthStore } from '@/store/auth'
 import { isKakaoShareEnabled, shareText } from '@/lib/kakaoShare'
 import { getNavConfig } from '@/components/layout/navConfig'
@@ -130,6 +131,18 @@ export default function SchedulePage() {
   // 면회 예약 승인함 — 백엔드 권한(ADMIN·시설장·사회복지사)과 동일 기준
   const canVisit = authUser?.role === 'ADMIN' || ['시설장', '사회복지사'].includes(authUser?.position ?? '')
   const [visitOpen, setVisitOpen] = useState(false)
+  const [returnOpen, setReturnOpen] = useState(false)
+  const [returnCount, setReturnCount] = useState(0)
+  const loadReturnCount = () => {
+    const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10)
+    const start = new Date(Date.now() + 9 * 3600e3 - 14 * 86400e3).toISOString().slice(0, 10)
+    scheduleAPI.events({ start_date: start, end_date: today })
+      .then(evs => setReturnCount((evs as any[]).filter(e =>
+        ['외출', '외박', '외래·병원'].includes(e.category) && e.status !== 'canceled'
+        && !e.returned_at && (e.start_at ?? '').slice(0, 10) <= today).length))
+      .catch(() => setReturnCount(0))
+  }
+  useEffect(loadReturnCount, [])
   const [visitPending, setVisitPending] = useState(0)
   const loadVisitCount = useCallback(() => {
     if (!canVisit) return
@@ -434,6 +447,11 @@ export default function SchedulePage() {
               {visitPending > 0 && <span className="ml-1 text-[10px] font-extrabold bg-yellow-500 text-white rounded-full px-1.5 py-0.5">{visitPending}</span>}
             </button>
           )}
+          <button onClick={() => setReturnOpen(true)}
+            className={`relative px-3 py-1.5 text-xs font-semibold rounded-lg border ${returnCount > 0 ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-gray-500 border-gray-200 hover:bg-gray-50'}`}>
+            🏠 귀원 대기
+            {returnCount > 0 && <span className="ml-1 text-[10px] font-extrabold bg-amber-500 text-white rounded-full px-1.5 py-0.5">{returnCount}</span>}
+          </button>
         </div>
       </div>
 
@@ -471,6 +489,10 @@ export default function SchedulePage() {
       {visitOpen && (
         <VisitInboxPanel onClose={() => setVisitOpen(false)}
           onDecided={() => { loadVisitCount(); load() }} />
+      )}
+      {returnOpen && (
+        <ReturnInboxPanel onClose={() => setReturnOpen(false)}
+          onRecorded={() => { loadReturnCount(); load() }} />
       )}
 
       {/* ── 월 뷰 ── */}
@@ -637,11 +659,12 @@ function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: strin
     return editing ? null : 60
   })
   // 귀원 일시 — 외출은 당일이라 시간만, 외박은 날짜+시간 (end_at에 저장)
-  const isOuting = category === '외출' || category === '외박'
+  const isOuting = category === '외출' || category === '외박' || category === '외래·병원'
+  const sameDayReturn = category === '외출' || category === '외래·병원'   // 당일 귀원(시간만)
   const [returnDate, setReturnDate] = useState(() =>
     editing?.end_at && editing.category === '외박' ? ymd(new Date(editing.end_at)) : '')
   const [returnTime, setReturnTime] = useState(() =>
-    editing?.end_at && ['외출', '외박'].includes(editing.category) ? hmOf(editing.end_at) : '')
+    editing?.end_at && ['외출', '외박', '외래·병원'].includes(editing.category) ? hmOf(editing.end_at) : '')
   const [location, setLocation] = useState(editing?.location ?? '')
   const [contactName, setContactName] = useState(editing?.contact_name ?? '')
   const [contactPhone, setContactPhone] = useState(editing?.contact_phone ?? '')
@@ -649,6 +672,33 @@ function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: strin
   // 외출·외박/외래 안내는 가족 단톡에 공유하는 경우가 많다 — 공지로도 만들어 카톡 템플릿 공유
   const NOTICE_CATS = ['외출', '외박', '외래·병원', '면회', '외부방문', '행사']
   const noticeCat = NOTICE_CATS.includes(category)
+  // 면회·외출·외박·외래는 어르신 한 분의 일정 — 제목 대신 수급자를 골라 자동 생성
+  const RESIDENT_CATS = ['면회', '외출', '외박', '외래·병원']
+  const residentCat = RESIDENT_CATS.includes(category)
+  const [residents, setResidents] = useState<{ id: string; name: string; floor?: string | null; room?: string | null }[]>([])
+  const [resPickOpen, setResPickOpen] = useState(false)
+  const [resQ, setResQ] = useState('')
+  const [resFloor, setResFloor] = useState('')   // 층 필터
+  useEffect(() => {
+    if (!residentCat || residents.length > 0) return
+    import('@/api/evalClient').then(({ evalResidentsAPI }) =>
+      evalResidentsAPI.list().then((rows: any[]) =>
+        setResidents(rows.filter(r => r.status === 'active')
+          .map(r => ({ id: r.id, name: r.name, floor: r.floor, room: r.room }))
+          .sort((a, b) => a.name.localeCompare(b.name, 'ko')))
+      ).catch(() => {}))
+  }, [residentCat, residents.length])
+  const pickResident = (name: string) => {
+    setTitle(`[${category}] ${name} 어르신`)   // 예: [외박] 김순자 어르신
+    setResPickOpen(false); setResQ('')
+  }
+  // 분류를 바꾸면 자동 생성 제목의 태그도 따라간다 (직접 고친 제목은 건드리지 않음)
+  useEffect(() => {
+    if (residentCat && /^\[[^\]]+\] .+ 어르신$/.test(title)) {
+      setTitle(t => t.replace(/^\[[^\]]+\]/, `[${category}]`))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [category])
   const hasNotice = !!editing?.notice_id
   const [makeNotice, setMakeNotice] = useState(false)
   useEffect(() => {
@@ -659,8 +709,8 @@ function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: strin
   const [err, setErr] = useState('')
 
   const start_at = noTime ? `${date}T00:00` : `${date}T${time}`
-  const returnAt = category === '외출'
-    ? (returnTime ? `${date}T${returnTime}` : null)                          // 외출 = 당일 귀원
+  const returnAt = sameDayReturn
+    ? (returnTime ? `${date}T${returnTime}` : null)                          // 외출·외래 = 당일 귀원
     : category === '외박'
       ? (returnDate ? `${returnDate}T${returnTime || '12:00'}` : null)       // 외박 = 다른 날 귀원
       : null
@@ -675,7 +725,7 @@ function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: strin
   ]
 
   const submit = async () => {
-    if (!title.trim()) { setErr('제목을 입력해주세요.'); return }
+    if (!title.trim()) { setErr(residentCat ? '어르신을 선택해주세요.' : '제목을 입력해주세요.'); return }
     setSaving(true); setErr('')
     try {
       const body: EventInput = {
@@ -698,10 +748,10 @@ function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: strin
           const w = ['일', '월', '화', '수', '목', '금', '토'][new Date(yy, mm - 1, dd).getDay()]
           const lines = [
             `[${category}] ${mm}/${dd}(${w})${noTime ? '' : ` ${time}`}`,
-            title.trim(),
+            title.trim().replace(/^\[[^\]]+\]\s*/, ''),   // 제목 앞 [분류]는 첫 줄에 이미 있음
           ]
           if (returnAt) {
-            if (category === '외출') {
+            if (sameDayReturn) {
               lines.push(`귀원: 당일 ${returnTime}`)
             } else {
               const [ry, rm, rd] = returnDate.split('-').map(Number)
@@ -746,7 +796,50 @@ function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: strin
           </label>
         )}
 
-        <Field label="제목"><input value={title} onChange={e => setTitle(e.target.value)} placeholder="예: 김OO 어르신 방문상담" className="inp" autoFocus /></Field>
+        {residentCat ? (
+          <Field label="어르신 선택 — 제목은 자동으로 만들어져요">
+            <button type="button" onClick={() => setResPickOpen(true)}
+              className={`inp w-full px-3 py-2.5 text-sm border rounded-xl text-left flex items-center ${title ? 'border-violet-200 bg-violet-50/40 font-bold text-violet-800' : 'border-gray-200 text-gray-400'}`}>
+              {title || '눌러서 어르신 찾기'}
+              <span className="ml-auto text-[10px] font-bold text-violet-500">{title ? '변경' : '검색'}</span>
+            </button>
+            {resPickOpen && (
+              <div className="fixed inset-0 z-[70] bg-black/30 flex items-center justify-center p-4" onClick={() => setResPickOpen(false)}>
+                <div className="bg-white rounded-2xl shadow-xl w-full max-w-xs max-h-[70vh] overflow-y-auto p-3" onClick={e => e.stopPropagation()}>
+                  {/* 층 필터 */}
+                  <div className="flex gap-1 mb-2 flex-wrap">
+                    {['', ...Array.from(new Set(residents.map(r => r.floor).filter(Boolean))).sort()].map(f => (
+                      <button key={f || 'all'} type="button" onClick={() => setResFloor(f as string)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${resFloor === f ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-gray-500 border-gray-200'}`}>
+                        {f || '전체'}
+                      </button>
+                    ))}
+                  </div>
+                  <input autoFocus value={resQ} onChange={e => setResQ(e.target.value)}
+                    onKeyDown={e => {
+                      const list = residents.filter(r => (!resFloor || r.floor === resFloor) && r.name.includes(resQ))
+                      if (e.key === 'Enter' && list.length === 1) pickResident(list[0].name)
+                      if (e.key === 'Escape') setResPickOpen(false)
+                    }}
+                    placeholder="어르신 이름 검색 — 한 분 남으면 Enter"
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl mb-2" />
+                  <div className="space-y-0.5">
+                    {residents.filter(r => (!resFloor || r.floor === resFloor) && r.name.includes(resQ)).map(r => (
+                      <button key={r.id} type="button" onClick={() => pickResident(r.name)}
+                        className="w-full flex items-center px-3 py-2 rounded-xl text-left text-sm font-semibold text-gray-700 hover:bg-violet-50">
+                        {r.name}
+                        {(r.floor || r.room) && <span className="ml-auto text-[10px] text-gray-400">{r.floor ?? ''}{r.room ? ` ${r.room}호` : ''}</span>}
+                      </button>
+                    ))}
+                    {residents.length === 0 && <p className="text-xs text-gray-300 text-center py-3">불러오는 중…</p>}
+                  </div>
+                </div>
+              </div>
+            )}
+          </Field>
+        ) : (
+          <Field label="제목"><input value={title} onChange={e => setTitle(e.target.value)} placeholder="예: 김OO 어르신 방문상담" className="inp" autoFocus /></Field>
+        )}
 
         {/* 날짜 */}
         <div>
@@ -806,10 +899,10 @@ function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: strin
         {isOuting && (
           <div>
             <label className="text-xs font-semibold text-gray-500 mb-1.5 block">
-              {category === '외출' ? '귀원 시간 (선택) — 당일 몇 시에 돌아오시는지' : '귀원 일시 (선택) — 언제 돌아오시는지'}
-              {returnTime && (category === '외출' || returnDate) && (
+              {sameDayReturn ? '귀원 시간 (선택) — 당일 몇 시에 돌아오시는지' : '귀원 일시 (선택) — 언제 돌아오시는지'}
+              {returnTime && (sameDayReturn || returnDate) && (
                 <span className="ml-1.5 text-green-700 font-bold">
-                  → {category === '외출' ? '당일' : `${Number(returnDate.slice(5, 7))}/${Number(returnDate.slice(8, 10))}`} {returnTime} 귀원
+                  → {sameDayReturn ? '당일' : `${Number(returnDate.slice(5, 7))}/${Number(returnDate.slice(8, 10))}`} {returnTime} 귀원
                 </span>
               )}
             </label>
@@ -830,8 +923,16 @@ function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: strin
             <select value={returnTime} onChange={e => setReturnTime(e.target.value)}
               disabled={category === '외박' && !returnDate} className="inp disabled:opacity-40">
               <option value="">다른 시간 선택 (30분 단위)</option>
+              {returnTime && !RETURN_TIMES.includes(returnTime) && (
+                <option value={returnTime}>{returnTime} — 실제 귀원 기록</option>
+              )}
               {RETURN_TIMES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
+            {(editing as any)?.returned_at && (
+              <p className="text-[11px] text-green-700 mt-1">
+                🏠 실제 귀원 기록과 연동된 시각입니다 — 여기서 고치면 귀원 기록도 함께 바뀝니다.
+              </p>
+            )}
             {category === '외박' && !returnDate && (
               <p className="text-[11px] text-amber-600 mt-1">귀원 날짜를 먼저 고르면 시간을 선택할 수 있어요 — 적어두면 공지·카톡에도 안내됩니다.</p>
             )}
@@ -942,6 +1043,38 @@ function DetailModal({ ev, onClose, onChanged, onGoRecruit, onEdit }: { ev: UEve
                 <p className="text-[11px] text-gray-400">등록: {(ev.raw as any).created_by}</p>
               )}
             </div>
+            {/* 실제 귀원 기록 — 외출·외박·외래는 돌아온 시각을 그때 남긴다 */}
+            {ev.kind === 'event' && ['외출', '외박', '외래·병원'].includes(ev.category) && (() => {
+              const raw = ev.raw as any
+              const todayIso = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10)
+              if (raw?.returned_at) {
+                const rd = new Date(raw.returned_at)
+                return (
+                  <div className="bg-green-50 text-green-700 rounded-lg p-2.5 text-xs flex items-center gap-1.5">
+                    🏠 귀원 완료 — {rd.getMonth() + 1}/{rd.getDate()} {String(rd.getHours()).padStart(2, '0')}:{String(rd.getMinutes()).padStart(2, '0')}
+                    {raw.returned_by && <span className="text-green-500">기록 {raw.returned_by}</span>}
+                    <button onClick={async () => {
+                      if (!confirm('귀원 기록을 취소할까요?')) return
+                      await scheduleAPI.markReturned(raw.id, { clear: true }); onChanged()
+                    }} className="ml-auto text-[10px] font-bold text-green-500 hover:underline">취소</button>
+                  </div>
+                )
+              }
+              if (ev.dateKey > todayIso) return null   // 아직 시작 전
+              return (
+                <div className="bg-amber-50 text-amber-700 rounded-lg p-2.5 text-xs flex items-center gap-2">
+                  <span className="flex-1">🚶 아직 귀원 기록이 없어요 — 어르신이 돌아오시면 눌러주세요</span>
+                  <button onClick={async () => {
+                    if (!confirm('지금 시각으로 귀원 완료를 기록할까요?')) return
+                    try { await scheduleAPI.markReturned(raw.id); onChanged() }
+                    catch (e2: any) { alert(e2?.response?.data?.detail ?? '기록 실패') }
+                  }}
+                    className="shrink-0 text-[11px] font-bold text-white bg-amber-500 hover:bg-amber-600 px-2.5 py-1.5 rounded-lg">
+                    지금 귀원 완료
+                  </button>
+                </div>
+              )
+            })()}
             {isInterview && (
               <div className="bg-violet-50 rounded-lg p-3 text-xs text-violet-700 flex items-start gap-2">
                 <Briefcase className="w-4 h-4 shrink-0 mt-0.5" />

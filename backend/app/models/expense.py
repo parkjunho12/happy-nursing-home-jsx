@@ -25,8 +25,10 @@ def now_kst() -> datetime:
 
 # 계정과목(카테고리)
 EXPENSE_CATEGORIES = [
-    "소모품비", "식자재비", "의료용품비", "시설관리비",
-    "공과금", "비품구입", "차량유지", "복리후생", "기타",
+    "소모품비", "사무용품비", "식자재비", "의약품·위생재료비", "의료용품비",
+    "수선유지비", "시설관리비", "공과금(전기·수도·가스)", "통신비",
+    "비품구입", "차량유지비", "교육훈련비", "프로그램·행사비",
+    "복리후생비", "지급수수료", "임차료", "세금과공과", "기타",
 ]
 # 결제수단
 PAYMENT_METHODS = ["법인카드", "계좌이체", "현금", "개인카드(후정산)"]
@@ -96,5 +98,6 @@ class ExpenseAccountSetting(Base):
     id                = Column(String, primary_key=True, default=_uuid)
     withdraw_accounts = Column(JSON, nullable=True)   # ["농협 운영비 301-...", ...]
     deposit_accounts  = Column(JSON, nullable=True)
+    cards             = Column(JSON, nullable=True)   # ["신한 법인카드 (1234)", ...]
     updated_by        = Column(String(100), nullable=True)
     updated_at        = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)

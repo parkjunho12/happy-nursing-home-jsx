@@ -58,6 +58,7 @@ import RequestHistoryPage from './pages/admin/RequestHistoryPage'
 import PensionPage from './pages/admin/PensionPage'
 import AuditCheckPage from './pages/AuditCheckPage'
 import ResidentDetailPage from './pages/eval/ResidentDetailPage'
+import StaffDetailPage from './pages/eval/StaffDetailPage'
 import StaffEducationPage from './pages/StaffEducationPage'
 import WorkGuidePage from './pages/WorkGuidePage'
 import GuidePage from './pages/GuidePage'
@@ -309,6 +310,7 @@ function App() {
             <Route path="eval/residents" element={<ResidentCareRoute><EvalResidentsPage /></ResidentCareRoute>} />
             <Route path="eval/residents/:id" element={<ResidentCareRoute><ResidentDetailPage /></ResidentCareRoute>} />
             <Route path="eval/staff"     element={<StaffAdminRoute><EvalStaffPage /></StaffAdminRoute>} />
+            <Route path="eval/staff/:id" element={<StaffAdminRoute><StaffDetailPage /></StaffAdminRoute>} />
 
             {/* ADMIN 전용 */}
             <Route path="eval/ai-review" element={<ManagerRoute><EvalAIReviewPage /></ManagerRoute>} />

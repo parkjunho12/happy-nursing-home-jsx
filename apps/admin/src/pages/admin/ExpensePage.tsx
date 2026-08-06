@@ -243,6 +243,8 @@ function ExpenseFormModal({ meta, editing, onClose, onSaved }:
   const [payment, setPayment] = useState(editing?.payment_method ?? (meta?.payment_methods[0] ?? ''))
   const [depositAcc, setDepositAcc] = useState(editing?.deposit_account ?? '')
   const [withdrawAcc, setWithdrawAcc] = useState(editing?.withdraw_account ?? '')
+  const [saveDeposit, setSaveDeposit] = useState(false)   // 자주 쓰는 통장에 추가
+  const isCard = payment.includes('카드')
   const [purchasedAt, setPurchasedAt] = useState(editing?.purchased_at ?? ymd(new Date()))
   const [memo, setMemo] = useState(editing?.memo ?? '')
   const [files, setFiles] = useState<File[]>([])
@@ -264,8 +266,11 @@ function ExpenseFormModal({ meta, editing, onClose, onSaved }:
       fd.append('vendor', vendor)
       fd.append('category', category)
       fd.append('payment_method', payment)
-      fd.append('deposit_account', depositAcc)
+      fd.append('deposit_account', isCard ? '' : depositAcc)
       fd.append('withdraw_account', withdrawAcc)
+      if (!isCard && saveDeposit && depositAcc.trim()) {
+        expenseAPI.addDepositAccount(depositAcc.trim()).catch(() => {})
+      }
       fd.append('purchased_at', purchasedAt)
       fd.append('memo', memo)
       files.forEach(f => fd.append('files', f))
@@ -296,28 +301,52 @@ function ExpenseFormModal({ meta, editing, onClose, onSaved }:
               {meta?.categories.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </Field>
-          <Field label="출금 통장 (돈 나가는 시설 계좌)">
-            <select value={withdrawAcc} onChange={e => setWithdrawAcc(e.target.value)}
-              className="inp w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl">
-              <option value="">선택 안 함</option>
-              {[...new Set([...(withdrawAcc ? [withdrawAcc] : []), ...(meta?.withdraw_accounts ?? [])])].map(a => <option key={a} value={a}>{a}</option>)}
-            </select>
-            {(meta?.withdraw_accounts ?? []).length === 0 && (
-              <p className="text-[10px] text-gray-400 mt-0.5">계좌 목록이 비어 있어요 — ADMIN이 설정에서 추가합니다</p>
-            )}
-          </Field>
-          <Field label="입금 통장 (거래처가 받을 계좌)">
-            <select value={depositAcc} onChange={e => setDepositAcc(e.target.value)}
-              className="inp w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl">
-              <option value="">선택 안 함</option>
-              {[...new Set([...(depositAcc ? [depositAcc] : []), ...(meta?.deposit_accounts ?? [])])].map(a => <option key={a} value={a}>{a}</option>)}
-            </select>
-          </Field>
           <Field label="결제수단">
             <select value={payment} onChange={e => setPayment(e.target.value)} className="einp">
               {meta?.payment_methods.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
           </Field>
+          {isCard ? (
+            /* ── 카드 결제 — 카드만 고르면 끝 (이체·입금계좌 개념 없음) ── */
+            <Field label="사용 카드">
+              <select value={withdrawAcc} onChange={e => setWithdrawAcc(e.target.value)}
+                className="inp w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl">
+                <option value="">선택 안 함</option>
+                {withdrawAcc && !(meta?.cards ?? []).some(c => c.account === withdrawAcc) && <option value={withdrawAcc}>{withdrawAcc}</option>}
+                {(meta?.cards ?? []).map(c => <option key={c.account} value={c.account}>{c.account}{c.memo ? ` — ${c.memo}` : ''}</option>)}
+              </select>
+              {(meta?.cards ?? []).length === 0 && (
+                <p className="text-[10px] text-gray-400 mt-0.5">카드 목록이 비어 있어요 — ADMIN이 설정 → 지출 계좌 관리에서 추가합니다</p>
+              )}
+            </Field>
+          ) : payment === '계좌이체' ? (
+            <>
+              <Field label="출금 통장 (돈 나가는 시설 계좌)">
+                <select value={withdrawAcc} onChange={e => setWithdrawAcc(e.target.value)}
+                  className="inp w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl">
+                  <option value="">선택 안 함</option>
+                  {withdrawAcc && !(meta?.withdraw_accounts ?? []).some(c => c.account === withdrawAcc) && <option value={withdrawAcc}>{withdrawAcc}</option>}
+                  {(meta?.withdraw_accounts ?? []).map(c => <option key={c.account} value={c.account}>{c.account}{c.memo ? ` — ${c.memo}` : ''}</option>)}
+                </select>
+                {(meta?.withdraw_accounts ?? []).length === 0 && (
+                  <p className="text-[10px] text-gray-400 mt-0.5">시설 계좌는 ADMIN이 설정에서 추가합니다</p>
+                )}
+              </Field>
+              <Field label="입금 통장 (거래처가 받을 계좌)">
+                <input value={depositAcc} onChange={e => setDepositAcc(e.target.value)} list="exp-dep"
+                  placeholder="직접 입력 — 예: 국민 123-**-4567 (○○상사)"
+                  className="inp w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl" />
+                <datalist id="exp-dep">{(meta?.deposit_accounts ?? []).map(c => <option key={c.account} value={c.account}>{c.memo ?? ''}</option>)}</datalist>
+                {depositAcc.trim() && !(meta?.deposit_accounts ?? []).some(c => c.account === depositAcc.trim()) && (
+                  <label className="flex items-center gap-1.5 mt-1 text-[11px] text-gray-500 cursor-pointer">
+                    <input type="checkbox" checked={saveDeposit} onChange={e => setSaveDeposit(e.target.checked)} className="w-3.5 h-3.5 accent-teal-600" />
+                    이 계좌를 자주 쓰는 통장에 추가
+                  </label>
+                )}
+              </Field>
+            </>
+          ) : null}
+
         </div>
         <Field label="거래처 (선택)"><input value={vendor} onChange={e => setVendor(e.target.value)} placeholder="예: OO마트" className="einp" /></Field>
         <Field label="메모 (선택)"><textarea value={memo} onChange={e => setMemo(e.target.value)} rows={2} className="einp resize-none" /></Field>

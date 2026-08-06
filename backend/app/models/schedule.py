@@ -25,6 +25,8 @@ class ScheduleEvent(Base):
     memo          = Column(Text, nullable=True)
     status        = Column(String, nullable=False, default="scheduled")  # scheduled/done/canceled
     notice_id     = Column(String, nullable=True, index=True)  # 연결된 공개 공지 — 일정 수정 시 함께 갱신
+    returned_at   = Column(DateTime(timezone=True), nullable=True)  # 실제 귀원 시각 (외출·외박·외래)
+    returned_by   = Column(String, nullable=True)                   # 귀원 기록자
     created_by    = Column(String, nullable=True)          # 작성자 이름(표시용)
     created_by_id = Column(String, nullable=True, index=True)  # 작성자 user.id (권한 판정)
     created_at    = Column(DateTime(timezone=True), default=now_kst)

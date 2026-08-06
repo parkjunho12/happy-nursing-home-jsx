@@ -137,6 +137,7 @@ def meta(current_user: User = Depends(_require_submitter)):
         "payment_methods": PAYMENT_METHODS,
         "deposit_accounts": _account_setting(db)["deposit"],
         "withdraw_accounts": _account_setting(db)["withdraw"],
+        "cards": _account_setting(db)["cards"],
         "is_approver": _is_approver(current_user),
     })
 
@@ -178,15 +179,31 @@ def get_request(rid: str, db: Session = Depends(get_db),
     return ApiResponse(success=True, data=_view(e, current_user))
 
 
+def _norm_accounts(raw) -> list:
+    """문자열/객체 혼용 저장분을 [{account, memo}]로 — 계좌값 기준 중복 제거."""
+    out, seen = [], set()
+    for x in (raw or []):
+        if isinstance(x, dict):
+            acc = str(x.get("account") or "").strip()
+            memo = str(x.get("memo") or "").strip() or None
+        else:
+            acc, memo = str(x).strip(), None
+        if acc and acc not in seen:
+            out.append({"account": acc, "memo": memo}); seen.add(acc)
+    return out
+
+
 def _account_setting(db: Session) -> dict:
     row = db.query(ExpenseAccountSetting).first()
-    return {"withdraw": (row.withdraw_accounts if row else None) or [],
-            "deposit": (row.deposit_accounts if row else None) or []}
+    return {"withdraw": _norm_accounts(row.withdraw_accounts if row else None),
+            "deposit": _norm_accounts(row.deposit_accounts if row else None),
+            "cards": _norm_accounts(row.cards if row else None)}
 
 
 class AccountsBody(BaseModel):
     withdraw_accounts: Optional[list] = None
     deposit_accounts: Optional[list] = None
+    cards: Optional[list] = None
 
 
 @router.get("/accounts")
@@ -205,22 +222,40 @@ def save_accounts(body: AccountsBody, db: Session = Depends(get_db),
     if not row:
         row = ExpenseAccountSetting()
         db.add(row)
-    def clean(v):
-        if v is None:
-            return None
-        out, seen = [], set()
-        for x in v:
-            t = str(x).strip()
-            if t and t not in seen:
-                out.append(t); seen.add(t)
-        return out
     if body.withdraw_accounts is not None:
-        row.withdraw_accounts = clean(body.withdraw_accounts)
+        row.withdraw_accounts = _norm_accounts(body.withdraw_accounts)
     if body.deposit_accounts is not None:
-        row.deposit_accounts = clean(body.deposit_accounts)
+        row.deposit_accounts = _norm_accounts(body.deposit_accounts)
+    if body.cards is not None:
+        row.cards = _norm_accounts(body.cards)
     row.updated_by = getattr(current_user, "name", None)
     db.commit()
     return ApiResponse(success=True, data=_account_setting(db))
+
+
+class DepositAddBody(BaseModel):
+    account: str
+    memo: Optional[str] = None
+
+
+@router.post("/accounts/deposit")
+def add_deposit_account(body: DepositAddBody, db: Session = Depends(get_db),
+                        current_user: User = Depends(_require_submitter)):
+    """입금(거래처) 계좌를 자주 쓰는 목록에 추가 — 신청하면서 바로. 삭제·정리는 ADMIN 설정에서."""
+    t = (body.account or "").strip()
+    if not t:
+        raise HTTPException(400, "계좌를 입력해주세요.")
+    row = db.query(ExpenseAccountSetting).first()
+    if not row:
+        row = ExpenseAccountSetting()
+        db.add(row)
+    cur = _norm_accounts(row.deposit_accounts)
+    if t not in {c["account"] for c in cur}:
+        cur.append({"account": t, "memo": (body.memo or "").strip() or None})
+        row.deposit_accounts = cur
+        row.updated_by = getattr(current_user, "name", None)
+        db.commit()
+    return ApiResponse(success=True, data={"deposit": _norm_accounts(row.deposit_accounts)})
 
 
 @router.post("/requests")
@@ -432,7 +467,7 @@ def summary(
     for r in approved:
         key = r.withdraw_account or "미지정"
         by_wa[key] = by_wa.get(key, 0) + (r.amount or 0)
-    unpaid = [r for r in approved if not r.paid_at]
+    unpaid = [r for r in approved if not r.paid_at and (r.payment_method or "") == "계좌이체"]
     return ApiResponse(success=True, data={
         "year": year, "month": month,
         "by_withdraw_account": [{"account": k, "amount": v} for k, v in

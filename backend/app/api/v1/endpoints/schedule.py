@@ -84,6 +84,8 @@ def _view(e: ScheduleEvent, user: Optional[User] = None) -> dict:
         "can_edit": _can_edit_event(user, e) if user else False,
         "notice_id": e.notice_id,
         "created_by_id": e.created_by_id,
+        "returned_at": e.returned_at.isoformat() if e.returned_at else None,
+        "returned_by": e.returned_by,
         "id": e.id, "category": e.category, "title": e.title,
         "start_at": _kst(e.start_at).isoformat() if e.start_at else None,
         "end_at": _kst(e.end_at).isoformat() if e.end_at else None,
@@ -143,14 +145,18 @@ def _notice_text(e: ScheduleEvent) -> tuple:
     w = WEEK_KO[dt.weekday()]
     when = f"{dt.month}월 {dt.day}일({w}) {dt.strftime('%H:%M')}"
     # 날짜를 맨 앞에 — 단톡방 목록에서 "언제"가 제일 먼저 보여야 한다
-    title = f"{dt.month}/{dt.day}({w}) [{e.category}] {e.title}"
+    # 제목에 이미 [카테고리]가 들어 있으면(수급자 자동 제목) 중복으로 붙이지 않는다
+    _t = e.title or ""
+    title = (f"{dt.month}/{dt.day}({w}) {_t}"
+             if _t.startswith(f"[{e.category}]")
+             else f"{dt.month}/{dt.day}({w}) [{e.category}] {_t}")
     lines = [
         f"안내드립니다 🙂",
         "",
-        f"· 내용: {e.title}",
+        f"· 내용: {(_t[len(f'[{e.category}]'):].strip() if _t.startswith(f'[{e.category}]') else _t)}",
         f"· 일시: {when}",
     ]
-    if e.end_at and e.category in ("외출", "외박"):
+    if e.end_at and e.category in ("외출", "외박", "외래·병원"):
         rt = _kst(e.end_at)
         if rt.date() == dt.date():          # 외출 — 당일 귀원은 시간만
             lines.append(f"· 귀원: 당일 {rt.strftime('%H:%M')}")
@@ -263,6 +269,8 @@ def update_event(eid: str, body: EventUpdate, db: Session = Depends(get_db),
             e.start_at = at
     if body.end_at is not None:
         e.end_at = _parse_dt(body.end_at)
+        if e.returned_at:               # 이미 귀원 기록이 있으면 하나로 sync
+            e.returned_at = e.end_at
     if body.location is not None:
         e.location = body.location
     if body.contact_name is not None:
@@ -296,6 +304,35 @@ def delete_event(eid: str, db: Session = Depends(get_db),
             n.active = False               # 일정이 사라지면 공지도 내린다
     db.delete(e); db.commit()
     return ApiResponse(success=True, message="삭제되었습니다.")
+
+
+class ReturnedBody(BaseModel):
+    returned_at: Optional[str] = None   # ISO — 없으면 지금
+    clear: Optional[bool] = False       # 취소
+
+
+@router.post("/events/{eid}/returned")
+def mark_returned(eid: str, body: ReturnedBody, db: Session = Depends(get_db),
+                  current_user: User = Depends(_require_manager)):
+    """실제 귀원 기록 — 어르신이 돌아온 시각을 그때그때 남긴다 (외출·외박·외래)."""
+    e = db.query(ScheduleEvent).filter(ScheduleEvent.id == eid).first()
+    if not e:
+        raise HTTPException(404, "일정을 찾을 수 없습니다.")
+    if body.clear:
+        e.returned_at = None
+        e.returned_by = None
+    else:
+        dt = _parse_dt(body.returned_at) if body.returned_at else None
+        e.returned_at = dt or now_kst()
+        e.returned_by = getattr(current_user, "name", None)
+        e.end_at = e.returned_at        # 예정 귀원(end_at)도 실제 시각으로 통일
+    _sync_notice(db, e, current_user)   # 공지의 귀원 안내도 함께 갱신
+    db.commit(); db.refresh(e)
+    return ApiResponse(success=True, data={
+        "id": e.id,
+        "returned_at": e.returned_at.isoformat() if e.returned_at else None,
+        "returned_by": e.returned_by,
+    })
 
 
 @router.get("/lifecycle")
