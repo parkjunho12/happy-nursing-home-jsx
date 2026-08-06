@@ -263,8 +263,8 @@ export default function EvalCalendarPage() {
     if (!selectedDayKey) return { recurring: [], event: [] }
     const all = occsByDay.get(selectedDayKey) ?? []
     return {
-      recurring: all.filter(e => !['on_admission','on_discharge','on_hire'].includes(e.occ.frequency)),
-      event:     all.filter(e =>  ['on_admission','on_discharge','on_hire'].includes(e.occ.frequency)),
+      recurring: all.filter(e => !['on_admission','on_discharge','on_hire','on_resign'].includes(e.occ.frequency)),
+      event:     all.filter(e =>  ['on_admission','on_discharge','on_hire','on_resign'].includes(e.occ.frequency)),
     }
   }, [selectedDayKey, occsByDay])
 
@@ -411,8 +411,8 @@ export default function EvalCalendarPage() {
             let todoCount = 0, doneCount = 0, eventTodo = 0, hasUrgent = false, hasOverdue = false
             if (hasOccurrences) {
               const all = occsByDay.get(key) ?? []
-              const recurring = all.filter(e => !['on_admission','on_discharge','on_hire'].includes(e.occ.frequency))
-              const events    = all.filter(e =>  ['on_admission','on_discharge','on_hire'].includes(e.occ.frequency))
+              const recurring = all.filter(e => !['on_admission','on_discharge','on_hire','on_resign'].includes(e.occ.frequency))
+              const events    = all.filter(e =>  ['on_admission','on_discharge','on_hire','on_resign'].includes(e.occ.frequency))
               doneCount  = recurring.filter(e => e.occ.status === 'completed').length
               todoCount  = recurring.filter(e => e.occ.status !== 'completed').length
               eventTodo  = events.filter(e => e.occ.status !== 'completed').length

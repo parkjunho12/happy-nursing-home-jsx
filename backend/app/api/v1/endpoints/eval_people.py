@@ -181,6 +181,7 @@ def discharge_ltc_resident(
         raise HTTPException(404, "Not found")
     r.status = "discharged"
     r.discharge_date = payload.discharge_date
+    r.discharge_time = payload.discharge_time
     try:
         from app.models.resident_docs import ResidentDocStatus
         db.query(ResidentDocStatus).filter(ResidentDocStatus.resident_id == rid).update({"active": False})
@@ -342,12 +343,19 @@ def unresign_ltc_staff(sid: str, db: Session = Depends(get_db), _: User = Depend
     today = _dt.now(_tz(_td(hours=9))).strftime("%Y-%m-%d")
     s.status = "pending" if (s.hire_date or "")[:10] > today else "active"
     s.resign_date = None
-    # 퇴사 처리 때 껐던 미완료 체크리스트 복구
+    # 퇴사 처리 때 껐던 미완료 체크리스트 복구 (퇴사 업무 체크리스트는 제외)
     db.execute(
         update(ChecklistItem)
         .where(ChecklistItem.person_id == sid, ChecklistItem.completed == False,
-               ChecklistItem.active == False)
+               ChecklistItem.active == False, ChecklistItem.frequency != "on_resign")
         .values(active=True)
+    )
+    # 퇴사 취소면 퇴사 업무 체크리스트는 더 이상 유효하지 않다
+    db.execute(
+        update(ChecklistItem)
+        .where(ChecklistItem.person_id == sid, ChecklistItem.frequency == "on_resign",
+               ChecklistItem.completed == False)
+        .values(active=False)
     )
     try:
         from app.models.staff_hr import StaffHrRecord

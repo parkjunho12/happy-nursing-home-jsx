@@ -154,7 +154,7 @@ export default function DashboardPage() {
           const item = itemMap.get(o.checklistItemId)
           if (!item || !item.active) return
 
-          const isEvent = ['on_admission', 'on_discharge', 'on_hire'].includes(o.frequency)
+          const isEvent = ['on_admission', 'on_discharge', 'on_hire', 'on_resign'].includes(o.frequency)
           const daysOverdue = Math.max(0, -daysFromToday(o.dueDate))
 
           // one_time: 기한까지 남은 일수 계산
@@ -192,7 +192,7 @@ export default function DashboardPage() {
       checklists
         .filter(c => c.active)
         .forEach(c => {
-          const isEvent = ['on_admission', 'on_discharge', 'on_hire'].includes(c.frequency)
+          const isEvent = ['on_admission', 'on_discharge', 'on_hire', 'on_resign'].includes(c.frequency)
           const done = isEvent
             ? c.completed
             : c.completionHistory.some(r => {
@@ -226,7 +226,7 @@ export default function DashboardPage() {
 
     // ── 이벤트(입소·퇴소·입사) 미완료 — 수급자 상세 페이지와 완전히 같은 기준(isItemDone) ──
     checklists
-      .filter(c => c.active && ['on_admission', 'on_discharge', 'on_hire'].includes(c.frequency))
+      .filter(c => c.active && ['on_admission', 'on_discharge', 'on_hire', 'on_resign'].includes(c.frequency))
       .filter(c => !isItemDone(c))
       .forEach(c => {
         eventT.push({
@@ -242,8 +242,8 @@ export default function DashboardPage() {
     return {
       todayTasks:        todayT.sort((a, b) => (b.riskLevel==='high'?1:0)-(a.riskLevel==='high'?1:0)),
       urgentTasks:       urgentT,
-      admissionTasks:    sorted.filter(t => t.frequency !== 'on_hire'),
-      hireTasks:         sorted.filter(t => t.frequency === 'on_hire'),
+      admissionTasks:    sorted.filter(t => t.frequency !== 'on_hire' && t.frequency !== 'on_resign'),
+      hireTasks:         sorted.filter(t => t.frequency === 'on_hire' || t.frequency === 'on_resign'),
     }
   }, [occurrences, checklists])
 

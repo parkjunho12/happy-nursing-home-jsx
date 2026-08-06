@@ -3,7 +3,7 @@ import RoomPicker from '@/components/eval/RoomPicker'
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/auth'
-import { UserPlus, LogOut, Edit2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw, Trash2 } from 'lucide-react'
+import { UserPlus, LogOut, Edit2, AlertTriangle, RotateCcw, Trash2 } from 'lucide-react'
 import DateField from '@/components/ui/DateField'
 import CertificationEditor from '@/components/eval/CertificationEditor'
 import { endFromStart, type Certification } from '@/utils/cert'
@@ -11,8 +11,7 @@ import { autoDocEvents } from '@/utils/docEvents'
 import { useLtcStore } from '@/store/ltc'
 import type { LtcResident } from '@/store/ltc'
 import type { ChecklistItem } from '@/utils/period'
-import { calcAge, isItemDone, daysFromToday } from '@/utils/period'
-import ChecklistDetailModal from '@/components/eval/ChecklistDetailModal'
+import { calcAge, isItemDone } from '@/utils/period'
 import { adminAlbumAPI } from '@/api/albumClient'
 
 type Tab = 'active' | 'pending' | 'discharged' | 'all'
@@ -25,9 +24,7 @@ export default function EvalResidentsPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const navigate = useNavigate()
-  const [expandedId, setExpandedId] = useState<string | null>(null)
   const [showDischarge, setShowDischarge] = useState<string | null>(null)
-  const [selectedCl, setSelectedCl] = useState<ChecklistItem | null>(null)
   const [addGuardianFor, setAddGuardianFor] = useState<{ id: string; name: string } | null>(null)
 
   useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
@@ -122,14 +119,11 @@ export default function EvalResidentsPage() {
         <div className="space-y-2.5">
           {filtered.map(r => (
             <ResidentCard key={r.id} r={r}
-              expanded={expandedId===r.id}
-              onExpand={() => setExpandedId(expandedId===r.id ? null : r.id)}
               onDetail={() => navigate(`/eval/residents/${r.id}`)}
               onEdit={() => setEditingId(r.id)}
               onDischarge={() => setShowDischarge(r.id)}
               onDelete={() => handleDeleteResident(r)}
               checklists={resCls[r.id]??[]}
-              onClClick={setSelectedCl}
               onAddGuardian={() => setAddGuardianFor({ id: r.id, name: r.name })} />
           ))}
         </div>
@@ -138,7 +132,6 @@ export default function EvalResidentsPage() {
       {showAdd       && <ResidentForm onClose={() => setShowAdd(false)} />}
       {editingId     && <ResidentForm existing={residents.find(r=>r.id===editingId)} onClose={() => setEditingId(null)} />}
       {showDischarge && <DischargeModal residentId={showDischarge} onClose={() => setShowDischarge(null)} />}
-      {selectedCl    && <ChecklistDetailModal item={selectedCl} onClose={() => setSelectedCl(null)} />}
       {quickOpen && <QuickPendingModal onClose={()=>setQuickOpen(false)} />}
       {addGuardianFor && (
         <GuardianAddModal
@@ -151,9 +144,9 @@ export default function EvalResidentsPage() {
   )
 }
 
-function ResidentCard({ r, expanded, onExpand, onEdit, onDischarge, onDelete, onDetail, checklists, onClClick, onAddGuardian }: {
-  r: LtcResident; expanded:boolean; onExpand:()=>void; onEdit:()=>void; onDischarge:()=>void; onDelete:()=>void; onDetail:()=>void;
-  checklists: ChecklistItem[]; onClClick:(c:ChecklistItem)=>void; onAddGuardian:()=>void;
+function ResidentCard({ r, onEdit, onDischarge, onDelete, onDetail, checklists, onAddGuardian }: {
+  r: LtcResident; onEdit:()=>void; onDischarge:()=>void; onDelete:()=>void; onDetail:()=>void;
+  checklists: ChecklistItem[]; onAddGuardian:()=>void;
 }) {
   // 케어팀(간호팀장·물리치료사)은 열람·체크 중심 — 삭제는 숨긴다
   const canDelete = useAuthStore(st => st.user?.role === 'ADMIN' || ['사회복지사', '시설장', '대표', '이사'].includes(st.user?.position ?? ''))
@@ -164,7 +157,7 @@ function ResidentCard({ r, expanded, onExpand, onEdit, onDischarge, onDelete, on
 
   return (
     <div className={`bg-white rounded-xl border shadow-sm overflow-hidden ${r.status==='discharged'?'opacity-60 border-gray-100':r.status==='pending'?'border-amber-200 bg-amber-50/30':hasHigh?'border-red-200':'border-gray-200'}`}>
-      <div className="flex items-center gap-3 p-4 cursor-pointer" onClick={onExpand}>
+      <div className="flex items-center gap-3 p-4 cursor-pointer" onClick={onDetail} title="상세 페이지 열기">
         <div className={`w-10 h-10 rounded-full flex items-center justify-center text-base font-bold flex-shrink-0 ${r.gender==='female'?'bg-pink-100 text-pink-700':'bg-blue-100 text-blue-700'}`}>
           {r.name[0]}
         </div>
@@ -180,6 +173,7 @@ function ResidentCard({ r, expanded, onExpand, onEdit, onDischarge, onDelete, on
             <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${r.status==='active'?'bg-green-100 text-green-700':r.status==='pending'?'bg-amber-100 text-amber-700':'bg-gray-100 text-gray-500'}`}>
               {r.status==='active'?'입소 중':r.status==='pending'?'입소 예정':'퇴소'}
             </span>
+            {r.tubeFeeding && <span className="text-[9px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1 py-0.5 rounded">경관식</span>}
             {hasHigh && <AlertTriangle size={13} className="text-red-500"/>}
           </div>
           <p className="text-xs text-gray-400 mt-0.5">{r.birthDate} · 입소 {r.admissionDate}{r.dischargeDate&&` · 퇴소 ${r.dischargeDate}`}</p>
@@ -213,54 +207,8 @@ function ResidentCard({ r, expanded, onExpand, onEdit, onDischarge, onDelete, on
               )}
             </>
           )}
-          {expanded ? <ChevronUp size={16} className="text-gray-400"/> : <ChevronDown size={16} className="text-gray-400"/>}
         </div>
       </div>
-
-      {expanded && total > 0 && (
-        <div className="border-t border-gray-50 px-4 pb-4 pt-3">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-gray-600">개인 체크리스트 ({total}건)</p>
-            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${done===total?'bg-green-100 text-green-700':'bg-orange-100 text-orange-600'}`}>
-              {done===total?'✓ 완료':`${total-done}건 미완료`}
-            </span>
-          </div>
-          <div className="space-y-1.5">
-            {checklists.map(cl => (
-              <div key={cl.id} onClick={() => onClClick(cl)}
-                className={`flex items-center gap-2.5 p-2.5 rounded-xl border cursor-pointer transition-colors ${
-                  isItemDone(cl)?'bg-green-50 border-green-100 hover:bg-green-100':
-                  cl.riskLevel==='high'?'bg-red-50 border-red-100 hover:bg-red-100':
-                  'bg-gray-50 border-gray-100 hover:bg-gray-100'
-                }`}>
-                <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${isItemDone(cl)?'bg-green-500 border-green-500':'border-gray-300'}`}>
-                  {isItemDone(cl) && <div className="w-1.5 h-1.5 bg-white rounded-full"/>}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-xs font-semibold truncate ${isItemDone(cl)?'line-through text-gray-400':'text-gray-800'}`}>
-                    {cl.title.replace(`[${r.name}] `,'')}
-                  </p>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${cl.frequency==='on_discharge'?'bg-gray-200 text-gray-600':'bg-teal-100 text-teal-700'}`}>
-                      {cl.frequency==='on_discharge'?'퇴소':'입소'}
-                    </span>
-                    {cl.dueDate && (() => {
-                      const dd = daysFromToday(cl.dueDate)
-                      const done = isItemDone(cl)
-                      return (
-                        <span className={`text-[10px] font-semibold ${done?'text-gray-300':dd<0?'text-red-500':dd<=7?'text-amber-600':'text-gray-400'}`}>
-                          기한 {cl.dueDate.slice(2).replace(/-/g,'.')}{!done && (dd<0?` (${-dd}일 지남)`:dd===0?' (오늘)':` (D-${dd})`)}
-                        </span>
-                      )
-                    })()}
-                  </div>
-                </div>
-                {cl.riskLevel==='high' && !isItemDone(cl) && <AlertTriangle size={11} className="text-red-400 flex-shrink-0"/>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
@@ -297,11 +245,11 @@ function BirthDateSelect({ value, onChange }: { value: string; onChange: (v: str
   )
 }
 
-function ResidentForm({ existing, onClose }: { existing?: LtcResident; onClose:()=>void }) {
+export function ResidentForm({ existing, onClose }: { existing?: LtcResident; onClose:()=>void }) {
   const { addResident, updateResident } = useLtcStore()
   const today = new Date().toISOString().split('T')[0]
   const [roomPickOpen, setRoomPickOpen] = useState(false)
-  const [form, setForm] = useState({ name:existing?.name??'', birthDate:existing?.birthDate??'1930-01-01', gender:existing?.gender??'female', admissionDate:existing?.admissionDate??today, admissionTime:(existing as any)?.admissionTime??'', careGradeStartDate:existing?.careGradeStartDate??today, floor:existing?.floor??'', room:(existing as any)?.room??'', memo:existing?.memo??'', religion:existing?.religion??'', groupCognitive:existing?.groupCognitive??'', groupLeisure:existing?.groupLeisure??'', groupPhysical:existing?.groupPhysical??'' })
+  const [form, setForm] = useState({ name:existing?.name??'', birthDate:existing?.birthDate??'1930-01-01', gender:existing?.gender??'female', admissionDate:existing?.admissionDate??today, admissionTime:(existing as any)?.admissionTime??'', careGradeStartDate:existing?.careGradeStartDate??today, floor:existing?.floor??'', room:(existing as any)?.room??'', memo:existing?.memo??'', religion:existing?.religion??'', groupCognitive:existing?.groupCognitive??'', groupLeisure:existing?.groupLeisure??'', groupPhysical:existing?.groupPhysical??'', tubeFeeding:existing?.tubeFeeding??false })
   const [flags, setFlags] = useState({ basicMedical: false, restraint: false, pressureSore: false, positioning: false })
   const [certs, setCerts] = useState<Certification[]>([
     { grade:'3', cert_no:'', start: today, end: endFromStart(today, 2), benefits:[{ type:'시설', from: today }] },
@@ -377,6 +325,11 @@ function ResidentForm({ existing, onClose }: { existing?: LtcResident; onClose:(
               ))}
             </div>
           </div>
+          <button type="button" onClick={()=>setForm({...form,tubeFeeding:!form.tubeFeeding})}
+            className={`w-full text-left px-3 py-2.5 rounded-xl border text-sm transition-colors ${form.tubeFeeding ? 'bg-rose-50 border-rose-300 text-rose-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+            <span className="font-bold">{form.tubeFeeding ? '✓ ' : ''}경관식(비위관) 어르신</span>
+            <span className="block text-[10px] opacity-70 mt-0.5">체크하면 식수 정산에서 자동으로 제외됩니다</span>
+          </button>
           <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">입소일 *</label>
             {form.admissionDate > new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) && (
               <p className="text-[11px] text-amber-600 mb-1">입소일이 미래라 <b>입소 예정자</b>로 등록됩니다 — 입소일이 되면 자동으로 현원 전환 · 일정 캘린더에도 「입소」로 표시</p>
@@ -432,11 +385,12 @@ function DischargeModal({ residentId, onClose }: { residentId:string; onClose:()
   const { residents, dischargeResident } = useLtcStore()
   const r = residents.find(x=>x.id===residentId)
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [time, setTime] = useState('')
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true)
-    try { await dischargeResident(residentId, date); onClose() } finally { setLoading(false) }
+    try { await dischargeResident(residentId, date, time || undefined); onClose() } finally { setLoading(false) }
   }
 
   if (!r) return null
@@ -445,8 +399,14 @@ function DischargeModal({ residentId, onClose }: { residentId:string; onClose:()
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
         <div className="px-5 py-4 border-b"><h2 className="font-bold text-gray-900">퇴소 처리 — {r.name}</h2></div>
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 text-xs text-orange-700">퇴소 처리 시 연계기록지 체크리스트가 자동 생성되며, 미완료 입소 체크리스트는 비활성화됩니다.</div>
-          <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">퇴소일 *</label><DateField className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40" value={date} onChange={v=>setDate(v)} clearable={false}/></div>
+          <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 text-xs text-orange-700">퇴소 처리 시 「[희망이음] 퇴소 보고」·「[롱텀케어] 퇴소 등록」 체크리스트가 자동 생성되며(기한: 퇴소일+7일), 미완료 입소 체크리스트는 비활성화됩니다.</div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">퇴소일 *</label><DateField className="border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40" value={date} onChange={v=>setDate(v)} clearable={false}/></div>
+            <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">퇴소 시간</label>
+              <input type="time" value={time} onChange={e=>setTime(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40"/>
+              <p className="text-[10px] text-gray-400 mt-1">기록하면 퇴소일 식수가 이 시각 이전 끼니까지만 계산됩니다</p>
+            </div>
+          </div>
           <div className="flex gap-3 pt-2">
             <button type="submit" disabled={loading} className="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-red-600 disabled:opacity-50">{loading?'처리 중...':'퇴소 처리'}</button>
             <button type="button" onClick={onClose} className="flex-1 border border-gray-200 text-gray-700 rounded-xl py-2.5 text-sm">취소</button>

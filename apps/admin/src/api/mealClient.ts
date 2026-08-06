@@ -50,3 +50,21 @@ export const mealTimeAPI = {
   get: () => apiClient.get(`${BASE}/settings`).then(unwrap<MealTimes>),
   save: (b: MealTimes) => apiClient.put(`${BASE}/settings`, b).then(unwrap<MealTimes>),
 }
+
+export interface MealCountData {
+  month: string
+  meal_times: Record<string, string>
+  meal_order: string[]
+  days: { date: string; base: number; meals: Record<string, number> }[]
+  totals: Record<string, number>
+  grand_total: number
+  excluded_total: number
+  exclusions: { date: string; items: { name: string; meal: string; category: string }[] }[]
+  tube_feeding: string[]
+  warnings: { date: string; name: string; category: string }[]
+}
+
+export const mealCountAPI = {
+  month: (month: string) =>
+    apiClient.get(`${BASE}/count`, { params: { month } }).then(unwrap<MealCountData>),
+}

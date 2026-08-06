@@ -21,6 +21,7 @@ class FrequencyEnum(str, enum.Enum):
     on_admission = "on_admission"
     on_discharge = "on_discharge"
     on_hire = "on_hire"
+    on_resign = "on_resign"
 
 
 class RiskEnum(str, enum.Enum):
@@ -256,6 +257,7 @@ class LtcResident(Base):
     admission_date = Column(String(20), nullable=False)
     admission_time = Column(String(5), nullable=True)   # 입소 예정 시간 'HH:MM' — 미정이면 null
     discharge_date = Column(String(20), nullable=True)
+    discharge_time = Column(String(5), nullable=True)   # HH:MM — 퇴소일 식수 계산 기준
     care_grade_start_date = Column(String(20), nullable=False)
     floor = Column(String(20), nullable=True, index=True)   # 어르신 생활 층
     room = Column(String(10), nullable=True, index=True)    # 호실 (예: 201) — 담당 명단의 뼈대
@@ -263,6 +265,7 @@ class LtcResident(Base):
     group_cognitive = Column(String(2), nullable=True)      # 인지 프로그램 그룹 A/B/C
     group_leisure = Column(String(2), nullable=True)        # 여가 프로그램 그룹 A/B/C
     group_physical = Column(String(2), nullable=True)       # 신체 프로그램 그룹 A/B/C
+    tube_feeding = Column(Boolean, nullable=True, default=False)  # 경관식(비위관) — 식수 정산 제외
     status = Column(String(20), default="active", index=True)
     memo = Column(Text, default="")
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, CalendarDays, FileText, Landmark, Loader2, Pencil, UserRound } from 'lucide-react'
+import { StaffForm } from './EvalStaffPage'
 import { useLtcStore } from '@/store/ltc'
 import { calcAge, isItemDone } from '@/utils/period'
 import type { ChecklistItem } from '@/utils/period'
@@ -32,6 +33,21 @@ const Row = ({ k, v }: { k: string; v: React.ReactNode }) => (
   </div>
 )
 
+// 입사 체크리스트 그룹 — 제목의 [입사전]/[7일 이내]/[1달 이내] 태그로 분류
+const HIRE_GROUPS = [
+  { key: '입사전', label: '📋 입사 전', cls: 'text-sky-600' },
+  { key: '7일 이내', label: '⏱ 입사 7일 이내', cls: 'text-indigo-600' },
+  { key: '1달 이내', label: '📅 입사 1달 이내', cls: 'text-violet-600' },
+  { key: '퇴사', label: '🚪 퇴사 업무', cls: 'text-rose-600' },
+  { key: '기타', label: '기타', cls: 'text-gray-500' },
+]
+const stripName = (t: string) => t.replace(/^\[[^\]]+\]\s*/, '')
+const hireGroupOf = (t: string) => {
+  const m = stripName(t).match(/^\[(입사전|7일 이내|1달 이내|퇴사)\]/)
+  return m ? m[1] : '기타'
+}
+const hireTitleOf = (t: string) => stripName(t).replace(/^\[(입사전|7일 이내|1달 이내|퇴사)\]\s*/, '')
+
 export default function StaffDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -40,6 +56,8 @@ export default function StaffDetailPage() {
   const [hrLoading, setHrLoading] = useState(true)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [editingCl, setEditingCl] = useState<ChecklistItem | null>(null)
+  const [editingStaff, setEditingStaff] = useState(false)
+  const [batchKey, setBatchKey] = useState<string | null>(null)   // 그룹 전체 체크 진행 중
 
   useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
   useEffect(() => {
@@ -50,7 +68,18 @@ export default function StaffDetailPage() {
   }, [id])
 
   const s = staffList.find(x => x.id === id)
-  const cls = useMemo(() => checklists.filter(c => c.personId === id), [checklists, id])
+  // 퇴사자는 입사 체크리스트를 숨기고 퇴사 업무만 보여준다
+  const cls = useMemo(() => checklists.filter(c => c.personId === id
+    && (s?.status !== 'resigned' || c.frequency === 'on_resign')), [checklists, id, s?.status])
+  const grouped = useMemo(() => {
+    const m = new Map<string, ChecklistItem[]>()
+    cls.forEach(c => {
+      const g = hireGroupOf(c.title)
+      if (!m.has(g)) m.set(g, [])
+      m.get(g)!.push(c)
+    })
+    return m
+  }, [cls])
   const done = cls.filter(isItemDone).length
   const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10)
 
@@ -92,14 +121,14 @@ export default function StaffDetailPage() {
             {s.gender === 'female' ? '여' : '남'} · 만 {calcAge(s.birthDate)}세 · 입사 {s.hireDate} · 근속 {workYears}{s.resignDate && ` · 퇴사 ${s.resignDate}`}
           </p>
         </div>
-        <button onClick={() => navigate('/eval/staff')}
+        <button onClick={() => setEditingStaff(true)}
           className="ml-auto inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-gray-500 text-sm font-semibold hover:bg-gray-50">
-          <Pencil size={13} /> 직원 관리에서 수정
+          <Pencil size={13} /> 수정
         </button>
       </div>
 
       {/* 입사 체크리스트 — 풀폭, 토글·기한·완료자 */}
-      <Sec icon={CalendarDays} title={`입사 체크리스트 ${cls.length ? `(${done}/${cls.length})` : ''}`}
+      <Sec icon={CalendarDays} title={`${s.status === 'resigned' ? '퇴사 업무 체크리스트' : '입사 체크리스트'} ${cls.length ? `(${done}/${cls.length})` : ''}`}
         right={cls.length > 0 ? (
           <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden">
             <div className={`h-2 rounded-full ${done === cls.length ? 'bg-green-500' : 'bg-indigo-400'}`} style={{ width: `${cls.length ? (done / cls.length) * 100 : 0}%` }} />
@@ -108,8 +137,32 @@ export default function StaffDetailPage() {
         {cls.length === 0 ? (
           <p className="text-xs text-gray-400">연결된 체크리스트가 없습니다.</p>
         ) : (
-          <ul className="space-y-1">
-            {cls.map(c => {
+          <div className="space-y-3">
+            {HIRE_GROUPS.filter(g => grouped.get(g.key)?.length).map(g => {
+              const items = grouped.get(g.key)!
+              const todo = items.filter(c => !isItemDone(c))
+              const checkAll = async () => {
+                if (todo.length === 0) return
+                if (!confirm(`「${g.label.replace(/^\S+\s/, '')}」 미완료 ${todo.length}건을 전부 완료 처리할까요?\n체크한 담당자로 내 이름이 기록됩니다.`)) return
+                setBatchKey(g.key)
+                try { for (const c of todo) await toggleComplete(c.id, true) }
+                catch (e: any) { alert(e?.response?.data?.detail ?? '일괄 처리 중 오류') }
+                finally { setBatchKey(null) }
+              }
+              return (
+              <div key={g.key}>
+                <p className={`flex items-center gap-1.5 text-[11px] font-bold mb-1 ${g.cls}`}>
+                  {g.label}
+                  <span className="font-semibold text-gray-300">{items.filter(isItemDone).length}/{items.length}</span>
+                  {todo.length > 0 && (
+                    <button type="button" onClick={checkAll} disabled={batchKey !== null}
+                      className="ml-auto text-[11px] font-bold text-indigo-600 border border-indigo-200 px-2 py-0.5 rounded-lg hover:bg-indigo-50 disabled:opacity-40 inline-flex items-center gap-1">
+                      {batchKey === g.key ? <Loader2 size={11} className="animate-spin" /> : '전체 체크'}
+                    </button>
+                  )}
+                </p>
+                <ul className="space-y-1">
+                  {grouped.get(g.key)!.map(c => {
               const ok = isItemDone(c)
               const late = !ok && !!c.dueDate && c.dueDate < today
               const dday = c.dueDate ? Math.round((new Date(c.dueDate).getTime() - new Date(today).getTime()) / 86400000) : null
@@ -125,7 +178,7 @@ export default function StaffDetailPage() {
                     className={`w-5 h-5 rounded-md border-2 shrink-0 flex items-center justify-center ${ok ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-green-400 bg-white'} ${busyId === c.id ? 'opacity-40' : ''}`}>
                     {ok && <span className="text-white text-[11px] font-black leading-none">✓</span>}
                   </button>
-                  <span className={`flex-1 min-w-0 truncate text-[12.5px] ${ok ? 'line-through text-gray-400' : 'font-semibold text-gray-700'}`}>{c.title}</span>
+                  <span className={`flex-1 min-w-0 truncate text-[12.5px] ${ok ? 'line-through text-gray-400' : 'font-semibold text-gray-700'}`}>{hireTitleOf(c.title)}</span>
                   {ok && (
                     <span className="shrink-0 inline-flex items-center gap-1 text-[11px] font-bold text-green-700 bg-white border border-green-200 px-2 py-0.5 rounded-full">
                       ✓ {(c as any).completedBy ?? '담당자 미기록'}
@@ -147,7 +200,11 @@ export default function StaffDetailPage() {
                 </li>
               )
             })}
-          </ul>
+                </ul>
+              </div>
+              )
+            })}
+          </div>
         )}
       </Sec>
 
@@ -211,6 +268,7 @@ export default function StaffDetailPage() {
       </div>
 
       {editingCl && <ChecklistFormModal existing={editingCl} onClose={() => setEditingCl(null)} />}
+      {editingStaff && <StaffForm existing={s} onClose={() => setEditingStaff(false)} />}
     </div>
   )
 }

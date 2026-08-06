@@ -3,12 +3,11 @@ import StickyToolbar from '../../components/common/StickyToolbar'
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/auth'
-import { UserPlus, UserMinus, Edit2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw, CalendarOff, X, Trash2 } from 'lucide-react'
+import { UserPlus, UserMinus, Edit2, RotateCcw, CalendarOff, X, Trash2 } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
 import type { LtcStaff } from '@/store/ltc'
 import type { ChecklistItem } from '@/utils/period'
-import { calcAge, isItemDone, daysFromToday } from '@/utils/period'
-import ChecklistDetailModal from '@/components/eval/ChecklistDetailModal'
+import { calcAge, isItemDone } from '@/utils/period'
 import { STAFF_POSITIONS } from '@/constants/positions'
 
 type Tab = 'active' | 'pending' | 'resigned' | 'all'
@@ -23,9 +22,7 @@ export default function EvalStaffPage() {
   const [tab, setTab] = useState<Tab>('active')
   const [showAdd, setShowAdd] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
   const [showResign, setShowResign] = useState<string | null>(null)
-  const [selectedCl, setSelectedCl] = useState<ChecklistItem | null>(null)
   const [search, setSearch] = useState('')
   const [posFilter, setPosFilter] = useState('')
   const [leaveFor, setLeaveFor] = useState<string | null>(null)
@@ -128,8 +125,6 @@ export default function EvalStaffPage() {
         <div className="space-y-2.5">
           {filtered.map(s => (
             <StaffCard key={s.id} s={s}
-              expanded={expandedId===s.id}
-              onExpand={() => setExpandedId(expandedId===s.id ? null : s.id)}
               onEdit={() => setEditingId(s.id)}
               onResign={() => setShowResign(s.id)}
               onLeave={() => setLeaveFor(s.id)}
@@ -142,8 +137,7 @@ export default function EvalStaffPage() {
                 try { await useLtcStore.getState().deleteStaff(s.id) }
                 catch (e: any) { alert(e?.response?.data?.detail ?? e?.message ?? '삭제 실패') }
               }}
-              checklists={staffCls[s.id]??[]}
-              onClClick={setSelectedCl} />
+              checklists={staffCls[s.id]??[]} />
           ))}
         </div>
       )}
@@ -152,14 +146,13 @@ export default function EvalStaffPage() {
       {editingId   && <StaffForm existing={staffList.find(s=>s.id===editingId)} onClose={() => setEditingId(null)} />}
       {leaveFor    && <LeaveModal staffId={leaveFor} onClose={() => setLeaveFor(null)} />}
       {showResign  && <ResignModal staffId={showResign} onClose={() => setShowResign(null)} />}
-      {selectedCl  && <ChecklistDetailModal item={selectedCl} onClose={() => setSelectedCl(null)} />}
     </div>
   )
 }
 
-function StaffCard({ s, expanded, onExpand, onEdit, onResign, onLeave, onDelete, onDetail, checklists, onClClick }: {
-  s: LtcStaff; expanded:boolean; onExpand:()=>void; onEdit:()=>void; onResign:()=>void; onLeave:()=>void; onDelete:()=>void; onDetail:()=>void;
-  checklists: ChecklistItem[]; onClClick:(c:ChecklistItem)=>void;
+function StaffCard({ s, onEdit, onResign, onLeave, onDelete, onDetail, checklists }: {
+  s: LtcStaff; onEdit:()=>void; onResign:()=>void; onLeave:()=>void; onDelete:()=>void; onDetail:()=>void;
+  checklists: ChecklistItem[];
 }) {
   const isAdmin = useAuthStore(st => st.user?.role === 'ADMIN')
   const age = calcAge(s.birthDate)
@@ -173,7 +166,7 @@ function StaffCard({ s, expanded, onExpand, onEdit, onResign, onLeave, onDelete,
 
   return (
     <div className={`bg-white rounded-xl border shadow-sm overflow-hidden ${s.status==='resigned'?'opacity-60 border-gray-100':'border-gray-200'}`}>
-      <div className="flex items-center gap-3 p-4 cursor-pointer" onClick={onExpand}>
+      <div className="flex items-center gap-3 p-4 cursor-pointer" onClick={onDetail} title="상세 페이지 열기">
         <div className={`w-10 h-10 rounded-full flex items-center justify-center text-base font-bold flex-shrink-0 ${s.gender==='female'?'bg-pink-100 text-pink-700':'bg-blue-100 text-blue-700'}`}>
           {s.name[0]}
         </div>
@@ -222,53 +215,15 @@ function StaffCard({ s, expanded, onExpand, onEdit, onResign, onLeave, onDelete,
               title={s.status==='pending' ? '입사 취소 — 완전 삭제' : s.status==='active' ? '완전 삭제 (ADMIN 전용)' : '기록 완전 삭제'}
               className="flex items-center gap-1 text-xs font-medium text-red-500 border border-red-200 px-2.5 py-1.5 rounded-xl hover:bg-red-50"><Trash2 size={12}/>삭제</button>
           )}
-          {expanded ? <ChevronUp size={16} className="text-gray-400"/> : <ChevronDown size={16} className="text-gray-400"/>}
         </div>
       </div>
-
-      {expanded && total > 0 && (
-        <div className="border-t border-gray-50 px-4 pb-4 pt-3">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-gray-600">입사 체크리스트 ({total}건)</p>
-            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${done===total?'bg-green-100 text-green-700':'bg-orange-100 text-orange-600'}`}>
-              {done===total?'✓ 완료':`${total-done}건 미완료`}
-            </span>
-          </div>
-          <div className="space-y-1.5">
-            {checklists.map(cl => (
-              <div key={cl.id} onClick={() => onClClick(cl)}
-                className={`flex items-center gap-2.5 p-2.5 rounded-xl border cursor-pointer transition-colors ${isItemDone(cl)?'bg-green-50 border-green-100 hover:bg-green-100':cl.riskLevel==='high'?'bg-red-50 border-red-100 hover:bg-red-100':'bg-gray-50 border-gray-100 hover:bg-gray-100'}`}>
-                <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${isItemDone(cl)?'bg-green-500 border-green-500':'border-gray-300'}`}>
-                  {isItemDone(cl) && <div className="w-1.5 h-1.5 bg-white rounded-full"/>}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-xs font-semibold truncate ${isItemDone(cl)?'line-through text-gray-400':'text-gray-800'}`}>{cl.title.replace(`[${s.name}] `,'')}</p>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">입사</span>
-                    {cl.dueDate && (() => {
-                      const dd = daysFromToday(cl.dueDate)
-                      const done = isItemDone(cl)
-                      return (
-                        <span className={`text-[10px] font-semibold ${done?'text-gray-300':dd<0?'text-red-500':dd<=7?'text-amber-600':'text-gray-400'}`}>
-                          기한 {cl.dueDate.slice(2).replace(/-/g,'.')}{!done && (dd<0?` (${-dd}일 지남)`:dd===0?' (오늘)':` (D-${dd})`)}
-                        </span>
-                      )
-                    })()}
-                  </div>
-                </div>
-                {cl.riskLevel==='high' && !isItemDone(cl) && <AlertTriangle size={11} className="text-red-400 flex-shrink-0"/>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
 
 const ic = "w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40"
 
-function StaffForm({ existing, onClose }: { existing?: LtcStaff; onClose:()=>void }) {
+export function StaffForm({ existing, onClose }: { existing?: LtcStaff; onClose:()=>void }) {
   const { addStaff, updateStaff } = useLtcStore()
   const [form, setForm] = useState({ name:existing?.name??'', birthDate:existing?.birthDate??'', gender:existing?.gender??'female', hireDate:existing?.hireDate??new Date().toISOString().split('T')[0], position:(existing as any)?.position??'요양보호사', residentNo:(existing as any)?.residentNo??'', address:(existing as any)?.address??'', addressDetail:(existing as any)?.addressDetail??'', phone:(existing as any)?.phone??'', licenseDate:(existing as any)?.licenseDate??'', licenseNo:(existing as any)?.licenseNo??'', bankAccount:(existing as any)?.bankAccount??'', memo:existing?.memo??'' })
   const [loading, setLoading] = useState(false)
@@ -305,7 +260,7 @@ function StaffForm({ existing, onClose }: { existing?: LtcStaff; onClose:()=>voi
           {!existing && <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 text-xs text-orange-700">✨ 등록 시 입사 관련 체크리스트 <strong>2건</strong>이 자동 생성됩니다.</div>}
           <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">성명 *</label><input required className={ic} value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="홍길동"/></div>
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">생년월일 *</label><DateField className={ic} value={form.birthDate} onChange={v=>setForm({...form,birthDate:v})} clearable={false}/></div>
+            <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">생년월일 *</label><DateField className={ic} value={form.birthDate} onChange={v=>setForm({...form,birthDate:v})} clearable={false} defaultView="1990-01-01"/></div>
             <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">성별</label>
               <select className={ic} value={form.gender} onChange={e=>setForm({...form,gender:e.target.value})}><option value="female">여</option><option value="male">남</option></select>
             </div>

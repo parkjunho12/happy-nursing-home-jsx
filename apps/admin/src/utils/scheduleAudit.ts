@@ -6,7 +6,7 @@ export type IssueLevel = 'danger' | 'warn'
 export interface Issue {
   id: string
   level: IssueLevel
-  kind: 'understaffed' | 'overHours' | 'underHours' | 'nightStreak' | 'workStreak' | 'unassigned'
+  kind: 'understaffed' | 'overHours' | 'underHours' | 'nightStreak' | 'workStreak' | 'unassigned' | 'roleMissing'
   title: string
   detail: string
   day?: number          // 해당 일자 (열 강조용)
@@ -48,6 +48,9 @@ export const statOf = (row: Record<string, string> | undefined, days: AuditInput
   return { hours: h, extra: e, total: Math.round((h + e) * 10) / 10, d, n, annual, off, blank }
 }
 
+// 매일 최소 1명은 출근해야 하는 필수 직종 — 없는 날을 점검에서 잡아낸다
+export const REQUIRED_ROLES = ['간호팀장', '사회복지사'] as const
+
 /** 하루 근무 인원 (D·N 계열만) */
 export const staffOnDay = (input: AuditInput, day: number): number =>
   input.staff.reduce((a, s) => a + (countAsOf(input.data[s.id]?.[String(day)]) ? 1 : 0), 0)
@@ -66,6 +69,25 @@ export function auditSchedule(input: AuditInput): Issue[] {
         detail: n === 0 ? '아무도 배정되지 않았습니다' : `최소 ${minStaffPerDay}명보다 ${minStaffPerDay - n}명 부족합니다`,
       })
     }
+  })
+
+  // 1-2) 필수 직종 공백 — 간호팀장·사회복지사는 매일 한 명은 반드시 출근.
+  //      해당 직종 직원이 편성표에 아예 없으면(퇴사 등) 날짜별 반복 대신 한 건으로 알린다.
+  REQUIRED_ROLES.forEach(role => {
+    const members = staff.filter(s => (s.pos ?? '').includes(role))
+    if (members.length === 0) {
+      out.push({ id: `rm-${role}`, level: 'warn', kind: 'roleMissing',
+        title: `${role} 미편성`, detail: '편성표에 해당 직종 직원이 없어 일별 점검을 할 수 없습니다' })
+      return
+    }
+    days.forEach(({ day }) => {
+      const onDuty = members.some(mb => countAsOf(data[mb.id]?.[String(day)]) !== null)
+      if (!onDuty) {
+        out.push({ id: `rm-${role}-${day}`, level: 'danger', kind: 'roleMissing', day,
+          title: `${day}일 ${role} 없음`,
+          detail: `${role}이(가) 한 명도 근무하지 않습니다 — 최소 1명 필수` })
+      }
+    })
   })
 
   staff.forEach(s => {

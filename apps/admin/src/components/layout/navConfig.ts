@@ -89,6 +89,7 @@ export function getNavConfig(
           items: [
             { to: '/schedule', icon: CalendarClock, label: '일정 캘린더' },
             { to: '/meals', icon: ChefHat, label: '식단표' },
+            { to: '/meal-count', icon: ChefHat, label: '식수 정산' },
           ],
         },
       ],
@@ -140,6 +141,7 @@ export function getNavConfig(
             { to: '/enteral', icon: Soup, label: '경관식 관리' },
             { to: '/programs', icon: CalendarDays, label: '프로그램 관리' },
             { to: '/meals', icon: ChefHat, label: '식단표' },
+            { to: '/meal-count', icon: ChefHat, label: '식수 정산' },
           ],
         },
         {
@@ -231,6 +233,7 @@ export function getNavConfig(
             { to: '/enteral', icon: Soup, label: '경관식 관리' },
             { to: '/programs', icon: CalendarDays, label: '프로그램 관리' },
             { to: '/meals', icon: ChefHat, label: '식단표' },
+            { to: '/meal-count', icon: ChefHat, label: '식수 정산' },
           ],
         },
         {

@@ -145,3 +145,108 @@ def list_weeks(limit: int = Query(12), db: Session = Depends(get_db),
             .limit(max(1, min(limit, 60))).all())
     return ApiResponse(success=True, data=[{"start": r.start, "end": r.end,
                                             "updated_by": r.updated_by} for r in rows])
+
+
+@router.get("/count")
+def meal_count(month: str = Query(...), db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """월별 식수 정산 — 재원 어르신(경관식 제외) × 5끼니에서
+    외출·외박·외래로 자리 비운 시간대의 끼니를 자동으로 뺀다 (실제 귀원 기록 우선)."""
+    if not _YM.match(month):
+        raise HTTPException(400, "month는 YYYY-MM 형식이어야 합니다.")
+    import calendar as _cal
+    import re as _re
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    from app.models.eval import LtcResident
+    from app.models.schedule import ScheduleEvent
+
+    KST = _tz(_td(hours=9))
+    y, m = int(month[:4]), int(month[5:7])
+    total_days = _cal.monthrange(y, m)[1]
+    times = {k: v for k, v in _meal_times(db).items() if v}
+    MEAL_ORDER = [k for k in MEAL_TIME_FIELDS if k in times]
+
+    residents = db.query(LtcResident).all()
+    tube_names = {r.name for r in residents if r.tube_feeding}
+
+    def present(r, day_iso: str) -> bool:
+        if r.tube_feeding:
+            return False
+        adm = (r.admission_date or "")[:10]
+        if not adm or adm > day_iso:
+            return False
+        dis = (r.discharge_date or "")[:10]
+        if dis and dis < day_iso:
+            return False
+        if r.status == "pending":
+            return False
+        return True
+
+    # 외출·외박·외래 부재 구간 — [출발, 실제 귀원 ?? 예정 귀원 ?? 당일 끝]
+    m_start = _dt(y, m, 1, tzinfo=KST) - _td(days=7)     # 전월 말 시작 외박도 잡는다
+    m_end = _dt(y, m, total_days, 23, 59, tzinfo=KST)
+    events = (db.query(ScheduleEvent)
+              .filter(ScheduleEvent.category.in_(["외출", "외박", "외래·병원"]),
+                      ScheduleEvent.status != "canceled",
+                      ScheduleEvent.start_at >= m_start, ScheduleEvent.start_at <= m_end)
+              .all())
+    absences = []       # (name, start_dt, end_dt, category, has_return)
+    warnings = []       # 귀원 미기록
+    for e in events:
+        name = _re.sub(r"^\[[^\]]+\]\s*", "", e.title or "").replace("어르신", "").strip()
+        st = e.start_at if e.start_at.tzinfo else e.start_at.replace(tzinfo=KST)
+        ret = e.returned_at or e.end_at
+        if ret is not None and ret.tzinfo is None:
+            ret = ret.replace(tzinfo=KST)
+        if ret is None:
+            # 귀원 기록이 없을 때의 확정 규칙:
+            #   외출·외래 → 식사한 것으로 간주(부재 반영 안 함)
+            #   외박     → 출발일은 안 먹은 것으로(출발 시각~당일 23:59 부재)
+            if e.category != "외박":
+                continue
+            ret = st.replace(hour=23, minute=59)
+            warnings.append({"date": st.astimezone(KST).strftime("%Y-%m-%d"),
+                             "name": name, "category": e.category})
+        absences.append((name, st.astimezone(KST), ret.astimezone(KST), e.category))
+
+    days_out = []
+    totals = {k: 0 for k in MEAL_ORDER}
+    excl_total = 0
+    excl_detail = []
+    for d in range(1, total_days + 1):
+        day_iso = f"{month}-{d:02d}"
+        base = [r for r in residents if present(r, day_iso)]
+        base_n = len(base)
+        base_names = {r.name for r in base}
+        # 퇴소 당일: 퇴소 시각(기록 시)이 지난 끼니는 제외
+        dis_time = {r.name: r.discharge_time for r in base
+                    if (r.discharge_date or "")[:10] == day_iso and r.discharge_time}
+        meals = {}
+        day_excl = []
+        for k in MEAL_ORDER:
+            hh, mm = int(times[k][:2]), int(times[k][3:5])
+            meal_dt = _dt(y, m, d, hh, mm, tzinfo=KST)
+            out_map = {}
+            for n, dt_ in dis_time.items():
+                if times[k] > dt_:
+                    out_map[n] = "퇴소"
+            for (n, st, en, cat) in absences:
+                if n in base_names and st <= meal_dt <= en and n not in out_map:
+                    out_map[n] = cat
+            meals[k] = base_n - len(out_map)
+            totals[k] += meals[k]
+            for n, cat in out_map.items():
+                day_excl.append({"name": n, "meal": k, "category": cat})
+                excl_total += 1
+        if day_excl:
+            excl_detail.append({"date": day_iso, "items": day_excl})
+        days_out.append({"date": day_iso, "base": base_n, "meals": meals})
+
+    return ApiResponse(success=True, data={
+        "month": month, "meal_times": times, "meal_order": MEAL_ORDER,
+        "days": days_out, "totals": totals,
+        "grand_total": sum(totals.values()),
+        "excluded_total": excl_total,
+        "exclusions": excl_detail,
+        "tube_feeding": sorted(tube_names),
+        "warnings": warnings,
+    })

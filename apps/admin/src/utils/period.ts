@@ -3,11 +3,11 @@
 export type Frequency =
   | 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'half-yearly' | 'yearly'
   | 'weekly_dow' | 'monthly_day' | 'monthly_nth_dow'
-  | 'on_admission' | 'on_discharge' | 'on_hire'
+  | 'on_admission' | 'on_discharge' | 'on_hire' | 'on_resign'
   | 'one_time'
 
 export const RECURRING: Frequency[] = ['daily','weekly','weekly_dow','monthly','monthly_day','monthly_nth_dow','quarterly','half-yearly','yearly']
-export const EVENT_FREQS: Frequency[] = ['on_admission','on_discharge','on_hire']
+export const EVENT_FREQS: Frequency[] = ['on_admission','on_discharge','on_hire','on_resign']
 
 // 저장된 frequency 값의 표기 흔들림(언더스코어/하이픈 등)을 표준값으로 정규화한다.
 // 예: 'half_yearly' → 'half-yearly' (이게 안 되면 반기별 필터/라벨에 안 걸림)

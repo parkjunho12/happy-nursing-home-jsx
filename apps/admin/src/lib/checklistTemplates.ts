@@ -142,15 +142,31 @@ const plusDays = (iso: string, n: number) => {
   return `${dt.getFullYear()}-${p2(dt.getMonth() + 1)}-${p2(dt.getDate())}`
 }
 
-// 퇴소 시 자동 생성 템플릿 (1건)
+// 퇴소 시 자동 생성 템플릿 (2건) — 전산 보고
 const DISCHARGE_TEMPLATES = [
-  { templateId:'tpl_dis_01', title:'연계기록지 및 급여이용종료 상담 실시', description:'퇴소 전 연계기록지 작성 및 급여이용종료 상담 실시', evidenceRequired:'연계기록지, 급여이용종료 상담 기록', storageLocation:'퇴소파일 > 연계기록', howTo:'퇴소 전 사회복지사가 수급자/보호자와 상담. 연계기관 정보 기재', evalNote:'미실시 시 급여제공계획(2점) 감점', riskLevel:'medium', relatedIndicatorId:'si25', relatedCategoryId:'cat5', relatedDomainId:'dom3' },
+  { templateId:'tpl_dis26_01', title:'[희망이음] 희망이음 퇴소 보고', description:'희망이음에 퇴소 보고 등록', evidenceRequired:'', storageLocation:'', howTo:'', evalNote:'', riskLevel:'high', relatedIndicatorId:'si25', relatedCategoryId:'cat5', relatedDomainId:'dom3' },
+  { templateId:'tpl_dis26_02', title:'[롱텀케어] 퇴소 등록', description:'롱텀케어(장기요양정보시스템)에 퇴소 등록', evidenceRequired:'', storageLocation:'', howTo:'', evalNote:'', riskLevel:'high', relatedIndicatorId:'si25', relatedCategoryId:'cat5', relatedDomainId:'dom3' },
 ]
 
-// 입사 시 자동 생성 템플릿 (2건)
-const HIRE_TEMPLATES = [
-  { templateId:'tpl_hire_01', title:'입사 7일 이내 운영규정 교육', description:'입사 후 7일 이내 운영규정 교육 실시 및 서명', evidenceRequired:'운영규정 교육 확인서, 서명', storageLocation:'인사파일 > 신규 직원 교육', howTo:'입사 후 7일 이내 운영규정 전달 및 교육. 서명 받기', evalNote:'7일 초과 시 운영규정(1점) 감점', riskLevel:'high', relatedIndicatorId:'si01', relatedCategoryId:'cat1', relatedDomainId:'dom1' },
-  { templateId:'tpl_hire_02', title:'건강검진 결과 통보서 확인 (1년 이내)', description:'입사 전 1년 이내 건강검진 결과 통보서 제출 여부 확인', evidenceRequired:'건강검진 결과 통보서 (입사 기준 1년 이내)', storageLocation:'인사파일 > 건강관리', howTo:'입사 시 1년 이내 결과서 제출 요청. 1년 초과 결과 불인정', evalNote:'1년 초과 또는 미제출 시 직원건강관리(4점) 감점', riskLevel:'high', relatedIndicatorId:'si05', relatedCategoryId:'cat1', relatedDomainId:'dom1' },
+// 입사 시 자동 생성 템플릿 — 그룹은 제목의 [입사전]/[7일 이내]/[1달 이내] 태그로 인코딩
+// off: 입사일 기준 기한 오프셋(일), months: 개월 단위 오프셋(우선)
+const HIRE_TPL: { g: string; t: string; off?: number; months?: number; risk?: string; evalNote?: string }[] = [
+  // 입사 전 — 기한은 입사일
+  { g:'입사전', t:'케어포 ID/PW 만들기', off:0 },
+  { g:'입사전', t:'카드키 만들기', off:0 },
+  { g:'입사전', t:'건강검진 결과 통보서 1년 이내 확인', off:0, risk:'high', evalNote:'1년 초과 또는 미제출 시 직원건강관리(4점) 감점' },
+  { g:'입사전', t:'입사 서류 안내 하기', off:0 },
+  { g:'입사전', t:'근무표 만들기', off:0 },
+  // 입사 7일 이내
+  { g:'7일 이내', t:'신규직원 교육', off:7, risk:'high', evalNote:'7일 초과 시 운영규정(1점) 감점' },
+  { g:'7일 이내', t:'[희망이음] 입퇴사 보고', off:7 },
+  { g:'7일 이내', t:'[희망이음] 인력 변경 보고', off:7 },
+  { g:'7일 이내', t:'노인 인권 교육 하기', off:7 },
+  { g:'7일 이내', t:'근로계약 및 서류 챙기기', off:7 },
+  // 입사 1달 이내
+  { g:'1달 이내', t:'퇴직연금 등록', months:1 },
+  { g:'1달 이내', t:'회계 업체 입퇴사 보고', months:1 },
+  { g:'1달 이내', t:'4대 보험 가입 확인', months:1 },
 ]
 
 function makeItem(tpl: any, personId: string, personName: string, personType: 'resident' | 'staff', dueDate: string, frequency: string) {
@@ -205,23 +221,49 @@ export function generateResidentAdmissionChecklists(
   ).map((item, i) => ({ ...item, assignee: list[i].team ?? '복지팀' }))
 }
 
-export function generateResidentDischargeChecklists(resident: { id: string; name: string }, _dischargeDate: string) {
-  // 기한: 생성일(오늘)로부터 1개월
-  const due = plusMonths(today(), 1)
+export function generateResidentDischargeChecklists(resident: { id: string; name: string }, dischargeDate: string) {
+  // 기한: 퇴소일 + 7일 (전산 보고는 신속하게)
+  const due = plusDays((dischargeDate || today()).slice(0, 10), 7)
   return DISCHARGE_TEMPLATES.map(tpl =>
     makeItem(tpl, resident.id, resident.name, 'resident', due, 'on_discharge')
   )
 }
 
+// 퇴사 시 자동 생성 템플릿 (6건) — 제목 태그 [퇴사]로 그룹 인코딩
+const RESIGN_TPL: string[] = [
+  '사직서 등록',
+  '희망이음 입퇴사 보고',
+  '희망이음 인력 변경 보고',
+  '회계 업체 입퇴사 등록',
+  '퇴직연금 해제',
+  '카드키 반납 및 반환금 이체',
+]
+
+export function generateStaffResignChecklists(staff: { id: string; name: string }, resignDate: string) {
+  // 기한: 퇴사일 + 7일
+  const due = plusDays((resignDate || today()).slice(0, 10), 7)
+  return RESIGN_TPL.map((t, i) =>
+    makeItem({
+      templateId: `tpl_resign26_${String(i + 1).padStart(2, '0')}`,
+      title: `[퇴사] ${t}`,
+      description: '', evidenceRequired: '', storageLocation: '', howTo: '', evalNote: '',
+      riskLevel: 'medium',
+    }, staff.id, staff.name, 'staff', due, 'on_resign')
+  )
+}
+
 export function generateStaffHireChecklists(staff: { id: string; name: string; hireDate: string }) {
-  // tpl_hire_01: 7일 이내
-  const due7 = (() => {
-    const d = new Date(staff.hireDate); d.setDate(d.getDate() + 7)
-    return d.toISOString().split('T')[0]
-  })()
-  return HIRE_TEMPLATES.map(tpl =>
-    makeItem(tpl, staff.id, staff.name, 'staff',
-      tpl.templateId === 'tpl_hire_01' ? due7 : staff.hireDate,
+  const base = (staff.hireDate || today()).slice(0, 10)
+  return HIRE_TPL.map((tpl, i) =>
+    makeItem({
+      templateId: `tpl_hire26_${String(i + 1).padStart(2, '0')}`,
+      title: `[${tpl.g}] ${tpl.t}`,
+      description: '',
+      evidenceRequired: '', storageLocation: '', howTo: '',
+      evalNote: tpl.evalNote ?? '',
+      riskLevel: tpl.risk ?? 'medium',
+    }, staff.id, staff.name, 'staff',
+      tpl.months ? plusMonths(base, tpl.months) : plusDays(base, tpl.off ?? 0),
       'on_hire')
   )
 }

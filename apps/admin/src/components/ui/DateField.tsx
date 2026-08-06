@@ -44,22 +44,28 @@ interface Props {
   placeholder?: string
   disabled?: boolean
   clearable?: boolean
+  /** 값이 없을 때 달력이 처음 보여줄 날짜 (예: 생년월일 → '1990-01-01') */
+  defaultView?: string
 }
 
 export default function DateField({
   value, onChange, className = '', wrapperClassName = '',
-  placeholder = 'YYYY.MM.DD', disabled = false, clearable = true,
+  placeholder = 'YYYY.MM.DD', disabled = false, clearable = true, defaultView,
 }: Props) {
   const [open, setOpen] = useState(false)
   const [text, setText] = useState(fmtText(value))
   const [focused, setFocused] = useState(false)
   const sel = parseISO(value)
-  const [view, setView] = useState<Date>(() => sel ?? new Date())
+  const [view, setView] = useState<Date>(() => sel ?? parseISO(defaultView ?? null) ?? new Date())
   const ref = useRef<HTMLDivElement>(null)
 
   // 외부 value 변경 → 입력 중이 아닐 때만 표시 텍스트 동기화
   useEffect(() => { if (!focused) setText(fmtText(value)) }, [value, focused])
-  useEffect(() => { if (open && sel) setView(sel) }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!open) return
+    const d = sel ?? parseISO(defaultView ?? null)
+    if (d) setView(d)
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!open) return
     const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
