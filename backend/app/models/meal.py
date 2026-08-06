@@ -26,3 +26,17 @@ class MealWeek(Base):
     notes      = Column(JSON, nullable=True)   # 원산지 안내 등
     updated_by = Column(String(100), nullable=True)
     updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)
+
+
+class MealTimeSetting(Base):
+    """식사 시간 설정 — 식수 정산의 기준. 외출·외박 시간과 겹치는 끼니를 빼고 세는 근거가 된다."""
+    __tablename__ = "meal_time_settings"
+
+    id         = Column(String, primary_key=True, default=_uuid)
+    breakfast  = Column(String(5), nullable=True)   # 아침 'HH:MM'
+    snack_am   = Column(String(5), nullable=True)   # 아침 간식
+    lunch      = Column(String(5), nullable=True)   # 점심
+    snack_pm   = Column(String(5), nullable=True)   # 저녁 간식
+    dinner     = Column(String(5), nullable=True)   # 저녁
+    updated_by = Column(String(100), nullable=True)
+    updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)

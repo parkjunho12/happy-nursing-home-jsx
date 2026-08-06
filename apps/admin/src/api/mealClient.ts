@@ -37,3 +37,16 @@ export const mealAPI = {
   weeks: () =>
     apiClient.get(`${BASE}/weeks`).then(unwrap<{ start: string; end: string; updated_by?: string | null }[]>),
 }
+
+export interface MealTimes {
+  breakfast?: string | null
+  snack_am?: string | null
+  lunch?: string | null
+  snack_pm?: string | null
+  dinner?: string | null
+}
+
+export const mealTimeAPI = {
+  get: () => apiClient.get(`${BASE}/settings`).then(unwrap<MealTimes>),
+  save: (b: MealTimes) => apiClient.put(`${BASE}/settings`, b).then(unwrap<MealTimes>),
+}

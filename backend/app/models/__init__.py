@@ -99,6 +99,6 @@ from app.models.record_audit import RecordAudit  # noqa: F401
 from app.models.work_schedule import WorkSchedule, WorkScheduleVersion, WorkScheduleConfig  # noqa: F401
 from app.models.handover import HandoverReport  # noqa: F401
 from app.models.leave import LeaveRequest, SwapRequest  # noqa: F401
-from app.models.meal import MealWeek  # noqa: F401
+from app.models.meal import MealWeek, MealTimeSetting  # noqa: F401
 from app.models.pension import PensionEntry, PensionRefund  # noqa: F401
 from app.models.audit_check import AuditRound, AuditItem  # noqa: F401

@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Save, User, Lock, Bell, Globe, BedDouble , Landmark } from 'lucide-react'
+import { Save, User, Lock, Bell, Globe, BedDouble , Landmark , Soup } from 'lucide-react'
 import RoomSettings from '@/components/settings/RoomSettings'
 import ExpenseAccountSettings from '@/components/settings/ExpenseAccountSettings'
+import MealTimeSettings from '@/components/settings/MealTimeSettings'
 import { useAuthStore } from '@/store/auth'
 
 const SettingsPage = () => {
@@ -14,6 +15,7 @@ const SettingsPage = () => {
     { id: 'notifications', label: '알림 설정', icon: Bell },
     { id: 'rooms', label: '층·호실 관리', icon: BedDouble },
     { id: 'accounts', label: '지출 계좌 관리', icon: Landmark },
+    { id: 'mealtimes', label: '식사 시간', icon: Soup },
     { id: 'system', label: '시스템 설정', icon: Globe },
   ]
 
@@ -52,7 +54,8 @@ const SettingsPage = () => {
         <div className="lg:col-span-3">
           {activeTab === 'rooms' && <RoomSettings />}
           {activeTab === 'accounts' && <ExpenseAccountSettings />}
-          <div className={`bg-white rounded-2xl p-8 shadow-sm border-2 border-gray-100 ${activeTab === 'rooms' || activeTab === 'accounts' ? 'hidden' : ''}`}>
+          {activeTab === 'mealtimes' && <MealTimeSettings />}
+          <div className={`bg-white rounded-2xl p-8 shadow-sm border-2 border-gray-100 ${['rooms', 'accounts', 'mealtimes'].includes(activeTab) ? 'hidden' : ''}`}>
             {activeTab === 'profile' && (
               <div>
                 <h2 className="text-2xl font-bold text-gray-900 mb-6">프로필 정보</h2>

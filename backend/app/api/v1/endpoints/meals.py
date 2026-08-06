@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
-from app.models.meal import MealWeek
+from app.models.meal import MealWeek, MealTimeSetting
 from app.schemas.response import ApiResponse
 
 router = APIRouter()
@@ -54,6 +54,51 @@ async def upload_meal(file: UploadFile = File(...), db: Session = Depends(get_db
     db.commit()
     return ApiResponse(success=True, data={"start": parsed["start"], "end": parsed["end"],
                                            "day_count": len(parsed["days"])})
+
+
+MEAL_TIME_FIELDS = ["breakfast", "snack_am", "lunch", "snack_pm", "dinner"]
+
+
+def _meal_times(db: Session) -> dict:
+    row = db.query(MealTimeSetting).first()
+    return {k: (getattr(row, k, None) if row else None) for k in MEAL_TIME_FIELDS}
+
+
+@router.get("/settings")
+def get_meal_settings(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    return ApiResponse(success=True, data=_meal_times(db))
+
+
+from pydantic import BaseModel
+from typing import Optional as _Opt
+
+
+class MealTimesBody(BaseModel):
+    breakfast: _Opt[str] = None
+    snack_am: _Opt[str] = None
+    lunch: _Opt[str] = None
+    snack_pm: _Opt[str] = None
+    dinner: _Opt[str] = None
+
+
+@router.put("/settings")
+def save_meal_settings(body: MealTimesBody, db: Session = Depends(get_db),
+                       current_user: User = Depends(get_current_user)):
+    """식사 시간 저장 — ADMIN 전용. 식수 정산의 기준 시간이 된다."""
+    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    if role != "ADMIN":
+        raise HTTPException(403, "식사 시간 설정은 ADMIN만 가능합니다.")
+    row = db.query(MealTimeSetting).first()
+    if not row:
+        row = MealTimeSetting()
+        db.add(row)
+    hhmm = re.compile(r"^\d{2}:\d{2}$")
+    for k in MEAL_TIME_FIELDS:
+        v = (getattr(body, k) or "").strip()
+        setattr(row, k, v if hhmm.match(v) else None)
+    row.updated_by = getattr(current_user, "name", None)
+    db.commit()
+    return ApiResponse(success=True, data=_meal_times(db))
 
 
 @router.get("/week")
