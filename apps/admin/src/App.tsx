@@ -59,6 +59,7 @@ import PensionPage from './pages/admin/PensionPage'
 import AuditCheckPage from './pages/AuditCheckPage'
 import ResidentDetailPage from './pages/eval/ResidentDetailPage'
 import StaffDetailPage from './pages/eval/StaffDetailPage'
+import MealCountPage from './pages/admin/MealCountPage'
 import StaffEducationPage from './pages/StaffEducationPage'
 import WorkGuidePage from './pages/WorkGuidePage'
 import GuidePage from './pages/GuidePage'
@@ -275,6 +276,7 @@ function App() {
             <Route path="facility-news"            element={<SocialWorkerRoute><FacilityNewsPage /></SocialWorkerRoute>} />
             <Route path="notices"                  element={<SocialWorkerRoute><InternalNoticesPage /></SocialWorkerRoute>} />
             <Route path="meals"                    element={<MealRoute><MealPlanPage /></MealRoute>} />
+            <Route path="meal-count"               element={<MealRoute><MealCountPage /></MealRoute>} />
             <Route path="staff-hr"                 element={<StaffAdminRoute><StaffHrPage /></StaffAdminRoute>} />
             <Route path="staffing"                 element={<ManagerRoute><StaffingSimulatorPage /></ManagerRoute>} />
             <Route path="work-schedule"           element={<ManagerRoute><WorkSchedulePage /></ManagerRoute>} />

@@ -15,6 +15,11 @@ const CODE_CLS: Record<string, string> = {
   AD: 'bg-teal-50 text-teal-700', PD: 'bg-teal-50 text-teal-700',
 }
 const codeCls = (c: string) => CODE_CLS[c] ?? (/^\d/.test(c) ? 'bg-purple-50 text-purple-700' : 'bg-gray-50 text-gray-600')
+// "0930 1200" 같은 시간대 코드는 세로 두 줄로 — 열 폭을 좁게 유지
+const splitTime = (c: string): string[] | null => {
+  const m = c.trim().match(/^(\d{3,4})[\s~\-]+(\d{3,4})$/)
+  return m ? [m[1], m[2]] : null
+}
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
 
 export default function WorkScheduleViewPage() {
@@ -122,6 +127,10 @@ export default function WorkScheduleViewPage() {
     return forText ? 'text-gray-600' : ''
   }
 
+  // 일별 세로 구분선 — 매일 옅게, 토→일 경계는 진하게
+  const vLine = (day: number) =>
+    new Date(y, m - 1, day).getDay() === 6 ? 'border-r-2 border-r-gray-300' : 'border-r border-r-gray-200/80'
+
   const empty = !loading && (!doc || people.length === 0)
 
   return (
@@ -167,11 +176,11 @@ export default function WorkScheduleViewPage() {
                 <thead className="sticky top-0 z-20">
                   <tr className="bg-gray-50">
                     <th className="sticky left-0 z-30 bg-gray-50 border-b border-r border-gray-200 px-2 py-1.5 text-[11px] font-bold text-gray-500 text-left min-w-[72px]">성명</th>
-                    <th className="border-b border-gray-200 px-1 py-1.5 text-[10px] font-bold text-gray-400">조</th>
+                    <th className="border-b border-r-2 border-gray-200 border-r-gray-300 px-1 py-1.5 text-[10px] font-bold text-gray-400">조</th>
                     {days.map(d => {
                       const iso = `${ym}-${String(d).padStart(2, '0')}`
                       return (
-                        <th key={d} className={`border-b border-gray-200 px-0.5 py-1 text-center min-w-[30px] ${iso === todayIso ? 'bg-amber-100' : dayColor(d, false)}`}>
+                        <th key={d} className={`border-b border-gray-200 ${vLine(d)} px-0.5 py-1 text-center min-w-[30px] ${iso === todayIso ? 'bg-amber-100' : dayColor(d, false)}`}>
                           <p className={`text-[11px] font-extrabold leading-none ${dayColor(d)}`}>{d}</p>
                           <p className={`text-[8.5px] leading-tight ${dayColor(d)}`}>{DOW[new Date(y, m - 1, d).getDay()]}</p>
                         </th>
@@ -189,15 +198,17 @@ export default function WorkScheduleViewPage() {
                           <p className="text-[12px] font-bold text-gray-800 leading-tight">{p.name}</p>
                           <p className="text-[9px] text-gray-400 leading-tight">{p.pos}</p>
                         </td>
-                        <td className="border-b border-gray-100 px-1 py-1 text-center text-[10px] font-bold text-gray-500 whitespace-nowrap">{p.team || ''}</td>
+                        <td className="border-b border-gray-100 border-r-2 border-r-gray-300 px-1 py-1 text-center text-[10px] font-bold text-gray-500 whitespace-nowrap">{p.team || ''}</td>
                         {days.map(d => {
                           const iso = `${ym}-${String(d).padStart(2, '0')}`
                           const c = p.codes[String(d)] ?? ''
                           return (
-                            <td key={d} className={`border-b border-gray-50 p-0.5 text-center ${iso === todayIso ? 'bg-amber-50' : dayColor(d, false)}`}>
+                            <td key={d} className={`border-b border-gray-50 ${vLine(d)} p-0.5 text-center ${iso === todayIso ? 'bg-amber-50' : dayColor(d, false)}`}>
                               {c && (
                                 <span className={`inline-block min-w-[24px] px-0.5 py-0.5 rounded text-[10px] font-bold leading-none ${codeCls(c)}`}>
-                                  {c}
+                                  {splitTime(c)
+                                    ? splitTime(c)!.map((t, i) => <span key={i} className="block leading-[1.15]">{t}</span>)
+                                    : c}
                                 </span>
                               )}
                             </td>

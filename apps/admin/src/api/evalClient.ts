@@ -74,8 +74,8 @@ export const evalResidentsAPI = {
     const res = await apiClient.patch(`/api/v1/eval/residents/${id}`, d)
     return unwrap<any>(res)
   },
-  discharge: async (id: string, discharge_date: string) => {
-    const res = await apiClient.post(`/api/v1/eval/residents/${id}/discharge`, { discharge_date })
+  discharge: async (id: string, discharge_date: string, discharge_time?: string) => {
+    const res = await apiClient.post(`/api/v1/eval/residents/${id}/discharge`, { discharge_date, discharge_time: discharge_time || null })
     return unwrap<any>(res)
   },
   delete: async (id: string) => {

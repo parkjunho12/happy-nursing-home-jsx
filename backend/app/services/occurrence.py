@@ -30,7 +30,7 @@ from app.models.eval import ChecklistItem, ChecklistOccurrence
 # ── 상수 ──────────────────────────────────────────────────────────────────
 RECURRING_FREQS = {'daily', 'weekly', 'monthly', 'quarterly', 'half-yearly', 'yearly',
                    'weekly_dow', 'monthly_day', 'monthly_nth_dow'}
-EVENT_FREQS     = {'on_admission', 'on_discharge', 'on_hire'}
+EVENT_FREQS     = {'on_admission', 'on_discharge', 'on_hire', 'on_resign'}
 ONE_TIME_FREQ   = 'one_time'
 
 # frequency 표기 흔들림 정규화 (예: 'half_yearly' → 'half-yearly')

@@ -11,6 +11,7 @@ import {
   generateResidentAdmissionChecklists,
   generateResidentDischargeChecklists,
   generateStaffHireChecklists,
+  generateStaffResignChecklists,
 } from '@/lib/checklistTemplates'
 import { normalizeFrequency } from '@/utils/period'
 
@@ -61,13 +62,14 @@ export interface ChecklistItem {
 
 export interface LtcResident {
   id: string; name: string; birthDate: string; gender: string
-  admissionDate: string; admissionTime?: string; dischargeDate?: string; careGradeStartDate: string
+  admissionDate: string; admissionTime?: string; dischargeDate?: string; dischargeTime?: string; careGradeStartDate: string
   grade?: string; certEnd?: string
   floor?: string
   status: string; memo: string; createdAt: string
   room?: string
   religion?: string
   groupCognitive?: string; groupLeisure?: string; groupPhysical?: string
+  tubeFeeding?: boolean
 }
 
 export interface LtcStaff {
@@ -166,10 +168,11 @@ function mapCL(raw: any): ChecklistItem {
 }
 function mapR(raw: any): LtcResident {
   return { id:raw.id, name:raw.name, birthDate:raw.birth_date, gender:raw.gender,
-    admissionDate:raw.admission_date, admissionTime:raw.admission_time??undefined, dischargeDate:raw.discharge_date,
+    admissionDate:raw.admission_date, admissionTime:raw.admission_time??undefined, dischargeDate:raw.discharge_date, dischargeTime:raw.discharge_time??undefined,
     careGradeStartDate:raw.care_grade_start_date, floor:raw.floor??undefined, room:(raw as any).room??undefined, status:raw.status,
     religion:raw.religion??undefined,
     groupCognitive:raw.group_cognitive??undefined, groupLeisure:raw.group_leisure??undefined, groupPhysical:raw.group_physical??undefined,
+    tubeFeeding:raw.tube_feeding??false,
     memo:raw.memo??'', createdAt:raw.created_at??'' }
 }
 function mapS(raw: any): LtcStaff {
@@ -230,7 +233,7 @@ interface LtcState {
   toggleComplete:    (id: string, completed?: boolean) => Promise<void>
   addResident:       (r: Omit<LtcResident,'id'|'createdAt'>) => Promise<void>
   updateResident:    (id: string, u: Partial<LtcResident>) => Promise<void>
-  dischargeResident: (id: string, date: string) => Promise<void>
+  dischargeResident: (id: string, date: string, time?: string) => Promise<void>
   deleteResident:    (id: string) => Promise<void>
   addStaff:          (s: Omit<LtcStaff,'id'|'createdAt'>) => Promise<void>
   updateStaff:       (id: string, u: Partial<LtcStaff>) => Promise<void>
@@ -382,7 +385,7 @@ export const useLtcStore = create<LtcState>((set, get) => ({
   },
 
   addResident: async (r) => {
-    const raw = await evalResidentsAPI.create({ name:r.name, birth_date:r.birthDate, gender:r.gender, admission_date:r.admissionDate, admission_time:(r as any).admissionTime, care_grade_start_date:r.careGradeStartDate, floor:r.floor, room:(r as any).room, status:(r as any).status, religion:(r as any).religion, group_cognitive:(r as any).groupCognitive, group_leisure:(r as any).groupLeisure, group_physical:(r as any).groupPhysical, certifications:(r as any).certifications, contract_lines:(r as any).contract_lines, plan_lines:(r as any).plan_lines, eval_lines:(r as any).eval_lines, memo:r.memo })
+    const raw = await evalResidentsAPI.create({ name:r.name, birth_date:r.birthDate, gender:r.gender, admission_date:r.admissionDate, admission_time:(r as any).admissionTime, care_grade_start_date:r.careGradeStartDate, floor:r.floor, room:(r as any).room, status:(r as any).status, religion:(r as any).religion, group_cognitive:(r as any).groupCognitive, group_leisure:(r as any).groupLeisure, group_physical:(r as any).groupPhysical, tube_feeding:(r as any).tubeFeeding ?? false, certifications:(r as any).certifications, contract_lines:(r as any).contract_lines, plan_lines:(r as any).plan_lines, eval_lines:(r as any).eval_lines, memo:r.memo })
     const newR = mapR(raw)
     const templates = generateResidentAdmissionChecklists(newR as any, (r as any).intakeFlags ?? {})
     const newCls = await evalChecklistAPI.createBulk(templates.map(clPayload as any))
@@ -407,16 +410,17 @@ export const useLtcStore = create<LtcState>((set, get) => ({
     if ((u as any).groupCognitive !== undefined) p.group_cognitive = (u as any).groupCognitive
     if ((u as any).groupLeisure !== undefined)   p.group_leisure   = (u as any).groupLeisure
     if ((u as any).groupPhysical !== undefined)  p.group_physical  = (u as any).groupPhysical
+    if ((u as any).tubeFeeding !== undefined)    p.tube_feeding    = (u as any).tubeFeeding
     if (u.memo !== undefined)               p.memo                  = u.memo
     const raw = await evalResidentsAPI.update(id, p)
     set(s => ({ residents: s.residents.map(r => r.id===id ? mapR(raw) : r) }))
   },
-  dischargeResident: async (id, date) => {
+  dischargeResident: async (id, date, time) => {
     const resident = get().residents.find(r => r.id===id)
     if (!resident) return
     const templates = generateResidentDischargeChecklists(resident as any, date)
     const [raw, newCls] = await Promise.all([
-      evalResidentsAPI.discharge(id, date),
+      evalResidentsAPI.discharge(id, date, time),
       evalChecklistAPI.createBulk(templates.map(clPayload as any)),
     ])
     const newItemIds = newCls.map((c: any) => c.id)
@@ -482,15 +486,25 @@ export const useLtcStore = create<LtcState>((set, get) => ({
     const raw = await evalStaffAPI.unresign(id)
     set(st => ({
       staffList:  st.staffList.map(s => s.id===id ? mapS(raw) : s),
-      checklists: st.checklists.map(c => c.personId===id&&!c.completed ? {...c,active:true} : c),
+      checklists: st.checklists.map(c => c.personId===id&&!c.completed ? {...c,active:c.frequency!=='on_resign'} : c),
     }))
   },
   resignStaff: async (id, date) => {
-    const raw = await evalStaffAPI.resign(id, date)
+    const staff = get().staffList.find(s => s.id===id)
+    const templates = staff ? generateStaffResignChecklists(staff, date) : []
+    const [raw, newCls] = await Promise.all([
+      evalStaffAPI.resign(id, date),
+      templates.length ? evalChecklistAPI.createBulk(templates.map(clPayload as any)) : Promise.resolve([]),
+    ])
+    const newItemIds = newCls.map((c: any) => c.id)
     set(st => ({
       staffList:  st.staffList.map(s => s.id===id ? mapS(raw) : s),
-      checklists: st.checklists.map(c => c.personId===id&&!c.completed ? {...c,active:false} : c),
+      // 미완료 입사 체크리스트는 비활성화하되, 방금 만든 퇴사 체크리스트는 살린다
+      checklists: [...st.checklists.map(c => c.personId===id&&!c.completed ? {...c,active:false} : c), ...newCls.map(mapCL)],
     }))
+    const newOccs = await occurrenceAPI.list({ person_id: id }).catch(() => [])
+    if (newOccs.length > 0)
+      set(st => ({ occurrences: [...st.occurrences.filter(o => !newItemIds.includes(o.checklistItemId)), ...newOccs.map(mapOcc)] }))
   },
 
   updateSettings: async (u) => {

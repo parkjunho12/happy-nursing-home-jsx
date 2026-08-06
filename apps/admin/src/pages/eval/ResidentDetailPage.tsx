@@ -7,11 +7,12 @@ import { residentDocAPI, type ResidentDoc } from '@/api/residentDocClient'
 import { assignmentAPI, type AssignRow } from '@/api/assignmentClient'
 import { currentCert, certState, fmtD, gradeLabel } from '@/utils/cert'
 import ChecklistFormModal from '@/components/eval/ChecklistFormModal'
+import { ResidentForm } from './EvalResidentsPage'
 import type { ChecklistItem } from '@/utils/period'
 
 /**
  * 수급자 상세 — 흩어져 있던 정보(기본·그룹·담당자·서류·체크리스트)를 한 화면에.
- * 수정은 수급자 관리의 기존 모달에서 (여기선 이동 버튼만).
+ * 수정은 이 페이지에서 바로 (수급자 관리와 같은 폼 재사용).
  */
 const GRP = [
   ['인지', 'groupCognitive', 'bg-violet-50 text-violet-700 border-violet-200'],
@@ -37,6 +38,8 @@ const CL_GROUPS: { tag: string; no: number; label: string; fam: keyof typeof FAM
   { tag: '당일',     no: 7, label: '입소 당일 업무',                        fam: 'work' },
   { tag: '다음날',   no: 8, label: '입소 후 다음날 업무',                    fam: 'work' },
   { tag: '욕창',     no: 9, label: '욕창 대상자',                            fam: 'cond' },
+  { tag: '희망이음', no: 10, label: '퇴소 — 희망이음',                        fam: 'it' },
+  { tag: '롱텀케어', no: 11, label: '퇴소 — 롱텀케어',                        fam: 'it' },
 ] as const).map(g => ({ ...g, accent: FAM[g.fam].accent, bar: FAM[g.fam].bar }))
 const TAG_RE = new RegExp(`^\\[(${CL_GROUPS.map(g => g.tag).join('|')})\\]\\s*`)
 /** '[오경애] [전산] 상담 4회차' → { tag: '전산', text: '상담 4회차' } */
@@ -72,6 +75,7 @@ export default function ResidentDetailPage() {
   const { residents, checklists, loaded, loadAll, toggleComplete, updateChecklist } = useLtcStore()
   const [busyId, setBusyId] = useState<string | null>(null)
   const [editingCl, setEditingCl] = useState<ChecklistItem | null>(null)
+  const [editingRes, setEditingRes] = useState(false)
   const [batchTag, setBatchTag] = useState<string | null>(null)   // 영역 전체 체크 진행 중
   const [doc, setDoc] = useState<ResidentDoc | null>(null)
   const [assign, setAssign] = useState<AssignRow | null>(null)
@@ -88,7 +92,9 @@ export default function ResidentDetailPage() {
   }, [id])
 
   const r = residents.find(x => x.id === id)
-  const cls = useMemo(() => checklists.filter(c => c.personId === id), [checklists, id])
+  // 퇴소자는 입소 체크리스트를 숨기고 퇴소 업무만 보여준다
+  const cls = useMemo(() => checklists.filter(c => c.personId === id
+    && (r?.status !== 'discharged' || c.frequency === 'on_discharge')), [checklists, id, r?.status])
   const done = cls.filter(isItemDone).length
 
   if (!loaded) return <div className="flex items-center justify-center h-64"><Loader2 className="animate-spin text-gray-300" /></div>
@@ -122,16 +128,16 @@ export default function ResidentDetailPage() {
               </span>
             )}
           </div>
-          <p className="text-xs text-gray-400 mt-0.5">{r.gender === 'female' ? '여' : '남'} · 만 {calcAge(r.birthDate)}세 · 입소 {r.admissionDate}{r.dischargeDate && ` · 퇴소 ${r.dischargeDate}`}</p>
+          <p className="text-xs text-gray-400 mt-0.5">{r.gender === 'female' ? '여' : '남'} · 만 {calcAge(r.birthDate)}세 · 입소 {r.admissionDate}{r.dischargeDate && ` · 퇴소 ${r.dischargeDate}${(r as any).dischargeTime ? ` ${(r as any).dischargeTime}` : ''}`}</p>
         </div>
-        <button onClick={() => navigate('/eval/residents', { state: { editId: r.id } })}
+        <button onClick={() => setEditingRes(true)}
           className="ml-auto inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-gray-500 text-sm font-semibold hover:bg-gray-50">
-          <Pencil size={13} /> 정보 수정
+          <Pencil size={13} /> 수정
         </button>
       </div>
 
       {/* 체크리스트 — 영역별 구분 · 전체 체크 · 담당자 표시 */}
-      <Sec icon={CalendarDays} title={`입소 (서류/준비) 체크리스트 ${cls.length ? `— 전체 ${done}/${cls.length}` : ''}`}
+      <Sec icon={CalendarDays} title={`${r.status === 'discharged' ? '퇴소 업무 체크리스트' : '입소 (서류/준비) 체크리스트'} ${cls.length ? `— 전체 ${done}/${cls.length}` : ''}`}
         right={cls.length > 0 ? (
           <div className="flex items-center gap-2">
             <div className="w-36 h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -470,6 +476,7 @@ export default function ResidentDetailPage() {
       })()}
 
       {editingCl && <ChecklistFormModal existing={editingCl} onClose={() => setEditingCl(null)} />}
+      {editingRes && <ResidentForm existing={r} onClose={() => setEditingRes(false)} />}
 
       {/* 하단 바로가기 */}
       <div className="flex gap-2 flex-wrap">
