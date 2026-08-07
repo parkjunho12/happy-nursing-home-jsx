@@ -10,6 +10,7 @@ import {
 import {
   generateResidentAdmissionChecklists,
   generateResidentDischargeChecklists,
+  generateResidentFlagChecklists,
   generateStaffHireChecklists,
   generateStaffResignChecklists,
 } from '@/lib/checklistTemplates'
@@ -234,6 +235,7 @@ interface LtcState {
   addResident:       (r: Omit<LtcResident,'id'|'createdAt'>) => Promise<void>
   updateResident:    (id: string, u: Partial<LtcResident>) => Promise<void>
   dischargeResident: (id: string, date: string, time?: string) => Promise<void>
+  addResidentFlagChecklists: (id: string, flags: Record<string, boolean>) => Promise<number>
   deleteResident:    (id: string) => Promise<void>
   addStaff:          (s: Omit<LtcStaff,'id'|'createdAt'>) => Promise<void>
   updateStaff:       (id: string, u: Partial<LtcStaff>) => Promise<void>
@@ -414,6 +416,15 @@ export const useLtcStore = create<LtcState>((set, get) => ({
     if (u.memo !== undefined)               p.memo                  = u.memo
     const raw = await evalResidentsAPI.update(id, p)
     set(s => ({ residents: s.residents.map(r => r.id===id ? mapR(raw) : r) }))
+  },
+  addResidentFlagChecklists: async (id, flags) => {
+    const resident = get().residents.find(r => r.id===id)
+    if (!resident) return 0
+    const templates = generateResidentFlagChecklists(resident as any, flags as any)
+    if (templates.length === 0) return 0
+    const newCls = await evalChecklistAPI.createBulk(templates.map(clPayload as any))
+    set(s => ({ checklists: [...s.checklists, ...newCls.map(mapCL)] }))
+    return newCls.length
   },
   dischargeResident: async (id, date, time) => {
     const resident = get().residents.find(r => r.id===id)
