@@ -13,6 +13,7 @@ import type { LtcResident } from '@/store/ltc'
 import type { ChecklistItem } from '@/utils/period'
 import { calcAge, isItemDone } from '@/utils/period'
 import { adminAlbumAPI } from '@/api/albumClient'
+import { residentDocAPI } from '@/api/residentDocClient'
 
 type Tab = 'active' | 'pending' | 'discharged' | 'all'
 
@@ -255,6 +256,29 @@ export function ResidentForm({ existing, onClose }: { existing?: LtcResident; on
     { grade:'3', cert_no:'', start: today, end: endFromStart(today, 2), benefits:[{ type:'시설', from: today }] },
   ])
   const [loading, setLoading] = useState(false)
+  // ── 수정 모드: 서류현황의 인정서 로드 + 이미 생성된 대상자 구분 감지 ──
+  const [docId, setDocId] = useState<string | null>(null)
+  const [certsReady, setCertsReady] = useState(!existing)
+  const checklists = useLtcStore(st => st.checklists)
+  const addResidentFlagChecklists = useLtcStore(st => st.addResidentFlagChecklists)
+  const existingFlags = useMemo(() => {
+    if (!existing) return {} as Record<string, boolean>
+    const mine = checklists.filter(c => c.personId === existing.id)
+    const has = (frag: string) => mine.some(c => c.title.includes(frag))
+    return {
+      basicMedical: has('[기초의료]'),
+      restraint: has('[신체제재]'),
+      positioning: has('체위변경 표 침실 부착'),
+      pressureSore: has('[욕창]'),
+    } as Record<string, boolean>
+  }, [existing, checklists])
+  useEffect(() => {
+    if (!existing) return
+    residentDocAPI.list(true).then(rows => {
+      const d = rows.find(x => x.resident_id === existing.id)
+      if (d) { setDocId(d.id); if ((d.certifications ?? []).length) setCerts(d.certifications as Certification[]) }
+    }).catch(() => {}).finally(() => setCertsReady(true))
+  }, [existing])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); if(!form.name||!form.birthDate) return
@@ -263,7 +287,15 @@ export function ResidentForm({ existing, onClose }: { existing?: LtcResident; on
     const careGradeStartDate = certs[0]?.start || form.careGradeStartDate || today
     const auto = autoDocEvents(certifications, form.admissionDate)
     try {
-      if(existing) await updateResident(existing.id, form)
+      if(existing) {
+        await updateResident(existing.id, form)
+        if (docId && certsReady) await residentDocAPI.update(docId, { certifications }).catch(() => alert('인정서 저장에 실패했습니다 — 서류현황에서 다시 시도해주세요.'))
+        const newFlags = Object.fromEntries(Object.entries(flags).filter(([k, v]) => v && !existingFlags[k]))
+        if (Object.keys(newFlags).length) {
+          const n = await addResidentFlagChecklists(existing.id, newFlags).catch(() => 0)
+          if (n > 0) alert(`대상자 구분 체크리스트 ${n}건이 추가되었습니다.`)
+        }
+      }
       else await addResident({...form, careGradeStartDate, certifications, contract_lines:auto.contract, plan_lines:auto.plan, eval_lines:auto.eval, status:'active', intakeFlags: flags} as any)
       onClose()
     }
@@ -346,30 +378,37 @@ export function ResidentForm({ existing, onClose }: { existing?: LtcResident; on
                 </select>
               </div>
             )}</div>
-          {!existing && <div>
+          <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">장기요양인정서 <span className="text-gray-400 font-normal">— 등급·유효기간(2/3/4년)·급여(재가↔시설)</span></label>
-            <CertificationEditor value={certs} onChange={setCerts} />
-            <p className="text-xs text-gray-400 mt-1">등록 시 어르신 서류현황에 자동 반영됩니다. (종료 90일 전 갱신 알림)</p>
-          </div>}
-          {!existing && (
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1.5">대상자 구분 <span className="font-normal text-gray-400">— 해당하면 전용 체크리스트가 함께 생성됩니다</span></label>
-              <div className="grid grid-cols-2 gap-1.5">
-                {([
-                  ['basicMedical', '기초 · 의료 대상자', '이용신청서·의뢰서 2건'],
-                  ['restraint', '신체 제재 대상자', '신체제재 등록·서명 등 5건'],
-                  ['positioning', '체위변경(다음날 업무)', '욕창방지 도구·체위변경 3건'],
-                  ['pressureSore', '욕창 대상자', '욕창 간호 기록 등 2건'],
-                ] as const).map(([k, label, hint]) => (
-                  <button key={k} type="button" onClick={() => setFlags(f => ({ ...f, [k]: !f[k] }))}
-                    className={`text-left px-3 py-2 rounded-xl border text-xs transition-colors ${(flags as any)[k] ? 'bg-teal-50 border-teal-300 text-teal-800' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
-                    <span className="font-bold">{(flags as any)[k] ? '✓ ' : ''}{label}</span>
-                    <span className="block text-[10px] opacity-70 mt-0.5">{hint}</span>
+            {certsReady ? <CertificationEditor value={certs} onChange={setCerts} />
+              : <p className="text-xs text-gray-400 py-2">인정서 불러오는 중...</p>}
+            <p className="text-xs text-gray-400 mt-1">{existing ? '저장하면 어르신 서류현황의 인정서가 함께 수정됩니다.' : '등록 시 어르신 서류현황에 자동 반영됩니다. (종료 90일 전 갱신 알림)'}</p>
+            {existing && !docId && certsReady && <p className="text-[10px] text-amber-600 mt-0.5">⚠ 서류현황 기록이 없어 인정서는 저장되지 않습니다 — 서류현황에서 먼저 등록해주세요.</p>}
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">대상자 구분 <span className="font-normal text-gray-400">— {existing ? '새로 체크하고 저장하면 해당 체크리스트가 추가됩니다' : '해당하면 전용 체크리스트가 함께 생성됩니다'}</span></label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {([
+                ['basicMedical', '기초 · 의료 대상자', '이용신청서·의뢰서 2건'],
+                ['restraint', '신체 제재 대상자', '신체제재 등록·서명 등 5건'],
+                ['positioning', '체위변경(다음날 업무)', '욕창방지 도구·체위변경 3건'],
+                ['pressureSore', '욕창 대상자', '욕창 간호 기록 등 2건'],
+              ] as const).map(([k, label, hint]) => {
+                const already = !!existingFlags[k]
+                const on = already || (flags as any)[k]
+                return (
+                  <button key={k} type="button" disabled={already}
+                    onClick={() => setFlags(f => ({ ...f, [k]: !f[k] }))}
+                    className={`text-left px-3 py-2 rounded-xl border text-xs transition-colors ${
+                      already ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-default'
+                      : on ? 'bg-teal-50 border-teal-300 text-teal-800' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                    <span className="font-bold">{on ? '✓ ' : ''}{label}</span>
+                    <span className="block text-[10px] opacity-70 mt-0.5">{already ? '이미 생성됨' : hint}</span>
                   </button>
-                ))}
-              </div>
+                )
+              })}
             </div>
-          )}
+          </div>
           <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">메모</label><textarea className={ic} rows={2} value={form.memo} onChange={e=>setForm({...form,memo:e.target.value})} placeholder="예: 1등급, 낙상 고위험"/></div>
           <div className="flex gap-3 pt-2">
             <button type="submit" disabled={loading} className="flex-1 bg-primary-orange text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-primary-orange/90 disabled:opacity-50">{loading?'처리 중...':existing?'수정':'입소 등록'}</button>

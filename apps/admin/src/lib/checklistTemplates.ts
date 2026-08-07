@@ -221,6 +221,29 @@ export function generateResidentAdmissionChecklists(
   ).map((item, i) => ({ ...item, assignee: list[i].team ?? '복지팀' }))
 }
 
+/** 수정 화면에서 대상자 구분을 나중에 켰을 때 — 조건부 체크리스트만 생성 */
+export function generateResidentFlagChecklists(
+  resident: { id: string; name: string; admissionDate: string },
+  flags: AdmissionFlags,
+) {
+  const base = (resident.admissionDate || today()).slice(0, 10)
+  const list: AdmTpl[] = [
+    ...(flags.basicMedical ? ADM_BASIC_MEDICAL : []),
+    ...(flags.restraint ? ADM_RESTRAINT : []),
+    ...(flags.positioning ? ADM_POSITIONING : []),
+    ...(flags.pressureSore ? ADM_PRESSURE : []),
+  ]
+  return list.map((tpl, i) =>
+    makeItem({
+      templateId: `tpl_admflag_${String(i + 1).padStart(2, '0')}`,
+      title: `[${tpl.g}] ${tpl.t}`,
+      description: tpl.desc ?? '',
+      evidenceRequired: '', storageLocation: '', howTo: '', evalNote: '',
+      riskLevel: tpl.risk ?? 'medium',
+    }, resident.id, resident.name, 'resident', plusDays(base, tpl.off), 'on_admission')
+  ).map((item, i) => ({ ...item, assignee: list[i].team ?? '복지팀' }))
+}
+
 export function generateResidentDischargeChecklists(resident: { id: string; name: string }, dischargeDate: string) {
   // 기한: 퇴소일 + 7일 (전산 보고는 신속하게)
   const due = plusDays((dischargeDate || today()).slice(0, 10), 7)
