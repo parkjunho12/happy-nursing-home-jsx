@@ -253,14 +253,16 @@ export default function EvalAlbumPage() {
 
   // 보호자 검색
   const filteredGuardians = useMemo(() => {
-    if (!guardianSearch.trim()) return guardians
+    let list = guardians
+    if (floorFilter) list = list.filter(g => g.residents.some(r => (floorOf[r.id] ?? '미지정') === floorFilter))
+    if (!guardianSearch.trim()) return list
     const q = guardianSearch.toLowerCase()
-    return guardians.filter(g =>
+    return list.filter(g =>
       g.name.toLowerCase().includes(q) ||
       g.phone.includes(q) ||
       g.residents.some(r => r.name.toLowerCase().includes(q))
     )
-  }, [guardians, guardianSearch])
+  }, [guardians, guardianSearch, floorFilter, floorOf])
 
   const overview = useMemo(() => ({
     total: albums.length,
@@ -298,6 +300,24 @@ export default function EvalAlbumPage() {
         </div>
       </div>
 
+      {/* 층 필터 — 페이지 전체(앨범·보호자·참여도)에 적용되는 최상위 필터 */}
+      {floorOptions.length > 1 && (
+        <div className="flex gap-1.5 flex-wrap">
+          <button onClick={() => { setFloorFilter(''); setPage(1) }}
+            className={`px-5 py-2.5 rounded-xl text-sm font-bold border-2 transition-all ${
+              !floorFilter ? 'bg-gray-800 text-white border-gray-800 shadow-sm' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}>
+            전체
+          </button>
+          {floorOptions.map(f => (
+            <button key={f} onClick={() => { setFloorFilter(f); setPage(1) }}
+              className={`px-5 py-2.5 rounded-xl text-sm font-bold border-2 transition-all ${
+                floorFilter === f ? 'bg-primary-orange text-white border-primary-orange shadow-sm' : 'bg-white text-gray-500 border-gray-200 hover:border-orange-300'}`}>
+              {f}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* 탭 — 요양보호사는 앨범만, 그 외 2개 탭 */}
       {canManage && (
         <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
@@ -314,7 +334,7 @@ export default function EvalAlbumPage() {
         </div>
       )}
 
-      {canManage && tab === 'engagement' && <EngagementPanel />}
+      {canManage && tab === 'engagement' && <EngagementPanel floorFilter={floorFilter} floorOf={floorOf} />}
 
       {/* ── 앨범 탭 ── */}
       {tab === 'albums' && (
@@ -408,19 +428,6 @@ export default function EvalAlbumPage() {
               )}
             </div>
 
-            {/* 층 필터 — 층별로 담당이 나뉘어 있어 제일 앞에 둔다 */}
-            {floorOptions.length > 1 && (
-              <div className="shrink-0 inline-flex items-center gap-1">
-                <button onClick={() => { setFloorFilter(''); setPage(1) }}
-                  className={`h-10 px-3 rounded-xl text-sm font-bold border transition-all ${
-                    !floorFilter ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}>전체</button>
-                {floorOptions.map(f => (
-                  <button key={f} onClick={() => { setFloorFilter(floorFilter === f ? '' : f); setPage(1) }}
-                    className={`h-10 px-3 rounded-xl text-sm font-bold border transition-all ${
-                      floorFilter === f ? 'bg-primary-orange text-white border-primary-orange' : 'bg-white text-gray-500 border-gray-200 hover:border-orange-300'}`}>{f}</button>
-                ))}
-              </div>
-            )}
 
             {/* 월별 관리 — ‹ 2026년 7월 › 로 한 달씩 넘겨 본다. 라벨 클릭 = 전체 보기 */}
             {(() => {
@@ -1757,7 +1764,7 @@ function EngStat({ label, value, icon }: { label: string; value: number; icon: R
   )
 }
 
-function EngagementPanel() {
+function EngagementPanel({ floorFilter, floorOf }: { floorFilter: string; floorOf: Record<string, string> }) {
   const [days, setDays] = useState(30)
   const [data, setData] = useState<any>(null)
   const [fcm, setFcm] = useState<any>(null)
@@ -1776,7 +1783,11 @@ function EngagementPanel() {
   useEffect(() => { load() }, [load])
 
   const s = data?.summary
-  const albums = data?.albums ?? []
+  const allAlbums = data?.albums ?? []
+  // 층 필터 — 앨범의 수급자 층 기준 (열람 요약 카드는 전체 기준 유지)
+  const albums = floorFilter
+    ? allAlbums.filter((a: any) => a.resident_id && (floorOf[a.resident_id] ?? '미지정') === floorFilter)
+    : allAlbums
   const fmt = (iso?: string | null) => {
     if (!iso) return '-'
     const d = new Date(iso)

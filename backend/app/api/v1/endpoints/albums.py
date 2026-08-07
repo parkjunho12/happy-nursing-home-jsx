@@ -933,6 +933,7 @@ def album_engagement(days: int = 30, db: Session = Depends(get_db),
         out.append({
             "album_id": aid,
             "album_title": alb.title if alb else "(삭제된 앨범)",
+            "resident_id": alb.resident_id if alb else None,
             "resident_name": res.name if res else None,
             "opens": d["opens"], "photo_views": d["photos"], "downloads": d["downloads"],
             "unique_guardians": len(d["guardians"]),

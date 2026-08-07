@@ -115,11 +115,18 @@ export default function ProgramPage() {
     return [...byFloor.entries()].sort((a, b) => a[0].localeCompare(b[0]))
       .map(([floor, names]) => ({ floor, names: names.sort((a, b) => a.localeCompare(b, 'ko')) }))
   }
+  // 내부/외부 구분 — 인지 C·여가 C 그룹과 ♥(자체) 프로그램은 내부, 나머지는 외부 강사
+  const sourceOf = (e: ProgramEntry) => {
+    if (e.kind === '자체') return '내부'
+    const g = (e.group ?? '').replace(/\s/g, '')
+    if (g === '인지C' || g === '여가C') return '내부'
+    return '외부'
+  }
   const shareTemplate = (e: ProgramEntry) => {
     const head = e.group ? `${e.group}그룹 프로그램 입니다` : '오늘의 프로그램 입니다'
     const em = emojiFor(e)
     return [
-      `${em}${head}${em}`,
+      `${em}[${sourceOf(e)}] ${head}${em}`,
       `ㅇ 시간/장소 : ${e.time ?? e.slot}`,
       `ㅇ 활동명 : ${e.title || e.group || ''}`,
       '아래 명단에 있는 어르신은 반드시 참여 부탁드립니다',
@@ -580,6 +587,7 @@ export default function ProgramPage() {
                       className={`w-full text-left px-3 py-2.5 rounded-xl border text-sm font-semibold flex items-center gap-2 ${
                         sharePick === i ? 'border-violet-400 bg-violet-50 text-violet-800' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
                       <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border ${groupCls(e.group)}`}>{e.slot}</span>
+                      <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${sourceOf(e) === '내부' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-sky-50 text-sky-700 border border-sky-200'}`}>{sourceOf(e)}</span>
                       {e.group && <b>[{e.group}]</b>} {e.title}
                       {e.time && <span className="ml-auto text-xs text-gray-400">{e.time}</span>}
                     </button>
