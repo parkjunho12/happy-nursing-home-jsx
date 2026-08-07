@@ -131,13 +131,14 @@ def _save_files(files: List[UploadFile], request_id: str, db: Session):
 
 
 @router.get("/meta")
-def meta(current_user: User = Depends(_require_submitter)):
+def meta(db: Session = Depends(get_db), current_user: User = Depends(_require_submitter)):
+    acc = _account_setting(db)
     return ApiResponse(success=True, data={
         "categories": EXPENSE_CATEGORIES,
         "payment_methods": PAYMENT_METHODS,
-        "deposit_accounts": _account_setting(db)["deposit"],
-        "withdraw_accounts": _account_setting(db)["withdraw"],
-        "cards": _account_setting(db)["cards"],
+        "deposit_accounts": acc["deposit"],
+        "withdraw_accounts": acc["withdraw"],
+        "cards": acc["cards"],
         "is_approver": _is_approver(current_user),
     })
 
