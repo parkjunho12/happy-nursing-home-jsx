@@ -50,8 +50,10 @@ def _norm_periods(raw) -> list:
 
 
 def _c_view(c: OperationContract) -> dict:
+    from app.services.operations_groups import infer_group
     return {
         "id": c.id, "section": c.section, "category": c.category, "vendor": c.vendor,
+        "grp": c.grp or infer_group(c.category or ""),
         "contact": c.contact, "amount_note": c.amount_note,
         "start_date": c.start_date, "end_date": c.end_date, "pay_day": c.pay_day,
         "periods": _norm_periods(c.periods),
@@ -61,6 +63,7 @@ def _c_view(c: OperationContract) -> dict:
 
 class ContractBody(BaseModel):
     periods: Optional[list] = None
+    grp: Optional[str] = None
     section: Optional[str] = None
     category: Optional[str] = None
     vendor: Optional[str] = None
@@ -86,7 +89,7 @@ def create_contract(body: ContractBody, db: Session = Depends(get_db), user: Use
         raise HTTPException(400, "항목명은 필수입니다.")
     max_sort = db.query(OperationContract).count()
     c = OperationContract(
-        section=body.section or "정기", category=body.category.strip(),
+        section=body.section or "정기", category=body.category.strip(), grp=body.grp or None,
         vendor=body.vendor, contact=body.contact, amount_note=body.amount_note,
         start_date=body.start_date, end_date=body.end_date, pay_day=body.pay_day,
         memo=body.memo, sort=body.sort if body.sort is not None else max_sort,
@@ -103,7 +106,7 @@ def update_contract(cid: str, body: ContractBody, db: Session = Depends(get_db),
     if not c:
         raise HTTPException(404, "계약을 찾을 수 없습니다.")
     for f in ("section", "category", "vendor", "contact", "amount_note",
-              "start_date", "end_date", "pay_day", "memo", "active", "sort"):
+              "start_date", "end_date", "pay_day", "grp", "memo", "active", "sort"):
         v = getattr(body, f)
         if v is not None:
             setattr(c, f, v)

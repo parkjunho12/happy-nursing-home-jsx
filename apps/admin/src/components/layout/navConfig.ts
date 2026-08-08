@@ -32,7 +32,21 @@ export const MOBILE_HIDDEN = new Set<string>([
 export interface NavUser {
   role?: string | null
   position?: string | null
+  allowed_menus?: string[] | null
 }
+
+/** 외부담당에게 체크박스로 제공할 수 있는 메뉴 카탈로그 — 계정 관리와 공유 */
+export const EXT_MENU_CATALOG: { to: string; label: string }[] = [
+  { to: '/eval/albums', label: '보호자 앨범' },
+  { to: '/eval/blog-ai-writer', label: '블로그 AI 작성' },
+  { to: '/history', label: '블로그 관리' },
+  { to: '/reviews', label: '후기 관리' },
+  { to: '/facility-news', label: '시설소식' },
+  { to: '/schedule', label: '일정 캘린더' },
+  { to: '/programs', label: '프로그램 관리' },
+  { to: '/meals', label: '식단표' },
+  { to: '/education', label: '직원 교육' },
+]
 
 export interface NavItem {
   to: string
@@ -94,6 +108,22 @@ export function getNavConfig(
           ],
         },
       ],
+    }
+  }
+
+  // 외부담당 — 계정에 체크된 메뉴만
+  if (user?.role !== 'ADMIN' && user?.position === '외부담당') {
+    const allowed = new Set(user?.allowed_menus ?? [])
+    const ICONS: Record<string, LucideIcon> = {
+      '/eval/albums': ImageIcon, '/eval/blog-ai-writer': PenLine, '/history': FileText,
+      '/reviews': Star, '/facility-news': Megaphone, '/schedule': CalendarDays,
+      '/programs': CalendarDays, '/meals': ChefHat, '/education': GraduationCap,
+    }
+    const items = EXT_MENU_CATALOG.filter(m => allowed.has(m.to))
+      .map(m => ({ to: m.to, icon: ICONS[m.to] ?? FileText, label: m.label }))
+    return {
+      showDashboard: false,
+      sections: items.length ? [{ label: '메뉴', items }] : [{ label: '메뉴', items: [{ to: '/guide', icon: BookOpen, label: '이용 안내' }] }],
     }
   }
 
@@ -390,6 +420,11 @@ export function getNavConfig(
 // 모바일 하단 탭 — 권한별 자주 쓰는 기능 1탭 접근 (마지막 "전체" 버튼은 컴포넌트에서 추가)
 export function getMobileTabs(user: NavUser | null): NavItem[] {
   const pos = user?.position ?? ''
+  if (pos === '외부담당') {
+    const allowed = new Set(user?.allowed_menus ?? [])
+    return EXT_MENU_CATALOG.filter(m => allowed.has(m.to)).slice(0, 4)
+      .map(m => ({ to: m.to, icon: ImageIcon, label: m.label }))
+  }
   if (pos === '앨범담당') {
     return [{ to: '/eval/albums', icon: ImageIcon, label: '보호자 앨범' }]
   }

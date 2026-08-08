@@ -950,3 +950,119 @@ def album_engagement(days: int = 30, db: Session = Depends(get_db),
         "active_guardians": len({v.guardian_id for v in rows}),
     }
     return ApiResponse(success=True, data={"summary": summary, "albums": out})
+
+
+# ── 월별 사진 전체 다운로드 (ZIP) ─────────────────────────────────────────────
+@admin_router.get("/albums/download-month")
+def download_month_zip(
+    month: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """해당 월 앨범의 승인된 사진 전부를 ZIP 하나로.
+
+    - 월 판정: 제목 "YYYY년 M월…" 우선, 없으면 생성월 (프론트 monthKeyOf와 동일)
+    - ZIP 안 구조: 어르신이름/앨범제목/파일명 — 폴더째 정리돼 받는 즉시 쓸 수 있게
+    - 사진은 이미 압축된 JPEG이므로 무압축(STORED)으로 묶는다 — CPU 낭비 없이 빠르게
+    """
+    import io as _io
+    import os as _os
+    import re as _re
+    import tempfile
+    import zipfile
+    from fastapi.responses import StreamingResponse
+    from urllib.parse import quote as _q
+
+    if not _re.match(r"^\d{4}-\d{2}$", month or ""):
+        raise HTTPException(400, "month 형식은 YYYY-MM 이어야 합니다.")
+
+    def month_key(a: Album) -> str:
+        m = _re.match(r"^(\d{4})년 (\d{1,2})월", a.title or "")
+        if m:
+            return f"{m.group(1)}-{int(m.group(2)):02d}"
+        return a.created_at.strftime("%Y-%m") if a.created_at else ""
+
+    albums = [a for a in db.query(Album).all() if month_key(a) == month]
+    if not albums:
+        raise HTTPException(404, "해당 월의 앨범이 없습니다.")
+    res_names = {r.id: r.name for r in db.query(LtcResident).all()}
+
+    # R2 키 직접 조회 준비 (공개 URL을 다시 인터넷으로 받지 않도록)
+    r2 = None
+    r2_prefix = None
+    try:
+        from app.core.config import settings as _st
+        if _st.R2_PUBLIC_URL:
+            from app.services.r2_storage import _get_client, _bucket
+            r2 = (_get_client(), _bucket())
+            r2_prefix = _st.R2_PUBLIC_URL.rstrip("/") + "/"
+    except Exception:
+        r2 = None
+
+    def fetch(url: str):
+        try:
+            if url.startswith("/uploads/"):
+                path = url.lstrip("/")
+                if _os.path.exists(path):
+                    with open(path, "rb") as f:
+                        return f.read()
+                return None
+            if r2 and r2_prefix and url.startswith(r2_prefix):
+                key = url[len(r2_prefix):]
+                obj = r2[0].get_object(Bucket=r2[1], Key=key)
+                return obj["Body"].read()
+            import httpx
+            resp = httpx.get(url, timeout=30)
+            return resp.content if resp.status_code == 200 else None
+        except Exception:
+            return None
+
+    safe = lambda t: _re.sub(r'[\\/:*?"<>|]', "_", t or "").strip() or "무제"  # noqa: E731
+    tmp = tempfile.SpooledTemporaryFile(max_size=64 * 1024 * 1024)
+    count, skipped = 0, 0
+    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED) as zf:
+        for a in albums:
+            media = (db.query(AlbumMedia)
+                       .filter(AlbumMedia.album_id == a.id,
+                               AlbumMedia.media_type == "photo",
+                               AlbumMedia.status == "approved")
+                       .order_by(AlbumMedia.sort_order, AlbumMedia.created_at).all())
+            if not media:
+                continue
+            folder = f"{safe(res_names.get(a.resident_id, '이름미상'))}/{safe(a.title)}"
+            used = set()
+            for i, m in enumerate(media, 1):
+                data = fetch(m.file_url)
+                if not data:
+                    skipped += 1
+                    continue
+                ext = _os.path.splitext(m.file_name or m.file_url)[1].lower() or ".jpg"
+                base = _os.path.splitext(safe(m.file_name or ""))[0] or f"{i:03d}"
+                name = f"{base}{ext}"
+                j = 1
+                while name in used:
+                    j += 1
+                    name = f"{base}_{j}{ext}"
+                used.add(name)
+                zf.writestr(f"{folder}/{name}", data)
+                count += 1
+    if count == 0:
+        raise HTTPException(404, "내려받을 승인된 사진이 없습니다.")
+    tmp.seek(0)
+    y, mo = month.split("-")
+    fname = f"행복한요양원_앨범사진_{y}.{mo}.zip"
+
+    def iterfile():
+        while True:
+            chunk = tmp.read(1024 * 1024)
+            if not chunk:
+                break
+            yield chunk
+        tmp.close()
+
+    headers = {
+        "Content-Disposition": f"attachment; filename*=UTF-8''{_q(fname)}",
+        "X-Photo-Count": str(count),
+        "X-Skipped": str(skipped),
+    }
+    return StreamingResponse(iterfile(), media_type="application/zip", headers=headers)

@@ -7,6 +7,7 @@ import {
 import { useLtcStore } from '@/store/ltc'
 import { useAuthStore } from '@/store/auth'
 import { adminAlbumAPI } from '@/api/albumClient'
+import { apiClient } from '@/api/client'
 import { canManageFamilyAccounts } from '@/utils/role'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8010'
@@ -76,9 +77,31 @@ export default function EvalAlbumPage() {
   const [resDropOpen,  setResDropOpen]  = useState(false)
   const [albumSearch,  setAlbumSearch]  = useState('')       // 앨범 검색
   const [pendingOnly,  setPendingOnly]  = useState(false)     // 승인대기 있는 앨범만
+  const downloadMonthZip = async () => {
+    const month = monthFilter || thisMonthKey
+    if (zipBusy) return
+    setZipBusy(true)
+    try {
+      const res = await apiClient.get('/api/v1/admin/albums/download-month', {
+        params: { month }, responseType: 'blob', timeout: 600000,   // 사진 수백 장 대비 10분
+      })
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `행복한요양원_앨범사진_${month.replace('-', '.')}.zip`
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 5000)
+      const n = res.headers['x-photo-count']
+      const sk = Number(res.headers['x-skipped'] || 0)
+      if (n) alert(`사진 ${n}장을 내려받았습니다.${sk > 0 ? `\n(원본 유실 등으로 ${sk}장은 건너뛰었습니다)` : ''}`)
+    } catch (e: any) {
+      alert(e?.response?.status === 404 ? '이 달에는 내려받을 승인된 사진이 없습니다.' : 'ZIP 다운로드에 실패했습니다.')
+    } finally { setZipBusy(false) }
+  }
   const thisMonthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`
   const [monthFilter,  setMonthFilter]  = useState(thisMonthKey) // 월별 관리 — 기본 이번 달, ''=전체
   const [genBusy,      setGenBusy]      = useState(false)     // 월별 앨범 생성 중
+  const [zipBusy,      setZipBusy]      = useState(false)     // 월 사진 ZIP 다운로드 중
   const [floorFilter,  setFloorFilter]  = useState('')        // 층 필터 — ''=전체
   const [guardianSearch, setGuardianSearch] = useState('')   // 보호자 검색
 
@@ -459,6 +482,11 @@ export default function EvalAlbumPage() {
             <button onClick={generateMonthly} disabled={genBusy}
               className="shrink-0 h-10 px-3.5 rounded-xl text-sm font-bold border border-primary-orange/40 bg-orange-50 text-primary-orange hover:bg-orange-100 disabled:opacity-50">
               {genBusy ? '생성 중…' : '이번 달 앨범 만들기'}
+            </button>
+            <button onClick={downloadMonthZip} disabled={zipBusy}
+              title="보고 있는 달의 승인된 사진 전체를 어르신별 폴더로 정리한 ZIP 하나로 받습니다"
+              className="shrink-0 h-10 px-3.5 rounded-xl text-sm font-bold border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 inline-flex items-center gap-1.5">
+              {zipBusy ? <><Loader2 size={13} className="animate-spin" /> 묶는 중…</> : '⬇ 이 달 사진 전체 받기'}
             </button>
 
             {/* 승인대기 필터 — 몇 장이 기다리는지 보이고, 누르면 그 앨범만 남는다 */}

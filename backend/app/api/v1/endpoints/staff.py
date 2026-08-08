@@ -35,6 +35,7 @@ class UserCreate(BaseModel):
     password: str
     role:     str = "STAFF"
     position: Optional[str] = None
+    allowed_menus: Optional[list] = None
 
     @field_validator("role")
     @classmethod
@@ -56,6 +57,7 @@ class UserUpdate(BaseModel):
     name:     Optional[str] = None
     role:     Optional[str] = None
     position: Optional[str] = None
+    allowed_menus: Optional[list] = None
 
     @field_validator("role")
     @classmethod
@@ -84,6 +86,7 @@ def _to_dict(u: User) -> dict:
         "name":       u.name,
         "role":       u.role.value if hasattr(u.role, "value") else str(u.role),
         "position":   u.position,
+        "allowed_menus": u.allowed_menus or [],
         "created_at": u.created_at.isoformat() if u.created_at else None,
     }
 
@@ -163,6 +166,7 @@ def create_user(
         hashed_password=get_password_hash(body.password),
         role=UserRole(body.role),
         position=body.position,
+        allowed_menus=[str(x)[:60] for x in (body.allowed_menus or [])][:30] or None,
     )
     db.add(u)
     db.commit()
@@ -189,6 +193,8 @@ def update_user(
     if body.name     is not None: u.name     = body.name
     if body.position is not None: u.position = body.position
     if body.role     is not None: u.role     = UserRole(body.role)
+    if body.allowed_menus is not None:
+        u.allowed_menus = [str(x)[:60] for x in body.allowed_menus][:30] or None
 
     db.commit()
     return {"success": True, "data": _to_dict(u)}
