@@ -418,10 +418,14 @@ def export_schedule(month: str = Query(...), db: Session = Depends(get_db), _: U
     buf = _io.BytesIO()
     wb.save(buf)
     buf.seek(0)
-    fname = f"work_schedule_{month}.xlsx"
+    # 파일명: 원본 시트명 관례를 따라 "26.08월 (26.08.08).xlsx" — 괄호 안은 만든 날짜
+    from datetime import datetime as _dtm, timezone as _tz, timedelta as _td2
+    today_kst = _dtm.now(_tz(_td2(hours=9)))
+    fname = f"{y % 100:02d}.{m:02d}월 ({today_kst.strftime('%y.%m.%d')}).xlsx"
+    from urllib.parse import quote as _q
     return StreamingResponse(
         buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{_q(fname)}"})
 
 
 @router.get("/holidays")
