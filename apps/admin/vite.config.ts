@@ -17,7 +17,7 @@ export default defineConfig({
     allowedHosts: true,    // 외부 Host(10.0.2.2 등) 차단("Blocked request") 해제 — 로컬 테스트용
     proxy: {
       '/api': {
-        target: process.env.VITE_API_BASE_URL || 'http://localhost:8000',
+        target: process.env.VITE_API_BASE_URL || 'http://localhost:8010',
         changeOrigin: true,
       },
     },

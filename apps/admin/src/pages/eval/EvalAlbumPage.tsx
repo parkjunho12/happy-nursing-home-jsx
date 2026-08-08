@@ -9,7 +9,7 @@ import { useAuthStore } from '@/store/auth'
 import { adminAlbumAPI } from '@/api/albumClient'
 import { canManageFamilyAccounts } from '@/utils/role'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8010'
 const PAGE_SIZE = 12
 
 // ── 타입 ──────────────────────────────────────────────────────────────────────

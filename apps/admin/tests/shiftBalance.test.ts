@@ -142,3 +142,22 @@ test('연차는 정산 중립 — 쉬는 날의 休가 추가근무 빚이 되�
   assert.equal(extra, 0)                 // 연차가 빚으로 잡히면 안 된다
   assert.equal(paidBack, 0)
 })
+
+test('토·일과 겹친 공휴일 근무는 대휴를 만들지 않는다', () => {
+  // 2026-08-15(토)·2026-08-17(월) 둘 다 공휴일로 등록되어 있다(HOL).
+  // 회전상 15일(토)과 17일(월)에 모두 근무한 조합이 있어도,
+  // 대휴 수는 '평일 공휴일 근무 수'와 같아야 한다.
+  const series = planMembersMonths([ctxOf(2026, 8)], 'B조', undefined, MEMBERS)
+  for (const p of series[0]) {
+    // 이 사람이 실제 근무한 공휴일 중 평일인 날만 센다
+    let weekdayHolWork = 0
+    for (const [d, c] of Object.entries(p.codes)) {
+      const iso = `2026-08-${String(d).padStart(2, '0')}`
+      const dow = new Date(iso).getDay()
+      const worked = c === 'D' || c === 'M' || c === 'N'
+      if (worked && HOL.has(iso) && dow !== 0 && dow !== 6) weekdayHolWork++
+    }
+    assert.equal(p.daehyuDays, weekdayHolWork,
+      `${p.name}: 대휴 ${p.daehyuDays} ≠ 평일 공휴일 근무 ${weekdayHolWork}`)
+  }
+})
