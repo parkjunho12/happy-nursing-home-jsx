@@ -60,6 +60,7 @@ import AuditCheckPage from './pages/AuditCheckPage'
 import ResidentDetailPage from './pages/eval/ResidentDetailPage'
 import StaffDetailPage from './pages/eval/StaffDetailPage'
 import MealCountPage from './pages/admin/MealCountPage'
+import OperationsPage from './pages/admin/OperationsPage'
 import StaffEducationPage from './pages/StaffEducationPage'
 import WorkGuidePage from './pages/WorkGuidePage'
 import GuidePage from './pages/GuidePage'
@@ -286,6 +287,7 @@ function App() {
             <Route path="notices"                  element={<NurseLeadRoute><InternalNoticesPage /></NurseLeadRoute>} />
             <Route path="meals"                    element={<MealRoute><MealPlanPage /></MealRoute>} />
             <Route path="meal-count"               element={<MealRoute><MealCountPage /></MealRoute>} />
+            <Route path="operations"               element={<AdminRoute><OperationsPage /></AdminRoute>} />
             <Route path="staff-hr"                 element={<StaffAdminRoute><StaffHrPage /></StaffAdminRoute>} />
             <Route path="staffing"                 element={<ManagerRoute><StaffingSimulatorPage /></ManagerRoute>} />
             <Route path="work-schedule"           element={<ManagerRoute><WorkSchedulePage /></ManagerRoute>} />

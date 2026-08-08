@@ -24,6 +24,7 @@ from app.api.v1.endpoints.rooms import router as rooms_router
 from app.api.v1.endpoints.programs import router as programs_router, family_router as programs_family_router
 from app.api.v1.endpoints.meals import router as meals_router
 from app.api.v1.endpoints.pension import router as pension_router
+from app.api.v1.endpoints.operations import router as operations_router
 from app.api.v1.endpoints.audit_check import router as audit_check_router
 from app.api.v1.endpoints.staff_push import router as staff_push_router
 from app.api.v1.endpoints.staff_hr import router as staff_hr_router
@@ -144,6 +145,7 @@ api_router.include_router(programs_router, prefix="/admin/programs", tags=["admi
 api_router.include_router(programs_family_router, prefix="/family", tags=["family-programs"])
 api_router.include_router(meals_router, prefix="/admin/meals", tags=["admin-meals"])
 api_router.include_router(pension_router, prefix="/admin/pension", tags=["admin-pension"])
+api_router.include_router(operations_router, prefix="/admin/operations", tags=["admin-operations"])
 api_router.include_router(audit_check_router, prefix="/audit-check", tags=["audit-check"])
 api_router.include_router(staff_push_router, prefix="/staff/push", tags=["staff-push"])
 api_router.include_router(staff_hr_router, prefix="/admin/staff-hr", tags=["admin-staff-hr"])

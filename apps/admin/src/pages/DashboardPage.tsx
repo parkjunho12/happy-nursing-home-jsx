@@ -66,12 +66,28 @@ export default function DashboardPage() {
   const [siteStats, setSiteStats] = useState<DashboardStats | null>(null)
   const [loadingSite, setLoadingSite] = useState(true)
   const [pending, setPending] = useState<{ expense: number; album: number; leave: number; swap: number; visit: number; refund: number; returning: number }>({ expense: 0, album: 0, leave: 0, swap: 0, visit: 0, refund: 0, returning: 0 })
+  const [expiringContracts, setExpiringContracts] = useState(0)
   const [recentNews, setRecentNews] = useState<FacilityNews[]>([])
 
   const { checklists, occurrences, residents, staffList, loaded, loadAll, toggleComplete, completeOccurrence } = useLtcStore()
 
   useEffect(() => { if (canResidents || canStaffList || can('/contacts')) loadSiteStats() }, [canResidents, canStaffList])
   useEffect(() => { loadPending() }, [])
+  // 갱신 임박 계약 (45일 이내) — 운영·계약 권한자만
+  useEffect(() => {
+    if (authUser?.role !== 'ADMIN') return
+    import('@/api/operationsClient').then(({ operationsAPI }) =>
+      operationsAPI.contracts().then(list => {
+        const n = list.filter(c => {
+          if (!c.active || c.section === '업체' || !c.end_date) return false
+          const m = String(c.end_date).match(/(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/)
+          if (!m) return false
+          const d = Math.round((new Date(+m[1], +m[2] - 1, +m[3]).getTime() - Date.now()) / 86400000)
+          return d <= 45
+        }).length
+        setExpiringContracts(n)
+      }).catch(() => {}))
+  }, [authUser])
   useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
 
   const loadSiteStats = async () => {
@@ -395,6 +411,7 @@ export default function DashboardPage() {
     { show: canVisit && pending.visit > 0, label: '면회 예약 확인 대기', value: pending.visit, unit: '건', to: '/schedule', icon: CalendarClock, tone: 'orange' as const },
     { show: can('/schedule') && pending.returning > 0, label: '귀원 기록 대기 (외출·외박·외래)', value: pending.returning, unit: '건', to: '/schedule', icon: CalendarClock, tone: 'orange' as const },
     { show: can('/staff-hr') && pending.refund > 0, label: '카드키 보증금 이체 대기', value: pending.refund, unit: '건', to: '/staff-hr', icon: Receipt, tone: 'emerald' as const },
+    { show: expiringContracts > 0, label: '갱신 임박 계약 (45일 이내)', value: expiringContracts, unit: '건', to: '/operations', icon: Receipt, tone: 'orange' as const },
   ].filter(i => i.show)
 
   const runningTasks = todayTasks.filter(t => t.inProgress).slice(0, 2)

@@ -26,6 +26,7 @@ export const MOBILE_HIDDEN = new Set<string>([
   '/eval/blog-ai-writer',
   '/history',
   '/reviews',
+  '/operations',          // 운영·계약 — 넓은 표
 ])
 
 export interface NavUser {
@@ -195,7 +196,10 @@ export function getNavConfig(
         },
         {
           label: '회계',
-          items: [{ to: '/expense', icon: Receipt, label: '지출결의' }],
+          items: [
+            { to: '/expense', icon: Receipt, label: '지출결의' },
+            { to: '/operations', icon: Landmark, label: '운영 · 계약' },
+          ],
         },
         {
           label: '마케팅',

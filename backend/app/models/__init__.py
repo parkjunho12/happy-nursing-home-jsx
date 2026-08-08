@@ -102,3 +102,4 @@ from app.models.leave import LeaveRequest, SwapRequest  # noqa: F401
 from app.models.meal import MealWeek, MealTimeSetting  # noqa: F401
 from app.models.pension import PensionEntry, PensionRefund  # noqa: F401
 from app.models.audit_check import AuditRound, AuditItem  # noqa: F401
+from app.models.operations import OperationContract, OperationPayItem, OperationPayment  # noqa: F401
