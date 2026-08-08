@@ -94,6 +94,14 @@ function RoleRedirect({ children }: { children: React.ReactNode }) {
     return <>{children}</>
   }
 
+  // 외부담당: 계정에 체크된 메뉴만 접근 (하위 경로 포함)
+  if (user?.role !== 'ADMIN' && user?.position === '외부담당') {
+    const menus: string[] = (user as any)?.allowed_menus ?? []
+    const extOk = ['/guide', ...menus].some(m => location.pathname === m || location.pathname.startsWith(m + '/'))
+    if (!extOk) return <Navigate to={menus[0] ?? '/guide'} replace />
+    return <>{children}</>
+  }
+
   // 요양보호사 접근 허용 경로 — 사이드바(navConfig)에 노출되는 메뉴와 일치해야 한다.
   const isCaregiverOnly = user?.role === 'STAFF' && user?.position === '요양보호사'
   const caregiverAllowed = [
@@ -216,6 +224,19 @@ function CareInventoryRoute({ children }: { children: React.ReactNode }) {
 }
 
 // 블로그 AI 작성 — ADMIN · 사회복지사 · 대표 · 이사 접근 가능
+// 외부담당은 체크된 메뉴면 통과, 아니면 원래 가드 적용
+function ExtOr({ menu, otherwise: Other, children }: {
+  menu: string; otherwise: (p: { children: React.ReactNode }) => React.ReactElement | null; children: React.ReactNode
+}) {
+  const { isAuthenticated, user } = useAuthStore()
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  if (user?.role !== 'ADMIN' && user?.position === '외부담당') {
+    const ok = (((user as any)?.allowed_menus ?? []) as string[]).includes(menu)
+    return ok ? <>{children}</> : <Navigate to="/" replace />
+  }
+  return <Other>{children}</Other>
+}
+
 function BlogWriterRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
@@ -270,10 +291,10 @@ function App() {
             {/* ADMIN 전용 일반 메뉴 */}
             <Route path="residents"                element={<ManagerRoute><ResidentsPage /></ManagerRoute>} />
             <Route path="staff"                    element={<ManagerRoute><StaffPage /></ManagerRoute>} />
-            <Route path="history"                  element={<ManagerRoute><HistoryPage /></ManagerRoute>} />
-            <Route path="history/new"              element={<ManagerRoute><HistoryEditPage /></ManagerRoute>} />
-            <Route path="history/edit/:id"         element={<ManagerRoute><HistoryEditPage /></ManagerRoute>} />
-            <Route path="reviews"                  element={<ManagerRoute><ReviewsPage /></ManagerRoute>} />
+            <Route path="history"                  element={<ExtOr menu="/history" otherwise={ManagerRoute}><HistoryPage /></ExtOr>} />
+            <Route path="history/new"              element={<ExtOr menu="/history" otherwise={ManagerRoute}><HistoryEditPage /></ExtOr>} />
+            <Route path="history/edit/:id"         element={<ExtOr menu="/history" otherwise={ManagerRoute}><HistoryEditPage /></ExtOr>} />
+            <Route path="reviews"                  element={<ExtOr menu="/reviews" otherwise={ManagerRoute}><ReviewsPage /></ExtOr>} />
             <Route path="analytics/page-views"     element={<ManagerRoute><PageViewStats /></ManagerRoute>} />
             <Route path="analytics/suspicious-ips" element={<ManagerRoute><SuspiciousIPPage /></ManagerRoute>} />
             <Route path="settings"                 element={<ManagerRoute><SettingsPage /></ManagerRoute>} />
@@ -283,9 +304,9 @@ function App() {
             <Route path="recruitment"              element={<ManagerRoute><RecruitmentPage /></ManagerRoute>} />
             <Route path="schedule"                 element={<ScheduleRoute><SchedulePage /></ScheduleRoute>} />
             <Route path="expense"                  element={<ExpenseRoute><ExpensePage /></ExpenseRoute>} />
-            <Route path="facility-news"            element={<SocialWorkerRoute><FacilityNewsPage /></SocialWorkerRoute>} />
+            <Route path="facility-news"            element={<ExtOr menu="/facility-news" otherwise={SocialWorkerRoute}><FacilityNewsPage /></ExtOr>} />
             <Route path="notices"                  element={<NurseLeadRoute><InternalNoticesPage /></NurseLeadRoute>} />
-            <Route path="meals"                    element={<MealRoute><MealPlanPage /></MealRoute>} />
+            <Route path="meals"                    element={<ExtOr menu="/meals" otherwise={MealRoute}><MealPlanPage /></ExtOr>} />
             <Route path="meal-count"               element={<MealRoute><MealCountPage /></MealRoute>} />
             <Route path="operations"               element={<AdminRoute><OperationsPage /></AdminRoute>} />
             <Route path="staff-hr"                 element={<StaffAdminRoute><StaffHrPage /></StaffAdminRoute>} />
@@ -300,7 +321,7 @@ function App() {
             <Route path="incidents"                element={<NurseLeadRoute><IncidentsPage /></NurseLeadRoute>} />
             <Route path="monthly-report"           element={<StaffAdminRoute><MonthlyReportPage /></StaffAdminRoute>} />
             <Route path="assignments"              element={<NurseLeadRoute><ResidentAssignPage /></NurseLeadRoute>} />
-            <Route path="programs"                 element={<SocialWorkerRoute><ProgramPage /></SocialWorkerRoute>} />
+            <Route path="programs"                 element={<ExtOr menu="/programs" otherwise={SocialWorkerRoute}><ProgramPage /></ExtOr>} />
             <Route path="handover/:id"             element={<HandoverDetailPage />} />
             <Route path="resident-docs"            element={<SocialWorkerRoute><ResidentDocsPage /></SocialWorkerRoute>} />
             <Route path="education"                element={<StaffEducationPage />} />
@@ -319,7 +340,7 @@ function App() {
             <Route path="eval/record-audit/:auditId/resident/:residentName" element={<EvalRecordAuditDetailPage />} />
 
             {/* 사회복지사 + ADMIN — 수급자/직원 관리 */}
-            <Route path="eval/blog-ai-writer" element={<BlogWriterRoute><BlogAiWriterPage /></BlogWriterRoute>} />
+            <Route path="eval/blog-ai-writer" element={<ExtOr menu="/eval/blog-ai-writer" otherwise={BlogWriterRoute}><BlogAiWriterPage /></ExtOr>} />
             <Route path="eval/residents" element={<ResidentCareRoute><EvalResidentsPage /></ResidentCareRoute>} />
             <Route path="eval/residents/:id" element={<ResidentCareRoute><ResidentDetailPage /></ResidentCareRoute>} />
             <Route path="eval/staff"     element={<StaffAdminRoute><EvalStaffPage /></StaffAdminRoute>} />

@@ -17,6 +17,7 @@ class OperationContract(Base):
 
     id          = Column(String, primary_key=True, default=_uuid)
     section     = Column(String(20), nullable=False, default="정기")   # 정기·계약·보험·기타·업체·점검
+    grp         = Column(String(30), nullable=True)                    # 지출 영역 — 비우면 항목명으로 자동 분류
     category    = Column(String(100), nullable=False)                  # 항목 (소방·전기…)
     vendor      = Column(String(200), nullable=True)                   # 업체명
     contact     = Column(Text, nullable=True)

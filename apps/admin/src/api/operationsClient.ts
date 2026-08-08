@@ -10,6 +10,7 @@ const BASE = '/api/v1/admin/operations'
 export interface OpPeriod { start: string; end: string; note?: string | null; recorded_at?: string | null }
 export interface OpContract {
   id: string; section: string; category: string; vendor?: string | null
+  grp?: string | null
   contact?: string | null; amount_note?: string | null
   start_date?: string | null; end_date?: string | null; pay_day?: string | null
   periods?: OpPeriod[]

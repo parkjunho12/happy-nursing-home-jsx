@@ -23,6 +23,7 @@ class UserResponse(BaseModel):
     name: str
     role: str  # "ADMIN" | "STAFF"
     position: str | None = None
+    allowed_menus: list | None = None
 
 
 class LoginRequest(BaseModel):
@@ -88,6 +89,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
             name=user.name,
             role=user.role.value,
             position=user.position if hasattr(user, "position") else None,
+            allowed_menus=getattr(user, "allowed_menus", None) or None,
         ),
     )
 
@@ -112,4 +114,5 @@ def me(current_user: User = Depends(get_current_user)):
         name=current_user.name,
         role=current_user.role.value,
         position=current_user.position if hasattr(current_user, "position") else None,
+        allowed_menus=getattr(current_user, "allowed_menus", None) or None,
     )

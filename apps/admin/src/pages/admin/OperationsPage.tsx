@@ -198,7 +198,7 @@ export default function OperationsPage() {
             // 정기 지출은 영역별로 다시 묶는다 — 납부 대장과 같은 분류
             const buckets: { key: string; dot: string; rows: OpContract[] }[] = sec === '정기'
               ? Object.entries(allRows.reduce<Record<string, OpContract[]>>((acc, c) => {
-                  const g = inferGrp(c.category); (acc[g] ||= []).push(c); return acc
+                  const g = (c.grp && PAY_GROUPS.includes(c.grp as any)) ? c.grp : inferGrp(c.category); (acc[g] ||= []).push(c); return acc
                 }, {}))
                   .sort((a, b) => PAY_GROUPS.indexOf(a[0] as any) - PAY_GROUPS.indexOf(b[0] as any))
                   .map(([key, rows]) => ({ key, dot: GRP_DOT[key] ?? 'bg-gray-400', rows }))
@@ -260,6 +260,14 @@ export default function OperationsPage() {
                             <td className="px-2 py-2.5 text-[11.5px] text-gray-500 whitespace-nowrap">{c.pay_day || <span className="text-gray-300">—</span>}</td>
                             <td className="px-2 py-2.5 text-[11px] text-gray-400 hidden lg:table-cell max-w-[230px] truncate" title={c.memo ?? ''}>{c.memo || ''}</td>
                             <td className="px-2 py-2.5 text-right whitespace-nowrap">
+                              <button onClick={async () => {
+                                if (c.active && !confirm(`「${c.category}${c.vendor ? ` · ${c.vendor}` : ''}」 계약을 종료 처리할까요?\n목록에 흐리게 남고 만료 알림에서 빠집니다.`)) return
+                                await operationsAPI.updateContract(c.id, { active: !c.active }); load()
+                              }}
+                                title={c.active ? '계약 종료 처리' : '계약 재개'}
+                                className={`px-2 py-1 rounded-lg text-[10px] font-bold border mr-0.5 ${c.active ? 'text-gray-400 border-gray-200 hover:bg-gray-100 hover:text-gray-600' : 'text-emerald-600 border-emerald-200 hover:bg-emerald-50'}`}>
+                                {c.active ? '종료' : '재개'}
+                              </button>
                               <button onClick={() => setEditC(c)} className="p-1.5 rounded-lg text-gray-300 hover:text-gray-600 hover:bg-gray-100"><Pencil size={13} /></button>
                               {isAdmin && (
                                 <button onClick={async () => {
@@ -489,6 +497,7 @@ function ContractModal({ existing, onClose, onSaved }: { existing?: OpContract; 
     contact: existing?.contact ?? '', amount_note: existing?.amount_note ?? '',
     start_date: existing?.start_date ?? '', end_date: existing?.end_date ?? '',
     pay_day: existing?.pay_day ?? '', memo: existing?.memo ?? '', active: existing?.active ?? true,
+    grp: existing?.grp ?? '',
   })
   const [periods, setPeriods] = useState<OpPeriod[]>(existing?.periods ?? [])
   const [busy, setBusy] = useState(false)
@@ -520,6 +529,11 @@ function ContractModal({ existing, onClose, onSaved }: { existing?: OpContract; 
           </select></div>
         <div><L>항목 *</L><input className={ic} value={f.category} onChange={e => setF({ ...f, category: e.target.value })} placeholder="소방 / 전기 / CCTV…" /></div>
       </div>
+      <div><L>지출 영역 <span className="font-normal text-gray-400">— 정기 지출 소분류·납부 대장과 같은 기준</span></L>
+        <select className={ic} value={f.grp} onChange={e => setF({ ...f, grp: e.target.value })}>
+          <option value="">자동 분류{f.category ? ` (지금 기준: ${inferGrp(f.category)})` : ' (항목명 기준)'}</option>
+          {PAY_GROUPS.map(g => <option key={g} value={g}>{g}</option>)}
+        </select></div>
       <div className="grid grid-cols-2 gap-3">
         <div><L>업체명</L><input className={ic} value={f.vendor} onChange={e => setF({ ...f, vendor: e.target.value })} /></div>
         <div><L>월 지출액 (자유 표기)</L><input className={ic} value={f.amount_note} onChange={e => setF({ ...f, amount_note: e.target.value })} placeholder="예: 66,000(VAT포함)" /></div>

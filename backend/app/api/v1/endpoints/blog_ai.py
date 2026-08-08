@@ -78,6 +78,8 @@ def _index_summaries(photo_summaries):
 def _is_allowed(user: User) -> bool:
     role = user.role.value if hasattr(user.role, "value") else str(user.role)
     pos = getattr(user, "position", None)
+    if pos == "외부담당":
+        return "/eval/blog-ai-writer" in (getattr(user, "allowed_menus", None) or [])
     return role == "ADMIN" or pos in ("사회복지사", "대표", "이사")
 
 

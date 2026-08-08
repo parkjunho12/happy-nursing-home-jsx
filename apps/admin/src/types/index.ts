@@ -5,6 +5,7 @@ export interface User {
   name: string
   role: 'ADMIN' | 'STAFF'
   position?: string | null
+  allowed_menus?: string[] | null
   createdAt?: string
 }
 

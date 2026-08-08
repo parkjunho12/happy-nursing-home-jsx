@@ -2,6 +2,7 @@ import StickyToolbar from '../../components/common/StickyToolbar'
 import { useState, useEffect, useMemo } from 'react'
 import { Plus, Edit2, Trash2, Search, X, Eye, EyeOff, KeyRound } from 'lucide-react'
 import { apiClient } from '@/api/client'
+import { EXT_MENU_CATALOG } from '@/components/layout/navConfig'
 import { useLtcStore } from '@/store/ltc'
 import { Link2, Link2Off } from 'lucide-react'
 
@@ -9,7 +10,7 @@ import { Link2, Link2Off } from 'lucide-react'
 const POSITIONS = [
   '대표', '시설장', '이사',
   '사회복지사', '간호사', '간호조무사',
-  '물리치료사', '요양보호사', '요양팀장', '영양사', '앨범담당',
+  '물리치료사', '요양보호사', '요양팀장', '영양사', '앨범담당', '외부담당',
 ] as const
 
 const ROLES = [
@@ -134,6 +135,11 @@ export default function EvalUsersPage() {
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${roleCls[u.role] ?? roleCls.STAFF}`}>
                       {roleLabel[u.role] ?? u.role}
                     </span>
+                    {u.position === '외부담당' && ((u as any).allowed_menus?.length ?? 0) > 0 && (
+                      <span className="text-[10px] font-bold text-violet-600 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full">
+                        메뉴 {(u as any).allowed_menus.length}개
+                      </span>
+                    )}
                     {u.position && (
                       <span className="text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-semibold">
                         {u.position}
@@ -196,6 +202,7 @@ function UserFormModal({ existing, onClose, onSaved }: {
     password: '',
     role:     existing?.role     ?? 'STAFF',
     position: existing?.position ?? '',
+    allowed_menus: ((existing as any)?.allowed_menus ?? []) as string[],
   })
   const [saving, setSaving] = useState(false)
   const [error,  setError]  = useState('')
@@ -211,11 +218,13 @@ function UserFormModal({ existing, onClose, onSaved }: {
         if (form.name     !== existing.name)     body.name     = form.name
         if (form.role     !== existing.role)     body.role     = form.role
         if (form.position !== existing.position) body.position = form.position || null
+        if (form.position === '외부담당' || existing.position === '외부담당') body.allowed_menus = form.allowed_menus
         await apiClient.patch(`/api/v1/users/${existing.id}`, body)
       } else {
         await apiClient.post('/api/v1/users', {
           ...form,
           position: form.position || null,
+          allowed_menus: form.position === '외부담당' ? form.allowed_menus : undefined,
         })
       }
       onSaved(); onClose()
@@ -281,6 +290,26 @@ function UserFormModal({ existing, onClose, onSaved }: {
               </select>
             </div>
           </div>
+
+          {/* 외부담당 — 제공할 메뉴를 골라준다 */}
+          {form.position === '외부담당' && (
+            <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-3">
+              <p className="text-xs font-bold text-violet-700 mb-2">제공할 메뉴 선택 <span className="font-normal text-violet-400">— 체크한 메뉴만 보이고 접근됩니다</span></p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {EXT_MENU_CATALOG.map(m => {
+                  const on = form.allowed_menus.includes(m.to)
+                  return (
+                    <button key={m.to} type="button"
+                      onClick={() => setForm({ ...form, allowed_menus: on ? form.allowed_menus.filter(x => x !== m.to) : [...form.allowed_menus, m.to] })}
+                      className={`text-left px-2.5 py-1.5 rounded-lg border text-xs transition-colors ${on ? 'bg-violet-100 border-violet-300 text-violet-800 font-bold' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                      {on ? '✓ ' : ''}{m.label}
+                    </button>
+                  )
+                })}
+              </div>
+              {form.allowed_menus.length === 0 && <p className="text-[10px] text-violet-400 mt-1.5">아직 선택된 메뉴가 없습니다 — 최소 1개는 체크해주세요.</p>}
+            </div>
+          )}
 
           <div className="bg-gray-50 rounded-xl px-3 py-2.5 text-xs text-gray-500">
             <span className="font-semibold">권한 안내:</span>{' '}
