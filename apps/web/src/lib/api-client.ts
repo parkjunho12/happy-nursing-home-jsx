@@ -20,7 +20,7 @@ export function resolveApiBase(): string {
       h === 'localhost' || h === '127.0.0.1' || h === '10.0.2.2' ||
       /^192\.168\./.test(h) || /^10\./.test(h) ||
       /^172\.(1[6-9]|2\d|3[01])\./.test(h)
-    if (isLocal) return `http://${h}:8000`
+    if (isLocal) return `http://${h}:8010`
   }
   return API_BASE_URL
 }

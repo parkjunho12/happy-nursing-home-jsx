@@ -204,7 +204,12 @@ def save_config(body: ConfigBody, db: Session = Depends(get_db), current_user: U
 
 @router.get("/export")
 def export_schedule(month: str = Query(...), db: Session = Depends(get_db), _: User = Depends(_viewer)):
-    """저장된 근무표 최종본을 엑셀(.xlsx)로 — 화면과 같은 배치·색상."""
+    """저장된 근무표 최종본을 엑셀(.xlsx)로 — 기존 수기 근무표 서식을 따른다.
+
+    참고 원본: 노란 제목띠 · 직종/조/성명 열 · 주말 색(토 파랑/일 빨강) ·
+    休 파랑 배경 · 대휴 주황 배경 · 요양보호사 직종 세로 병합 ·
+    하단 일별 근무 인원 합계 + 근무 코드 범례.
+    """
     if not _YM.match(month or ""):
         raise HTTPException(400, "month 형식은 YYYY-MM 이어야 합니다.")
     w = db.query(WorkSchedule).filter(WorkSchedule.year_month == month).first()
@@ -217,6 +222,7 @@ def export_schedule(month: str = Query(...), db: Session = Depends(get_db), _: U
     from fastapi.responses import StreamingResponse
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
 
     y, m = int(month[:4]), int(month[5:7])
     total = _cal.monthrange(y, m)[1]
@@ -242,82 +248,172 @@ def export_schedule(month: str = Query(...), db: Session = Depends(get_db), _: U
 
     wb = Workbook()
     ws = wb.active
-    ws.title = f"{m}월 근무표"
+    ws.title = f"{y % 100}.{m:02d}월"
 
-    thin = Side(style="thin", color="D1D5DB")
+    # ── 원본 서식 상수 ──
+    thin = Side(style="thin", color="000000")
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
-    center = Alignment(horizontal="center", vertical="center")
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    F = lambda **kw: Font(name="Arial", size=12, bold=True, **kw)   # noqa: E731
+    RED, BLUE = "FF0000", "0000FF"
+    SAT_FILL = PatternFill("solid", fgColor="DAEEF3")    # 토 옅은 파랑
+    SUN_FILL = PatternFill("solid", fgColor="F4CCCC")    # 일·공휴일 옅은 빨강
+    HYU_FILL = PatternFill("solid", fgColor="4285F4")    # 休 파랑
+    DH_FILL = PatternFill("solid", fgColor="FF6D01")     # 대휴 주황
+    TITLE_FILL = PatternFill("solid", fgColor="FFFF00")  # 제목 노랑
 
-    CODE_FILL = {
-        "D": "E0F2FE", "M": "D1FAE5", "N": "E0E7FF", "休": "FFE4E6",
-        "대휴": "FEF3C7", "초과휴": "FEF3C7", "AD": "CCFBF1", "PD": "CCFBF1",
-    }
-    HEAD_FILL = PatternFill("solid", fgColor="F3F4F6")
-    SUN_FILL = PatternFill("solid", fgColor="FEE2E2")
-    SAT_FILL = PatternFill("solid", fgColor="DBEAFE")
+    DAY0, NAME_C = 4, 3      # D열부터 날짜, C열 성명
 
-    # 제목
-    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=3 + total)
-    tc = ws.cell(row=1, column=1, value=f"행복한요양원 {y}년 {m}월 근무표")
-    tc.font = Font(size=14, bold=True)
-    tc.alignment = Alignment(horizontal="left", vertical="center")
+    def day_style(c, day, base_fill=None):
+        dow = _date(y, m, day).weekday()
+        red = dow == 6 or day in holidays
+        if red:
+            c.fill = SUN_FILL
+        elif dow == 5:
+            c.fill = SAT_FILL
+        elif base_fill:
+            c.fill = base_fill
+        return red, dow == 5
 
-    # 머리행
-    heads = ["직종", "조", "성명"] + [str(d) for d in range(1, total + 1)]
-    for ci, h in enumerate(heads, start=1):
-        c = ws.cell(row=2, column=ci, value=h)
-        c.font = Font(size=9, bold=True)
-        c.alignment = center
-        c.border = border
-        c.fill = HEAD_FILL
-        if ci > 3:
-            day = ci - 3
-            dow = _date(y, m, day).weekday()   # 0=월
-            if dow == 6 or day in holidays:
-                c.fill = SUN_FILL
-                c.font = Font(size=9, bold=True, color="DC2626")
-            elif dow == 5:
-                c.fill = SAT_FILL
-                c.font = Font(size=9, bold=True, color="2563EB")
+    # ── 1행: 제목 (노란 띠) ──
+    ws.merge_cells(start_row=1, start_column=DAY0, end_row=1, end_column=DAY0 + total - 1)
+    tc = ws.cell(row=1, column=DAY0, value=f"{y}년  {m}월 행복한요양원 근무표")
+    tc.font = Font(name="맑은 고딕", size=14, bold=True)
+    tc.fill = TITLE_FILL
+    tc.alignment = center
+    tc.border = border
+    ws.row_dimensions[1].height = 25.5
 
-    # 본문 — 저장된 rows 순서(화면 정렬 그대로)
-    r_i = 3
+    # ── 3·4행: 날짜·요일 머리 ──
+    ws.merge_cells("A3:B4")
+    ws.merge_cells("C3:C4")
+    h1 = ws.cell(row=3, column=1, value="직종"); h1.font = F(); h1.alignment = center; h1.border = border
+    ws.cell(row=4, column=1).border = border
+    ws.cell(row=3, column=2).border = border
+    ws.cell(row=4, column=2).border = border
+    h2 = ws.cell(row=3, column=NAME_C, value="성명"); h2.font = F(); h2.alignment = center; h2.border = border
+    ws.cell(row=4, column=NAME_C).border = border
+    DOW_KO = ["월", "화", "수", "목", "금", "토", "일"]
+    for day in range(1, total + 1):
+        col = DAY0 + day - 1
+        c1 = ws.cell(row=3, column=col, value=day)
+        c2 = ws.cell(row=4, column=col, value=DOW_KO[_date(y, m, day).weekday()])
+        for c in (c1, c2):
+            c.alignment = center
+            c.border = border
+            red, sat = day_style(c, day)
+            c.font = F(color=RED) if red else F(color=BLUE) if sat else F()
+    ws.row_dimensions[4].height = 30
+
+    # ── 본문 — 저장된 rows 순서(화면 정렬 그대로) ──
+    body_rows = []
     for row in (w.rows or []):
         sid = row.get("staff_id")
         codes = (w.data or {}).get(sid) or {}
         if not codes and sid not in names:
             continue
-        vals = [row.get("position") or poss.get(sid, ""), row.get("team") or "", names.get(sid, "(퇴사)")]
-        for ci, v in enumerate(vals, start=1):
-            c = ws.cell(row=r_i, column=ci, value=v)
-            c.font = Font(size=9, bold=(ci == 3))
-            c.alignment = center
-            c.border = border
+        body_rows.append((row, sid, codes))
+
+    r_i = 5
+    cg_rows = []          # 요양보호사 블록(직종 세로 병합용)
+    care_first = None
+    for row, sid, codes in body_rows:
+        pos = row.get("position") or poss.get(sid, "")
+        is_care = "요양보호사" in pos
+        # 직종 (요양보호사는 나중에 병합, 그 외는 A:B 가로 병합)
+        if is_care:
+            if care_first is None:
+                care_first = r_i
+            cg_rows.append(r_i)
+            tv = ws.cell(row=r_i, column=2, value=row.get("team") or "")
+            tv.font = F(); tv.alignment = center
+        else:
+            ws.merge_cells(start_row=r_i, start_column=1, end_row=r_i, end_column=2)
+            pv = ws.cell(row=r_i, column=1, value=pos)
+            pv.font = F(); pv.alignment = center
+        nv = ws.cell(row=r_i, column=NAME_C, value=names.get(sid, "(퇴사)"))
+        nv.font = F(); nv.alignment = center
+        for cix in (1, 2, NAME_C):
+            ws.cell(row=r_i, column=cix).border = border
         for day in range(1, total + 1):
             code = codes.get(str(day), "")
-            c = ws.cell(row=r_i, column=3 + day, value=code)
-            c.font = Font(size=9)
+            # "0930 1200" 같은 시간대 근무는 두 줄로 (원본과 동일)
+            disp = code
+            import re as _re2
+            mm2 = _re2.match(r"^(\d{3,4})[\s~\-]+(\d{3,4})$", str(code).strip())
+            if mm2:
+                disp = f"{mm2.group(1)}\n{mm2.group(2)}"
+            c = ws.cell(row=r_i, column=DAY0 + day - 1, value=disp)
             c.alignment = center
             c.border = border
-            fill = CODE_FILL.get(code)
-            if fill:
-                c.fill = PatternFill("solid", fgColor=fill)
+            if code == "休":
+                c.fill = HYU_FILL
+                c.font = F()
+            elif code in ("대휴", "초과휴"):
+                c.fill = DH_FILL
+                c.font = F()
             else:
-                dow = _date(y, m, day).weekday()
-                if dow == 6 or day in holidays:
-                    c.fill = PatternFill("solid", fgColor="FEF2F2")
-                elif dow == 5:
-                    c.fill = PatternFill("solid", fgColor="EFF6FF")
+                red, sat = day_style(c, day)
+                c.font = F(color=RED) if (red and not code) else F()
+        ws.row_dimensions[r_i].height = 34
         r_i += 1
 
-    # 폭·행 높이
-    ws.column_dimensions["A"].width = 11
-    ws.column_dimensions["B"].width = 6
-    ws.column_dimensions["C"].width = 9
-    from openpyxl.utils import get_column_letter
+    # 요양보호사 직종 세로 병합
+    if cg_rows:
+        ws.merge_cells(start_row=cg_rows[0], start_column=1, end_row=cg_rows[-1], end_column=1)
+        cc = ws.cell(row=cg_rows[0], column=1, value="요\n양\n보\n호\n사")
+        cc.font = F(); cc.alignment = center
+        for rr in cg_rows:
+            ws.cell(row=rr, column=1).border = border
+
+    # ── 일별 근무 인원 합계 (요양보호사 기준, 원본의 특이사항 행) ──
+    sum_r = r_i
+    ws.merge_cells(start_row=sum_r, start_column=1, end_row=sum_r, end_column=3)
+    sv = ws.cell(row=sum_r, column=1, value="일별 근무 인원")
+    sv.font = F(); sv.alignment = center; sv.border = border
+    ws.cell(row=sum_r, column=2).border = border
+    ws.cell(row=sum_r, column=NAME_C).border = border
+    WORK_CODES = {"D", "M", "N", "AD", "PD", "D-3"}
+    for day in range(1, total + 1):
+        n_work = 0
+        for row, sid, codes in body_rows:
+            code = str(codes.get(str(day), "")).strip()
+            if code in WORK_CODES or (code and code[0].isdigit()):
+                n_work += 1
+        c = ws.cell(row=sum_r, column=DAY0 + day - 1, value=n_work)
+        c.alignment = center; c.border = border
+        red, sat = day_style(c, day)
+        c.font = F(color=RED) if red else F(color=BLUE) if sat else F()
+    r_i += 2
+
+    # ── 범례 (원본 하단) ──
+    LEGEND = [
+        ("D", "08:50 ~ 18:00"), ("M", "06:50 ~ 16:00"), ("N", "17:50 ~ 익일 09:00"),
+        ("AD", "08:50 ~ 13:30"), ("PD", "13:30 ~ 18:00"), ("D-3", "08:50 ~ 15:00"),
+        ("休", "연차"), ("대휴", "대체휴무"), ("숫자", "시간대 근무 (직접 입력)"),
+    ]
+    for code, desc in LEGEND:
+        cv = ws.cell(row=r_i, column=DAY0, value=code)
+        cv.font = F(); cv.alignment = center; cv.border = border
+        if code == "休":
+            cv.fill = HYU_FILL
+        elif code == "대휴":
+            cv.fill = DH_FILL
+        ws.merge_cells(start_row=r_i, start_column=DAY0 + 1, end_row=r_i, end_column=DAY0 + 5)
+        dv = ws.cell(row=r_i, column=DAY0 + 1, value=desc)
+        dv.font = Font(name="Arial", size=11)
+        dv.alignment = Alignment(horizontal="left", vertical="center")
+        for cix in range(DAY0 + 1, DAY0 + 6):
+            ws.cell(row=r_i, column=cix).border = border
+        r_i += 1
+
+    # ── 폭·틀 고정 ──
+    ws.column_dimensions["A"].width = 5.5
+    ws.column_dimensions["B"].width = 6.4
+    ws.column_dimensions["C"].width = 8.4
     for d in range(1, total + 1):
-        ws.column_dimensions[get_column_letter(3 + d)].width = 4.2
-    ws.freeze_panes = "D3"
+        ws.column_dimensions[get_column_letter(DAY0 + d - 1)].width = 6.5
+    ws.freeze_panes = "D5"
 
     buf = _io.BytesIO()
     wb.save(buf)

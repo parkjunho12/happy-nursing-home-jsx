@@ -302,65 +302,83 @@ export function getNavConfig(
     }
   }
 
-  // 일반 직원 (사회복지사·간호조무사·이사·대표·시설장 등)
-  const canEnteral = ['사회복지사', '간호조무사', '이사', '대표', '시설장'].includes(user?.position ?? '')
+  // 일반 직원 (사회복지사·간호팀·물리치료사·대표·이사)
+  // — ADMIN·시설장과 같은 소분류(어르신/직원·근무/일정·소통/기록·안전/평가)를 권한만큼만 보여준다
+  const isNurse = ['간호팀장', '간호사', '간호조무사'].includes(user?.position ?? '')
+  const isCareTeam = isNurse || user?.position === '물리치료사'
+  const canEnteral = isSocialWorker || isNurse || isManager
+  const canHandover = isSocialWorker || isNurse || user?.position === '시설장'
+  const canMeal = isSocialWorker || isManager
+
   const operItems: NavItem[] = [
     { to: '/contacts', icon: MessageSquare, label: '상담 관리' },
     { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
     { to: '/my-schedule', icon: CalendarDays, label: '내 근무표' },
   ]
-  if (isSocialWorker) operItems.push(
-    { to: '/programs', icon: CalendarDays, label: '프로그램 관리' },
-    { to: '/meals', icon: ChefHat, label: '식단표' },
-    { to: '/notices', icon: Bell, label: '내부 공지 관리' },
+  if (isManager) operItems.push({ to: '/work-schedule-view', icon: CalendarClock, label: '전체 근무표 보기' })
+
+  // 어르신 — 수급자·명단·경관식·프로그램·식단
+  const residentItems: NavItem[] = []
+  if (isSocialWorker || isCareTeam || isManager)
+    residentItems.push({ to: '/eval/residents', icon: UserRound, label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined })
+  if (isSocialWorker || isManager)
+    residentItems.push({ to: '/resident-docs', icon: ClipboardList, label: '어르신 서류현황' })
+  if (isSocialWorker || isNurse || isManager)
+    residentItems.push({ to: '/assignments', icon: Users, label: '담당 어르신 명단' })
+  if (canEnteral)
+    residentItems.push({ to: '/enteral', icon: Soup, label: '경관식 관리' })
+  if (isSocialWorker)
+    residentItems.push({ to: '/programs', icon: CalendarDays, label: '프로그램 관리' })
+  if (canMeal)
+    residentItems.push(
+      { to: '/meals', icon: ChefHat, label: '식단표' },
+      { to: '/meal-count', icon: ChefHat, label: '식수 정산' },
+    )
+
+  // 직원 · 근무 — 대표·이사만
+  const staffItems: NavItem[] = []
+  if (isManager) staffItems.push(
+    { to: '/eval/staff', icon: UserCog, label: '직원 관리', badge: activeStaff > 0 ? `${activeStaff}명` : undefined },
+    { to: '/staff-hr', icon: FileText, label: '직원 상세' },
+  )
+
+  // 일정 · 소통
+  const commItems: NavItem[] = []
+  if (isSocialWorker || isNurse) commItems.push({ to: '/notices', icon: Bell, label: '내부 공지 관리' })
+  if (isSocialWorker) commItems.push(
     { to: '/facility-news', icon: Megaphone, label: '시설소식' },
     { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
   )
-  if (isManager) operItems.push(
-    { to: '/eval/residents', icon: UserRound, label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined },
-    { to: '/resident-docs', icon: ClipboardList, label: '어르신 서류현황' },
-    { to: '/assignments', icon: Users, label: '담당 어르신 명단' },
-    { to: '/eval/staff', icon: UserCog, label: '직원 관리', badge: activeStaff > 0 ? `${activeStaff}명` : undefined },
-    { to: '/staff-hr', icon: FileText, label: '직원 상세' },
-    { to: '/incidents', icon: AlertTriangle, label: '낙상·사고 보고서' },
-    { to: '/monthly-report', icon: BarChart3, label: '월간 운영 리포트' },
-  )
-  if (canEnteral) operItems.push({ to: '/enteral', icon: Soup, label: '경관식 관리' })
-  const canHandover = ['사회복지사', '간호사', '간호조무사', '시설장'].includes(user?.position ?? '')
-  if (canHandover) operItems.push({ to: '/handover', icon: ClipboardCheck, label: '인수인계 AI' })
+
+  // 기록 · 안전
+  const safetyItems: NavItem[] = []
+  if (canHandover) safetyItems.push({ to: '/handover', icon: ClipboardCheck, label: '인수인계 AI' })
+  if (isNurse || isManager) safetyItems.push({ to: '/incidents', icon: AlertTriangle, label: '낙상·사고 보고서' })
+  if (isManager) safetyItems.push({ to: '/monthly-report', icon: BarChart3, label: '월간 운영 리포트' })
 
   const evalItems: NavItem[] = [
     checklistItem,
     { to: '/audit-check', icon: ShieldCheck, label: '지도점검 체크리스트' },
     { to: '/eval/calendar', icon: CalendarDays, label: '평가 캘린더' },
     { to: '/education', icon: GraduationCap, label: '직원 교육' },
-  ]
-  const isCareTeam = ['간호팀장', '물리치료사'].includes(user?.position ?? '')
-  if (isCareTeam && !isSocialWorker) {
-    evalItems.push({ to: '/eval/residents', icon: UserRound, label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined })
-  }
-  if (isSocialWorker) {
-    evalItems.push(
-      { to: '/eval/residents', icon: UserRound, label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined },
-      { to: '/resident-docs', icon: ClipboardList, label: '어르신 서류현황' },
-            { to: '/assignments', icon: Users, label: '담당 어르신 명단' },
-    )
-  }
-  evalItems.push(
     { to: '/eval/record-audit', icon: FileSearch, label: '제공기록지 검수' },
     { to: '/eval/record-guide', icon: BookOpen, label: '검수 기준' },
-  )
+  ]
 
   const marketingItems: NavItem[] = []
   if (isSocialWorker || isManager) marketingItems.push({ to: '/eval/blog-ai-writer', icon: PenLine, label: '블로그 AI 작성' })
 
   const sections: NavSection[] = [
     { label: '운영', items: operItems },
+    { label: '어르신', items: residentItems },
+    { label: '직원 · 근무', items: staffItems },
+    { label: '일정 · 소통', items: commItems },
+    { label: '기록 · 안전', items: safetyItems },
     { label: '평가', items: evalItems },
     { label: '앨범', items: [{ to: '/eval/albums', icon: ImageIcon, label: '보호자 앨범' }] },
     { label: '회계', items: [{ to: '/expense', icon: Receipt, label: '지출결의' }] },
     { label: '마케팅', items: marketingItems },
-  ]
+  ].filter(sec => sec.items.length > 0)
 
   return { showDashboard: true, sections }
 }

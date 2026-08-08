@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft, X, Play, Image as ImageIcon } from 'lucide-react'
 import { familyAPI } from '@/api/albumClient'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8010'
 const mediaUrl = (url: string) => url?.startsWith('http') ? url : `${API_BASE}${url}`
 
 type Media = { id:string; media_type:string; file_url:string; file_name:string; created_at:string }

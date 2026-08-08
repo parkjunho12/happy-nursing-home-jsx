@@ -29,7 +29,7 @@ logger = logging.getLogger("enteral")
 
 router = APIRouter()
 
-ALLOWED_POSITIONS = {"사회복지사", "간호조무사", "이사", "대표", "시설장"}
+ALLOWED_POSITIONS = {"사회복지사", "간호조무사", "간호팀장", "간호사", "이사", "대표", "시설장"}
 TX_TYPES = {"in", "out"}
 
 

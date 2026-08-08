@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 export const revalidate = 3600
 
 const BASE_URL = 'https://www.행복한요양원녹양역.com'
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8010'
 
 async function getHistoryPosts() {
   try {

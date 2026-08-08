@@ -183,7 +183,7 @@ function ResidentCareRoute({ children }: { children: React.ReactNode }) {
   // 수급자 관리·상세 — 케어팀(간호팀장·물리치료사)도 체크리스트 확인·토글을 위해 접근
   const { isAuthenticated, user } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
-  const ok = user?.role === 'ADMIN' || ['사회복지사', '시설장', '대표', '이사', '간호팀장', '물리치료사'].includes(user?.position ?? '')
+  const ok = user?.role === 'ADMIN' || ['사회복지사', '시설장', '대표', '이사', '간호팀장', '간호사', '간호조무사', '물리치료사'].includes(user?.position ?? '')
   if (!ok) return <Navigate to="/eval/checklist" replace />
   return <>{children}</>
 }
@@ -196,11 +196,20 @@ function SocialWorkerRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+// 담당 명단·내부 공지·낙상 보고서 — 사회복지사 라인 + 간호팀장
+function NurseLeadRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, user } = useAuthStore()
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  const ok = user?.role === 'ADMIN' || ['사회복지사', '시설장', '대표', '이사', '간호팀장', '간호사', '간호조무사'].includes(user?.position ?? '')
+  if (!ok) return <Navigate to="/eval/checklist" replace />
+  return <>{children}</>
+}
+
 // 경관식 재고 — ADMIN · 사회복지사 · 간호조무사 · 이사 · 대표 · 시설장
 function CareInventoryRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
-  const ok = user?.role === 'ADMIN' || ['사회복지사', '간호조무사', '이사', '대표', '시설장'].includes(user?.position ?? '')
+  const ok = user?.role === 'ADMIN' || ['사회복지사', '간호조무사', '간호팀장', '간호사', '이사', '대표', '시설장'].includes(user?.position ?? '')
   if (!ok) return <Navigate to="/eval/checklist" replace />
   return <>{children}</>
 }
@@ -274,7 +283,7 @@ function App() {
             <Route path="schedule"                 element={<ScheduleRoute><SchedulePage /></ScheduleRoute>} />
             <Route path="expense"                  element={<ExpenseRoute><ExpensePage /></ExpenseRoute>} />
             <Route path="facility-news"            element={<SocialWorkerRoute><FacilityNewsPage /></SocialWorkerRoute>} />
-            <Route path="notices"                  element={<SocialWorkerRoute><InternalNoticesPage /></SocialWorkerRoute>} />
+            <Route path="notices"                  element={<NurseLeadRoute><InternalNoticesPage /></NurseLeadRoute>} />
             <Route path="meals"                    element={<MealRoute><MealPlanPage /></MealRoute>} />
             <Route path="meal-count"               element={<MealRoute><MealCountPage /></MealRoute>} />
             <Route path="staff-hr"                 element={<StaffAdminRoute><StaffHrPage /></StaffAdminRoute>} />
@@ -286,9 +295,9 @@ function App() {
             <Route path="audit-check"             element={<AuditCheckRoute><AuditCheckPage /></AuditCheckRoute>} />
             <Route path="my-schedule"             element={<MySchedulePage />} />
             <Route path="handover"                 element={<HandoverAiPage />} />
-            <Route path="incidents"                element={<StaffAdminRoute><IncidentsPage /></StaffAdminRoute>} />
+            <Route path="incidents"                element={<NurseLeadRoute><IncidentsPage /></NurseLeadRoute>} />
             <Route path="monthly-report"           element={<StaffAdminRoute><MonthlyReportPage /></StaffAdminRoute>} />
-            <Route path="assignments"              element={<SocialWorkerRoute><ResidentAssignPage /></SocialWorkerRoute>} />
+            <Route path="assignments"              element={<NurseLeadRoute><ResidentAssignPage /></NurseLeadRoute>} />
             <Route path="programs"                 element={<SocialWorkerRoute><ProgramPage /></SocialWorkerRoute>} />
             <Route path="handover/:id"             element={<HandoverDetailPage />} />
             <Route path="resident-docs"            element={<SocialWorkerRoute><ResidentDocsPage /></SocialWorkerRoute>} />

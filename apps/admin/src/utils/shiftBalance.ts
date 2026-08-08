@@ -145,7 +145,10 @@ export function planMembersMonth(
       codes[String(day)] = c
       rotationHours += hoursOf(c)
       if (c === 'D') workDays.push(day)
-      if (ctx.holidays.has(iso)) { holidayWork++; holidayWorkDays.push(day) }
+      // 공휴일 근무 → 대휴. 단, 공휴일이 토·일과 겹치면 대휴를 만들지 않는다
+      // (교대조는 주말 근무가 원래 일정이므로 이중 보상이 된다)
+      const dow = new Date(iso).getDay()
+      if (ctx.holidays.has(iso) && dow !== 0 && dow !== 6) { holidayWork++; holidayWorkDays.push(day) }
     })
 
     const daehyu = holidayWork
