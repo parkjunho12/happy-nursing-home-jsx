@@ -589,7 +589,9 @@ export default function WorkSchedulePage() {
                   const url = URL.createObjectURL(res.data)
                   const a = document.createElement('a')
                   a.href = url
-                  a.download = `근무표_${ym}.xlsx`
+                  const t = new Date()
+                  const p2 = (n: number) => String(n).padStart(2, '0')
+                  a.download = `${ym.slice(2, 4)}.${ym.slice(5, 7)}월 (${String(t.getFullYear()).slice(2)}.${p2(t.getMonth() + 1)}.${p2(t.getDate())}).xlsx`
                   a.click()
                   setTimeout(() => URL.revokeObjectURL(url), 3000)
                 } catch {
