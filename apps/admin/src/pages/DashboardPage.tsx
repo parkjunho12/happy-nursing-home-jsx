@@ -620,25 +620,70 @@ export default function DashboardPage() {
           <div className="flex items-center gap-2 min-w-0">
             <AlertTriangle size={14} className={`${T.icon} shrink-0`}/>
             <h2 className="text-sm font-bold text-gray-800 truncate">{title}</h2>
-            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${T.badge} shrink-0`}>{tasks.length}건</span>
+            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${T.badge} shrink-0`}>
+              {new Set(tasks.map(t => t.personId ?? t.personName)).size}명 · {tasks.length}건
+            </span>
           </div>
         </div>
         <div className="divide-y divide-gray-50">
-          {tasks.slice(0, 5).map(task => (
-            <EventTaskRow key={task.occId || task.itemId} task={task}
-              onClick={() => {
-                if (task.personType === 'resident' && task.personId) navigate(`/eval/residents/${task.personId}`)
-                else if (task.personType === 'staff' && task.personId) navigate(`/eval/staff/${task.personId}`)
-                else if (task.personType === 'staff') navigate('/eval/staff')
-                else navigate('/eval/checklist')
-              }} />
-          ))}
-          {tasks.length > 5 && (
-            <button onClick={() => navigate(tasks[0]?.personType === 'staff' ? '/eval/staff' : '/eval/residents')}
-              className={`w-full py-3 text-xs text-center text-gray-400 transition-colors ${T.hover}`}>
-              +{tasks.length - 5}건 더 보기
-            </button>
-          )}
+          {(() => {
+            // 사람별로 묶는다 — 한 어르신(직원)당 카드 하나, 최대 5장
+            const byPerson = new Map<string, { name: string; tasks: TodayTask[] }>()
+            tasks.forEach(t => {
+              const key = t.personId ?? t.personName ?? '미지정'
+              if (!byPerson.has(key)) byPerson.set(key, { name: t.personName ?? '이름 미상', tasks: [] })
+              byPerson.get(key)!.tasks.push(t)
+            })
+            const groups = [...byPerson.entries()]
+              .map(([key, g]) => ({
+                key, name: g.name, count: g.tasks.length,
+                worst: Math.max(...g.tasks.map(t => t.daysOverdue)),
+                high: g.tasks.some(t => t.riskLevel === 'high'),
+                sample: g.tasks[0],
+              }))
+              .sort((a, b) => b.worst - a.worst || b.count - a.count)
+            const shown = groups.slice(0, 5)
+            const rest = groups.length - shown.length
+            return (
+              <>
+                {shown.map(g => (
+                  <button key={g.key}
+                    onClick={() => {
+                      const t = g.sample
+                      if (t.personType === 'resident' && t.personId) navigate(`/eval/residents/${t.personId}`)
+                      else if (t.personType === 'staff' && t.personId) navigate(`/eval/staff/${t.personId}`)
+                      else if (t.personType === 'staff') navigate('/eval/staff')
+                      else navigate('/eval/checklist')
+                    }}
+                    className="w-full min-h-[44px] flex items-center gap-3 px-4 md:px-5 py-3 hover:bg-gray-50 text-left transition-colors">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${tone === 'purple' ? 'bg-purple-100 text-purple-700' : 'bg-sky-100 text-sky-700'}`}>
+                      {g.name[0] ?? '?'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-gray-800 truncate">
+                        {g.name}
+                        {g.high && <AlertTriangle size={11} className="inline ml-1 text-red-400 align-[-1px]" />}
+                      </p>
+                      <p className="text-[11px] text-gray-400 truncate">{g.sample.title.replace(`[${g.name}] `, '')}{g.count > 1 ? ` 외 ${g.count - 1}건` : ''}</p>
+                    </div>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${T.badge}`}>{g.count}건</span>
+                    {g.worst > 0 && (
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
+                        g.worst >= 14 ? 'bg-red-100 text-red-600' : g.worst >= 7 ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-500'
+                      }`}>{g.worst}일째</span>
+                    )}
+                    <ChevronRight size={13} className="text-gray-300 shrink-0" />
+                  </button>
+                ))}
+                {rest > 0 && (
+                  <button onClick={() => navigate(tasks[0]?.personType === 'staff' ? '/eval/staff' : '/eval/residents')}
+                    className={`w-full py-3 text-xs text-center text-gray-400 transition-colors ${T.hover}`}>
+                    +{rest}명 더 보기
+                  </button>
+                )}
+              </>
+            )
+          })()}
         </div>
       </section>
     )
@@ -894,26 +939,6 @@ function StatBadge({ label, value, unit, extra, tone, icon, onClick }: {
 
 
 
-function EventTaskRow({ task, onClick }: { task: TodayTask; onClick: () => void }) {
-  return (
-    <button onClick={onClick} className="w-full min-h-[44px] flex items-center gap-3 px-4 md:px-5 py-3 hover:bg-purple-50/40 text-left transition-colors">
-      <div className="w-2 h-2 rounded-full bg-purple-400 flex-shrink-0"/>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-800 truncate">{task.title}</p>
-        <div className="flex items-center gap-2 mt-0.5">
-          <span className="text-[10px] text-gray-400">{FREQUENCY_LABELS[task.frequency] ?? task.frequency}</span>
-          {task.personName && <span className="text-[10px] text-purple-500 font-medium">👤 {task.personName}</span>}
-        </div>
-      </div>
-      {task.daysOverdue > 0 && (
-        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
-          task.daysOverdue>=14 ? 'bg-red-100 text-red-600' : task.daysOverdue>=7 ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-500'
-        }`}>{task.daysOverdue}일째</span>
-      )}
-      <ChevronRight size={13} className="text-gray-300 flex-shrink-0" />
-    </button>
-  )
-}
 
 function SiteStatRow({ label, value, unit, highlight, alert }: {
   label:string; value:number; unit:string; highlight?:boolean; alert?:boolean
