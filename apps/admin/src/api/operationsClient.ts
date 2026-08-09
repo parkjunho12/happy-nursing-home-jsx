@@ -42,4 +42,15 @@ export const operationsAPI = {
   deletePayment: (id: string) => apiClient.delete(`${BASE}/payments/${id}`).then(r => r.data),
 
   seed: () => apiClient.post(`${BASE}/seed`).then(unwrap<{ contracts: number; items: number; payments: number }>),
+
+  expenseCandidates: (year: number) =>
+    apiClient.get(`${BASE}/expense-candidates`, { params: { year } }).then(unwrap<ExpenseCandidate[]>),
+  importExpense: (b: { expense_id: string; item_id: string; year_month?: string; paid_on?: string }) =>
+    apiClient.post(`${BASE}/import-expense`, b).then(unwrap<{ id: string }>),
+}
+
+export interface ExpenseCandidate {
+  id: string; title: string; amount: number; vendor?: string | null
+  category: string; payment_method?: string | null
+  year_month: string; paid_on: string; paid: boolean; requester?: string | null
 }

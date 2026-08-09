@@ -59,5 +59,6 @@ class OperationPayment(Base):
     amount     = Column(Integer, nullable=False, default=0)
     paid_on    = Column(String(20), nullable=True)                     # 납부일 (MM.DD 자유 표기)
     note       = Column(String(200), nullable=True)
+    expense_id = Column(String, nullable=True, index=True)             # 지출결의 연동 원본 (중복 가져오기 방지)
     created_by = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_kst)

@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth'
 import {
-  operationsAPI, type OpContract, type OpPayItem, type OpPaymentsMap, type OpPeriod,
+  operationsAPI, type OpContract, type OpPayItem, type OpPaymentsMap, type OpPeriod, type ExpenseCandidate,
 } from '@/api/operationsClient'
 
 /**
@@ -290,7 +290,8 @@ export default function OperationsPage() {
         </>
       ) : (
         <PaymentsTab items={items} pays={pays} year={year} setYear={setYear} yearTotal={yearTotal}
-          onCell={(item, ym) => setCell({ item, ym })} onEditItem={setEditItem} onAddItem={() => setEditItem('new')} />
+          onCell={(item, ym) => setCell({ item, ym })} onEditItem={setEditItem} onAddItem={() => setEditItem('new')}
+          onImported={load} />
       )}
 
       {editC && <ContractModal existing={editC === 'new' ? undefined : editC} onClose={() => setEditC(null)} onSaved={load} />}
@@ -302,9 +303,10 @@ export default function OperationsPage() {
 }
 
 // ── 납부 대장 ─────────────────────────────────────────────────────────────
-function PaymentsTab({ items, pays, year, setYear, yearTotal, onCell, onEditItem, onAddItem }: {
+function PaymentsTab({ items, pays, year, setYear, yearTotal, onCell, onEditItem, onAddItem, onImported }: {
   items: OpPayItem[]; pays: OpPaymentsMap; year: number; setYear: (y: number) => void; yearTotal: number
   onCell: (item: OpPayItem, ym: string) => void; onEditItem: (i: OpPayItem) => void; onAddItem: () => void
+  onImported: () => void
 }) {
   const months = Array.from({ length: 12 }, (_, i) => i + 1)
   const now = new Date()
@@ -346,6 +348,9 @@ function PaymentsTab({ items, pays, year, setYear, yearTotal, onCell, onEditItem
           <p className={`text-xl font-black leading-8 ${missedCount ? 'text-rose-600' : 'text-gray-800'}`}>{missedCount}<span className="text-sm font-bold ml-0.5 opacity-60">칸</span></p>
         </div>
       </div>
+
+      {/* 지출결의 가져오기 — 승인된 건을 원클릭으로 납부 대장에 */}
+      <ExpenseInbox items={items} year={year} onImported={onImported} />
 
       {/* 영역별 연간 소계 카드 */}
       <div className="flex flex-wrap gap-1.5 mb-4">
@@ -467,6 +472,87 @@ function PaymentsTab({ items, pays, year, setYear, yearTotal, onCell, onEditItem
       </div>
       <p className="text-[11px] text-gray-400">분홍 칸 = 정기 항목인데 납부 기록이 없는 지난달 · 영역은 항목을 눌러 수정할 수 있습니다</p>
     </>
+  )
+}
+
+// ── 지출결의 가져오기 인박스 ────────────────────────────────────────────────
+// 계정과목 → 납부 항목 추천 매칭 (이름·업체 겹침 우선, 없으면 계정과목 키워드)
+const CAT_HINT: Record<string, string[]> = {
+  '공과금(전기·수도·가스)': ['전기', '가스', '상하수도'], '통신비': ['인터넷', '전화', 'KT'],
+  '식자재비': ['급식'], '프로그램·행사비': ['프로그램'], '세금과공과': ['세금'],
+  '지급수수료': ['회계'], '시설관리비': ['소독', 'CCTV', '소방'], '의약품·위생재료비': ['약국', '기저귀'],
+}
+function ExpenseInbox({ items, year, onImported }: { items: OpPayItem[]; year: number; onImported: () => void }) {
+  const [cands, setCands] = useState<ExpenseCandidate[]>([])
+  const [open, setOpen] = useState(false)
+  const [pick, setPick] = useState<Record<string, string>>({})   // expense_id → item_id
+  const [busy, setBusy] = useState<string | null>(null)
+  const load = () => operationsAPI.expenseCandidates(year).then(setCands).catch(() => setCands([]))
+  useEffect(() => { load() }, [year]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const suggest = (c: ExpenseCandidate): string => {
+    const act = items.filter(i => i.active)
+    const byName = act.find(i =>
+      (c.vendor && (i.vendor ?? '').includes(c.vendor)) ||
+      (c.vendor && c.vendor.includes(i.category)) ||
+      c.title.includes(i.category))
+    if (byName) return byName.id
+    for (const kw of CAT_HINT[c.category] ?? []) {
+      const hit = act.find(i => i.category.includes(kw) || (i.vendor ?? '').includes(kw))
+      if (hit) return hit.id
+    }
+    return ''
+  }
+  if (cands.length === 0) return null
+  return (
+    <div className="mb-4 rounded-2xl border border-indigo-200 bg-indigo-50/50 overflow-hidden">
+      <button onClick={() => setOpen(v => !v)} className="w-full flex items-center gap-2 px-4 py-3 text-left">
+        <span className="w-6 h-6 rounded-lg bg-indigo-600 text-white text-[11px] font-black flex items-center justify-center">{cands.length}</span>
+        <span className="text-sm font-bold text-indigo-800">지출결의에서 가져올 수 있는 건 {cands.length}건</span>
+        <span className="text-[11px] text-indigo-400">— 승인 완료된 지출을 납부 대장에 원클릭 기록 (이중 입력 방지)</span>
+        <span className="ml-auto text-indigo-300 text-xs">{open ? '접기 ▴' : '펼치기 ▾'}</span>
+      </button>
+      {open && (
+        <ul className="px-3 pb-3 space-y-1.5">
+          {cands.map(c => {
+            const sel = pick[c.id] ?? suggest(c)
+            return (
+              <li key={c.id} className="flex items-center gap-2 flex-wrap bg-white rounded-xl border border-indigo-100 px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[12.5px] font-bold text-gray-800 truncate">
+                    {c.title}
+                    <span className="ml-1.5 font-black text-indigo-700 tabular-nums">{c.amount.toLocaleString()}원</span>
+                  </p>
+                  <p className="text-[10px] text-gray-400 truncate">
+                    {c.category}{c.vendor ? ` · ${c.vendor}` : ''} · {Number(c.year_month.slice(5, 7))}월 {c.paid_on}
+                    {c.paid ? ' 지급됨' : ' 승인됨'}{c.requester ? ` · ${c.requester} 신청` : ''}
+                  </p>
+                </div>
+                <select value={sel} onChange={e => setPick(p => ({ ...p, [c.id]: e.target.value }))}
+                  className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 max-w-[180px]">
+                  <option value="">납부 항목 선택…</option>
+                  {items.filter(i => i.active).map(i => (
+                    <option key={i.id} value={i.id}>{i.category}{i.vendor ? ` (${i.vendor})` : ''}</option>
+                  ))}
+                </select>
+                <button disabled={!sel || busy === c.id}
+                  onClick={async () => {
+                    setBusy(c.id)
+                    try {
+                      await operationsAPI.importExpense({ expense_id: c.id, item_id: sel })
+                      await load(); onImported()
+                    } catch (e: any) { alert(e?.response?.data?.detail ?? '가져오기 실패') }
+                    finally { setBusy(null) }
+                  }}
+                  className="text-xs font-bold px-3 py-1.5 rounded-lg bg-indigo-600 text-white disabled:opacity-40 hover:bg-indigo-700">
+                  {busy === c.id ? '기록 중…' : '대장에 기록'}
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
   )
 }
 

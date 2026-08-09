@@ -55,7 +55,6 @@ export default function StaffHrPage() {
   }, [rows])
 
   const positions = useMemo(() => [...new Set(rows.map(r => r.position).filter(Boolean))] as string[], [rows])
-  const rankById = useMemo(() => new Map(rows.map((r, i) => [r.id, i + 1])), [rows])
   const filtered = useMemo(() => rows.filter(r => {
     if (search && !(r.name ?? '').includes(search)) return false
     if (posFilter && r.position !== posFilter) return false
@@ -148,7 +147,8 @@ export default function StaffHrPage() {
           <table className="w-full border-collapse min-w-[980px]">
             <thead className="sticky top-0 z-30">
               <tr className="bg-gray-50/90">
-                <th className={`${th} sticky left-0 z-20 bg-gray-50 text-left border-r border-gray-200 min-w-[140px]`}>직원</th>
+                <th className={`${th} sticky left-0 z-20 bg-gray-50 w-10`}>연번</th>
+                <th className={`${th} sticky left-10 z-20 bg-gray-50 text-left border-r border-gray-200 min-w-[140px]`}>직원</th>
                 <th className={th}>입사일</th>
                 <th className={`${th} text-left`}>근로계약일자</th>
                 <th className={th}>작성</th>
@@ -159,13 +159,13 @@ export default function StaffHrPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(r => {
+              {filtered.map((r, ri) => {
                 const done = DOC_FIELDS.filter(d => r.docs[d.key] === true).length
                 return (
                   <tr key={r.id} className={`group hover:bg-indigo-50/20 ${r.active === false ? 'opacity-50' : ''}`}>
-                    <td className={`${td} sticky left-0 z-10 bg-white group-hover:bg-indigo-50/40 text-left border-r border-gray-100`}>
+                    <td className={`${td} sticky left-0 z-10 bg-white group-hover:bg-indigo-50/40 w-10 text-center text-[11px] font-bold text-gray-400`}>{ri + 1}</td>
+                    <td className={`${td} sticky left-10 z-10 bg-white group-hover:bg-indigo-50/40 text-left border-r border-gray-100`}>
                       <div className="flex items-baseline gap-1.5">
-                        <span className="text-[10px] text-gray-300">{rankById.get(r.id)}</span>
                         <span className="text-sm font-bold text-gray-800">{r.name || '-'}</span>
                         {r.active === false && <span className="text-[9px] font-bold text-white bg-gray-400 px-1 py-0.5 rounded">퇴사</span>}
                       </div>
@@ -534,13 +534,14 @@ function StaffDetailTable({ staff }: { staff: LtcStaff[] }) {
           <table className="w-full border-collapse min-w-[1100px]">
             <thead className="sticky top-0 z-30 bg-white">
               <tr>
-                <th className={`${gh} sticky left-0 z-20 bg-indigo-50/60 text-indigo-700 border-r border-gray-200`} colSpan={5}>기본정보</th>
+                <th className={`${gh} sticky left-0 z-20 bg-indigo-50/60 text-indigo-700 border-r border-gray-200`} colSpan={6}>기본정보</th>
                 <th className={`${gh} bg-teal-50/60 text-teal-700`} colSpan={3}>인적사항</th>
                 <th className={`${gh} bg-amber-50/60 text-amber-700`} colSpan={3}>자격 · 계좌</th>
                 <th className={`${gh} bg-gray-50 text-gray-500`}>메모</th>
               </tr>
               <tr className="bg-gray-50/90">
-                <th className={`${th} sticky left-0 z-20 bg-gray-50 text-left border-r border-gray-200 min-w-[120px]`}>성명</th>
+                <th className={`${th} sticky left-0 z-20 bg-gray-50 w-10`}>연번</th>
+                <th className={`${th} sticky left-10 z-20 bg-gray-50 text-left border-r border-gray-200 min-w-[120px]`}>성명</th>
                 <th className={th}>직종</th>
                 <th className={th}>입사일</th>
                 <th className={th}>생년월일</th>
@@ -555,9 +556,10 @@ function StaffDetailTable({ staff }: { staff: LtcStaff[] }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map(s => (
+              {rows.map((s, si) => (
                 <tr key={s.id} className="hover:bg-indigo-50/30">
-                  <td className={`${td} sticky left-0 z-10 bg-white text-left border-r border-gray-100 font-bold text-gray-800`}>{s.name}</td>
+                  <td className={`${td} sticky left-0 z-10 bg-white w-10 text-center text-[11px] font-bold text-gray-400`}>{si + 1}</td>
+                  <td className={`${td} sticky left-10 z-10 bg-white text-left border-r border-gray-100 font-bold text-gray-800`}>{s.name}</td>
                   <td className={td}>{val(s.position)}</td>
                   <td className={td}>{fmtD(s.hireDate)}</td>
                   <td className={td}>{fmtD(s.birthDate)}</td>

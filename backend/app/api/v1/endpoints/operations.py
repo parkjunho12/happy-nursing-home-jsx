@@ -20,6 +20,9 @@ from app.schemas.response import ApiResponse
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+from datetime import timezone as _tz, timedelta as _td  # noqa: E402
+KST_OP = _tz(_td(hours=9))
+
 def _guard(current_user: User = Depends(get_current_user)) -> User:
     """운영·계약은 급여 총액 등 민감 정보가 포함되어 ADMIN 전용."""
     role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
@@ -239,6 +242,72 @@ def delete_payment(pid: str, db: Session = Depends(get_db), _: User = Depends(_g
     db.query(OperationPayment).filter(OperationPayment.id == pid).delete()
     db.commit()
     return ApiResponse(success=True, data={"deleted": pid})
+
+
+# ── 지출결의 연동 ───────────────────────────────────────────────────────────
+# 최종 승인·지급된 지출결의 건을 납부 대장으로 끌어온다 — 이중 입력 제거.
+
+@router.get("/expense-candidates")
+def expense_candidates(year: int, db: Session = Depends(get_db), _: User = Depends(_guard)):
+    """아직 납부 대장에 안 들어간 승인 지출결의 목록 (해당 연도)."""
+    from app.models.expense import ExpenseRequest
+    linked = {e for (e,) in db.query(OperationPayment.expense_id)
+              .filter(OperationPayment.expense_id.isnot(None)).all()}
+    rows = (db.query(ExpenseRequest)
+              .filter(ExpenseRequest.status == "approved")
+              .order_by(ExpenseRequest.approved_at.desc().nullslast())
+              .limit(300).all())
+    out = []
+    for r in rows:
+        if r.id in linked:
+            continue
+        base_dt = r.paid_at or r.approved_at or r.created_at
+        ym = base_dt.strftime("%Y-%m") if base_dt else None
+        if not ym or not ym.startswith(str(year)):
+            continue
+        out.append({
+            "id": r.id, "title": r.title, "amount": r.amount, "vendor": r.vendor,
+            "category": r.category, "payment_method": r.payment_method,
+            "year_month": ym,
+            "paid_on": (r.paid_at or r.approved_at).astimezone(KST_OP).strftime("%m.%d") if (r.paid_at or r.approved_at) else "",
+            "paid": r.paid_at is not None,
+            "requester": r.requester_name,
+        })
+    return ApiResponse(success=True, data=out)
+
+
+class ImportExpenseBody(BaseModel):
+    expense_id: str
+    item_id: str
+    year_month: Optional[str] = None
+    paid_on: Optional[str] = None
+
+
+@router.post("/import-expense")
+def import_expense(body: ImportExpenseBody, db: Session = Depends(get_db), user: User = Depends(_guard)):
+    from app.models.expense import ExpenseRequest
+    r = db.query(ExpenseRequest).filter(ExpenseRequest.id == body.expense_id).first()
+    if not r:
+        raise HTTPException(404, "지출결의 건을 찾을 수 없습니다.")
+    if r.status != "approved":
+        raise HTTPException(409, "최종 승인된 건만 가져올 수 있습니다.")
+    if db.query(OperationPayment).filter(OperationPayment.expense_id == r.id).first():
+        raise HTTPException(409, "이미 납부 대장에 들어간 건입니다.")
+    item = db.query(OperationPayItem).filter(OperationPayItem.id == body.item_id).first()
+    if not item:
+        raise HTTPException(404, "납부 항목을 찾을 수 없습니다.")
+    base_dt = r.paid_at or r.approved_at or r.created_at
+    ym = body.year_month or (base_dt.strftime("%Y-%m") if base_dt else None)
+    if not ym:
+        raise HTTPException(400, "year_month를 지정해주세요.")
+    p2 = OperationPayment(
+        item_id=item.id, year_month=ym, amount=r.amount or 0,
+        paid_on=body.paid_on or (base_dt.astimezone(KST_OP).strftime("%m.%d") if base_dt else None),
+        note=f"지출결의 · {r.title[:60]}", expense_id=r.id,
+        created_by=getattr(user, "name", None))
+    db.add(p2)
+    db.commit()
+    return ApiResponse(success=True, data={"id": p2.id, "year_month": ym, "amount": p2.amount})
 
 
 # ── 엑셀 이관 시드 (1회) ────────────────────────────────────────────────────
