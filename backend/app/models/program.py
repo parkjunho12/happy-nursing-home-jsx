@@ -5,7 +5,7 @@
 """
 import uuid
 from datetime import datetime, timezone, timedelta
-from sqlalchemy import Column, String, Boolean, DateTime, JSON
+from sqlalchemy import Column, String, Boolean, DateTime, JSON, Text
 from app.core.database import Base
 
 KST = timezone(timedelta(hours=9))
@@ -26,7 +26,8 @@ class ProgramMonth(Base):
     month      = Column(String(7), unique=True, index=True, nullable=False)   # 'YYYY-MM'
     # { "1": [{slot:'오전'|'오후', group:'인지A'|null, title:'색칠공부'}], ... }
     days       = Column(JSON, nullable=True)
-    notes      = Column(JSON, nullable=True)        # 운영 규칙 안내(엑셀 오른쪽 메모) — 문자열 배열
+    notes      = Column(JSON, nullable=True)        # 운영 규칙(내부용) — 관리자 화면에서만 노출
+    public_memo = Column(Text, nullable=True)       # 보호자 안내 메모 — 보호자앱·웹에 이것만 노출
     published  = Column(Boolean, default=False)     # 게시해야 보호자앱에 보인다
     updated_by = Column(String(100), nullable=True)
     updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)

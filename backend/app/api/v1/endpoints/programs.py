@@ -40,7 +40,8 @@ def family_program(month: str = Query(...), db: Session = Depends(get_db),
     return ApiResponse(success=True, data={
         "month": month, "published_months": published,
         "days": (row.days or {}) if row else None,
-        "notes": (row.notes or []) if row else [],
+        # 내부 운영 규칙(notes)은 보호자에게 노출하지 않는다 — 보호자 안내 메모만
+        "notes": ([ln for ln in (row.public_memo or "").split("\n") if ln.strip()]) if row else [],
     })
 
 
@@ -132,6 +133,7 @@ def get_schedule(month: str = Query(...), db: Session = Depends(get_db),
     return ApiResponse(success=True, data=None if not row else {
         "month": row.month, "days": row.days or {}, "published": bool(row.published),
         "notes": row.notes or [],
+        "public_memo": row.public_memo or "",
         "updated_by": row.updated_by,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
     })
@@ -195,6 +197,10 @@ class NotesBody(BaseModel):
     notes: list
 
 
+class PublicMemoBody(BaseModel):
+    memo: str = ""
+
+
 @router.patch("/schedule/{month}/notes")
 def edit_notes(month: str, body: NotesBody, db: Session = Depends(get_db),
                current_user: User = Depends(_editor)):
@@ -206,6 +212,19 @@ def edit_notes(month: str, body: NotesBody, db: Session = Depends(get_db),
     _log(db, month, "수정", current_user, summary="운영 규칙 안내 수정")
     db.commit()
     return ApiResponse(success=True, data={"notes": row.notes})
+
+
+@router.patch("/schedule/{month}/public-memo")
+def edit_public_memo(month: str, body: PublicMemoBody, db: Session = Depends(get_db),
+                     user: User = Depends(_editor)):
+    """보호자 안내 메모 — 보호자앱·공식 웹에 노출되는 건 이것뿐."""
+    row = db.query(ProgramMonth).filter(ProgramMonth.month == month).first()
+    if not row:
+        raise HTTPException(404, "해당 월 일정표가 없습니다.")
+    row.public_memo = (body.memo or "").strip()[:2000] or None
+    row.updated_by = getattr(user, "name", None)
+    db.commit()
+    return ApiResponse(success=True, data={"public_memo": row.public_memo or ""})
 
 
 class TimesBody(BaseModel):
