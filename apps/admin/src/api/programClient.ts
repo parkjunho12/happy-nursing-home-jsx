@@ -11,6 +11,7 @@ export interface ProgramMonthData {
   month: string
   days: Record<string, ProgramEntry[]>
   notes?: string[]
+  public_memo?: string
   published: boolean
   updated_by?: string | null
   updated_at?: string | null
@@ -54,6 +55,8 @@ export const programAPI = {
     apiClient.put(`${BASE}/groups`, { groups, religion }).then(unwrap<{ group_count: number }>),
   editNotes: (month: string, notes: string[]) =>
     apiClient.patch(`${BASE}/schedule/${month}/notes`, { notes }).then(unwrap<{ notes: string[] }>),
+  editPublicMemo: (month: string, memo: string) =>
+    apiClient.patch(`${BASE}/schedule/${month}/public-memo`, { memo }).then(unwrap<{ public_memo: string }>),
   editDay: (month: string, day: number, entries: ProgramEntry[]) =>
     apiClient.put(`${BASE}/schedule/${month}/day/${day}`, { entries }).then(unwrap<{ entries: ProgramEntry[] }>),
   times: () => apiClient.get(`${BASE}/times`).then(unwrap<{ times: ProgramTime[] }>).then(r => r.times),

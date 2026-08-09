@@ -30,6 +30,7 @@ export default function ProgramPage() {
   const [busy, setBusy] = useState<'sch' | null>(null)
   const [tab, setTab] = useState<'schedule' | 'groups'>('schedule')
   const [notesEdit, setNotesEdit] = useState<string | null>(null)   // 편집 중 텍스트(줄 단위)
+  const [memoEdit, setMemoEdit] = useState<string | null>(null)     // 보호자 안내 메모 편집
   // 진행 시간 목록('10:00~10:40') — 일자 수정 드롭다운에 쓰인다
   const [times, setTimes] = useState<ProgramTime[]>([])
   const [residents, setResidents] = useState<any[]>([])   // 수급자 등록 기준 분류의 원천
@@ -547,11 +548,29 @@ export default function ProgramPage() {
         </p>
       )}
 
-      {/* 운영 규칙 안내 — 엑셀 오른쪽 메모가 그대로 들어온다 */}
+      {/* 보호자 안내 메모 — 보호자앱·공식 웹에 노출되는 건 이것뿐 */}
       {data && (
-        <div className="mt-4 bg-violet-50/50 border border-violet-100 rounded-2xl p-4">
+        <div className="mt-4 bg-emerald-50/50 border border-emerald-200 rounded-2xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <h2 className="text-sm font-bold text-emerald-800">보호자 안내 메모</h2>
+            <span className="text-[10px] font-bold text-emerald-600 bg-white border border-emerald-200 px-1.5 py-0.5 rounded-full">보호자앱 · 웹 노출</span>
+            <button onClick={() => setMemoEdit((data as any).public_memo ?? '')}
+              className="ml-auto text-[11px] font-semibold text-emerald-600 hover:underline print:hidden">수정</button>
+          </div>
+          {((data as any).public_memo ?? '').trim() === ''
+            ? <p className="text-xs text-gray-400">아직 없음 — 보호자님께 보여드릴 안내를 적어주세요 (예: 이번 달 특별 프로그램, 준비물)</p>
+            : <div className="space-y-0.5">{String((data as any).public_memo).split('\n').filter(Boolean).map((n, i) => (
+                <p key={i} className="text-xs text-gray-700 leading-relaxed">{n}</p>
+              ))}</div>}
+        </div>
+      )}
+
+      {/* 운영 규칙 안내 — 내부 참고용, 외부 비노출 */}
+      {data && (
+        <div className="mt-3 bg-violet-50/50 border border-violet-100 rounded-2xl p-4">
           <div className="flex items-center gap-2 mb-2">
             <h2 className="text-sm font-bold text-violet-800">운영 규칙 안내</h2>
+            <span className="text-[10px] font-bold text-gray-400 bg-white border border-gray-200 px-1.5 py-0.5 rounded-full">내부용 — 보호자에게 안 보임</span>
             <button onClick={() => setNotesEdit((data.notes ?? []).join('\n'))}
               className="ml-auto text-[11px] font-semibold text-violet-500 hover:underline print:hidden">수정</button>
           </div>
@@ -730,6 +749,24 @@ export default function ProgramPage() {
         </div>
       )}
 
+      {tab === 'schedule' && memoEdit !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setMemoEdit(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-5" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-bold text-gray-800 mb-1">보호자 안내 메모</h3>
+            <p className="text-[11px] text-gray-400 mb-2">보호자앱과 공식 웹 프로그램표 아래에 그대로 보입니다 — 내부 규칙은 적지 마세요.</p>
+            <textarea value={memoEdit} onChange={e => setMemoEdit(e.target.value)} rows={8}
+              placeholder={'예)\n이번 달에는 가을 소풍 프로그램이 있어요 🍂\n프로그램은 날씨에 따라 변경될 수 있습니다'}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl leading-relaxed" />
+            <div className="flex gap-2 mt-3">
+              <button onClick={async () => {
+                try { await programAPI.editPublicMemo(ym, memoEdit); setMemoEdit(null); load() }
+                catch (e2: any) { alert(e2?.response?.data?.detail ?? '저장 실패') }
+              }} className="flex-1 bg-emerald-600 text-white rounded-xl py-2.5 text-sm font-bold">저장</button>
+              <button onClick={() => setMemoEdit(null)} className="flex-1 border border-gray-200 text-gray-600 rounded-xl py-2.5 text-sm">취소</button>
+            </div>
+          </div>
+        </div>
+      )}
       {tab === 'schedule' && notesEdit !== null && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setNotesEdit(null)}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-4" onClick={e => e.stopPropagation()}>
