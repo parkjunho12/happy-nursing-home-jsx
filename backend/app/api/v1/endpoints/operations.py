@@ -276,6 +276,38 @@ def expense_candidates(year: int, db: Session = Depends(get_db), _: User = Depen
     return ApiResponse(success=True, data=out)
 
 
+@router.get("/expense-matrix")
+def expense_matrix(year: int, db: Session = Depends(get_db), _: User = Depends(_guard)):
+    """승인된 지출결의를 계정과목×월로 집계 — 납부 대장 아래 '계약 외 운영 지출'로 그대로 보여준다.
+
+    수동으로 대장에 가져간 건(expense_id 연동)은 이중 집계를 막기 위해 뺀다.
+    """
+    from app.models.expense import ExpenseRequest
+    linked = {e for (e,) in db.query(OperationPayment.expense_id)
+              .filter(OperationPayment.expense_id.isnot(None)).all()}
+    rows = (db.query(ExpenseRequest)
+              .filter(ExpenseRequest.status == "approved").all())
+    out: dict = {}
+    for r in rows:
+        if r.id in linked:
+            continue
+        base_dt = r.paid_at or r.approved_at or r.created_at
+        if not base_dt:
+            continue
+        ym = base_dt.astimezone(KST_OP).strftime("%Y-%m")
+        if not ym.startswith(str(year)):
+            continue
+        cat = r.category or "기타"
+        cell = out.setdefault(cat, {}).setdefault(ym, {"amount": 0, "count": 0})
+        cell["amount"] += r.amount or 0
+        cell["count"] += 1
+    data = [{"category": c, "months": mm,
+             "total": sum(v["amount"] for v in mm.values())}
+            for c, mm in out.items()]
+    data.sort(key=lambda x: -x["total"])
+    return ApiResponse(success=True, data=data)
+
+
 class ImportExpenseBody(BaseModel):
     expense_id: str
     item_id: str

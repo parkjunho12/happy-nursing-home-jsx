@@ -43,12 +43,19 @@ export const operationsAPI = {
 
   seed: () => apiClient.post(`${BASE}/seed`).then(unwrap<{ contracts: number; items: number; payments: number }>),
 
+  expenseMatrix: (year: number) =>
+    apiClient.get(`${BASE}/expense-matrix`, { params: { year } }).then(unwrap<ExpenseMatrixRow[]>),
   expenseCandidates: (year: number) =>
     apiClient.get(`${BASE}/expense-candidates`, { params: { year } }).then(unwrap<ExpenseCandidate[]>),
   importExpense: (b: { expense_id: string; item_id: string; year_month?: string; paid_on?: string }) =>
     apiClient.post(`${BASE}/import-expense`, b).then(unwrap<{ id: string }>),
 }
 
+export interface ExpenseMatrixRow {
+  category: string
+  months: Record<string, { amount: number; count: number }>
+  total: number
+}
 export interface ExpenseCandidate {
   id: string; title: string; amount: number; vendor?: string | null
   category: string; payment_method?: string | null

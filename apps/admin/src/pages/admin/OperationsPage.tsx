@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth'
 import {
-  operationsAPI, type OpContract, type OpPayItem, type OpPaymentsMap, type OpPeriod, type ExpenseCandidate,
+  operationsAPI, type OpContract, type OpPayItem, type OpPaymentsMap, type OpPeriod, type ExpenseMatrixRow,
 } from '@/api/operationsClient'
 
 /**
@@ -290,8 +290,7 @@ export default function OperationsPage() {
         </>
       ) : (
         <PaymentsTab items={items} pays={pays} year={year} setYear={setYear} yearTotal={yearTotal}
-          onCell={(item, ym) => setCell({ item, ym })} onEditItem={setEditItem} onAddItem={() => setEditItem('new')}
-          onImported={load} />
+          onCell={(item, ym) => setCell({ item, ym })} onEditItem={setEditItem} onAddItem={() => setEditItem('new')} />
       )}
 
       {editC && <ContractModal existing={editC === 'new' ? undefined : editC} onClose={() => setEditC(null)} onSaved={load} />}
@@ -303,15 +302,22 @@ export default function OperationsPage() {
 }
 
 // ── 납부 대장 ─────────────────────────────────────────────────────────────
-function PaymentsTab({ items, pays, year, setYear, yearTotal, onCell, onEditItem, onAddItem, onImported }: {
+function PaymentsTab({ items, pays, year, setYear, yearTotal, onCell, onEditItem, onAddItem }: {
   items: OpPayItem[]; pays: OpPaymentsMap; year: number; setYear: (y: number) => void; yearTotal: number
   onCell: (item: OpPayItem, ym: string) => void; onEditItem: (i: OpPayItem) => void; onAddItem: () => void
-  onImported: () => void
 }) {
   const months = Array.from({ length: 12 }, (_, i) => i + 1)
   const now = new Date()
   const nowYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   const grpOf = (i: OpPayItem) => (i.grp && PAY_GROUPS.includes(i.grp as any)) ? i.grp : '기타'
+  // 지출결의(승인) — 계정과목×월 자동 집계, 버튼 없이 바로 보인다
+  const [expRows, setExpRows] = useState<ExpenseMatrixRow[]>([])
+  useEffect(() => { operationsAPI.expenseMatrix(year).then(setExpRows).catch(() => setExpRows([])) }, [year])
+  const expMonthTotal = (m: number) => {
+    const ym = `${year}-${String(m).padStart(2, '0')}`
+    return expRows.reduce((a, r) => a + (r.months[ym]?.amount ?? 0), 0)
+  }
+  const expYearTotal = expRows.reduce((a, r) => a + r.total, 0)
   const active = items.filter(i => i.active)
   const thisMonthTotal = active.reduce((a, it) => a + (pays[it.id]?.[nowYm] ?? []).reduce((x, p) => x + p.amount, 0), 0)
   const missedCount = active.filter(i => i.section === '정기').reduce((a, it) => {
@@ -348,9 +354,6 @@ function PaymentsTab({ items, pays, year, setYear, yearTotal, onCell, onEditItem
           <p className={`text-xl font-black leading-8 ${missedCount ? 'text-rose-600' : 'text-gray-800'}`}>{missedCount}<span className="text-sm font-bold ml-0.5 opacity-60">칸</span></p>
         </div>
       </div>
-
-      {/* 지출결의 가져오기 — 승인된 건을 원클릭으로 납부 대장에 */}
-      <ExpenseInbox items={items} year={year} onImported={onImported} />
 
       {/* 영역별 연간 소계 카드 */}
       <div className="flex flex-wrap gap-1.5 mb-4">
@@ -455,104 +458,79 @@ function PaymentsTab({ items, pays, year, setYear, yearTotal, onCell, onEditItem
         )
       })}
 
-      {/* 전체 합계 */}
+      {/* 계약 외 운영 지출 — 지출결의(최종 승인) 자동 집계, 계정과목별 */}
+      {expRows.length > 0 && (
+        <div className="mb-6">
+          <h2 className="flex items-center gap-1.5 text-[12px] font-bold text-gray-600 mb-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-orange-500" /> 계약 외 운영 지출
+            <span className="font-semibold text-gray-400">— 지출결의 승인 건 자동 집계 (계정과목별)</span>
+            <span className="ml-auto text-[11px] font-black text-gray-500 tabular-nums">연간 {fmt(expYearTotal)}원</span>
+          </h2>
+          <div className="bg-white rounded-2xl border border-orange-100 shadow-sm overflow-x-auto">
+            <table className="border-collapse min-w-[1020px] w-full">
+              <thead>
+                <tr className="text-[10.5px] font-bold text-gray-400">
+                  <th className="sticky left-0 bg-white px-3 py-2.5 text-left border-b border-r border-gray-100 min-w-[160px] z-10">계정과목</th>
+                  {months.map(m => (
+                    <th key={m} className={`px-1 py-2.5 text-center border-b border-gray-100 min-w-[76px] ${`${year}-${String(m).padStart(2, '0')}` === nowYm ? 'bg-amber-50 text-amber-600' : ''}`}>{m}월</th>
+                  ))}
+                  <th className="px-2.5 py-2.5 text-right border-b border-gray-100 min-w-[92px]">연간</th>
+                </tr>
+              </thead>
+              <tbody>
+                {expRows.map((r, ri) => (
+                  <tr key={r.category} className={ri % 2 ? 'bg-gray-50/40' : ''}>
+                    <td className={`sticky left-0 px-3 py-1.5 border-b border-r border-gray-100 z-10 ${ri % 2 ? 'bg-gray-50' : 'bg-white'}`}>
+                      <p className="text-[12px] font-bold text-gray-800 leading-tight">{r.category}</p>
+                      <p className="text-[10px] text-gray-400 leading-tight">지출결의</p>
+                    </td>
+                    {months.map(m => {
+                      const ym = `${year}-${String(m).padStart(2, '0')}`
+                      const cell = r.months[ym]
+                      return (
+                        <td key={m} className={`px-1 py-1.5 text-center border-b border-gray-50 align-middle ${ym === nowYm ? 'bg-amber-50/60' : ''}`}>
+                          {cell ? (
+                            <div>
+                              <p className="text-[11px] font-bold text-gray-800 leading-tight tabular-nums">{fmt(cell.amount)}</p>
+                              {cell.count > 1 && <p className="text-[9px] text-gray-400 leading-tight">{cell.count}건</p>}
+                            </div>
+                          ) : <span className="text-gray-100 text-[10px]">·</span>}
+                        </td>
+                      )
+                    })}
+                    <td className="px-2.5 py-1.5 text-right border-b border-gray-50 text-[11px] font-bold text-gray-600 whitespace-nowrap tabular-nums">{fmt(r.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-orange-50 text-[10.5px] font-black text-orange-700 border-t border-orange-100">
+                  <td className="sticky left-0 bg-orange-50 px-3 py-2 border-r border-orange-100 z-10">지출결의 소계</td>
+                  {months.map(m => <td key={m} className="px-1 py-2 text-center tabular-nums">{expMonthTotal(m) ? fmt(expMonthTotal(m)) : <span className="text-orange-200">·</span>}</td>)}
+                  <td className="px-2.5 py-2 text-right tabular-nums">{fmt(expYearTotal)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* 전체 합계 — 납부 대장 + 지출결의 */}
       <div className="bg-slate-800 text-white rounded-2xl shadow-sm overflow-x-auto mb-2">
         <table className="border-collapse min-w-[1020px] w-full">
           <tbody>
             <tr className="text-[11px] font-bold">
-              <td className="sticky left-0 bg-slate-800 px-3 py-3 border-r border-slate-700 min-w-[160px] z-10">전체 월 합계</td>
+              <td className="sticky left-0 bg-slate-800 px-3 py-3 border-r border-slate-700 min-w-[160px] z-10">전체 월 합계 <span className="font-semibold opacity-50">대장+지출결의</span></td>
               {months.map(m => {
-                const t = active.reduce((a, it) => a + cellSum(it.id, m), 0)
+                const t = active.reduce((a, it) => a + cellSum(it.id, m), 0) + expMonthTotal(m)
                 return <td key={m} className="px-1 py-3 text-center min-w-[76px] tabular-nums">{t ? fmt(t) : <span className="opacity-20">·</span>}</td>
               })}
-              <td className="px-2.5 py-3 text-right min-w-[92px] tabular-nums font-black">{fmt(yearTotal)}</td>
+              <td className="px-2.5 py-3 text-right min-w-[92px] tabular-nums font-black">{fmt(yearTotal + expYearTotal)}</td>
             </tr>
           </tbody>
         </table>
       </div>
-      <p className="text-[11px] text-gray-400">분홍 칸 = 정기 항목인데 납부 기록이 없는 지난달 · 영역은 항목을 눌러 수정할 수 있습니다</p>
+      <p className="text-[11px] text-gray-400">분홍 칸 = 정기 항목인데 납부 기록이 없는 지난달 · 「계약 외 운영 지출」은 지출결의 최종 승인 건이 자동으로 집계됩니다</p>
     </>
-  )
-}
-
-// ── 지출결의 가져오기 인박스 ────────────────────────────────────────────────
-// 계정과목 → 납부 항목 추천 매칭 (이름·업체 겹침 우선, 없으면 계정과목 키워드)
-const CAT_HINT: Record<string, string[]> = {
-  '공과금(전기·수도·가스)': ['전기', '가스', '상하수도'], '통신비': ['인터넷', '전화', 'KT'],
-  '식자재비': ['급식'], '프로그램·행사비': ['프로그램'], '세금과공과': ['세금'],
-  '지급수수료': ['회계'], '시설관리비': ['소독', 'CCTV', '소방'], '의약품·위생재료비': ['약국', '기저귀'],
-}
-function ExpenseInbox({ items, year, onImported }: { items: OpPayItem[]; year: number; onImported: () => void }) {
-  const [cands, setCands] = useState<ExpenseCandidate[]>([])
-  const [open, setOpen] = useState(false)
-  const [pick, setPick] = useState<Record<string, string>>({})   // expense_id → item_id
-  const [busy, setBusy] = useState<string | null>(null)
-  const load = () => operationsAPI.expenseCandidates(year).then(setCands).catch(() => setCands([]))
-  useEffect(() => { load() }, [year]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const suggest = (c: ExpenseCandidate): string => {
-    const act = items.filter(i => i.active)
-    const byName = act.find(i =>
-      (c.vendor && (i.vendor ?? '').includes(c.vendor)) ||
-      (c.vendor && c.vendor.includes(i.category)) ||
-      c.title.includes(i.category))
-    if (byName) return byName.id
-    for (const kw of CAT_HINT[c.category] ?? []) {
-      const hit = act.find(i => i.category.includes(kw) || (i.vendor ?? '').includes(kw))
-      if (hit) return hit.id
-    }
-    return ''
-  }
-  if (cands.length === 0) return null
-  return (
-    <div className="mb-4 rounded-2xl border border-indigo-200 bg-indigo-50/50 overflow-hidden">
-      <button onClick={() => setOpen(v => !v)} className="w-full flex items-center gap-2 px-4 py-3 text-left">
-        <span className="w-6 h-6 rounded-lg bg-indigo-600 text-white text-[11px] font-black flex items-center justify-center">{cands.length}</span>
-        <span className="text-sm font-bold text-indigo-800">지출결의에서 가져올 수 있는 건 {cands.length}건</span>
-        <span className="text-[11px] text-indigo-400">— 승인 완료된 지출을 납부 대장에 원클릭 기록 (이중 입력 방지)</span>
-        <span className="ml-auto text-indigo-300 text-xs">{open ? '접기 ▴' : '펼치기 ▾'}</span>
-      </button>
-      {open && (
-        <ul className="px-3 pb-3 space-y-1.5">
-          {cands.map(c => {
-            const sel = pick[c.id] ?? suggest(c)
-            return (
-              <li key={c.id} className="flex items-center gap-2 flex-wrap bg-white rounded-xl border border-indigo-100 px-3 py-2">
-                <div className="min-w-0 flex-1">
-                  <p className="text-[12.5px] font-bold text-gray-800 truncate">
-                    {c.title}
-                    <span className="ml-1.5 font-black text-indigo-700 tabular-nums">{c.amount.toLocaleString()}원</span>
-                  </p>
-                  <p className="text-[10px] text-gray-400 truncate">
-                    {c.category}{c.vendor ? ` · ${c.vendor}` : ''} · {Number(c.year_month.slice(5, 7))}월 {c.paid_on}
-                    {c.paid ? ' 지급됨' : ' 승인됨'}{c.requester ? ` · ${c.requester} 신청` : ''}
-                  </p>
-                </div>
-                <select value={sel} onChange={e => setPick(p => ({ ...p, [c.id]: e.target.value }))}
-                  className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 max-w-[180px]">
-                  <option value="">납부 항목 선택…</option>
-                  {items.filter(i => i.active).map(i => (
-                    <option key={i.id} value={i.id}>{i.category}{i.vendor ? ` (${i.vendor})` : ''}</option>
-                  ))}
-                </select>
-                <button disabled={!sel || busy === c.id}
-                  onClick={async () => {
-                    setBusy(c.id)
-                    try {
-                      await operationsAPI.importExpense({ expense_id: c.id, item_id: sel })
-                      await load(); onImported()
-                    } catch (e: any) { alert(e?.response?.data?.detail ?? '가져오기 실패') }
-                    finally { setBusy(null) }
-                  }}
-                  className="text-xs font-bold px-3 py-1.5 rounded-lg bg-indigo-600 text-white disabled:opacity-40 hover:bg-indigo-700">
-                  {busy === c.id ? '기록 중…' : '대장에 기록'}
-                </button>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-    </div>
   )
 }
 
