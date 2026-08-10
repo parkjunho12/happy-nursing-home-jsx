@@ -299,6 +299,7 @@ export function ResidentForm({ existing, onClose }: { existing?: LtcResident; on
       else await addResident({...form, careGradeStartDate, certifications, contract_lines:auto.contract, plan_lines:auto.plan, eval_lines:auto.eval, status:'active', intakeFlags: flags} as any)
       onClose()
     }
+    catch (err: any) { alert(err?.response?.data?.detail ?? '저장에 실패했습니다.') }
     finally { setLoading(false) }
   }
 

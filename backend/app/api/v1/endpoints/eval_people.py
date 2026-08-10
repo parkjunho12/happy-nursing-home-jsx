@@ -38,6 +38,31 @@ def list_ltc_residents(db: Session = Depends(get_db), _: User = Depends(get_curr
     return ApiResponse(success=True, data=[LtcResidentOut.model_validate(r).model_dump() for r in rows])
 
 
+def _check_room_capacity(db: Session, floor, room, exclude_id=None):
+    """호실 정원 검증 — 등록·수정 양쪽에서. 설정에 없는 호실은 검사하지 않는다(구버전 자유 입력 호환)."""
+    if not room:
+        return
+    try:
+        from app.models.room import RoomConfig
+    except Exception:
+        return
+    cfg = (db.query(RoomConfig)
+             .filter(RoomConfig.floor == (floor or ""), RoomConfig.room == room,
+                     RoomConfig.active == True).first())  # noqa: E712
+    if not cfg:
+        return
+    q = db.query(LtcResident).filter(
+        LtcResident.status.in_(["active", "pending"]),
+        LtcResident.room == room, LtcResident.floor == (floor or ""))
+    if exclude_id:
+        q = q.filter(LtcResident.id != exclude_id)
+    n = q.count()
+    cap = cfg.capacity or 4
+    if n >= cap:
+        raise HTTPException(409, f"{floor} {room}호는 정원 {cap}명이 이미 찼습니다. "
+                                 f"먼저 기존 어르신을 다른 방으로 옮기거나 설정에서 정원을 조정해주세요.")
+
+
 @residents_router.post("", response_model=ApiResponse, status_code=201)
 def create_ltc_resident(
     payload: LtcResidentCreate,
@@ -45,6 +70,7 @@ def create_ltc_resident(
     _: User = Depends(get_current_user),
 ):
     data = payload.model_dump()
+    _check_room_capacity(db, data.get("floor"), data.get("room"))
     certifications_in = data.pop("certifications", None)
     contract_in = data.pop("contract_lines", None)
     plan_in = data.pop("plan_lines", None)
@@ -151,6 +177,10 @@ def update_ltc_resident(
     r = db.query(LtcResident).filter(LtcResident.id == rid).first()
     if not r:
         raise HTTPException(404, "Not found")
+    # 방 변경이면 정원부터 확인
+    if payload.room is not None and payload.room:
+        _check_room_capacity(db, payload.floor if payload.floor is not None else r.floor,
+                             payload.room, exclude_id=rid)
     before = {k: getattr(r, k, None) for k in GROUP_LOG_FIELDS}
     for k, v in payload.model_dump(exclude_none=True).items():
         setattr(r, k, v)
