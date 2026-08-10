@@ -31,11 +31,13 @@ def occupancy(db: Session = Depends(get_db), _: User = Depends(get_current_user)
     """층 → 호실 → 침대 현황. 어르신 등록 화면의 침대 그림이 이걸 그린다."""
     configs = (db.query(RoomConfig).filter(RoomConfig.active == True)  # noqa: E712
                .order_by(RoomConfig.floor, RoomConfig.order, RoomConfig.room).all())
-    residents = db.query(LtcResident).filter(LtcResident.status == "active").all()
+    # 입소 예정(pending)도 침대를 점유한 것으로 본다 — 예정자 자리에 이중 배정 방지
+    residents = db.query(LtcResident).filter(LtcResident.status.in_(["active", "pending"])).all()
     by_room: dict = {}
     for r in residents:
         if r.room:
-            by_room.setdefault((r.floor or "", r.room), []).append(r.name)
+            label = r.name + (" (예정)" if r.status == "pending" else "")
+            by_room.setdefault((r.floor or "", r.room), []).append(label)
 
     floors: dict = {}
     for c in configs:

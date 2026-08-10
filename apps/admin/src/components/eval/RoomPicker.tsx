@@ -46,7 +46,13 @@ export default function RoomPicker({ current, onPick, onClose }: {
           <h3 className="text-sm font-bold text-gray-800">
             {floor ? `${floor.floor} — 호실 선택` : '층 선택'}
           </h3>
-          <button onClick={onClose} className="ml-auto text-gray-300 hover:text-gray-500"><X size={18} /></button>
+          {(current?.floor || current?.room) && (
+            <button onClick={() => onPick('', '')}
+              className="ml-auto text-[11px] font-bold text-red-400 border border-red-200 px-2 py-1 rounded-lg hover:bg-red-50">
+              배정 해제
+            </button>
+          )}
+          <button onClick={onClose} className={`${(current?.floor || current?.room) ? '' : 'ml-auto '}text-gray-300 hover:text-gray-500`}><X size={18} /></button>
         </div>
 
         {floors === null ? (
