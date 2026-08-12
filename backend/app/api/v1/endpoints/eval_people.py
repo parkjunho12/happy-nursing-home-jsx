@@ -11,6 +11,9 @@ from app.schemas.eval import (
     LtcStaffCreate, LtcStaffUpdate, LtcStaffOut, ResignRequest,
 )
 from app.schemas.response import ApiResponse
+
+import logging
+logger = logging.getLogger(__name__)
 from typing import List
 
 residents_router = APIRouter()
@@ -140,6 +143,12 @@ def create_ltc_resident(
     except Exception:
         db.rollback()
 
+    # 등록과 동시에 이번 달 보호자 앨범 생성 (실패해도 등록은 성공)
+    try:
+        from app.services.monthly_albums import ensure_album_for_resident
+        ensure_album_for_resident(db, r.id, r.name)
+    except Exception:
+        logger.warning("등록 시 앨범 생성 실패: %s", r.name)
     return ApiResponse(success=True, data=LtcResidentOut.model_validate(r).model_dump())
 
 

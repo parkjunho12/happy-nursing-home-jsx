@@ -287,13 +287,20 @@ export default function EvalAlbumPage() {
     )
   }, [guardians, guardianSearch, floorFilter, floorOf])
 
+  // 층 필터가 걸리면 요약 카드·탭 카운트·월 카운트 전부 그 층 기준으로
+  const floorAlbums = useMemo(() =>
+    floorFilter ? albums.filter(a => (floorOf[a.resident_id] ?? '미지정') === floorFilter) : albums,
+    [albums, floorFilter, floorOf])
+  const floorGuardians = useMemo(() =>
+    floorFilter ? guardians.filter(g => g.residents.some(r => (floorOf[r.id] ?? '미지정') === floorFilter)) : guardians,
+    [guardians, floorFilter, floorOf])
   const overview = useMemo(() => ({
-    total: albums.length,
-    publicCount: albums.filter(a => a.is_public).length,
-    privateCount: albums.filter(a => !a.is_public).length,
-    photos: albums.reduce((sum, a) => sum + (a.media_count || 0), 0),
-    guardians: guardians.length,
-  }), [albums, guardians])
+    total: floorAlbums.length,
+    publicCount: floorAlbums.filter(a => a.is_public).length,
+    privateCount: floorAlbums.filter(a => !a.is_public).length,
+    photos: floorAlbums.reduce((sum, a) => sum + (a.media_count || 0), 0),
+    guardians: floorGuardians.length,
+  }), [floorAlbums, floorGuardians])
 
   return (
     <div className="space-y-5">
@@ -350,7 +357,7 @@ export default function EvalAlbumPage() {
                 tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
               }`}>
               {t === 'albums'
-                ? `앨범 관리${albums.length > 0 ? ` (${albums.length})` : ''}`
+                ? `앨범 관리${floorAlbums.length > 0 ? ` (${floorAlbums.length})` : ''}`
                 : t === 'guardians' ? '보호자 계정' : '참여도'}
             </button>
           ))}
@@ -461,7 +468,7 @@ export default function EvalAlbumPage() {
                 setMonthFilter(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
                 setPage(1)
               }
-              const countInMonth = monthFilter ? albums.filter(a => monthKeyOf(a) === monthFilter).length : albums.length
+              const countInMonth = monthFilter ? floorAlbums.filter(a => monthKeyOf(a) === monthFilter).length : floorAlbums.length
               return (
                 <div className="shrink-0 inline-flex items-center h-10 border border-gray-200 rounded-xl bg-white overflow-hidden">
                   <button onClick={() => moveMonth(-1)} aria-label="이전 달"
@@ -1810,12 +1817,20 @@ function EngagementPanel({ floorFilter, floorOf }: { floorFilter: string; floorO
   }, [days])
   useEffect(() => { load() }, [load])
 
-  const s = data?.summary
   const allAlbums = data?.albums ?? []
-  // 층 필터 — 앨범의 수급자 층 기준 (열람 요약 카드는 전체 기준 유지)
+  // 층 필터 — 앨범의 수급자 층 기준
   const albums = floorFilter
     ? allAlbums.filter((a: any) => a.resident_id && (floorOf[a.resident_id] ?? '미지정') === floorFilter)
     : allAlbums
+  // 요약 카드도 층 기준으로 — 열람 보호자는 앨범별 ID를 모아 중복 없이 센다
+  const s = floorFilter
+    ? {
+        total_opens: albums.reduce((a: number, x: any) => a + (x.opens ?? 0), 0),
+        total_photo_views: albums.reduce((a: number, x: any) => a + (x.photo_views ?? 0), 0),
+        total_downloads: albums.reduce((a: number, x: any) => a + (x.downloads ?? 0), 0),
+        active_guardians: new Set(albums.flatMap((x: any) => x.guardian_ids ?? [])).size,
+      }
+    : data?.summary
   const fmt = (iso?: string | null) => {
     if (!iso) return '-'
     const d = new Date(iso)
