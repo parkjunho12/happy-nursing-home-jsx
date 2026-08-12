@@ -272,6 +272,17 @@ export function ResidentForm({ existing, onClose }: { existing?: LtcResident; on
       pressureSore: has('[욕창]'),
     } as Record<string, boolean>
   }, [existing, checklists])
+  // 수정 모드에서는 기존 구분을 켠 상태로 시작 — 끄면 저장 시 해당 체크리스트를 삭제한다
+  useEffect(() => {
+    if (existing) setFlags(f => ({ ...f, ...existingFlags } as any))
+  }, [existing, existingFlags])  // eslint-disable-line react-hooks/exhaustive-deps
+  // 플래그별 체크리스트 판별 — 생성 템플릿 제목과 1:1
+  const FLAG_MATCH: Record<string, (t: string) => boolean> = {
+    basicMedical: t => t.includes('[기초의료]'),
+    restraint: t => t.includes('[신체제재]'),
+    positioning: t => ['욕창방지 도구 체크', '체위변경 표 침실 부착', '체위변경 기록지 작성 및 확인'].some(x => t.includes(x)),
+    pressureSore: t => t.includes('[욕창]'),
+  }
   useEffect(() => {
     if (!existing) return
     residentDocAPI.list(true).then(rows => {
@@ -294,6 +305,16 @@ export function ResidentForm({ existing, onClose }: { existing?: LtcResident; on
         if (Object.keys(newFlags).length) {
           const n = await addResidentFlagChecklists(existing.id, newFlags).catch(() => 0)
           if (n > 0) alert(`대상자 구분 체크리스트 ${n}건이 추가되었습니다.`)
+        }
+        // 해제된 구분 → 해당 체크리스트 삭제 (완료 기록 포함)
+        const offFlags = Object.keys(existingFlags).filter(k => existingFlags[k] && !(flags as any)[k])
+        if (offFlags.length) {
+          const targets = checklists.filter(c => c.personId === existing.id
+            && offFlags.some(k => FLAG_MATCH[k]?.(c.title)))
+          if (targets.length && confirm(`해제한 대상자 구분의 체크리스트 ${targets.length}건을 삭제할까요?\n완료된 항목·기록도 함께 지워지며 되돌릴 수 없습니다.`)) {
+            for (const c of targets) await useLtcStore.getState().deleteChecklist(c.id).catch(() => {})
+            alert(`체크리스트 ${targets.length}건을 삭제했습니다.`)
+          }
         }
       }
       else await addResident({...form, careGradeStartDate, certifications, contract_lines:auto.contract, plan_lines:auto.plan, eval_lines:auto.eval, status:'active', intakeFlags: flags} as any)
@@ -396,15 +417,19 @@ export function ResidentForm({ existing, onClose }: { existing?: LtcResident; on
                 ['pressureSore', '욕창 대상자', '욕창 간호 기록 등 2건'],
               ] as const).map(([k, label, hint]) => {
                 const already = !!existingFlags[k]
-                const on = already || (flags as any)[k]
+                const on = (flags as any)[k]
+                const willRemove = already && !on
+                const willAdd = !already && on
                 return (
-                  <button key={k} type="button" disabled={already}
-                    onClick={() => setFlags(f => ({ ...f, [k]: !f[k] }))}
+                  <button key={k} type="button"
+                    onClick={() => setFlags(f => ({ ...f, [k]: !(f as any)[k] }))}
                     className={`text-left px-3 py-2 rounded-xl border text-xs transition-colors ${
-                      already ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-default'
+                      willRemove ? 'bg-red-50 border-red-300 text-red-600'
                       : on ? 'bg-teal-50 border-teal-300 text-teal-800' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
                     <span className="font-bold">{on ? '✓ ' : ''}{label}</span>
-                    <span className="block text-[10px] opacity-70 mt-0.5">{already ? '이미 생성됨' : hint}</span>
+                    <span className="block text-[10px] opacity-70 mt-0.5">
+                      {willRemove ? '저장 시 관련 체크리스트 삭제' : willAdd ? '저장 시 체크리스트 생성' : already ? '적용 중 — 끄면 체크리스트 삭제' : hint}
+                    </span>
                   </button>
                 )
               })}

@@ -1,7 +1,8 @@
-"""월별 보호자 앨범 자동 생성.
+"""월별 보호자 앨범 생성.
 
-매월 초, 재원 중인 어르신 전원에게 그 달 앨범을 만들어준다 (퇴소자 제외).
-인사말은 ChatGPT로 계절·시설 분위기에 맞게 한 번 생성해 전원이 공유한다.
+생성 경로는 두 가지뿐 (매월 1일 자동 루프는 제거):
+ 1) 수급자 등록 시 그 달 앨범 1개 (ensure_album_for_resident)
+ 2) 관리자 화면 「이번 달 앨범 만들기」 버튼 (ensure_monthly_albums)
 멱등: 같은 달 앨범이 이미 있으면 건너뛴다 — 몇 번을 돌려도 안전.
 """
 from __future__ import annotations
@@ -97,3 +98,23 @@ def ensure_monthly_albums(db: Session, year: int, month: int) -> dict:
     return {"year": year, "month": month, "created": len(created),
             "created_names": created, "skipped": skipped,
             "text": month_text}
+
+
+def ensure_album_for_resident(db: Session, resident_id: str, name: str) -> bool:
+    """수급자 등록 직후 — 그 달 앨범이 없으면 하나 만들어준다.
+
+    등록 요청 경로에서 부르므로 AI 호출 없이 폴백 인사말을 쓴다(빠르고 실패 없음)."""
+    from datetime import datetime, timezone, timedelta
+    KST = timezone(timedelta(hours=9))
+    now = datetime.now(KST)
+    m_start = datetime(now.year, now.month, 1, tzinfo=KST)
+    exists = (db.query(Album)
+                .filter(Album.resident_id == resident_id, Album.created_at >= m_start)
+                .first())
+    if exists:
+        return False
+    db.add(Album(id=str(uuid.uuid4()), resident_id=resident_id,
+                 title=f"{now.year}년 {now.month}월 · {name} 어르신",
+                 description=FALLBACK[now.month], is_public=True))
+    db.commit()
+    return True

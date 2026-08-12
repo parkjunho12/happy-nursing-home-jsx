@@ -937,6 +937,7 @@ def album_engagement(days: int = 30, db: Session = Depends(get_db),
             "resident_name": res.name if res else None,
             "opens": d["opens"], "photo_views": d["photos"], "downloads": d["downloads"],
             "unique_guardians": len(d["guardians"]),
+            "guardian_ids": sorted(x for x in d["guardians"] if x),
             "last_viewed_at": last.astimezone(KST).isoformat() if last else None,
         })
     out.sort(key=lambda x: (x["opens"] + x["photo_views"]), reverse=True)
