@@ -61,6 +61,7 @@ import ResidentDetailPage from './pages/eval/ResidentDetailPage'
 import StaffDetailPage from './pages/eval/StaffDetailPage'
 import MealCountPage from './pages/admin/MealCountPage'
 import OperationsPage from './pages/admin/OperationsPage'
+import AdminRoutinePage from './pages/admin/AdminRoutinePage'
 import StaffEducationPage from './pages/StaffEducationPage'
 import WorkGuidePage from './pages/WorkGuidePage'
 import GuidePage from './pages/GuidePage'
@@ -309,6 +310,7 @@ function App() {
             <Route path="meals"                    element={<ExtOr menu="/meals" otherwise={MealRoute}><MealPlanPage /></ExtOr>} />
             <Route path="meal-count"               element={<MealRoute><MealCountPage /></MealRoute>} />
             <Route path="operations"               element={<AdminRoute><OperationsPage /></AdminRoute>} />
+            <Route path="monthly-routines"         element={<AdminRoute><AdminRoutinePage /></AdminRoute>} />
             <Route path="staff-hr"                 element={<StaffAdminRoute><StaffHrPage /></StaffAdminRoute>} />
             <Route path="staffing"                 element={<ManagerRoute><StaffingSimulatorPage /></ManagerRoute>} />
             <Route path="work-schedule"           element={<ManagerRoute><WorkSchedulePage /></ManagerRoute>} />

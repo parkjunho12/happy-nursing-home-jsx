@@ -14,7 +14,8 @@ import { useAuthStore } from '@/store/auth'
 import { isKakaoShareEnabled, shareText } from '@/lib/kakaoShare'
 import { getNavConfig } from '@/components/layout/navConfig'
 import {
-  scheduleAPI, SCHEDULE_CATEGORIES, type ScheduleEvent, type EventInput, type LifecycleEvent, type RenewalEvent, type DocCalEvent, type EduCalEvent,
+  scheduleAPI, SCHEDULE_CATEGORIES, ADMIN_ONLY_CATEGORIES,
+  type ScheduleEvent, type EventInput, type LifecycleEvent, type RenewalEvent, type DocCalEvent, type EduCalEvent,
 } from '../../api/scheduleClient'
 import { recruitmentAPI, type Interview } from '../../api/recruitmentClient'
 
@@ -29,7 +30,7 @@ const hmOf = (iso?: string | null) => {
 const startOfWeek = (d: Date) => { const x = new Date(d); x.setDate(x.getDate() - x.getDay()); x.setHours(0, 0, 0, 0); return x }
 
 /* 카테고리 색상 */
-type CatKey = '방문상담' | '외부방문' | '회의' | '행사' | '외래·병원' | '면회' | '외출' | '외박' | '갱신' | '퇴소' | '기타' | '면접' | '입소' | '입사' | '재계약' | '계약서' | '계획서' | '평가' | '교육' | '생신' | '생일' | '연차촉진'
+type CatKey = '방문상담' | '외부방문' | '회의' | '행사' | '외래·병원' | '면회' | '외출' | '외박' | '갱신' | '퇴소' | '기타' | '관리자' | '면접' | '입소' | '입사' | '재계약' | '계약서' | '계획서' | '평가' | '교육' | '생신' | '생일' | '연차촉진'
 const CAT: Record<CatKey, { dot: string; chip: string; bar: string }> = {
   방문상담: { dot: 'bg-blue-500',   chip: 'bg-blue-50 text-blue-700 border-blue-200',       bar: 'border-l-blue-500 bg-blue-50' },
   외부방문: { dot: 'bg-teal-500',   chip: 'bg-teal-50 text-teal-700 border-teal-200',       bar: 'border-l-teal-500 bg-teal-50' },
@@ -42,6 +43,7 @@ const CAT: Record<CatKey, { dot: string; chip: string; bar: string }> = {
   갱신:    { dot: 'bg-stone-500',  chip: 'bg-stone-100 text-stone-700 border-stone-300',    bar: 'border-l-stone-500 bg-stone-100' },
   퇴소:    { dot: 'bg-slate-500',  chip: 'bg-slate-100 text-slate-600 border-slate-300',    bar: 'border-l-slate-500 bg-slate-100' },
   기타:    { dot: 'bg-gray-400',   chip: 'bg-gray-50 text-gray-600 border-gray-200',       bar: 'border-l-gray-400 bg-gray-50' },
+  관리자:  { dot: 'bg-zinc-800',   chip: 'bg-zinc-100 text-zinc-800 border-zinc-400',     bar: 'border-l-zinc-800 bg-zinc-100' },
   면접:    { dot: 'bg-violet-500', chip: 'bg-violet-50 text-violet-700 border-violet-200', bar: 'border-l-violet-500 bg-violet-50' },
   입소:    { dot: 'bg-rose-500',   chip: 'bg-rose-50 text-rose-600 border-rose-200',       bar: 'border-l-rose-500 bg-rose-50' },
   입사:    { dot: 'bg-cyan-500',   chip: 'bg-cyan-50 text-cyan-700 border-cyan-200',       bar: 'border-l-cyan-500 bg-cyan-50' },
@@ -54,7 +56,7 @@ const CAT: Record<CatKey, { dot: string; chip: string; bar: string }> = {
   생일:    { dot: 'bg-lime-500',    chip: 'bg-lime-50 text-lime-700 border-lime-200',            bar: 'border-l-lime-500 bg-lime-50' },
   연차촉진: { dot: 'bg-fuchsia-500', chip: 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200',     bar: 'border-l-fuchsia-500 bg-fuchsia-50' },
 }
-const ALL_CATS: CatKey[] = ['방문상담', '외부방문', '회의', '행사', '외래·병원', '면회', '외출', '외박', '갱신', '퇴소', '기타', '면접', '입소', '입사', '재계약', '계약서', '계획서', '평가', '교육', '생신', '생일', '연차촉진']
+const ALL_CATS: CatKey[] = ['방문상담', '외부방문', '회의', '행사', '외래·병원', '면회', '외출', '외박', '갱신', '퇴소', '기타', '관리자', '면접', '입소', '입사', '재계약', '계약서', '계획서', '평가', '교육', '생신', '생일', '연차촉진']
 
 // 카테고리마다 근거가 되는 메뉴가 있다 — 그 메뉴를 못 보는 직종은 캘린더에서도 그 정보를 못 본다.
 // null = 일반 일정(캘린더 접근자 전원)
@@ -68,6 +70,7 @@ const CAT_ROUTE: Record<CatKey, string | null> = {
   계약서: '/resident-docs', 계획서: '/resident-docs', 평가: '/resident-docs',
   교육: '/education',
   연차촉진: null,   // 별도 규칙(시설장·ADMIN) — 아래 canPromo로 판정
+  관리자: null,     // 별도 규칙(ADMIN 전용) — visibleCats에서 role로 판정
 }
 
 /* 통합 이벤트 */
@@ -162,6 +165,7 @@ export default function SchedulePage() {
     const routes = new Set<string>(nav.sections.flatMap(sec => sec.items.map(i => i.to)))
     return new Set<CatKey>(ALL_CATS.filter(c =>
       c === '생일' ? authUser?.role === 'ADMIN'
+      : c === '관리자' ? authUser?.role === 'ADMIN'   // ADMIN 전용 — 시설장·대표도 제외
       : c === '연차촉진' ? canPromo
       : (CAT_ROUTE[c] === null || routes.has(CAT_ROUTE[c]!))))
   }, [authUser, canPromo])
@@ -650,6 +654,11 @@ const dayAfter = (n: number) => { const d = new Date(); d.setDate(d.getDate() + 
 function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: string | null; editing?: ScheduleEvent | null; onClose: () => void; onSaved: () => void }) {
   const isEdit = !!editing
   const eStart = editing?.start_at ? new Date(editing.start_at) : null
+  // ADMIN 전용 분류는 ADMIN에게만 선택지로 뜬다 (서버에서도 403으로 막힘)
+  const isAdmin = useAuthStore(s => s.user)?.role === 'ADMIN'
+  const cats = useMemo(
+    () => SCHEDULE_CATEGORIES.filter(c => isAdmin || !ADMIN_ONLY_CATEGORIES.includes(c)),
+    [isAdmin])
   const [category, setCategory] = useState<string>(editing?.category ?? '방문상담')
   const [title, setTitle] = useState(editing?.title ?? '')
   const [date, setDate] = useState(() => (eStart ? ymd(eStart) : presetDate ?? ymd(new Date())))
@@ -781,7 +790,7 @@ function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: strin
         <div>
           <label className="text-xs font-semibold text-gray-500 mb-1.5 block">분류</label>
           <div className="flex flex-wrap gap-1.5">
-            {SCHEDULE_CATEGORIES.map(c => (
+            {cats.map(c => (
               <button key={c} onClick={() => setCategory(c)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${category === c ? (CAT as any)[c].chip : 'bg-white text-gray-400 border-gray-200'}`}>{c}</button>
             ))}

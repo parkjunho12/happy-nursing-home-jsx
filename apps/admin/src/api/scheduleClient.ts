@@ -8,7 +8,10 @@ function unwrap<T>(res: any): T {
 }
 
 // 등록 가능한 분류 — 실제 사용 패턴(외래·면회·외출이 '기타'의 대부분)에서 뽑았다
-export const SCHEDULE_CATEGORIES = ['방문상담', '외부방문', '회의', '행사', '외래·병원', '면회', '외출', '외박', '갱신', '퇴소', '기타'] as const
+// '관리자'는 ADMIN 전용 분류 — 서버에서 다른 직원 응답에는 아예 실리지 않는다.
+export const SCHEDULE_CATEGORIES = ['방문상담', '외부방문', '회의', '행사', '외래·병원', '면회', '외출', '외박', '갱신', '퇴소', '기타', '관리자'] as const
+/** ADMIN(role=ADMIN)만 보고 만들 수 있는 분류 */
+export const ADMIN_ONLY_CATEGORIES: readonly string[] = ['관리자']
 export type ScheduleCategory = (typeof SCHEDULE_CATEGORIES)[number]
 
 export interface ScheduleEvent {

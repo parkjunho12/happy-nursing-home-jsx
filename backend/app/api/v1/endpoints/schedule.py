@@ -25,11 +25,20 @@ router = APIRouter()
 
 _KST = timezone(timedelta(hours=9))
 # 외출·외박은 분리 — 귀원 시점이 다르다 (외출=당일, 외박=다음날 이후)
-CATEGORIES = ["방문상담", "외부방문", "회의", "행사", "외래·병원", "면회", "외출", "외박", "갱신", "퇴소", "기타"]
+CATEGORIES = ["방문상담", "외부방문", "회의", "행사", "외래·병원", "면회", "외출", "외박", "갱신", "퇴소", "기타", "관리자"]
+
+# ADMIN 전용 분류 — 조회·등록·수정·삭제 전부 role=ADMIN만.
+# 화면 필터에만 기대지 않고 서버에서 잘라낸다(다른 직원 응답에 아예 실리지 않음).
+ADMIN_ONLY_CATEGORIES = ("관리자",)
 
 
 # 모든 일정 수정·삭제 가능(관리자급)
 EVENT_ADMIN_POSITIONS = ("대표", "이사")
+
+
+def _is_admin(user: User) -> bool:
+    role = user.role.value if hasattr(user.role, "value") else str(user.role)
+    return role == "ADMIN"
 
 
 def _can_edit_event(user: User, e: ScheduleEvent) -> bool:
@@ -37,6 +46,8 @@ def _can_edit_event(user: User, e: ScheduleEvent) -> bool:
     role = user.role.value if hasattr(user.role, "value") else str(user.role)
     pos = getattr(user, "position", None)
     pos = pos.value if hasattr(pos, "value") else str(pos or "")
+    if e.category in ADMIN_ONLY_CATEGORIES:
+        return role == "ADMIN"
     if role == "ADMIN" or pos in EVENT_ADMIN_POSITIONS:
         return True
     if e.created_by_id and e.created_by_id == user.id:
@@ -105,6 +116,8 @@ def list_events(
     current_user: User = Depends(_require_manager),
 ):
     q = db.query(ScheduleEvent)
+    if not _is_admin(current_user):
+        q = q.filter(ScheduleEvent.category.notin_(ADMIN_ONLY_CATEGORIES))
     if start_date:
         sd = _parse_dt(start_date + "T00:00")
         if sd:
@@ -218,6 +231,8 @@ def create_event(body: EventBody, db: Session = Depends(get_db),
     at = _parse_dt(body.start_at)
     if not at:
         raise HTTPException(status_code=400, detail="일시 형식이 올바르지 않습니다.")
+    if body.category in ADMIN_ONLY_CATEGORIES and not _is_admin(current_user):
+        raise HTTPException(status_code=403, detail="관리자 전용 분류입니다.")
     e = ScheduleEvent(
         category=body.category if body.category in CATEGORIES else "기타",
         title=body.title.strip(), start_at=at, end_at=_parse_dt(body.end_at),
@@ -255,10 +270,12 @@ class EventUpdate(BaseModel):
 def update_event(eid: str, body: EventUpdate, db: Session = Depends(get_db),
                  current_user: User = Depends(_require_manager)):
     e = db.query(ScheduleEvent).filter(ScheduleEvent.id == eid).first()
-    if not e:
+    if not e or (e.category in ADMIN_ONLY_CATEGORIES and not _is_admin(current_user)):
         raise HTTPException(status_code=404, detail="일정을 찾을 수 없습니다.")
     if not _can_edit_event(current_user, e):
         raise HTTPException(status_code=403, detail="본인이 등록한 일정만 수정할 수 있습니다.")
+    if body.category is not None and body.category in ADMIN_ONLY_CATEGORIES and not _is_admin(current_user):
+        raise HTTPException(status_code=403, detail="관리자 전용 분류입니다.")
     if body.category is not None and body.category in CATEGORIES:
         e.category = body.category
     if body.title is not None and body.title.strip():
@@ -293,7 +310,7 @@ def update_event(eid: str, body: EventUpdate, db: Session = Depends(get_db),
 def delete_event(eid: str, db: Session = Depends(get_db),
                  current_user: User = Depends(_require_manager)):
     e = db.query(ScheduleEvent).filter(ScheduleEvent.id == eid).first()
-    if not e:
+    if not e or (e.category in ADMIN_ONLY_CATEGORIES and not _is_admin(current_user)):
         raise HTTPException(status_code=404, detail="일정을 찾을 수 없습니다.")
     if not _can_edit_event(current_user, e):
         raise HTTPException(status_code=403, detail="본인이 등록한 일정만 삭제할 수 있습니다.")
@@ -316,7 +333,7 @@ def mark_returned(eid: str, body: ReturnedBody, db: Session = Depends(get_db),
                   current_user: User = Depends(_require_manager)):
     """실제 귀원 기록 — 어르신이 돌아온 시각을 그때그때 남긴다 (외출·외박·외래)."""
     e = db.query(ScheduleEvent).filter(ScheduleEvent.id == eid).first()
-    if not e:
+    if not e or (e.category in ADMIN_ONLY_CATEGORIES and not _is_admin(current_user)):
         raise HTTPException(404, "일정을 찾을 수 없습니다.")
     if body.clear:
         e.returned_at = None
