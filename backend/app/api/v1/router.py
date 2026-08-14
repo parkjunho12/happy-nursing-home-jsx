@@ -13,6 +13,7 @@ from app.api.v1.endpoints.recruitment import public_router as recruitment_public
 from app.api.v1.endpoints.enteral import router as enteral_router
 from app.api.v1.endpoints.schedule import router as schedule_router
 from app.api.v1.endpoints.expense import router as expense_router
+from app.api.v1.endpoints.admin_routines import router as admin_routines_router
 from app.api.v1.endpoints.albums import admin_router as album_admin_router, family_router as album_family_router
 from app.api.v1.endpoints.facility_news import admin_router as news_admin_router, family_router as news_family_router
 from app.api.v1.endpoints.visits import admin_router as visit_admin_router, family_router as visit_family_router
@@ -132,6 +133,7 @@ api_router.include_router(recruitment_admin_router, prefix="/admin/recruitment",
 api_router.include_router(enteral_router, prefix="/admin/enteral", tags=["admin-enteral"])
 api_router.include_router(schedule_router, prefix="/admin/schedule", tags=["admin-schedule"])
 api_router.include_router(expense_router, prefix="/admin/expense", tags=["admin-expense"])
+api_router.include_router(admin_routines_router, prefix="/admin/routines", tags=["admin-routines"])
 api_router.include_router(news_admin_router,  prefix="/admin",  tags=["admin-news"])
 api_router.include_router(news_family_router, prefix="/family", tags=["family-news"])
 api_router.include_router(visit_family_router, prefix="/family", tags=["family-visits"])

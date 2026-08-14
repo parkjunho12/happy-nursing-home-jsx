@@ -18,6 +18,7 @@ const CAT: Record<string, string> = {
   회의:    'bg-indigo-50 text-indigo-700 border-indigo-200',
   행사:    'bg-pink-50 text-pink-700 border-pink-200',
   기타:    'bg-gray-50 text-gray-600 border-gray-200',
+  관리자:  'bg-zinc-100 text-zinc-800 border-zinc-400',   // ADMIN 전용 — 서버가 타 직원 응답에서 제외
   면접:    'bg-violet-50 text-violet-700 border-violet-200',
   입소:    'bg-rose-50 text-rose-600 border-rose-200',
   입사:    'bg-cyan-50 text-cyan-700 border-cyan-200',

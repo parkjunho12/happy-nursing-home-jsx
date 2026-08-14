@@ -2,7 +2,7 @@ import {
   LayoutDashboard, UserCog, MessageSquare, FileText,
   Star, Settings, ClipboardList, ClipboardCheck, CalendarDays,
   UserRound, ShieldCheck, Sparkles, FileSearch,
-  Image as ImageIcon, Users, BookOpen, PenLine, Megaphone, Bell, CalendarClock, HeartHandshake, Briefcase, Soup, Receipt, GraduationCap,
+  Image as ImageIcon, Users, BookOpen, PenLine, Megaphone, Bell, CalendarClock, CalendarCheck, HeartHandshake, Briefcase, Soup, Receipt, GraduationCap,
   type LucideIcon, AlertTriangle, BarChart3, ChefHat, Landmark,
 } from 'lucide-react'
 
@@ -193,6 +193,8 @@ export function getNavConfig(
           label: '일정 · 소통',
           items: [
             { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
+            // ADMIN 블록에만 있다 — 매달 반복되는 관리자 업무 목록
+            { to: '/monthly-routines', icon: CalendarCheck, label: '월간 업무' },
             { to: '/notices', icon: Bell, label: '내부 공지 관리' },
             { to: '/facility-news', icon: Megaphone, label: '시설소식' },
             { to: '/contacts', icon: MessageSquare, label: '상담 관리' },
