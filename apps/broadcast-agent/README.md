@@ -18,7 +18,7 @@ Admin(예약 등록)  →  서버  →  Broadcast Agent(방송 PC)
 
 ## 1. 서버 준비 (한 번만)
 
-`backend/.env` 에 아래를 넣고 백엔드를 재시작합니다.
+`backend/.env` 에 아래를 넣습니다. (운영 서버는 `/opt/happy/backend/.env`)
 
 ```bash
 # 안내방송
@@ -38,6 +38,17 @@ BROADCAST_MAX_RETRY=2            # 실패한 방송 재시도 횟수
 
 `BROADCAST_ENROLL_CODE` 는 방송 PC를 등록할 때만 쓰는 비밀번호입니다.
 등록이 끝나면 기기별 토큰이 발급되므로, 이후에는 코드를 바꿔도 기존 PC는 계속 동작합니다.
+
+> **반영하려면 재시작이 아니라 재빌드가 필요합니다.**
+> 이 프로젝트는 `Dockerfile` 의 `COPY . .` 로 `.env` 가 이미지 안에 구워집니다.
+> `docker compose restart` 로는 새 값이 들어가지 않습니다.
+> ```bash
+> cd /opt/happy/infra
+> docker compose build backend
+> docker compose up -d --force-recreate backend
+> docker compose exec backend printenv BROADCAST_ENROLL_CODE   # 확인
+> ```
+> `main` 브랜치에 커밋을 푸시하면 배포 워크플로가 같은 일을 자동으로 합니다.
 
 ---
 
