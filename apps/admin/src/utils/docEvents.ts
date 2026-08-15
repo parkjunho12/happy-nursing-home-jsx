@@ -117,7 +117,7 @@ export const fmtMD = (s?: string | null): string => {
 }
 
 // ── 인정서 기반 자동 일시 생성 ─────────────────────────────
-import { addMonths, parseISO, isValid, format } from 'date-fns'
+import { addMonths, addDays, parseISO, isValid, format } from 'date-fns'
 import { type Certification, currentCert } from './cert'
 
 const _pd = (s?: string | null) => { if (!s) return null; const d = parseISO(s); return isValid(d) ? d : null }
@@ -164,8 +164,16 @@ export function autoDocEvents(certs: Certification[], admissionDate?: string | n
         if (jd > S && jd <= E) contract.push({ date: jan, kind: '변경계약', memo: '변경계약' })
       }
     }
-    // 유효기간 종료일 = 갱신계약 (다음 갱신 준비)
-    if (cur.end) contract.push({ date: cur.end, kind: '갱신', memo: '갱신계약' })
+    // 갱신은 인정서 마지막 날이 아니라 '그 다음 날'이다.
+    // 마지막 날까지는 기존 인정서가 살아 있고, 새 인정서·새 계약은 하루도 비지 않게 그 다음 날부터 시작한다.
+    // 그날 계약서만 쓰는 게 아니라 급여제공계획서·결과평가도 새 기준으로 함께 작성한다.
+    if (E) {
+      const renewAt = _f(addDays(E, 1))
+      contract.push({ date: renewAt, kind: '갱신', memo: '갱신계약' })
+      // 계획서·평가에는 '갱신' 구분이 없다 — 새 인정서의 첫 기준일이므로 '기준'으로 남긴다
+      plan.push({ date: renewAt, kind: '기준', memo: '갱신 기준일' })
+      evl.push({ date: renewAt, kind: '기준', memo: '갱신 기준일' })
+    }
     // 6개월 기준 사이클 [S, S+6, ...] ≤ E
     const cycle: string[] = []
     let c2 = S
@@ -188,12 +196,29 @@ export function autoDocEvents(certs: Certification[], admissionDate?: string | n
  * 갱신 인정서를 추가했을 때 이미 적어둔 일시를 지우거나 고치면 안 되므로,
  * 같은 날짜가 이미 있으면 건너뛰고 없는 날짜만 새로 넣는다.
  */
-export function appendAuto(existing: DocEvent[] | undefined, auto: DocEvent[]): { next: DocEvent[]; added: number } {
+export function appendAuto(existing: DocEvent[] | undefined, auto: DocEvent[]): { next: DocEvent[]; added: number; moved: number } {
   const cur = (existing ?? []).map(asEvent)
+
+  // 갱신계약 기준일이 '인정서 마지막 날'에서 '그 다음 날'로 바뀌었다.
+  // 예전 기준으로 저장된 갱신 항목이 그대로 남아 있으면 하루 차이로 두 건이 된다.
+  // 손대지 않은 항목이면 날짜만 옮기고, 이미 처리한 항목이면 건드리지 않는다.
+  const untouched = (e: DocEvent) =>
+    !e.done && !e.status && (!e.memo || e.memo === '갱신계약')
+  let moved = 0
+  const skip = new Set<string>()          // 이관으로 해결돼 새로 넣을 필요가 없는 날짜
+  for (const a of auto) {
+    if (a.kind !== '갱신' || !a.date) continue
+    const prevDay = _f(addDays(_pd(a.date)!, -1))
+    const old = cur.find(e => e.kind === '갱신' && e.date === prevDay)
+    if (!old) continue
+    if (untouched(old)) { old.date = a.date; moved++ }   // 하루 뒤로 이동
+    skip.add(a.date)                                     // 이미 처리한 건이면 새로 만들지 않는다
+  }
+
   const have = new Set(cur.filter(e => e.date).map(e => e.date as string))
-  const add = auto.filter(e => e.date && !have.has(e.date as string))
+  const add = auto.filter(e => e.date && !have.has(e.date as string) && !skip.has(e.date as string))
   const next = [...cur, ...add].sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'))
-  return { next, added: add.length }
+  return { next, added: add.length, moved }
 }
 
 // 자동 생성분과 기존 수동(변화·퇴소) 항목 병합 (routine은 새로 대체, 수동은 보존)
