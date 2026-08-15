@@ -251,22 +251,31 @@ export default function ResidentAssignPage() {
           const list = rows.filter(r => r.floor === f)
           const cur = list.filter(r => (r.admission_date ?? '') <= today).length
           const incom = list.length - cur
+
+          // 37명이 넘으면 한 장에 욱여넣지 않고 장을 나눈다.
+          // 억지로 한 장에 담으면 글자가 11px까지 떨어져 벽에 붙여도 안 보인다.
+          // 나눌 때는 균등하게 — 마지막 장에 두세 명만 남으면 보기 안 좋다.
+          const PER_PAGE_MAX = 36
+          const pageCount = Math.max(1, Math.ceil(list.length / PER_PAGE_MAX))
+          const perPage = Math.ceil(list.length / pageCount)
+          const chunks = Array.from({ length: pageCount },
+            (_, i) => list.slice(i * perPage, (i + 1) * perPage))
+
+          return chunks.map((chunk, ci) => {
           // 호실 바뀔 때마다 음영 교차 — 방 단위가 한눈에 들어온다
           let pv = '__'; let band = 0
           // 한 장(A4)에 들어가는 선에서 최대한 크게. 인원이 적을수록 더 키운다.
           // 현장에서 벽에 붙여놓고 멀리서 보는 표라 글자 크기가 곧 쓸모다.
           // 크기는 A4 한 장 기준으로 실제 인쇄해 재서 정한 값이다(측정 최대치보다 한 단계 여유).
-          // 인원이 늘수록 줄어들지만, 예전 최소 11px 고정보다는 어느 구간에서도 크다.
-          const n = list.length
+          const n = chunk.length
           const sz = n <= 20 ? { f: 17,   p: 8 }
                    : n <= 24 ? { f: 15,   p: 5.5 }
                    : n <= 28 ? { f: 14,   p: 4 }
                    : n <= 32 ? { f: 13,   p: 3 }
-                   : n <= 36 ? { f: 12,   p: 2 }
-                   :           { f: 11,   p: 1.5 }
+                   :           { f: 12,   p: 2 }
           const room = sz.f + 2, head = sz.f - 3   // 호실은 크게, 머리글은 조금 작게
           return (
-            <div key={f} className="asg-print-page">
+            <div key={`${f}-${ci}`} className="asg-print-page">
               {/* 머리글 */}
               <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', borderBottom: '3px solid #0d9488', paddingBottom: '7px', marginBottom: '9px' }}>
                 <div>
@@ -274,7 +283,9 @@ export default function ResidentAssignPage() {
                   <h1 style={{ fontSize: '26px', fontWeight: 900, color: '#111827', margin: '2px 0 0', letterSpacing: '0.08em' }}>담당 어르신 명단</h1>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <span style={{ display: 'inline-block', padding: '5px 18px', borderRadius: 10, background: '#0d9488', color: 'white', fontSize: '21px', fontWeight: 900 }}>{f}</span>
+                  <span style={{ display: 'inline-block', padding: '5px 18px', borderRadius: 10, background: '#0d9488', color: 'white', fontSize: '21px', fontWeight: 900 }}>
+                    {f}{pageCount > 1 && <span style={{ fontSize: '14px', marginLeft: 6, opacity: 0.85 }}>({ci + 1}/{pageCount})</span>}
+                  </span>
                   <p style={{ fontSize: '11px', color: '#6b7280', margin: '4px 0 0' }}>
                     현원 <b style={{ color: '#111827' }}>{cur}명</b>{incom > 0 && <> · 입소 예정 <b style={{ color: '#b45309' }}>{incom}명</b></>} · 출력 {new Date().toLocaleDateString('ko-KR')}
                   </p>
@@ -297,7 +308,7 @@ export default function ResidentAssignPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {list.map(r => {
+                  {chunk.map(r => {
                     const first = r.room !== pv
                     if (first) { pv = r.room; band += 1 }
                     const incoming = (r.admission_date ?? '') > today
@@ -337,6 +348,7 @@ export default function ResidentAssignPage() {
               </p>
             </div>
           )
+          })
         })}
       </div>
       <style>{`
