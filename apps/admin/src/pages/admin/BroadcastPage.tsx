@@ -158,6 +158,22 @@ export default function BroadcastPage() {
         </div>
       )}
 
+      {/* 서버 시계가 틀어지면 화면에 보이는 시각이 실제와 달라진다.
+          방송 자체는 현장 PC 시계로 나가지만, 기록 시각이 어긋나므로 알려준다. */}
+      {dash && typeof dash.server_clock_skew_sec === 'number'
+        && Math.abs(dash.server_clock_skew_sec) >= 60 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <b>서버 시계가 {Math.abs(Math.round(dash.server_clock_skew_sec / 60))}분
+          {dash.server_clock_skew_sec > 0 ? ' 빠릅니다' : ' 느립니다'}.</b>
+          {' '}화면에 표시되는 기록 시각이 실제와 다를 수 있습니다.
+          <span className="block text-xs mt-1 text-amber-700 leading-relaxed">
+            방송은 현장 PC 시계로 나가므로 <b>방송 시각 자체는 정확</b>합니다.
+            서버에서 시간 동기화를 켜주세요:
+            {' '}<code className="text-[11px]">sudo timedatectl set-ntp true</code>
+          </span>
+        </div>
+      )}
+
       {/* 방송 PC 가 꺼져 있으면 예약이 있어도 소리가 안 난다 — 가장 먼저 알린다 */}
       {dash && dash.devices.length === 0 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -477,7 +493,10 @@ function ScheduleModal({ editing, meta, onClose, onSaved }: {
         title: title.trim(), type,
         text: type === 'TTS' ? text.trim() : null,
         media_id: media.id,
-        scheduled_at: immediate ? null : when,
+        // 즉시 방송도 시각을 직접 보낸다. null 로 두면 서버가 자기 시계로 찍는데,
+        // 서버 시계가 틀어져 있으면 목록·이력에 엉뚱한 시각이 남는다.
+        // 관리자 PC 시계가 현장의 실제 시각이므로 이쪽을 기준으로 삼는다.
+        scheduled_at: immediate ? toLocalInput(new Date()) : when,
         repeat_rule: { freq, ...(freq === 'weekly' ? { days } : {}) } as RepeatRule,
         zones: ['ALL'],
         volume, enabled,

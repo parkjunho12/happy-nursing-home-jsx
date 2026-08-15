@@ -188,8 +188,15 @@ def dashboard(db: Session = Depends(get_db), _: User = Depends(_manager)):
     recent = (db.query(BroadcastLog).filter(BroadcastLog.event == "PLAY")
               .order_by(BroadcastLog.created_at.desc()).limit(15).all())
 
+    # 방송 PC 들이 보고한 시계 차이 — 서버 시계가 틀어졌는지 알 수 있는 유일한 단서다.
+    # (서버에는 비교할 기준이 없으므로 현장 PC 의 시계를 참고한다)
+    skews = [d.clock_skew_sec for d in devices
+             if d.clock_skew_sec is not None and _device_view(d, now=now)["online"]]
+    clock_skew = max(skews, key=abs) if skews else None
+
     return ApiResponse(success=True, data={
         "now": now.isoformat(),
+        "server_clock_skew_sec": clock_skew,
         "playing": [{"run_id": r.id, "schedule_id": r.schedule_id, "device_id": r.device_id,
                      "started_at": _iso(r.started_at)} for r in playing],
         "next": ({"at": nxt["at"].isoformat(), **_sched_view(nxt["schedule"])} if nxt else None),

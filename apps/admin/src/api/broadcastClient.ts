@@ -87,6 +87,8 @@ export interface TodayItem {
 
 export interface Dashboard {
   now: string
+  /** 서버와 방송 PC 시계의 차이(초). 양수면 서버가 빠름. 없으면 알 수 없음 */
+  server_clock_skew_sec?: number | null
   playing: { run_id: string; schedule_id: string; device_id?: string | null; started_at?: string | null }[]
   next: (BroadcastSchedule & { at: string }) | null
   today: TodayItem[]
