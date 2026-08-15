@@ -7,7 +7,7 @@ import DocEventsEditor from '@/components/eval/DocEventsEditor'
 import DocChangesModal from '@/components/eval/DocChangesModal'
 import { CARE_TYPES, careMeta, deriveCare, needsFacilityApply, APPLY_STAGES, stageMeta, stageProgress } from '@/utils/careType'
 import { currentCert, certState, renewalDue, daysUntil, gradeLabel, benefitLabel } from '@/utils/cert'
-import { type DocEvent, type DocType, KINDS, kindMeta, asEvent, fmtYMD, fmtMD, autoDocEvents, appendAuto, todayISO, STATUSES, statusMeta, effStatus, isAlert, isExplicitDone, isImplicitDone } from '@/utils/docEvents'
+import { type DocEvent, type DocType, KINDS, kindMeta, asEvent, fmtYMD, fmtMD, autoDocEvents, appendAuto, fixRenewalDates, todayISO, STATUSES, statusMeta, effStatus, isAlert, isExplicitDone, isImplicitDone } from '@/utils/docEvents'
 import { useLtcStore, type LtcResident } from '@/store/ltc'
 
 const fmtD = (s?: string | null) => {
@@ -67,6 +67,55 @@ export default function ResidentDocsPage() {
   useEffect(() => { loadAll() }, [loadAll])
   const [exp, setExp] = useState<Set<string>>(new Set())
   const toggleExp = (k: string) => setExp(p => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n })
+
+  // ── 갱신 일자 일괄 정리 ─────────────────────────────────────
+  // 갱신 기준이 '인정서 종료일'에서 '그 다음 날'로 바뀌기 전에 저장된 기록을 맞춘다.
+  // 무엇이 바뀌는지 먼저 보여주고, 확인을 받은 뒤에만 저장한다.
+  const [fixBusy, setFixBusy] = useState(false)
+  const fixRenewalAll = async () => {
+    setFixBusy(true)
+    try {
+      // 화면 필터와 무관하게 재원 어르신 전체를 대상으로 (퇴소자는 갱신할 일이 없다)
+      const all = await residentDocAPI.list(false)
+      const plans = all.map(r => ({ row: r, fix: fixRenewalDates(r.certifications, {
+        contract: r.contract_lines, plan: r.plan_lines, eval: r.eval_lines }) }))
+      const targets = plans.filter(p => p.fix.changed)
+      const skipped = plans.reduce((s, p) => s + p.fix.skipped, 0)
+
+      if (targets.length === 0) {
+        alert('고칠 갱신 일자가 없습니다. 모두 새 기준(인정서 종료일 다음 날)에 맞춰져 있습니다.'
+          + (skipped ? `\n\n※ ${skipped}건은 이미 완료 처리했거나 메모를 직접 쓴 항목이라 그대로 두었습니다.` : ''))
+        return
+      }
+
+      const moved = targets.reduce((s, p) => s + p.fix.moved, 0)
+      const added = targets.reduce((s, p) => s + p.fix.added, 0)
+      const names = targets.map(p => p.row.name || '(이름없음)')
+      const preview = names.slice(0, 12).join(', ') + (names.length > 12 ? ` 외 ${names.length - 12}명` : '')
+      if (!confirm(
+        `어르신 ${targets.length}명의 갱신 일자를 정리합니다.\n\n`
+        + `· 갱신계약 날짜 이동(종료일 → 다음 날): ${moved}건\n`
+        + `· 계획서·평가에 갱신 기준일 추가: ${added}건\n`
+        + (skipped ? `· 손대지 않음(이미 완료·메모 있음): ${skipped}건\n` : '')
+        + `\n대상: ${preview}\n\n진행할까요?`)) return
+
+      let ok = 0
+      const failed: string[] = []
+      for (const p of targets) {
+        try {
+          await residentDocAPI.update(p.row.id, {
+            contract_lines: p.fix.contract, plan_lines: p.fix.plan, eval_lines: p.fix.eval })
+          ok++
+        } catch { failed.push(p.row.name || p.row.id) }
+      }
+      await load()
+      alert(failed.length === 0
+        ? `${ok}명 정리를 마쳤습니다.\n갱신계약 ${moved}건 이동 · 기준일 ${added}건 추가`
+        : `${ok}명 완료, ${failed.length}명 실패했습니다.\n실패: ${failed.join(', ')}\n\n다시 눌러도 안전합니다(이미 고친 건은 건너뜁니다).`)
+    } catch (e: any) {
+      alert(e?.response?.data?.detail ?? e?.message ?? '일괄 정리에 실패했습니다.')
+    } finally { setFixBusy(false) }
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -226,6 +275,11 @@ export default function ResidentDocsPage() {
           </button>
           <button onClick={() => setHistOpen({})} className="inline-flex items-center gap-1.5 px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">
             <History className="w-4 h-4" /> 수정 이력
+          </button>
+          <button onClick={fixRenewalAll} disabled={fixBusy}
+            title="저장된 갱신 일자를 인정서 종료일 다음 날로 맞춥니다 (미리보기 후 확인)"
+            className="inline-flex items-center gap-1.5 px-3 py-2.5 border border-indigo-200 bg-indigo-50 rounded-xl text-sm font-semibold text-indigo-700 hover:bg-indigo-100 disabled:opacity-50">
+            {fixBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />} 갱신 일자 일괄 정리
           </button>
           <button onClick={() => setSopOpen(v => !v)} className="inline-flex items-center gap-1.5 px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">
             <BookOpen className="w-4 h-4" /> 서류 절차 안내
