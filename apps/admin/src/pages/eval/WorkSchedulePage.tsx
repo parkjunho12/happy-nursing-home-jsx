@@ -35,7 +35,7 @@ const todayISO = () => { const d = new Date(); const p = (n: number) => String(n
 
 
 export default function WorkSchedulePage() {
-  const { staffList, loaded, loadAll } = useLtcStore()
+  const { staffList, loadAll } = useLtcStore()
   const [ym, setYm] = useState(thisMonth())
   const [data, setData] = useState<ScheduleData>({})
   const [rows, setRows] = useState<ScheduleRow[]>([])
@@ -106,7 +106,7 @@ export default function WorkSchedulePage() {
   const [offsets, setOffsets] = useState<Record<string, number>>(DEFAULT_TEAM_OFFSET)
   const painting = useRef(false)
 
-  useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
+  useEffect(() => { loadAll() }, [loadAll])
 
   /**
    * 월을 바꿀 때마다 요청에 번호를 매긴다.

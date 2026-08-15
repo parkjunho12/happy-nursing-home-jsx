@@ -59,7 +59,7 @@ export default function StaffDetailPage() {
   const [editingStaff, setEditingStaff] = useState(false)
   const [batchKey, setBatchKey] = useState<string | null>(null)   // 그룹 전체 체크 진행 중
 
-  useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
+  useEffect(() => { loadAll() }, [loadAll])
   useEffect(() => {
     if (!id) return
     setHrLoading(true)

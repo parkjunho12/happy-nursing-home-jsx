@@ -81,7 +81,7 @@ export default function ResidentDetailPage() {
   const [assign, setAssign] = useState<AssignRow | null>(null)
   const [subLoading, setSubLoading] = useState(true)
 
-  useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
+  useEffect(() => { loadAll() }, [loadAll])
   useEffect(() => {
     if (!id) return
     setSubLoading(true)

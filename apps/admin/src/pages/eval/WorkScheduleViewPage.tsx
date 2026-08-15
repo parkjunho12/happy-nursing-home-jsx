@@ -29,7 +29,7 @@ export default function WorkScheduleViewPage() {
   const [hols, setHols] = useState<Record<string, HolidayInfo>>({})
   const [loading, setLoading] = useState(true)
   const [zoom, setZoom] = useState(1)
-  const { staffList, loaded, loadAll } = useLtcStore()
+  const { staffList, loadAll } = useLtcStore()
   const boxRef = useRef<HTMLDivElement>(null)      // 스크롤 컨테이너
   const innerRef = useRef<HTMLDivElement>(null)    // zoom 적용 대상
   const zoomRef = useRef(zoom); zoomRef.current = zoom
@@ -73,7 +73,7 @@ export default function WorkScheduleViewPage() {
     }
   }, [loading])   // 컨테이너가 생긴 뒤 부착
 
-  useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
+  useEffect(() => { loadAll() }, [loadAll])
   useEffect(() => {
     setLoading(true)
     Promise.all([

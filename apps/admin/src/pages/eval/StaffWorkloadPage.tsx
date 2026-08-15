@@ -12,14 +12,14 @@ type Entry = { item: ChecklistItem; title: string; person: string; freq: string;
 type Row = { key: string; name: string; overdue: number; soon: number; items: Entry[] }
 
 export default function StaffWorkloadPage() {
-  const { checklists, loaded, loadAll } = useLtcStore()
+  const { checklists, loadAll } = useLtcStore()
   const navigate = useNavigate()
   const [open, setOpen] = useState<string | null>(null)
   const [horizon, setHorizon] = useState(30)
   const [showFrequent, setShowFrequent] = useState(true)
   const today = todayKST()
 
-  useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
+  useEffect(() => { loadAll() }, [loadAll])
 
   const rows = useMemo<Row[]>(() => {
     const map: Record<string, Row> = {}

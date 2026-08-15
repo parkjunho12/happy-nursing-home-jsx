@@ -46,8 +46,8 @@ export default function EvalUsersPage() {
   const [editUser,   setEditUser]   = useState<UserAccount | null>(null)
   const [pwUser,     setPwUser]     = useState<UserAccount | null>(null)
   const [linkUser,   setLinkUser]   = useState<UserAccount | null>(null)
-  const { staffList, loaded: ltcLoaded, loadAll: ltcLoadAll } = useLtcStore()
-  useEffect(() => { if (!ltcLoaded) ltcLoadAll() }, [ltcLoaded, ltcLoadAll])
+  const { staffList, loadAll: ltcLoadAll } = useLtcStore()
+  useEffect(() => { ltcLoadAll() }, [ltcLoadAll])
 
   const load = async () => {
     setLoading(true)

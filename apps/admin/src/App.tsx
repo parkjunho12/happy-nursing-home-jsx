@@ -258,6 +258,19 @@ function LtcLoader() {
     }
   }, [isAuthenticated, loaded, user?.id, loadAll, syncOccurrences])
 
+  // 탭을 열어둔 채 자리를 비웠다 돌아오면 그 사이 바뀐 내용을 받아온다.
+  // (화면 이동 없이 하루 종일 켜두는 사용 패턴 — 새로고침해야만 최신이 되던 걸 막는다)
+  useEffect(() => {
+    if (!isAuthenticated) return
+    const onBack = () => { if (document.visibilityState === 'visible') loadAll() }
+    document.addEventListener('visibilitychange', onBack)
+    window.addEventListener('focus', onBack)
+    return () => {
+      document.removeEventListener('visibilitychange', onBack)
+      window.removeEventListener('focus', onBack)
+    }
+  }, [isAuthenticated, loadAll])
+
   return null
 }
 

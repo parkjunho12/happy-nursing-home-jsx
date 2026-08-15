@@ -69,7 +69,7 @@ export default function DashboardPage() {
   const [expiringContracts, setExpiringContracts] = useState(0)
   const [recentNews, setRecentNews] = useState<FacilityNews[]>([])
 
-  const { checklists, occurrences, residents, staffList, loaded, loadAll, toggleComplete, completeOccurrence } = useLtcStore()
+  const { checklists, occurrences, residents, staffList, loadAll, toggleComplete, completeOccurrence } = useLtcStore()
 
   useEffect(() => { if (canResidents || canStaffList || can('/contacts')) loadSiteStats() }, [canResidents, canStaffList])
   useEffect(() => { loadPending() }, [])
@@ -88,7 +88,7 @@ export default function DashboardPage() {
         setExpiringContracts(n)
       }).catch(() => {}))
   }, [authUser])
-  useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
+  useEffect(() => { loadAll() }, [loadAll])
 
   const loadSiteStats = async () => {
     try {

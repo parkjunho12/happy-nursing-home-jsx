@@ -58,12 +58,12 @@ export default function HandoverAiPage() {
   const [accessOpen, setAccessOpen] = useState(false)
   const [denied, setDenied] = useState(false)
   const [picking, setPicking] = useState<number | null>(null)   // 명단 선택 중인 항목 index
-  const { residents, loaded: ltcLoaded, loadAll: loadLtc } = useLtcStore()
+  const { residents, loadAll: loadLtc } = useLtcStore()
   const isMobile = useIsMobile()
   const [scanMode, setScanMode] = useState(true)   // 기본 켬 — 회전·그림자 보정으로 판독 도움
   const [scanning, setScanning] = useState(false)
 
-  useEffect(() => { if (!ltcLoaded) loadLtc() }, [ltcLoaded, loadLtc])
+  useEffect(() => { loadLtc() }, [loadLtc])
 
   useEffect(() => {
     handoverAPI.history().then(setHist)

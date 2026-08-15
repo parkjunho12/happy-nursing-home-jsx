@@ -28,7 +28,7 @@ export default function EvalResidentsPage() {
   const [showDischarge, setShowDischarge] = useState<string | null>(null)
   const [addGuardianFor, setAddGuardianFor] = useState<{ id: string; name: string } | null>(null)
 
-  useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
+  useEffect(() => { loadAll() }, [loadAll])
 
   const handleDeleteResident = async (r: LtcResident) => {
     if (!confirm(`'${r.name}' 수급자를 완전히 삭제할까요?\n\n개인 체크리스트·수행기록·서류현황이 함께 삭제되며 되돌릴 수 없습니다.`)) return

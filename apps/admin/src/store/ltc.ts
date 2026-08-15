@@ -221,8 +221,12 @@ interface LtcState {
   occurrences:  ChecklistOccurrence[]   // 신규
   loaded:       boolean
   loading:      boolean
+  lastLoadedAt: number                     // 마지막으로 서버에서 받아온 시각(ms)
 
-  loadAll:           () => Promise<void>
+  /** 화면 진입 때마다 호출해도 된다 — 캐시가 신선하면(TTL 이내) 요청을 건너뛴다. */
+  loadAll:           (force?: boolean) => Promise<void>
+  /** 다른 경로(담당 명단 등)로 수급자·직원을 고쳤을 때 — 다음 조회에서 반드시 새로 받게 한다 */
+  invalidate:        () => void
   syncOccurrences:   () => Promise<void>   // 신규
   reset:             () => void            // 로그아웃 시 캐시 초기화
   completeOccurrence:   (id: string, completedDate: string, memo?: string, attachmentName?: string) => Promise<void>
@@ -247,12 +251,23 @@ interface LtcState {
 
 const DEFAULT_SETTINGS: EvalSettings = { facilityName:'행복한 요양원', evalYear:2025, alertDaysBeforeDue:7, longInactiveThresholdDays:14 }
 
+// 이 시간 안에 다시 들어온 화면은 서버를 또 부르지 않는다(요청 8개짜리라 화면 이동마다 부르면 무겁다).
+// 지나면 화면에 들어오는 순간 조용히 새로 받아온다 — "새로고침해야 최신"이 되지 않도록.
+const LTC_TTL_MS = 30_000
+// 동시에 여러 화면이 불러도 요청은 한 번만 — 나머지는 같은 약속을 기다린다
+let inflight: Promise<void> | null = null
+
 export const useLtcStore = create<LtcState>((set, get) => ({
   checklists:[], residents:[], staffList:[], domains:[], categories:[], indicators:[],
-  settings: DEFAULT_SETTINGS, occurrences: [], loaded:false, loading:false,
+  settings: DEFAULT_SETTINGS, occurrences: [], loaded:false, loading:false, lastLoadedAt: 0,
 
-  loadAll: async () => {
-    if (get().loading) return
+  invalidate: () => set({ lastLoadedAt: 0 }),
+
+  loadAll: async (force = false) => {
+    const s = get()
+    if (!force && s.loaded && Date.now() - s.lastLoadedAt < LTC_TTL_MS) return
+    if (inflight) return inflight
+    inflight = (async () => {
     set({ loading: true })
     try {
       const [cls, res, stf, doms, cats, inds, settings, occs] = await Promise.all([
@@ -275,16 +290,20 @@ export const useLtcStore = create<LtcState>((set, get) => ({
         settings:    mapSettings(settings),
         occurrences: occs.map(mapOcc),
         loaded:      true,
+        lastLoadedAt: Date.now(),
       })
     } catch(e) { console.error('[LTC] loadAll failed', e) }
-    finally { set({ loading: false }) }
+    finally { set({ loading: false }); inflight = null }
+    })()
+    return inflight
   },
 
   reset: () => {
+    inflight = null
     set({
       checklists: [], residents: [], staffList: [], domains: [],
       categories: [], indicators: [], occurrences: [],
-      loaded: false, loading: false,
+      loaded: false, loading: false, lastLoadedAt: 0,
     })
   },
 

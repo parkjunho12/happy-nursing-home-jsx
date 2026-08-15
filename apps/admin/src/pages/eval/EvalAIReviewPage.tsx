@@ -75,7 +75,7 @@ export default function EvalAIReviewPage() {
   const [showPasteForm, setShowPasteForm] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
+  useEffect(() => { loadAll() }, [loadAll])
   useEffect(() => { refreshGuidelines(); refreshHistory() }, [])
 
   const refreshGuidelines = async () => {

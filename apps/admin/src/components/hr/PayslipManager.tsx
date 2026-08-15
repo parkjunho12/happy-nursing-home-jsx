@@ -9,8 +9,8 @@ import { useLtcStore } from '@/store/ltc'
  * 서명 안 한 사람이 한눈에 보이므로 수령 확인을 쫓아다닐 필요가 없다.
  */
 export default function PayslipManager() {
-  const { staffList, loaded, loadAll } = useLtcStore()
-  useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
+  const { staffList, loadAll } = useLtcStore()
+  useEffect(() => { loadAll() }, [loadAll])
 
   const now = new Date()
   const [ym, setYm] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)

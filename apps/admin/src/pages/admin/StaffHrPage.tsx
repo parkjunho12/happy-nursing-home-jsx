@@ -36,8 +36,8 @@ export default function StaffHrPage() {
   const { user: authUser } = useAuthStore()
   // 급여는 민감 정보 — ADMIN·시설장만 탭 노출 (서버도 동일 기준으로 잠금)
   const canPay = authUser?.role === 'ADMIN' || authUser?.position === '시설장'
-  const { staffList, loaded: ltcLoaded, loadAll } = useLtcStore()
-  useEffect(() => { if (!ltcLoaded) loadAll() }, [ltcLoaded, loadAll])
+  const { staffList, loadAll } = useLtcStore()
+  useEffect(() => { loadAll() }, [loadAll])
   const toggleC = (id: string) => setExpandedC(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
 
   const load = useCallback(async () => {
