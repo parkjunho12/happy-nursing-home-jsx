@@ -80,6 +80,9 @@ class BroadcastDevice(Base):
     # PC 를 실제로 찾으려면 이 둘이 필요하다 — Agent 가 스스로 알려준다
     hostname    = Column(String(120), nullable=True)
     local_ip    = Column(String(64), nullable=True)   # 원내 網 주소 (192.168.x.x 등)
+    # 이 PC 와 서버 시계의 차이(초). 양수면 서버가 빠르다.
+    # 어느 쪽이 틀렸는지는 알 수 없으므로 보정하지 않고 보여주기만 한다.
+    clock_skew_sec = Column(Integer, nullable=True)
     # 지금 무엇을 틀고 있는지 — heartbeat 로 갱신
     now_playing = Column(String, nullable=True)
     active      = Column(Boolean, nullable=False, default=True)

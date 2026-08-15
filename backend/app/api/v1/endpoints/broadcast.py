@@ -97,6 +97,8 @@ def _device_view(d: BroadcastDevice, *, now: datetime) -> dict:
         "output_name": d.output_name, "version": d.version,
         # 원격 접속·현장 확인용 — PC 가 스스로 알려준 값
         "hostname": d.hostname, "local_ip": d.local_ip,
+        # 시계가 어긋나면 방송 시각이 어긋난다 — 화면에서 바로 보이게
+        "clock_skew_sec": d.clock_skew_sec,
         # 서버가 본 IP (요양원 공유기의 WAN 주소) — 지점 확인용
         "last_ip": d.last_ip,
         "last_seen": _iso(d.last_seen), "online": online,

@@ -365,6 +365,15 @@ function DashboardView({ dash }: { dash: Dashboard }) {
                 <span className="font-semibold text-gray-800">{d.name}</span>
                 <span className="text-xs text-gray-400">{d.device_id}</span>
                 {d.now_playing && <span className="text-xs text-blue-600 font-semibold">▶ {d.now_playing}</span>}
+                {/* 시계가 어긋나면 방송이 그만큼 어긋난다 — 조용히 넘기면 원인을 못 찾는다 */}
+                {typeof d.clock_skew_sec === 'number' && Math.abs(d.clock_skew_sec) >= 30 && (
+                  <span title="서버와 이 PC의 시계가 다릅니다. 양쪽 시간 동기화(NTP)를 확인하세요."
+                    className="text-[11px] font-bold px-1.5 py-0.5 rounded border bg-amber-50 text-amber-700 border-amber-200">
+                    ⏱ 시계 {Math.abs(Math.round(d.clock_skew_sec / 60)) >= 1
+                      ? `${Math.abs(Math.round(d.clock_skew_sec / 60))}분`
+                      : `${Math.abs(d.clock_skew_sec)}초`} 차이
+                  </span>
+                )}
                 {/* 서버는 이 IP로 접속하지 않는다(통신은 항상 PC→서버).
                     사람이 그 PC를 찾아가거나 원격 접속할 때 쓰라고 보여준다. */}
                 {d.local_ip && (
