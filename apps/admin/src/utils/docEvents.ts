@@ -221,6 +221,49 @@ export function appendAuto(existing: DocEvent[] | undefined, auto: DocEvent[]): 
   return { next, added: add.length, moved }
 }
 
+/**
+ * 이미 저장된 갱신 일자를 새 기준(인정서 종료일 + 1일)으로 맞춘다 — 일괄 정리용.
+ *
+ * 「인정서 기준으로 일시 추가」와 달리 갱신 관련 항목만 건드린다.
+ * 전체 자동 채움을 다시 돌리면 일부러 지운 6개월 기준일까지 되살아나기 때문이다.
+ *
+ * - 계약서: 종료일 당일의 갱신 → 다음 날로 이동 (손대지 않은 것만)
+ * - 계획서·평가: 그날 항목이 없으면 '기준 · 갱신 기준일' 추가
+ * - 이미 완료·상태 표시했거나 메모를 직접 쓴 갱신은 건드리지 않는다(skipped)
+ */
+export function fixRenewalDates(
+  certs: Certification[] | undefined | null,
+  lines: { contract?: DocEvent[] | null; plan?: DocEvent[] | null; eval?: DocEvent[] | null },
+): { contract: DocEvent[]; plan: DocEvent[]; eval: DocEvent[]; moved: number; added: number; skipped: number; changed: boolean } {
+  const contract = (lines.contract ?? []).map(asEvent)
+  const plan = (lines.plan ?? []).map(asEvent)
+  const evl = (lines.eval ?? []).map(asEvent)
+  const out = { contract, plan, eval: evl, moved: 0, added: 0, skipped: 0, changed: false }
+
+  const cur = currentCert([...(certs ?? [])].filter(c => c.start))
+  const E = _pd(cur?.end)
+  if (!E) return out                                  // 종료일이 없으면 갱신 시점도 없다
+  const oldDay = _f(E), renewAt = _f(addDays(E, 1))
+
+  // 계약서 — 종료일 당일에 있던 갱신을 하루 뒤로
+  const already = contract.some(e => e.kind === '갱신' && e.date === renewAt)
+  const old = contract.find(e => e.kind === '갱신' && e.date === oldDay)
+  if (old) {
+    const untouched = !old.done && !old.status && (!old.memo || old.memo === '갱신계약')
+    if (untouched && !already) { old.date = renewAt; out.moved++; out.changed = true }
+    else out.skipped++                                // 이미 처리했거나 새 날짜가 이미 있음
+  }
+
+  // 계획서·평가 — 갱신일에 아무것도 없으면 기준일을 넣어준다
+  for (const list of [plan, evl]) {
+    if (list.some(e => e.date === renewAt)) continue
+    list.push({ date: renewAt, kind: '기준', memo: '갱신 기준일' })
+    list.sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'))
+    out.added++; out.changed = true
+  }
+  return out
+}
+
 // 자동 생성분과 기존 수동(변화·퇴소) 항목 병합 (routine은 새로 대체, 수동은 보존)
 export function mergeAuto(existing: DocEvent[] | undefined, auto: DocEvent[], keepKinds: string[]): DocEvent[] {
   const manual = (existing ?? []).map(asEvent).filter(e => (e.kind && keepKinds.includes(e.kind)) || (!e.kind && (e.memo || e.date)))
