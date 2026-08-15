@@ -88,11 +88,16 @@ async def lifespan(app: FastAPI):
     # 월별 앨범 자동 생성 루프는 제거 — 수급자 등록 시 + 「이번 달 앨범 만들기」 버튼으로만 생성
     logger.info("⏰ Dayparting bid scheduler + override loop started")
 
+    # 서버 부하 감시 (CPU·메모리·디스크·트래픽) — 임계치 초과 시 메일
+    from app.services.server_monitor import monitor_loop as _monitor_loop
+    _health_task = asyncio.create_task(_monitor_loop())
+
     yield
     # Shutdown
     _scheduler_task.cancel()
     _override_task.cancel()
-    for _t in (_scheduler_task, _override_task):
+    _health_task.cancel()
+    for _t in (_scheduler_task, _override_task, _health_task):
         try:
             await _t
         except Exception:

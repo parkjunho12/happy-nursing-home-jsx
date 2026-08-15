@@ -71,6 +71,29 @@ class Settings(BaseSettings):
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
+
+    # =============================
+    # 서버 부하 알림
+    # 기준 사양: 2 vCPU / 4GB RAM / SSD 50GB / 일 20GB 트래픽
+    # 순간 튐에는 안 보내고, SUSTAIN_MIN 분 동안 계속 넘을 때만 한 통 보낸다.
+    # =============================
+    SERVER_ALERT_ENABLED: bool = True
+    # 운영 서버에서만 감시한다. 개발용 노트북에서 켜두면 내 PC 상태로 메일이 온다.
+    # 로컬에서 일부러 시험해 볼 때만 SERVER_ALERT_FORCE=true 로 켠다.
+    SERVER_ALERT_FORCE: bool = False
+    SERVER_ALERT_TO: str = "ghdlwnsgh25@gmail.com"   # 쉼표로 여러 명
+    SERVER_ALERT_CPU_PCT: float = 85.0        # 2 vCPU — 85% 넘게 눌리면 응답이 밀리기 시작
+    SERVER_ALERT_MEM_PCT: float = 85.0        # 4GB 중 85% (약 3.4GB)
+    SERVER_ALERT_DISK_PCT: float = 85.0       # 50GB 중 85% (약 42GB) — 사진 업로드가 쌓인다
+    # 스왑은 '얼마나 찼나' 만으로는 위험 신호가 아니다(예전에 밀어둔 페이지가 그냥 남아 있다).
+    # 메모리까지 같이 높을 때만 경고한다 — 아래 MEM_GATE 와 함께 봐야 의미가 있다.
+    SERVER_ALERT_SWAP_PCT: float = 80.0
+    SERVER_ALERT_SWAP_MEM_GATE_PCT: float = 75.0   # 메모리가 이만큼 안 차 있으면 스왑은 무시
+    SERVER_ALERT_TRAFFIC_GB: float = 16.0     # 일 20GB 중 80%
+    SERVER_ALERT_SUSTAIN_MIN: int = 5         # 이 시간(분) 내내 넘어야 발송
+    SERVER_ALERT_COOLDOWN_MIN: int = 60       # 같은 항목 재발송 최소 간격(분)
+    SERVER_ALERT_INTERVAL_SEC: int = 60       # 점검 주기(초)
+    SERVER_ALERT_STATE_FILE: str = "logs/server_alert_state.json"
     
 
     # =============================
