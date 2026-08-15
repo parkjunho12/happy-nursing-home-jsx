@@ -49,6 +49,8 @@ export interface BroadcastDevice {
   /** PC 가 스스로 알려준 값 — 원격 접속·현장 확인용 */
   hostname?: string | null
   local_ip?: string | null
+  /** 이 PC 와 서버 시계의 차이(초). 양수면 서버가 빠름 */
+  clock_skew_sec?: number | null
   /** 서버가 본 IP (요양원 공유기의 WAN 주소) */
   last_ip?: string | null
   last_seen?: string | null

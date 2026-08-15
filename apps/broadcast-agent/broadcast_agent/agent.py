@@ -110,12 +110,14 @@ class ApiClient:
             "version": AGENT_VERSION, "output_name": output_name,
             "hostname": socket.gethostname(), "local_ip": local_ip()})
 
-    def heartbeat(self, now_playing: Optional[str], output_name: str = "") -> dict:
+    def heartbeat(self, now_playing: Optional[str], output_name: str = "",
+                  clock_skew_sec: float = 0.0) -> dict:
         # 호스트명·내부 IP를 함께 알린다 — 관리자가 그 PC를 찾아갈 수 있게.
         # 공유기에서 IP가 바뀌어도 다음 heartbeat 에 최신 값으로 갱신된다.
         return self._req("POST", "/api/v1/broadcast-agent/heartbeat", {
             "now_playing": now_playing, "version": AGENT_VERSION, "output_name": output_name,
-            "hostname": socket.gethostname(), "local_ip": local_ip()})
+            "hostname": socket.gethostname(), "local_ip": local_ip(),
+            "clock_skew_sec": round(clock_skew_sec, 1)})
 
     def sync(self) -> dict:
         return self._req("GET", "/api/v1/broadcast-agent/sync")
@@ -302,7 +304,8 @@ class BroadcastAgent:
     # ── 명령 ──
     def heartbeat(self) -> None:
         try:
-            data = self.api.heartbeat(self.now_playing, self.cfg.get("audio_device") or "")
+            data = self.api.heartbeat(self.now_playing, self.cfg.get("audio_device") or "",
+                                      self.clock_skew)
             self.online = True
             self._check_clock(data.get("server_time"))
             for cmd in data.get("commands", []):
@@ -314,11 +317,10 @@ class BroadcastAgent:
     def _check_clock(self, server_time: Optional[str]) -> None:
         """이 PC 시계가 서버와 얼마나 다른지 본다.
 
-        방송은 '몇 시 몇 분'에 나가야 하는 일이라 PC 시계가 틀어지면 그만큼
-        어긋난다. 5분 느린 PC 는 모든 방송을 5분 늦게 내보낸다.
-
-        그래서 차이를 재서 방송 시각 판단에 반영하고(그래야 실제 시각에 맞게 나간다),
-        동시에 경고를 남긴다 — 근본 해결은 PC 시간 동기화(NTP)다.
+        방송은 '몇 시 몇 분'에 나가야 하는 일이라 시계가 틀어지면 그만큼 어긋난다.
+        어느 쪽이 틀렸는지는 기계가 알 수 없으므로 임의로 보정하지 않고,
+        차이를 재서 알린다. 값은 서버로도 보내 관리자 화면에 표시된다.
+        근본 해결은 양쪽 다 시간 동기화(NTP)를 켜는 것이다.
         """
         if not server_time:
             return
@@ -334,12 +336,17 @@ class BroadcastAgent:
         self.clock_skew = skew
         if abs(skew) >= 30 and abs(skew - was) >= 5:
             logger.warning(
-                "PC 시계가 서버와 %.0f초 %s. 방송 시각 판단에 보정해 내보내지만, "
-                "PC 시간 동기화(NTP)를 켜주세요.",
-                abs(skew), "느립니다" if skew > 0 else "빠릅니다")
+                "시계가 서버와 %.0f초 어긋나 있습니다(서버가 %s). "
+                "예약 방송은 이 PC 시계를 기준으로 내보냅니다. "
+                "양쪽 모두 시간 동기화(NTP)를 확인해주세요.",
+                abs(skew), "빠름" if skew > 0 else "느림")
 
     def server_now(self) -> datetime:
-        """서버 기준 현재 시각 — 방송 시각 판단은 항상 이걸 쓴다."""
+        """서버 시계 기준 현재 시각 — 진단·표시용.
+
+        방송 시각 판단에는 쓰지 않는다. 서버 시계가 틀어져 있을 수 있고,
+        '몇 시에 방송'을 지켜야 하는 곳은 현장이기 때문이다.
+        """
         return now_kst() + timedelta(seconds=self.clock_skew)
 
     def handle_command(self, cmd: dict) -> None:
@@ -354,23 +361,33 @@ class BroadcastAgent:
     def due_items(self, at: Optional[datetime] = None) -> List[dict]:
         """지금 틀어야 할 회차들.
 
-        기준 시각은 서버 시계다(PC 시계가 틀어져 있어도 실제 시각에 맞게 나가도록).
-        즉시 방송은 허용창을 넓게 둔다 — 동기화가 조금 늦게 와도 관리자가 누른
-        방송은 나가야 한다. 반대로 예약 방송은 좁게 둬서 지나간 안내가
-        뒤늦게 튀어나오지 않게 한다.
+        두 종류를 다르게 다룬다. 서버와 이 PC 의 시계가 어긋나 있을 때
+        무엇이 옳은 동작인지가 서로 다르기 때문이다.
+
+        · 예약 방송("11시 50분 점심 안내")은 벽시계 약속이다. 그 시각을 지켜야 하는
+          곳은 현장이므로 **이 PC 의 시계**를 기준으로 판단한다. 서버 시계가
+          몇 분 틀어져 있어도 방송은 제 시각에 나간다.
+          창을 좁게(기본 90초) 둬서 지나간 안내가 뒤늦게 튀어나오지 않게 한다.
+
+        · 즉시 방송(관리자가 방금 누른 것)은 '가능한 한 빨리'가 목적이고,
+          찍힌 시각은 서버가 남긴 표식일 뿐이다. 그래서 앞뒤 양쪽으로 넓게 본다.
+          서버 시계가 빠르면 그 시각이 미래로 보이는데, 그때 기다리면
+          누른 사람 입장에서는 몇 분씩 늦게 나가는 것이 된다.
         """
-        at = at or self.server_now()
+        at = at or now_kst()
         out = []
         for it in self.store.load_schedule().get("items", []):
             try:
                 when = parse_at(it["occurrence_at"])
             except Exception:
                 continue
-            window = self.immediate_tolerance_sec if it.get("immediate") else self.tolerance_sec
             diff = (at - when).total_seconds()
-            if 0 <= diff <= window:
-                if not self.store.is_done(it["schedule_id"], it["occurrence_at"]):
-                    out.append(it)
+            if it.get("immediate"):
+                due = abs(diff) <= self.immediate_tolerance_sec      # 앞뒤 모두 허용
+            else:
+                due = 0 <= diff <= self.tolerance_sec                # 지난 뒤 잠깐만
+            if due and not self.store.is_done(it["schedule_id"], it["occurrence_at"]):
+                out.append(it)
         return out
 
     def run_item(self, item: dict) -> str:

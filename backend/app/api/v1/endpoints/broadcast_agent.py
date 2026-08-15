@@ -137,6 +137,7 @@ class HeartbeatBody(BaseModel):
     output_name: Optional[str] = None
     hostname: Optional[str] = None
     local_ip: Optional[str] = None
+    clock_skew_sec: Optional[float] = None
 
 
 @router.post("/heartbeat")
@@ -153,6 +154,8 @@ def heartbeat(body: HeartbeatBody, request: Request,
         d.hostname = body.hostname
     if body.local_ip:
         d.local_ip = body.local_ip
+    if body.clock_skew_sec is not None:
+        d.clock_skew_sec = int(body.clock_skew_sec)
     d.last_ip = _client_ip(request)
 
     cmds = (db.query(BroadcastCommand)
