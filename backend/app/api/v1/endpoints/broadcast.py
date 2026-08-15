@@ -89,6 +89,10 @@ def _device_view(d: BroadcastDevice, *, now: datetime) -> dict:
         "id": d.id, "device_id": d.device_id, "name": d.name,
         "facility_id": d.facility_id, "zones": d.zones or [ZONE_ALL],
         "output_name": d.output_name, "version": d.version,
+        # 원격 접속·현장 확인용 — PC 가 스스로 알려준 값
+        "hostname": d.hostname, "local_ip": d.local_ip,
+        # 서버가 본 IP (요양원 공유기의 WAN 주소) — 지점 확인용
+        "last_ip": d.last_ip,
         "last_seen": _iso(d.last_seen), "online": online,
         "now_playing": d.now_playing, "active": bool(d.active),
         "offline_after_sec": settings.BROADCAST_OFFLINE_SEC,

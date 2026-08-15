@@ -74,7 +74,12 @@ class BroadcastDevice(Base):
     output_name = Column(String(200), nullable=True) # 선택된 오디오 출력장치(참고용 표시)
     version     = Column(String(30), nullable=True)  # Agent 버전
     last_seen   = Column(DateTime(timezone=True), nullable=True, index=True)
+    # 서버가 본 IP — Caddy 뒤라 X-Forwarded-For 를 봐야 진짜 값이 나온다.
+    # 요양원 공유기의 WAN IP 라서 '어느 지점인지' 확인용이지, PC 를 찾는 용도는 아니다.
     last_ip     = Column(String(64), nullable=True)
+    # PC 를 실제로 찾으려면 이 둘이 필요하다 — Agent 가 스스로 알려준다
+    hostname    = Column(String(120), nullable=True)
+    local_ip    = Column(String(64), nullable=True)   # 원내 網 주소 (192.168.x.x 등)
     # 지금 무엇을 틀고 있는지 — heartbeat 로 갱신
     now_playing = Column(String, nullable=True)
     active      = Column(Boolean, nullable=False, default=True)

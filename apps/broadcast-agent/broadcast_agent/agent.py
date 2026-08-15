@@ -20,6 +20,7 @@ import hashlib
 import json
 import logging
 import os
+import socket
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -38,6 +39,28 @@ AGENT_VERSION = "1.0.0"
 
 def now_kst() -> datetime:
     return datetime.now(KST)
+
+
+def local_ip() -> str:
+    """이 PC 의 원내 網 주소.
+
+    서버는 이 IP 로 접속하지 않는다(통신은 항상 PC → 서버). 사람이 나중에
+    원격 접속하거나 '어느 PC인지' 찾을 때 쓰라고 알려주는 값이다.
+
+    UDP 소켓을 열어 커널이 고른 출발지 주소를 읽는다 — 실제 패킷은 나가지 않고,
+    인터넷이 끊겨 있어도 라우팅 테이블만 있으면 답이 나온다.
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except OSError:
+        try:
+            return socket.gethostbyname(socket.gethostname())
+        except OSError:
+            return ""
+    finally:
+        s.close()
 
 
 def parse_at(s: str) -> datetime:
@@ -84,11 +107,15 @@ class ApiClient:
     def register(self, enroll_code: str, device_id: str, name: str, output_name: str = "") -> dict:
         return self._req("POST", "/api/v1/broadcast-agent/register", {
             "enroll_code": enroll_code, "device_id": device_id, "name": name,
-            "version": AGENT_VERSION, "output_name": output_name})
+            "version": AGENT_VERSION, "output_name": output_name,
+            "hostname": socket.gethostname(), "local_ip": local_ip()})
 
     def heartbeat(self, now_playing: Optional[str], output_name: str = "") -> dict:
+        # 호스트명·내부 IP를 함께 알린다 — 관리자가 그 PC를 찾아갈 수 있게.
+        # 공유기에서 IP가 바뀌어도 다음 heartbeat 에 최신 값으로 갱신된다.
         return self._req("POST", "/api/v1/broadcast-agent/heartbeat", {
-            "now_playing": now_playing, "version": AGENT_VERSION, "output_name": output_name})
+            "now_playing": now_playing, "version": AGENT_VERSION, "output_name": output_name,
+            "hostname": socket.gethostname(), "local_ip": local_ip()})
 
     def sync(self) -> dict:
         return self._req("GET", "/api/v1/broadcast-agent/sync")
