@@ -145,12 +145,9 @@ def create_ltc_resident(
     except Exception:
         db.rollback()
 
-    # 등록과 동시에 이번 달 보호자 앨범 생성 (실패해도 등록은 성공)
-    try:
-        from app.services.monthly_albums import ensure_album_for_resident
-        ensure_album_for_resident(db, r.id, r.name)
-    except Exception:
-        logger.warning("등록 시 앨범 생성 실패: %s", r.name)
+    # 보호자 앨범은 여기서 만들지 않는다.
+    # 앨범 화면의 「이번 달 앨범 만들기」 한 곳으로 창구를 통일했다 —
+    # 등록 시점에도 만들면 입소일에 따라 앨범이 제각각 생겨 관리가 어긋난다.
     return ApiResponse(success=True, data=LtcResidentOut.model_validate(r).model_dump())
 
 

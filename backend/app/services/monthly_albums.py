@@ -1,9 +1,9 @@
 """월별 보호자 앨범 생성.
 
-생성 경로는 두 가지뿐 (매월 1일 자동 루프는 제거):
- 1) 수급자 등록 시 그 달 앨범 1개 (ensure_album_for_resident)
- 2) 관리자 화면 「이번 달 앨범 만들기」 버튼 (ensure_monthly_albums)
-멱등: 같은 달 앨범이 이미 있으면 건너뛴다 — 몇 번을 돌려도 안전.
+생성 경로는 관리자 화면 「이번 달 앨범 만들기」 버튼 하나뿐이다
+(ensure_monthly_albums). 매월 1일 자동 루프도, 수급자 등록 시 자동 생성도
+쓰지 않는다 — 앨범이 여기저기서 생기면 언제 무엇이 만들어졌는지 알 수 없다.
+멱등: 같은 달 앨범이 이미 있으면 건너뛴다 — 몇 번을 눌러도 안전.
 """
 from __future__ import annotations
 import logging
@@ -100,21 +100,5 @@ def ensure_monthly_albums(db: Session, year: int, month: int) -> dict:
             "text": month_text}
 
 
-def ensure_album_for_resident(db: Session, resident_id: str, name: str) -> bool:
-    """수급자 등록 직후 — 그 달 앨범이 없으면 하나 만들어준다.
-
-    등록 요청 경로에서 부르므로 AI 호출 없이 폴백 인사말을 쓴다(빠르고 실패 없음)."""
-    from datetime import datetime, timezone, timedelta
-    KST = timezone(timedelta(hours=9))
-    now = datetime.now(KST)
-    m_start = datetime(now.year, now.month, 1, tzinfo=KST)
-    exists = (db.query(Album)
-                .filter(Album.resident_id == resident_id, Album.created_at >= m_start)
-                .first())
-    if exists:
-        return False
-    db.add(Album(id=str(uuid.uuid4()), resident_id=resident_id,
-                 title=f"{now.year}년 {now.month}월 · {name} 어르신",
-                 description=FALLBACK[now.month], is_public=True))
-    db.commit()
-    return True
+# 수급자 등록 시 앨범을 만들던 ensure_album_for_resident 는 제거했다.
+# 앨범 생성 창구는 「이번 달 앨범 만들기」(ensure_monthly_albums) 하나뿐이다.
