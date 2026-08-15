@@ -19,8 +19,20 @@ from app.models.broadcast import BroadcastDevice, now_kst
 
 logger = logging.getLogger(__name__)
 
-# 같은 기기를 계속 알리지 않는다
-COOLDOWN_MIN = 120
+# 알림을 보내기 전에 이만큼 연속으로 조용해야 한다. 순간적인 끊김에는 안 보낸다.
+# (기기가 오프라인으로 '판정'되기까지 이미 BROADCAST_OFFLINE_SEC 이 걸린 뒤의 횟수다)
+SUSTAIN_CHECKS = 3
+# 회복 알림을 보내기 전에 이만큼 연속으로 정상이어야 한다 — 깜빡임에 반응하지 않게
+RECOVER_CHECKS = 2
+# 같은 기기를 다시 알리기까지의 최소 간격(분). 계속 꺼져 있으면 점점 뜸하게 알린다.
+COOLDOWN_MIN = 180
+COOLDOWN_MAX_MIN = 1440      # 하루에 한 번까지
+# 마지막 알림(회복 알림 포함) 이후 최소한 이만큼은 지나야 다시 보낸다.
+# 껐다 켜졌다를 반복하는 PC 가 시간당 여러 통을 만들지 않게 하는 바닥값.
+REALERT_MIN_GAP_MIN = 60
+# 이만큼 연속으로 정상이어야 '이제 안정됐다'고 보고 알림 횟수를 초기화한다.
+# 그 전까지는 횟수가 유지돼 깜빡일수록 간격이 벌어진다.
+STABLE_RESET_CHECKS = 60
 
 
 def offline_devices(db: Session) -> List[BroadcastDevice]:
@@ -37,34 +49,78 @@ def offline_devices(db: Session) -> List[BroadcastDevice]:
     return out
 
 
+def _backoff_min(alert_count: int) -> int:
+    """알림을 거듭할수록 간격을 늘린다.
+
+    며칠째 꺼져 있는 PC 를 3시간마다 알리는 것은 도움이 안 되고 메일함만 채운다.
+    3시간 → 6시간 → 12시간 → 하루.
+    """
+    if alert_count <= 0:
+        return 0
+    return min(COOLDOWN_MIN * (2 ** (alert_count - 1)), COOLDOWN_MAX_MIN)
+
+
 def evaluate(db: Session, state: Dict[str, Any], now_ts: float) -> List[Dict[str, Any]]:
-    """알려야 할 기기 목록. state 에 마지막 발송 시각을 기록해 반복 발송을 막는다."""
+    """알려야 할 기기 목록.
+
+    메일이 쏟아지지 않게 세 가지를 지킨다.
+      1) 연속 SUSTAIN_CHECKS 회 조용해야 첫 알림 — 잠깐 끊긴 것으로는 안 보낸다
+      2) 회복돼도 쿨다운을 초기화하지 않는다 — 껐다 켜졌다 반복해도 계속 오지 않는다
+      3) 계속 꺼져 있으면 간격을 늘린다(3h→6h→12h→하루)
+    """
     if not settings.BROADCAST_ENABLED:
         return []
-    sent: Dict[str, float] = state.setdefault("broadcast_offline_sent", {})
-    firing: List[str] = state.setdefault("broadcast_offline_firing", [])
+    st: Dict[str, Any] = state.setdefault("broadcast_offline", {})
+    # 예전 형식(플랫 dict)은 버린다 — 남아 있어도 의미가 없다
+    state.pop("broadcast_offline_sent", None)
+    state.pop("broadcast_offline_firing", None)
 
-    down = offline_devices(db)
-    down_ids = {d.device_id for d in down}
-    alerts = []
-    for d in down:
-        last = sent.get(d.device_id)
-        if last is None or (now_ts - last) >= COOLDOWN_MIN * 60:
-            sent[d.device_id] = now_ts
+    devices = db.query(BroadcastDevice).filter(BroadcastDevice.active == True).all()  # noqa: E712
+    down_ids = {d.device_id for d in offline_devices(db)}
+    alive_ids = {d.device_id for d in devices}
+    alerts: List[Dict[str, Any]] = []
+
+    for d in devices:
+        e = st.setdefault(d.device_id, {"miss": 0, "ok": 0, "alerts": 0,
+                                        "last_alert": None, "firing": False})
+        if d.device_id in down_ids:
+            e["miss"] = int(e.get("miss", 0)) + 1
+            e["ok"] = 0
+            if e["miss"] < SUSTAIN_CHECKS:
+                continue                       # 아직은 지켜본다
+            last = e.get("last_alert")
+            # 회복 알림 직후에도 바닥값만큼은 쉰다 — 안 그러면 깜빡임이 그대로 메일이 된다
+            gap = max(_backoff_min(int(e.get("alerts", 0))), REALERT_MIN_GAP_MIN) * 60
+            if last is not None and (now_ts - last) < gap:
+                continue                       # 쿨다운 중
+            e["alerts"] = int(e.get("alerts", 0)) + 1
+            e["last_alert"] = now_ts
+            e["firing"] = True
             alerts.append({
                 "device_id": d.device_id, "name": d.name,
                 "last_seen": d.last_seen.isoformat() if d.last_seen else None,
                 "recovered": False,
+                "repeat": e["alerts"],
+                "next_after_min": _backoff_min(e["alerts"]),
             })
-            if d.device_id not in firing:
-                firing.append(d.device_id)
+        else:
+            e["ok"] = int(e.get("ok", 0)) + 1
+            e["miss"] = 0
+            if e.get("firing") and e["ok"] >= RECOVER_CHECKS:
+                e["firing"] = False
+                # 회복 시각도 last_alert 로 남긴다 — 바로 다시 꺼져도 곧장 또 보내지 않는다.
+                # alerts 는 여기서 지우지 않는다. 깜빡이는 동안에는 횟수가 쌓여
+                # 간격이 점점 벌어지고, 그래야 스스로 잦아든다.
+                e["last_alert"] = now_ts
+                alerts.append({"device_id": d.device_id, "name": d.name,
+                               "last_seen": None, "recovered": True})
+            elif e["ok"] >= STABLE_RESET_CHECKS and e.get("alerts"):
+                # 충분히 오래 멀쩡했다 — 다음에 문제가 생기면 처음처럼 알린다
+                e["alerts"] = 0
 
-    # 돌아온 기기 — 한 번 알리고 끝낸다
-    for did in list(firing):
-        if did not in down_ids:
-            firing.remove(did)
-            sent.pop(did, None)
-            alerts.append({"device_id": did, "name": did, "last_seen": None, "recovered": True})
+    # 삭제된 기기의 찌꺼기 정리
+    for did in [k for k in st if k not in alive_ids]:
+        st.pop(did, None)
     return alerts
 
 
