@@ -572,10 +572,14 @@ function DocFormModal({ editing, residents = [], docByResident = new Map<string,
     const pl = appendAuto(f.plan_lines, a.plan)
     const ev = appendAuto(f.eval_lines, a.eval)
     const total = c.added + pl.added + ev.added
+    const moved = c.moved + pl.moved + ev.moved   // 갱신 기준일이 하루 뒤로 바뀌며 옮겨진 건
     setF(p => ({ ...p, contract_lines: c.next, plan_lines: pl.next, eval_lines: ev.next }))
-    alert(total === 0
+    const movedMsg = moved > 0
+      ? `\n\n갱신계약 ${moved}건은 인정서 종료일 → 그 다음 날로 옮겼습니다.`
+      : ''
+    alert(total === 0 && moved === 0
       ? '새로 추가할 일시가 없습니다. (이미 모두 등록되어 있습니다)'
-      : `일시 ${total}건을 추가했습니다.\n계약서 ${c.added} · 계획서 ${pl.added} · 평가 ${ev.added}건\n\n기존 기록은 그대로 두었습니다.`)
+      : `일시 ${total}건을 추가했습니다.\n계약서 ${c.added} · 계획서 ${pl.added} · 평가 ${ev.added}건\n\n기존 기록은 그대로 두었습니다.${movedMsg}`)
   }
   const del = async () => { if (!isEdit || !confirm('이 기록을 삭제할까요?')) return; setSaving(true); try { await residentDocAPI.remove(editing!.id); onSaved() } finally { setSaving(false) } }
 
