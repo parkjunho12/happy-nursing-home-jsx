@@ -344,7 +344,16 @@ function DashboardView({ dash }: { dash: Dashboard }) {
                 <span className="font-semibold text-gray-800">{d.name}</span>
                 <span className="text-xs text-gray-400">{d.device_id}</span>
                 {d.now_playing && <span className="text-xs text-blue-600 font-semibold">▶ {d.now_playing}</span>}
+                {/* 서버는 이 IP로 접속하지 않는다(통신은 항상 PC→서버).
+                    사람이 그 PC를 찾아가거나 원격 접속할 때 쓰라고 보여준다. */}
+                {d.local_ip && (
+                  <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200"
+                    title={`원내 IP${d.hostname ? ` · ${d.hostname}` : ''}${d.last_ip ? ` · 접속 IP ${d.last_ip}` : ''}`}>
+                    {d.local_ip}
+                  </span>
+                )}
                 <span className="ml-auto text-xs text-gray-400">
+                  {d.hostname ? `${d.hostname} · ` : ''}
                   {d.output_name ? `${d.output_name} · ` : ''}{d.version ?? ''}
                   {d.last_seen ? ` · ${mdhm(d.last_seen)}` : ''}
                 </span>

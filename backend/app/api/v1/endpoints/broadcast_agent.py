@@ -36,6 +36,17 @@ from app.models.broadcast import (
 from app.schemas.response import ApiResponse
 from app.services.broadcast_schedule import KST, occurrences, to_kst
 
+
+def _client_ip(request: Request) -> Optional[str]:
+    """Caddy 뒤에서도 진짜 접속 IP를 본다 — tracking.get_client_ip 와 같은 방식."""
+    fwd = request.headers.get("X-Forwarded-For")
+    if fwd:
+        return fwd.split(",")[0].strip()[:64]
+    real = request.headers.get("X-Real-IP")
+    if real:
+        return real.strip()[:64]
+    return getattr(request.client, "host", None) if request.client else None
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -68,6 +79,8 @@ class RegisterBody(BaseModel):
     facility_id: str = "default"
     version: Optional[str] = None
     output_name: Optional[str] = None
+    hostname: Optional[str] = None
+    local_ip: Optional[str] = None
 
 
 @router.post("/register")
@@ -99,7 +112,9 @@ def register(body: RegisterBody, request: Request, db: Session = Depends(get_db)
     d.token_hash = _hash(token)
     d.active = True
     d.last_seen = now_kst()
-    d.last_ip = getattr(request.client, "host", None) if request.client else None
+    d.last_ip = _client_ip(request)
+    d.hostname = body.hostname or d.hostname
+    d.local_ip = body.local_ip or d.local_ip
     db.add(BroadcastLog(event="DEVICE_REGISTER", device_id=did, status="SUCCESS",
                         title=d.name))
     db.commit()
@@ -116,6 +131,8 @@ class HeartbeatBody(BaseModel):
     now_playing: Optional[str] = None
     version: Optional[str] = None
     output_name: Optional[str] = None
+    hostname: Optional[str] = None
+    local_ip: Optional[str] = None
 
 
 @router.post("/heartbeat")
@@ -128,7 +145,11 @@ def heartbeat(body: HeartbeatBody, request: Request,
         d.version = body.version
     if body.output_name:
         d.output_name = body.output_name
-    d.last_ip = getattr(request.client, "host", None) if request.client else None
+    if body.hostname:
+        d.hostname = body.hostname
+    if body.local_ip:
+        d.local_ip = body.local_ip
+    d.last_ip = _client_ip(request)
 
     cmds = (db.query(BroadcastCommand)
               .filter(BroadcastCommand.acked_at.is_(None))

@@ -46,6 +46,11 @@ export interface BroadcastDevice {
   zones: string[]
   output_name?: string | null
   version?: string | null
+  /** PC 가 스스로 알려준 값 — 원격 접속·현장 확인용 */
+  hostname?: string | null
+  local_ip?: string | null
+  /** 서버가 본 IP (요양원 공유기의 WAN 주소) */
+  last_ip?: string | null
   last_seen?: string | null
   online: boolean
   now_playing?: string | null
