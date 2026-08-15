@@ -412,12 +412,33 @@ class BroadcastAgent:
             results.append(self.run_item(item))
         return results
 
+    def _heartbeat_loop(self) -> None:
+        """heartbeat 는 반드시 독립 스레드에서 돈다.
+
+        재생(tick)과 음원 내려받기(sync)는 끝날 때까지 블로킹한다.
+        같은 스레드에서 돌리면 3분짜리 방송이 나가는 동안 heartbeat 이 멈추고,
+        서버는 그 PC 를 오프라인으로 표시한다. 「즉시 중지」 명령도 방송이
+        끝난 뒤에야 도착해서 아무 소용이 없다.
+
+        분리해두면 방송 중에도 살아있음이 계속 전달되고, 중지 명령이
+        재생 도중에 도착해 output.stop() 을 부를 수 있다.
+        """
+        while not self._stop.is_set():
+            try:
+                self.heartbeat()
+            except Exception as e:                  # 어떤 이유로도 이 스레드는 죽으면 안 된다
+                logger.warning("heartbeat 오류: %s: %s", type(e).__name__, e)
+            self._stop.wait(self.heartbeat_sec)
+
     def run_forever(self) -> None:
         logger.info("Broadcast Agent 시작 — device=%s, 출력=%s",
                     self.device_id, self.output.name)
         h = self.output.health_check()
         logger.info("출력 점검: %s (%s)", "정상" if h.ok else "문제", h.detail)
-        last_hb = 0.0
+
+        hb = threading.Thread(target=self._heartbeat_loop, name="heartbeat", daemon=True)
+        hb.start()
+
         while not self._stop.is_set():
             try:
                 now = time.time()
@@ -425,13 +446,11 @@ class BroadcastAgent:
                     self.sync()
                     self.flush_reports()
                     self._last_sync = now
-                if now - last_hb >= self.heartbeat_sec:
-                    self.heartbeat()
-                    last_hb = now
                 self.tick()
             except Exception as e:                  # 어떤 예외로도 멈추면 안 된다
                 logger.exception("루프 오류: %s", e)
             self._stop.wait(5)                      # 5초마다 확인 — 정시 오차를 줄인다
+        hb.join(timeout=5)
         logger.info("Broadcast Agent 종료")
 
     def stop(self) -> None:

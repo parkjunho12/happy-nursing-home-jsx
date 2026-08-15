@@ -196,6 +196,24 @@ sudo journalctl -u broadcast-agent -f
 **재부팅 후에도 예약이 복구됩니다** — 받아둔 예약과 실행 기록이 `data_dir`
 (기본 `~/.broadcast-agent`)에 파일로 남아 있기 때문입니다.
 
+### 절전 끄기 (중요)
+24시간 켜두는 PC이므로 절전으로 잠들면 그 시간 방송이 나가지 않습니다.
+
+**Windows** (관리자 PowerShell)
+```powershell
+powercfg /change standby-timeout-ac 0     # 대기 모드 없음
+powercfg /change hibernate-timeout-ac 0   # 최대 절전 없음
+powercfg /change monitor-timeout-ac 15    # 화면만 꺼지는 건 무방
+powercfg -h off                           # 최대 절전 기능 자체 해제
+```
+장치 관리자 → 네트워크 어댑터 → 속성 → 전원 관리 →
+**"전원을 절약하기 위해 컴퓨터가 이 장치를 끌 수 있음" 체크 해제**
+
+**Linux**
+```bash
+sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
+```
+
 ---
 
 ## 7. Admin에서 방송 만들기
@@ -302,6 +320,7 @@ python -m broadcast_agent run        # 상주 실행
 | 온라인인데 소리가 안 남 | `test` 로 시험 방송 → 앰프 입력 선택·볼륨 → `audio_device` 이름 |
 | "ffplay 를 찾을 수 없습니다" | ffmpeg 설치 후 PATH 등록, PC 재부팅 |
 | 방송이 안 나감 | 예약이 활성(ON)인지, 「음원 없음」 표시가 아닌지, PC가 온라인인지 |
+| 자꾸 오프라인이 됨 | ① PC 절전·최대 절전 해제 ② 네트워크 어댑터 "전원 절약을 위해 끄기" 해제 ③ 유선 연결 권장(WiFi 불안정) ④ Agent 자동시작 등록 여부 |
 | 두 번 나감 | 방송 PC를 두 대 이상 켜두고 같은 스피커에 물린 경우입니다 — 서버는 한 대만 재생하도록 막지만, 앰프 배선이 중복이면 소리가 겹칩니다 |
 | 소리가 너무 큼/작음 | 앰프 볼륨을 기준으로 맞추고, 예약별 볼륨으로 미세 조정 |
 
