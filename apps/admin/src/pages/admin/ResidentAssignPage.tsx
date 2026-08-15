@@ -253,20 +253,29 @@ export default function ResidentAssignPage() {
           const incom = list.length - cur
           // 호실 바뀔 때마다 음영 교차 — 방 단위가 한눈에 들어온다
           let pv = '__'; let band = 0
-          const dense = list.length >= 25       // 인원이 많으면 자동으로 촘촘하게 (34명도 1장)
-          const careSum = (() => { const m2 = new Map<string, number>(); list.forEach(r => { if (r.care_staff_name) m2.set(r.care_staff_name, (m2.get(r.care_staff_name) ?? 0) + 1) }); return [...m2.entries()].sort((a, b) => b[1] - a[1]) })()
-          const rehabSum = (() => { const m2 = new Map<string, number>(); list.forEach(r => { if (r.rehab_staff_name) m2.set(r.rehab_staff_name, (m2.get(r.rehab_staff_name) ?? 0) + 1) }); return [...m2.entries()].sort((a, b) => b[1] - a[1]) })()
+          // 한 장(A4)에 들어가는 선에서 최대한 크게. 인원이 적을수록 더 키운다.
+          // 현장에서 벽에 붙여놓고 멀리서 보는 표라 글자 크기가 곧 쓸모다.
+          // 크기는 A4 한 장 기준으로 실제 인쇄해 재서 정한 값이다(측정 최대치보다 한 단계 여유).
+          // 인원이 늘수록 줄어들지만, 예전 최소 11px 고정보다는 어느 구간에서도 크다.
+          const n = list.length
+          const sz = n <= 20 ? { f: 17,   p: 8 }
+                   : n <= 24 ? { f: 15,   p: 5.5 }
+                   : n <= 28 ? { f: 14,   p: 4 }
+                   : n <= 32 ? { f: 13,   p: 3 }
+                   : n <= 36 ? { f: 12,   p: 2 }
+                   :           { f: 11,   p: 1.5 }
+          const room = sz.f + 2, head = sz.f - 3   // 호실은 크게, 머리글은 조금 작게
           return (
             <div key={f} className="asg-print-page">
               {/* 머리글 */}
-              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', borderBottom: '3px solid #0d9488', paddingBottom: dense ? '5px' : '8px', marginBottom: dense ? '6px' : '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', borderBottom: '3px solid #0d9488', paddingBottom: '7px', marginBottom: '9px' }}>
                 <div>
                   <p style={{ fontSize: '10px', fontWeight: 800, color: '#0d9488', letterSpacing: '0.2em', margin: 0 }}>행복한요양원 · 정성으로 모시겠습니다</p>
-                  <h1 style={{ fontSize: '24px', fontWeight: 900, color: '#111827', margin: '2px 0 0', letterSpacing: '0.08em' }}>담당 어르신 명단</h1>
+                  <h1 style={{ fontSize: '26px', fontWeight: 900, color: '#111827', margin: '2px 0 0', letterSpacing: '0.08em' }}>담당 어르신 명단</h1>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <span style={{ display: 'inline-block', padding: '5px 16px', borderRadius: 10, background: '#0d9488', color: 'white', fontSize: '18px', fontWeight: 900 }}>{f}</span>
-                  <p style={{ fontSize: '9.5px', color: '#6b7280', margin: '4px 0 0' }}>
+                  <span style={{ display: 'inline-block', padding: '5px 18px', borderRadius: 10, background: '#0d9488', color: 'white', fontSize: '21px', fontWeight: 900 }}>{f}</span>
+                  <p style={{ fontSize: '11px', color: '#6b7280', margin: '4px 0 0' }}>
                     현원 <b style={{ color: '#111827' }}>{cur}명</b>{incom > 0 && <> · 입소 예정 <b style={{ color: '#b45309' }}>{incom}명</b></>} · 출력 {new Date().toLocaleDateString('ko-KR')}
                   </p>
                 </div>
@@ -282,7 +291,7 @@ export default function ResidentAssignPage() {
                     {['호실', '성함', '담당 요양팀', '담당 재활팀', '기타'].map(h => (
                       <th key={h} style={{
                         border: '1px solid #99f6e4', background: '#ccfbf1', color: '#115e59',
-                        padding: dense ? '3px 4px' : '6px 4px', fontSize: dense ? '10px' : '11px', fontWeight: 800,
+                        padding: `${sz.p}px 4px`, fontSize: `${head}px`, fontWeight: 800,
                       }}>{h}</th>
                     ))}
                   </tr>
@@ -294,26 +303,26 @@ export default function ResidentAssignPage() {
                     const incoming = (r.admission_date ?? '') > today
                     const bg = incoming ? '#fffbeb' : band % 2 === 0 ? '#f8fafc' : 'white'
                     const cell: React.CSSProperties = {
-                      border: '1px solid #e2e8f0', background: bg, lineHeight: 1.25,
-                      padding: dense ? '2px 6px' : '5px 7px', fontSize: dense ? '11px' : '12.5px',
+                      border: '1px solid #e2e8f0', background: bg, lineHeight: 1.3,
+                      padding: `${sz.p}px 7px`, fontSize: `${sz.f}px`,
                     }
                     return (
                       <tr key={r.resident_id} className={first ? 'asg-room-top' : ''}>
                         <td style={{ ...cell, textAlign: 'center' }}>
                           {first && <span style={{
-                            display: 'inline-block', minWidth: 40, borderRadius: 8,
+                            display: 'inline-block', minWidth: 46, borderRadius: 8,
                             background: '#f0fdfa', border: '1px solid #99f6e4', color: '#0f766e',
-                            padding: dense ? '1px 6px' : '2px 8px',
-                            fontSize: dense ? '11px' : '13px', fontWeight: 900,
+                            padding: '2px 8px',
+                            fontSize: `${room}px`, fontWeight: 900,
                           }}>{r.room}호</span>}
                         </td>
-                        <td style={{ ...cell, fontWeight: 800, color: '#111827' }}>
+                        <td style={{ ...cell, fontWeight: 800, color: '#111827', fontSize: `${sz.f + 1}px` }}>
                           {r.name}
-                          {incoming && <span style={{ marginLeft: 5, fontSize: '9px', fontWeight: 800, color: '#b45309', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 6, padding: '1px 5px', verticalAlign: 'middle' }}>입소 예정</span>}
+                          {incoming && <span style={{ marginLeft: 5, fontSize: `${Math.max(9, sz.f - 4)}px`, fontWeight: 800, color: '#b45309', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 6, padding: '1px 5px', verticalAlign: 'middle' }}>입소 예정</span>}
                         </td>
-                        <td style={{ ...cell, textAlign: 'center', color: '#334155' }}>{r.care_staff_name ?? <span style={{ color: '#cbd5e1' }}>—</span>}</td>
-                        <td style={{ ...cell, textAlign: 'center', color: '#334155' }}>{r.rehab_staff_name ?? <span style={{ color: '#cbd5e1' }}>—</span>}</td>
-                        <td style={{ ...cell, fontSize: dense ? '9.5px' : '10.5px', color: '#64748b' }}>
+                        <td style={{ ...cell, textAlign: 'center', color: '#111827', fontWeight: 700 }}>{r.care_staff_name ?? <span style={{ color: '#cbd5e1', fontWeight: 400 }}>—</span>}</td>
+                        <td style={{ ...cell, textAlign: 'center', color: '#111827', fontWeight: 700 }}>{r.rehab_staff_name ?? <span style={{ color: '#cbd5e1', fontWeight: 400 }}>—</span>}</td>
+                        <td style={{ ...cell, fontSize: `${sz.f - 2}px`, color: '#64748b' }}>
                           {[incoming ? `${Number(r.admission_date!.slice(5, 7))}/${Number(r.admission_date!.slice(8, 10))} 입소` : '', r.note ?? ''].filter(Boolean).join(' · ')}
                         </td>
                       </tr>
@@ -321,22 +330,9 @@ export default function ResidentAssignPage() {
                   })}
                 </tbody>
               </table>
-              {/* 담당별 인원 요약 — 균형이 종이에서도 보이게 */}
-              <div style={{ display: 'flex', gap: '8px', marginTop: dense ? '6px' : '10px' }}>
-                {[['요양팀', careSum, '#0d9488', '#f0fdfa', '#99f6e4'] as const, ['재활팀', rehabSum, '#7c3aed', '#faf5ff', '#ddd6fe'] as const].map(([label, sum, c, bg2, bd]) => (
-                  <div key={label} style={{ flex: 1, border: `1px solid ${bd}`, background: bg2, borderRadius: 10, padding: dense ? '4px 8px' : '6px 10px' }}>
-                    <p style={{ fontSize: dense ? '9px' : '10px', fontWeight: 900, color: c, margin: '0 0 2px' }}>{label} 담당 현황</p>
-                    <p style={{ fontSize: dense ? '9px' : '10px', color: '#374151', margin: 0, lineHeight: 1.6 }}>
-                      {sum.length === 0 ? '미배정' : sum.map(([n, c2]) => (
-                        <span key={n} style={{ display: 'inline-block', marginRight: 8, whiteSpace: 'nowrap' }}>
-                          {n} <b style={{ color: c }}>{c2}명</b>
-                        </span>
-                      ))}
-                    </p>
-                  </div>
-                ))}
-              </div>
-              <p style={{ fontSize: '8.5px', color: '#9ca3af', textAlign: 'right', margin: '6px 2px 0' }}>
+              {/* 담당별 인원 요약은 종이에 넣지 않는다 — 그 자리를 명단 글자 크기에 쓴다.
+                  (화면 상단 집계에서 언제든 볼 수 있다) */}
+              <p style={{ fontSize: '9px', color: '#9ca3af', textAlign: 'right', margin: '8px 2px 0' }}>
                 ※ 담당 변경은 관리자 페이지 「담당 어르신 명단」에서 — 변경 이력이 함께 남습니다 · 행복한요양원
               </p>
             </div>
