@@ -22,6 +22,9 @@ const md = (iso?: string | null) => {
   return `${d.getMonth() + 1}/${d.getDate()}`
 }
 const mdhm = (iso?: string | null) => (iso ? `${md(iso)} ${hm(iso)}` : '')
+/** 기록에 보여줄 시각 — 실제로 방송이 나간 때(Agent 보고)를 우선한다.
+ *  created_at 은 서버가 찍은 값이라 서버 시계가 틀어져 있으면 그만큼 어긋난다. */
+const logTime = (l: BroadcastLog) => mdhm(l.started_at ?? l.created_at)
 /** datetime-local 입력용 — 로컬(KST) 기준 문자열 */
 const toLocalInput = (d: Date) =>
   `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`
@@ -251,7 +254,8 @@ export default function BroadcastPage() {
             <ul className="divide-y divide-gray-50">
               {logs.map(l => (
                 <li key={l.id} className="px-4 py-2.5 flex items-center gap-3 text-sm">
-                  <span className="text-xs text-gray-400 w-24 shrink-0">{mdhm(l.created_at)}</span>
+                  <span className="text-xs text-gray-400 w-24 shrink-0"
+                    title={l.started_at ? '실제 방송 시각' : '서버 기록 시각'}>{logTime(l)}</span>
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-gray-50 text-gray-500 border-gray-200 shrink-0">
                     {l.event}
                   </span>
@@ -404,7 +408,8 @@ function DashboardView({ dash }: { dash: Dashboard }) {
           <ul className="divide-y divide-gray-50">
             {dash.recent.slice(0, 8).map(l => (
               <li key={l.id} className="px-4 py-2 flex items-center gap-3 text-sm">
-                <span className="text-xs text-gray-400 w-20 shrink-0">{mdhm(l.created_at)}</span>
+                <span className="text-xs text-gray-400 w-20 shrink-0"
+                  title={l.started_at ? '실제 방송 시각' : '서버 기록 시각'}>{logTime(l)}</span>
                 {l.status === 'SUCCESS' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                   : <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
                 <span className="flex-1 min-w-0 truncate text-gray-700">{l.title ?? '—'}</span>
