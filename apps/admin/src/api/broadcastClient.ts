@@ -95,6 +95,10 @@ export interface Dashboard {
 }
 
 export interface BroadcastMeta {
+  /** 방송 PC 를 등록할 수 있는 상태인지 (서버에 BROADCAST_ENROLL_CODE 가 있는지) */
+  enroll_ready: boolean
+  /** 지금 TTS 로 음성을 만들 수 있는지 */
+  tts_ready: boolean
   types: BroadcastType[]
   /** enabled=false 인 구역은 실제로 동작하지 않는다 — 화면에서 고를 수 없게 해야 한다 */
   zones: { key: string; label: string; enabled: boolean }[]
