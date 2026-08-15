@@ -66,7 +66,7 @@ export default function EvalCalendarPage() {
   const [viewTab, setViewTab] = useState<ViewTab>('all')
   const [urgentFilter, setUrgentFilter] = useState<'todo' | 'overdue' | 'done'>('todo')
 
-  useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
+  useEffect(() => { loadAll() }, [loadAll])
 
   const hasOccurrences = occurrences.length > 0
 

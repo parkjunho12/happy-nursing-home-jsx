@@ -46,7 +46,7 @@ const mediaUrl = (url: string) =>
 
 // ── 메인 페이지 ───────────────────────────────────────────────────────────────
 export default function EvalAlbumPage() {
-  const { residents, loaded, loadAll } = useLtcStore()
+  const { residents, loadAll } = useLtcStore()
   const { user } = useAuthStore()
   const canManage = canManageFamilyAccounts(user)
 
@@ -112,7 +112,7 @@ export default function EvalAlbumPage() {
   const folderRef = useRef<HTMLInputElement>(null)
   const dropRef   = useRef<HTMLDivElement>(null)
 
-  useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
+  useEffect(() => { loadAll() }, [loadAll])
   useEffect(() => { fetchAlbums(); fetchGuardians() }, [])
 
   // 드롭다운 외부 클릭 닫기

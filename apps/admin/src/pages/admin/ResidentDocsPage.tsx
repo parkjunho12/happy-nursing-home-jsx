@@ -63,8 +63,8 @@ export default function ResidentDocsPage() {
   const [sopOpen, setSopOpen] = useState(false)
   // 수정 이력 모달 — null=닫힘, {}=전체 최근, {id,name}=해당 어르신
   const [histOpen, setHistOpen] = useState<{ id?: string; name?: string } | null>(null)
-  const { residents, loaded: ltcLoaded, loadAll } = useLtcStore()
-  useEffect(() => { if (!ltcLoaded) loadAll() }, [ltcLoaded, loadAll])
+  const { residents, loadAll } = useLtcStore()
+  useEffect(() => { loadAll() }, [loadAll])
   const [exp, setExp] = useState<Set<string>>(new Set())
   const toggleExp = (k: string) => setExp(p => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n })
 

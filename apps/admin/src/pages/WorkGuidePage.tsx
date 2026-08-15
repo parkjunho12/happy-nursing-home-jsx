@@ -25,11 +25,11 @@ export default function WorkGuidePage() {
   const navigate = useNavigate()
   const [sp, setSp] = useSearchParams()
   const { user } = useAuthStore()
-  const { checklists, loaded, loadAll } = useLtcStore()
+  const { checklists, loadAll } = useLtcStore()
   const [perm, setPerm] = useState<GuidePermission | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
+  useEffect(() => { loadAll() }, [loadAll])
   useEffect(() => {
     workGuideAPI.roles().then(setPerm).catch(() => setPerm(null)).finally(() => setLoading(false))
   }, [])

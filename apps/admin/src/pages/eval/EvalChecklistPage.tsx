@@ -95,7 +95,7 @@ export default function EvalChecklistPage() {
   const [lastCreated, setLastCreated] = useState<ChecklistItem | null>(null)
 
   useEffect(() => {
-    if (!loaded) loadAll()
+    loadAll()
   }, [loaded, loadAll])
 
   useEffect(() => {

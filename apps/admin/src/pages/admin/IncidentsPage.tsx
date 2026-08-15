@@ -32,8 +32,8 @@ const fmtD = (iso: string) => {
 const EMPTY: IncidentInput = { type: '낙상', occurred_date: '', severity: '경미', guardian_notified: false, status: 'open' }
 
 export default function IncidentsPage() {
-  const { residents, loaded, loadAll } = useLtcStore()
-  useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
+  const { residents, loadAll } = useLtcStore()
+  useEffect(() => { loadAll() }, [loadAll])
 
   const year = new Date().getFullYear()
   const [rows, setRows] = useState<Incident[]>([])

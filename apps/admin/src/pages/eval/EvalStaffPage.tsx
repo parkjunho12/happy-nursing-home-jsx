@@ -27,7 +27,7 @@ export default function EvalStaffPage() {
   const [posFilter, setPosFilter] = useState('')
   const [leaveFor, setLeaveFor] = useState<string | null>(null)
 
-  useEffect(() => { if (!loaded) loadAll() }, [loaded, loadAll])
+  useEffect(() => { loadAll() }, [loadAll])
 
   const positions = useMemo(() => Array.from(new Set(staffList.map(s => s.position).filter(Boolean))) as string[], [staffList])
   const filtered = useMemo(() => staffList

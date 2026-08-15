@@ -123,8 +123,8 @@ export default function SchedulePage() {
   const [editEvent, setEditEvent] = useState<ScheduleEvent | null>(null)
   const [detail, setDetail] = useState<UEvent | null>(null)
   // 생일은 서버 조회가 아니라 이미 있는 명단(수급자·직원)의 생년월일에서 계산한다
-  const { residents, staffList, loaded: ltcLoaded, loadAll: ltcLoadAll } = useLtcStore()
-  useEffect(() => { if (!ltcLoaded) ltcLoadAll() }, [ltcLoaded, ltcLoadAll])
+  const { residents, staffList, loadAll: ltcLoadAll } = useLtcStore()
+  useEffect(() => { ltcLoadAll() }, [ltcLoadAll])
 
   // 연차촉진 통지 일정 — 시설장·ADMIN만. 놓치면 법적 효력이 사라지므로 캘린더에 박아둔다.
   const { user: authUser } = useAuthStore()

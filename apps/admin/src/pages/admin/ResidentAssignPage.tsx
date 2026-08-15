@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { History, Loader2, Printer, Search, Users, Wand2, X } from 'lucide-react'
 import { assignmentAPI, type AssignRow, type StaffOpt, type AssignLog } from '@/api/assignmentClient'
 import RoomPicker from '@/components/eval/RoomPicker'
+import { useLtcStore } from '@/store/ltc'
 
 /**
  * 담당 어르신 명단 — 엑셀 명단을 그대로 화면으로.
@@ -95,6 +96,8 @@ export default function ResidentAssignPage() {
     try {
       await assignmentAPI.setBed(row.resident_id, f, room, force)
       load()   // 호실 순 정렬·방 구분선·층 탭까지 다시 맞춘다
+      // 여기서 바꾼 호실은 수급자 스토어를 거치지 않는다 — 수급자 관리·서류현황이 옛 호실을 들고 있지 않게
+      useLtcStore.getState().invalidate()
     } catch (e: any) {
       // 정원 초과(409)만은 그 자리에서 확인받고 강행 (직접 입력한 호실 포함)
       const detail = e?.response?.data?.detail
