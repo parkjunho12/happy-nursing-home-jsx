@@ -91,7 +91,11 @@ def register(body: RegisterBody, request: Request, db: Session = Depends(get_db)
     """
     code = (settings.BROADCAST_ENROLL_CODE or "").strip()
     if not code:
-        raise HTTPException(503, "서버에 등록코드(BROADCAST_ENROLL_CODE)가 설정돼 있지 않습니다.")
+        # .env 만 고치고 재빌드를 안 한 경우가 대부분이라, 그 사실까지 알려준다.
+        raise HTTPException(503,
+            "서버에 등록코드(BROADCAST_ENROLL_CODE)가 설정돼 있지 않습니다. "
+            ".env 에 넣었다면 이미지 재빌드가 필요합니다 "
+            "(docker compose build backend && docker compose up -d --force-recreate backend).")
     # bytes 로 비교한다 — str 끼리 비교하면 한글 같은 비ASCII 입력에서 TypeError 가 나
     # 403 이어야 할 자리가 500 이 된다. (비교 시간은 여전히 입력에 좌우되지 않는다)
     if not secrets.compare_digest(body.enroll_code.strip().encode("utf-8"), code.encode("utf-8")):

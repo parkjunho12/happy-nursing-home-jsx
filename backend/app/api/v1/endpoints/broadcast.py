@@ -118,13 +118,18 @@ def meta(_: User = Depends(_manager)):
     지원하지 않는 기능을 되는 것처럼 그리지 않으려고, 구역도 '지금 실제로
     동작하는지(enabled)'를 서버가 알려준다.
     """
+    providers = available_providers()
     return ApiResponse(success=True, data={
+        # 방송 PC 를 등록할 수 있는 상태인지 — 아니면 화면에서 먼저 알려준다.
+        # (설치하러 가서야 503 을 보는 일이 없도록)
+        "enroll_ready": bool((settings.BROADCAST_ENROLL_CODE or "").strip()),
+        "tts_ready": any(p["ready"] and p["current"] for p in providers),
         "types": list(BROADCAST_TYPES),
         # Zone 컨트롤러가 없으므로 ALL 만 실제 동작한다. 나머지는 자리만.
         "zones": [{"key": z, "label": "전체" if z == ZONE_ALL else z,
                    "enabled": z == ZONE_ALL} for z in KNOWN_ZONES],
         "zone_note": "구역 분리 장비(Zone Controller)가 없어 지금은 전체 방송만 나갑니다.",
-        "tts_providers": available_providers(),
+        "tts_providers": providers,
         "max_upload_mb": settings.BROADCAST_MAX_UPLOAD_MB,
         "max_seconds_default": settings.BROADCAST_MAX_SECONDS,
         "allowed_ext": sorted(media_svc.ALLOWED.keys()),

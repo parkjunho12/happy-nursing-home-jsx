@@ -134,6 +134,27 @@ export default function BroadcastPage() {
         </div>
       </div>
 
+      {/* 서버에 등록코드가 없으면 방송 PC 를 아예 붙일 수 없다.
+          설치하러 현장에 가서야 503 을 보는 일이 없도록 여기서 먼저 알린다. */}
+      {meta && !meta.enroll_ready && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+          <b>방송 PC 등록이 막혀 있습니다.</b> 서버에 등록코드(<code>BROADCAST_ENROLL_CODE</code>)가 없습니다.
+          <span className="block text-xs mt-1 text-rose-600 leading-relaxed">
+            <code>backend/.env</code> 에 값을 넣은 뒤 <b>이미지를 다시 빌드</b>해야 반영됩니다 —
+            재시작만으로는 적용되지 않습니다.<br />
+            <code className="text-[11px]">docker compose build backend &amp;&amp; docker compose up -d --force-recreate backend</code>
+          </span>
+        </div>
+      )}
+      {meta && meta.enroll_ready && !meta.tts_ready && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <b>음성 안내(TTS)를 만들 수 없습니다.</b> 서버에 TTS 설정이 없습니다.
+          <span className="block text-xs mt-0.5 text-amber-700">
+            MP3·MP4 업로드 방송은 정상 동작합니다. TTS 를 쓰시려면 <code>OPENAI_API_KEY</code> 를 설정하세요.
+          </span>
+        </div>
+      )}
+
       {/* 방송 PC 가 꺼져 있으면 예약이 있어도 소리가 안 난다 — 가장 먼저 알린다 */}
       {dash && dash.devices.length === 0 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
