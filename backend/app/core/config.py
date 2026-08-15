@@ -73,6 +73,26 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
 
     # =============================
+    # 안내방송 (소방·비상방송과 무관한 독립 시스템)
+    # =============================
+    BROADCAST_ENABLED: bool = True
+    # TTS 업체 — openai | local | mock. 교체는 이 값만 바꾸면 된다.
+    BROADCAST_TTS_PROVIDER: str = "openai"
+    BROADCAST_TTS_MODEL: str = "tts-1"
+    # 방송 PC(Agent)를 처음 등록할 때 쓰는 코드. 비워두면 등록 자체가 막힌다.
+    BROADCAST_ENROLL_CODE: str = ""
+    # 업로드 음원 상한 (요양원 안내방송에 100MB 넘는 파일은 없다)
+    BROADCAST_MAX_UPLOAD_MB: int = 100
+    # 예약 1건의 최대 재생시간(초) 기본값 — Agent가 이 시간에 강제로 끊는다
+    BROADCAST_MAX_SECONDS: int = 600
+    # Agent가 몇 초 이상 조용하면 오프라인으로 본다
+    BROADCAST_OFFLINE_SEC: int = 180
+    # Agent에 미리 내려보낼 예약 범위(일). 이 기간은 인터넷이 끊겨도 방송된다.
+    BROADCAST_SYNC_DAYS: int = 7
+    # 실패한 회차 재시도 횟수
+    BROADCAST_MAX_RETRY: int = 2
+
+    # =============================
     # 서버 부하 알림
     # 기준 사양: 2 vCPU / 4GB RAM / SSD 50GB / 일 20GB 트래픽
     # 순간 튐에는 안 보내고, SUSTAIN_MIN 분 동안 계속 넘을 때만 한 통 보낸다.

@@ -104,3 +104,7 @@ from app.models.pension import PensionEntry, PensionRefund  # noqa: F401
 from app.models.audit_check import AuditRound, AuditItem  # noqa: F401
 from app.models.operations import OperationContract, OperationPayItem, OperationPayment  # noqa: F401
 from app.models.admin_routine import AdminRoutine, AdminRoutineDone  # noqa: F401
+from app.models.broadcast import (  # noqa: F401
+    BroadcastDevice, BroadcastMedia, BroadcastSchedule,
+    BroadcastRun, BroadcastLog, BroadcastCommand,
+)

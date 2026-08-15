@@ -362,6 +362,22 @@ async def monitor_loop() -> None:
             if result["recover"]:
                 await send_alert("recover", result["recover"], checks, metrics)
 
+            # 방송 PC 감시도 이 루프에 얹는다 — 리더 선출·주기를 두 번 만들지 않으려고.
+            # 판단은 broadcast_watch 가 하고, 여기서는 부르기만 한다.
+            try:
+                from app.core.database import SessionLocal
+                from app.services import broadcast_watch
+                db = SessionLocal()
+                try:
+                    alerts = broadcast_watch.evaluate(db, state, time.time())
+                finally:
+                    db.close()
+                if alerts:
+                    save_state(state)
+                    await broadcast_watch.notify(alerts)
+            except Exception as e:
+                logger.warning("방송 PC 감시 오류: %s: %s", type(e).__name__, e)
+
         except asyncio.CancelledError:
             break
         except Exception as e:

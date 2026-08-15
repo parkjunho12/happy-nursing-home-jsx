@@ -1,0 +1,5 @@
+# Agent 는 표준 라이브러리만으로 동작합니다 (urllib · json · subprocess).
+# 아래는 선택 사항입니다.
+
+# 오디오 출력장치 목록을 정확히 보려면 (python -m broadcast_agent devices)
+sounddevice>=0.4.6 ; python_version >= "3.9"
