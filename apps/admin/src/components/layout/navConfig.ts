@@ -384,6 +384,7 @@ export function getNavConfig(
   const commItems: NavItem[] = []
   if (isSocialWorker || isNurse) commItems.push({ to: '/notices', icon: Bell, label: '내부 공지 관리' })
   if (isSocialWorker) commItems.push(
+    { to: '/broadcast', icon: Radio, label: '방송 관리' },
     { to: '/facility-news', icon: Megaphone, label: '시설소식' },
     { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
   )

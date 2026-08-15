@@ -42,12 +42,17 @@ router = APIRouter()
 # ──────────────────────────────────────────────────────────────
 # 권한
 # ──────────────────────────────────────────────────────────────
+# 방송을 걸 수 있는 사람. 건물 전체에 소리가 나가는 일이라 넓히지 않는다.
+# 화면 가드(App.tsx BroadcastRoute)·사이드바(navConfig)와 이 목록이 같아야 한다.
+BROADCAST_POSITIONS = ("시설장", "사회복지사")
+
+
 def _manager(current_user: User = Depends(get_current_user)) -> User:
     role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
     pos = getattr(current_user, "position", None)
     pos = pos.value if hasattr(pos, "value") else str(pos or "")
-    if role != "ADMIN" and pos != "시설장":
-        raise HTTPException(403, "방송 권한이 없습니다. (관리자·시설장)")
+    if role != "ADMIN" and pos not in BROADCAST_POSITIONS:
+        raise HTTPException(403, "방송 권한이 없습니다. (관리자·시설장·사회복지사)")
     return current_user
 
 

@@ -144,6 +144,17 @@ function ManagerRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+// 방송 관리 — ADMIN · 시설장 · 사회복지사
+// 건물 전체에 소리가 나가므로 넓히지 않는다.
+// 백엔드 broadcast.py 의 BROADCAST_POSITIONS 와 같아야 한다.
+function BroadcastRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, user } = useAuthStore()
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  const ok = user?.role === 'ADMIN' || ['시설장', '사회복지사'].includes(user?.position ?? '')
+  if (!ok) return <Navigate to="/eval/checklist" replace />
+  return <>{children}</>
+}
+
 // 직원 관리·직원 상세 — ADMIN · 시설장 · 대표 · 이사만 접근
 function StaffAdminRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuthStore()
@@ -325,7 +336,7 @@ function App() {
             <Route path="meal-count"               element={<MealRoute><MealCountPage /></MealRoute>} />
             <Route path="operations"               element={<AdminRoute><OperationsPage /></AdminRoute>} />
             <Route path="monthly-routines"         element={<AdminRoute><AdminRoutinePage /></AdminRoute>} />
-            <Route path="broadcast"                element={<ManagerRoute><BroadcastPage /></ManagerRoute>} />
+            <Route path="broadcast"                element={<BroadcastRoute><BroadcastPage /></BroadcastRoute>} />
             <Route path="staff-hr"                 element={<StaffAdminRoute><StaffHrPage /></StaffAdminRoute>} />
             <Route path="staffing"                 element={<ManagerRoute><StaffingSimulatorPage /></ManagerRoute>} />
             <Route path="work-schedule"           element={<ManagerRoute><WorkSchedulePage /></ManagerRoute>} />
