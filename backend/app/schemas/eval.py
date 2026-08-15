@@ -228,6 +228,7 @@ class LtcResidentCreate(BaseModel):
     eval_lines:            Optional[List[dict]] = None   # 자동 생성된 평가 일시
     memo:                  str = ""
     status:                Optional[str] = None   # active | pending(입소 예정)
+    allow_over_capacity:   Optional[bool] = None  # 정원이 찬 방에도 배정(화면에서 확인받음)
 
 
 class LtcResidentUpdate(BaseModel):
@@ -245,6 +246,8 @@ class LtcResidentUpdate(BaseModel):
     group_physical:        Optional[str] = None
     tube_feeding:          Optional[bool] = None
     memo:                  Optional[str] = None
+    # 정원이 찬 방으로도 옮긴다(교체·임시 배정). 화면에서 한 번 더 확인받고 보낸다.
+    allow_over_capacity:   Optional[bool] = None
 
 
 class LtcResidentOut(BaseModel):

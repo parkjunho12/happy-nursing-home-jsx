@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { History, Loader2, Printer, Search, Users, Wand2, X } from 'lucide-react'
 import { assignmentAPI, type AssignRow, type StaffOpt, type AssignLog } from '@/api/assignmentClient'
+import RoomPicker from '@/components/eval/RoomPicker'
 
 /**
  * 담당 어르신 명단 — 엑셀 명단을 그대로 화면으로.
@@ -86,6 +87,26 @@ export default function ResidentAssignPage() {
     }
   }
 
+  // ── 호실 변경 — 침대 그림으로 고르고 바로 저장 (배정 해제도 여기서) ──
+  const [bed, setBed] = useState<AssignRow | null>(null)
+  const [bedBusy, setBedBusy] = useState<string | null>(null)
+  const changeBed = async (row: AssignRow, f: string, room: string, force?: boolean) => {
+    setBed(null); setBedBusy(row.resident_id)
+    try {
+      await assignmentAPI.setBed(row.resident_id, f, room, force)
+      load()   // 호실 순 정렬·방 구분선·층 탭까지 다시 맞춘다
+    } catch (e: any) {
+      // 정원 초과(409)만은 그 자리에서 확인받고 강행 (직접 입력한 호실 포함)
+      const detail = e?.response?.data?.detail
+      if (e?.response?.status === 409 && confirm(`${detail}\n\n그래도 이 방으로 배정할까요?`)) {
+        try { await assignmentAPI.setBed(row.resident_id, f, room, true); load() }
+        catch (e2: any) { alert(e2?.response?.data?.detail ?? e2?.message ?? '호실 변경에 실패했습니다.') }
+      } else if (e?.response?.status !== 409) {
+        alert(detail ?? e?.message ?? '호실 변경에 실패했습니다.')
+      }
+    } finally { setBedBusy(null) }
+  }
+
   // 호실 경계 — 같은 방 첫 행에만 호실 표시 (엑셀 명단과 같은 눈높이)
   let prevRoom = '__'
 
@@ -124,7 +145,7 @@ export default function ResidentAssignPage() {
           </button>
         </div>
       </div>
-      <p className="text-xs text-gray-400 mb-3">담당을 바꾸면 바로 저장되고 이력이 남습니다 · 빈칸만 자동 배정(기존 담당 유지)</p>
+      <p className="text-xs text-gray-400 mb-3">담당·호실을 바꾸면 바로 저장되고 이력이 남습니다 · 호실 숫자를 누르면 침대 그림에서 고르거나 배정을 해제할 수 있어요 · 빈칸만 자동 배정(기존 담당 유지)</p>
 
       {/* 담당별 집계 — 몇 명씩 맡고 있는지 */}
       <div className="flex flex-wrap gap-3 mb-3">
@@ -174,10 +195,16 @@ export default function ResidentAssignPage() {
                 return (
                   <tr key={r.resident_id} className={`${first ? 'border-t-2 border-t-gray-300' : ''} ${incoming ? 'bg-amber-50/40' : ''}`}>
                     <td className={`${td} text-center`}>
-                      <input defaultValue={r.room}
-                        onBlur={async e => { const v = e.target.value.trim(); if (v !== r.room) { await assignmentAPI.setRoom(r.resident_id, v); patch(r.resident_id, { room: v }) } }}
-                        className={`w-12 text-center font-extrabold rounded-lg py-0.5 focus:outline-none focus:ring-2 focus:ring-teal-200 ${first ? 'bg-gray-800 text-white' : 'text-gray-300 bg-transparent'}`}
-                        placeholder="-" />
+                      <button onClick={() => setBed(r)} disabled={bedBusy === r.resident_id}
+                        title="눌러서 호실 변경 · 배정 해제"
+                        className={`w-12 text-center font-extrabold rounded-lg py-0.5 transition-colors ${
+                          !r.room ? 'text-gray-300 border border-dashed border-gray-300 hover:border-teal-400 hover:text-teal-500'
+                          : first ? 'bg-gray-800 text-white hover:bg-teal-600'
+                          : 'text-gray-300 bg-transparent hover:bg-gray-100 hover:text-gray-500'}`}>
+                        {bedBusy === r.resident_id
+                          ? <Loader2 size={12} className="animate-spin mx-auto" />
+                          : (r.room || '-')}
+                      </button>
                     </td>
                     <td className={`${td} font-bold text-gray-800`}>
                       {r.name}
@@ -324,6 +351,14 @@ export default function ResidentAssignPage() {
           .asg-print-page tr { break-inside: avoid; }
         }
       `}</style>
+
+      {/* 호실 변경 — 침대 그림에서 고르면 바로 저장 ('배정 해제'도 이 안에) */}
+      {bed && (
+        <RoomPicker
+          current={{ floor: bed.floor === '미지정' ? '' : bed.floor, room: bed.room }}
+          onClose={() => setBed(null)}
+          onPick={(f, room, force) => changeBed(bed, f, room, force)} />
+      )}
 
       {/* 담당 선택 — 검색 + 담당 수 보이는 원클릭 배정 */}
       {pick && (() => {

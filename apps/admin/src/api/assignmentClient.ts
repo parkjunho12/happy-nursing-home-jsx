@@ -34,6 +34,12 @@ export const assignmentAPI = {
     apiClient.put(`${BASE}/${rid}`, { note, set_note: true }).then(r => r.data),
   setRoom: (rid: string, room: string) =>
     apiClient.put(`${BASE}/${rid}`, { room, set_room: true }).then(r => r.data),
+  /** 층·호실을 한 번에 — 빈 문자열 둘 다 보내면 배정 해제. force=만실 강행 */
+  setBed: (rid: string, floor: string, room: string, force?: boolean) =>
+    apiClient.put(`${BASE}/${rid}`, {
+      floor, room, set_floor: true, set_room: true,
+      ...(force ? { allow_over_capacity: true } : {}),
+    }).then(r => r.data),
   auto: (kind: 'care' | 'rehab') =>
     apiClient.post(`${BASE}/auto?kind=${kind}`).then(unwrap<{ assigned: number; load: { name: string; count: number }[] }>),
   logs: (limit = 50) => apiClient.get(`${BASE}/logs`, { params: { limit } }).then(unwrap<AssignLog[]>),

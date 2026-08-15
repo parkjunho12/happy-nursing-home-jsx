@@ -387,7 +387,7 @@ export const useLtcStore = create<LtcState>((set, get) => ({
   },
 
   addResident: async (r) => {
-    const raw = await evalResidentsAPI.create({ name:r.name, birth_date:r.birthDate, gender:r.gender, admission_date:r.admissionDate, admission_time:(r as any).admissionTime, care_grade_start_date:r.careGradeStartDate, floor:r.floor, room:(r as any).room, status:(r as any).status, religion:(r as any).religion, group_cognitive:(r as any).groupCognitive, group_leisure:(r as any).groupLeisure, group_physical:(r as any).groupPhysical, tube_feeding:(r as any).tubeFeeding ?? false, certifications:(r as any).certifications, contract_lines:(r as any).contract_lines, plan_lines:(r as any).plan_lines, eval_lines:(r as any).eval_lines, memo:r.memo })
+    const raw = await evalResidentsAPI.create({ name:r.name, birth_date:r.birthDate, gender:r.gender, admission_date:r.admissionDate, admission_time:(r as any).admissionTime, care_grade_start_date:r.careGradeStartDate, floor:r.floor, room:(r as any).room, status:(r as any).status, religion:(r as any).religion, group_cognitive:(r as any).groupCognitive, group_leisure:(r as any).groupLeisure, group_physical:(r as any).groupPhysical, tube_feeding:(r as any).tubeFeeding ?? false, certifications:(r as any).certifications, contract_lines:(r as any).contract_lines, plan_lines:(r as any).plan_lines, eval_lines:(r as any).eval_lines, memo:r.memo, allow_over_capacity:(r as any).allowOverCapacity })
     const newR = mapR(raw)
     const templates = generateResidentAdmissionChecklists(newR as any, (r as any).intakeFlags ?? {})
     const newCls = await evalChecklistAPI.createBulk(templates.map(clPayload as any))
@@ -408,6 +408,8 @@ export const useLtcStore = create<LtcState>((set, get) => ({
     if (u.careGradeStartDate !== undefined) p.care_grade_start_date = u.careGradeStartDate
     if (u.floor !== undefined)              p.floor                 = u.floor
     if ((u as any).room !== undefined)      p.room                  = (u as any).room
+    // 정원 초과 강행 — 화면에서 확인받은 경우에만 실린다
+    if ((u as any).allowOverCapacity !== undefined) p.allow_over_capacity = (u as any).allowOverCapacity
     if ((u as any).religion !== undefined)       p.religion        = (u as any).religion
     if ((u as any).groupCognitive !== undefined) p.group_cognitive = (u as any).groupCognitive
     if ((u as any).groupLeisure !== undefined)   p.group_leisure   = (u as any).groupLeisure

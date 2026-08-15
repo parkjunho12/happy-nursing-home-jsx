@@ -3,7 +3,7 @@ import RoomPicker from '@/components/eval/RoomPicker'
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/auth'
-import { UserPlus, LogOut, Edit2, AlertTriangle, RotateCcw, Trash2 } from 'lucide-react'
+import { UserPlus, LogOut, Edit2, AlertTriangle, RotateCcw, Trash2, BedDouble, Loader2 } from 'lucide-react'
 import DateField from '@/components/ui/DateField'
 import CertificationEditor from '@/components/eval/CertificationEditor'
 import { endFromStart, type Certification } from '@/utils/cert'
@@ -151,6 +151,25 @@ function ResidentCard({ r, onEdit, onDischarge, onDelete, onDetail, checklists, 
 }) {
   // 케어팀(간호팀장·물리치료사)은 열람·체크 중심 — 삭제는 숨긴다
   const canDelete = useAuthStore(st => st.user?.role === 'ADMIN' || ['사회복지사', '시설장', '대표', '이사'].includes(st.user?.position ?? ''))
+  // 호실은 목록에서 바로 바꾼다 — 수정 모달을 열고 저장까지 갈 일이 아니다
+  const updateResident = useLtcStore(st => st.updateResident)
+  const [pickOpen, setPickOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const assignRoom = async (floor: string, room: string, force?: boolean) => {
+    setPickOpen(false); setSaving(true)
+    try {
+      await updateResident(r.id, { floor, room, ...(force ? { allowOverCapacity: true } : {}) } as any)
+    } catch (e: any) {
+      // 정원 초과(409)만은 되돌아가지 않고 그 자리에서 확인받고 강행한다 (직접 입력한 호실 포함)
+      const detail = e?.response?.data?.detail
+      if (e?.response?.status === 409 && confirm(`${detail}\n\n그래도 이 방으로 배정할까요?`)) {
+        try { await updateResident(r.id, { floor, room, allowOverCapacity: true } as any) }
+        catch (e2: any) { alert(e2?.response?.data?.detail ?? e2?.message ?? '호실 저장에 실패했습니다.') }
+      } else if (e?.response?.status !== 409) {
+        alert(detail ?? e?.message ?? '호실 저장에 실패했습니다.')
+      }
+    } finally { setSaving(false) }
+  }
   const age = calcAge(r.birthDate)
   const done = checklists.filter(c => isItemDone(c)).length
   const total = checklists.length
@@ -174,6 +193,18 @@ function ResidentCard({ r, onEdit, onDischarge, onDelete, onDetail, checklists, 
             <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${r.status==='active'?'bg-green-100 text-green-700':r.status==='pending'?'bg-amber-100 text-amber-700':'bg-gray-100 text-gray-500'}`}>
               {r.status==='active'?'입소 중':r.status==='pending'?'입소 예정':'퇴소'}
             </span>
+            {/* 호실 — 눌러서 바로 변경 (상세 열기와 겹치지 않게 전파 차단) */}
+            {r.status !== 'discharged' && (
+              <button onClick={e => { e.stopPropagation(); setPickOpen(true) }} disabled={saving}
+                title="눌러서 호실 바로 변경"
+                className={`inline-flex items-center gap-1 text-[11px] font-bold px-1.5 py-0.5 rounded border transition-colors ${
+                  r.floor || r.room
+                    ? 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100'
+                    : 'bg-white text-gray-400 border-dashed border-gray-300 hover:border-teal-300 hover:text-teal-600'}`}>
+                {saving ? <Loader2 size={11} className="animate-spin" /> : <BedDouble size={11} />}
+                {r.floor || r.room ? `${r.floor}${r.room ? ` ${r.room}호` : ''}` : '호실 미지정'}
+              </button>
+            )}
             {r.tubeFeeding && <span className="text-[9px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1 py-0.5 rounded">경관식</span>}
             {hasHigh && <AlertTriangle size={13} className="text-red-500"/>}
           </div>
@@ -210,6 +241,12 @@ function ResidentCard({ r, onEdit, onDischarge, onDelete, onDetail, checklists, 
           )}
         </div>
       </div>
+
+      {pickOpen && (
+        <RoomPicker current={{ floor: r.floor, room: (r as any).room }}
+          onClose={() => setPickOpen(false)}
+          onPick={(f, room, force) => assignRoom(f, room, force)} />
+      )}
     </div>
   )
 }
@@ -250,6 +287,7 @@ export function ResidentForm({ existing, onClose }: { existing?: LtcResident; on
   const { addResident, updateResident } = useLtcStore()
   const today = new Date().toISOString().split('T')[0]
   const [roomPickOpen, setRoomPickOpen] = useState(false)
+  const [overCap, setOverCap] = useState(false)   // 만실 방을 확인하고 고른 경우
   const [form, setForm] = useState({ name:existing?.name??'', birthDate:existing?.birthDate??'1930-01-01', gender:existing?.gender??'female', admissionDate:existing?.admissionDate??today, admissionTime:(existing as any)?.admissionTime??'', careGradeStartDate:existing?.careGradeStartDate??today, floor:existing?.floor??'', room:(existing as any)?.room??'', memo:existing?.memo??'', religion:existing?.religion??'', groupCognitive:existing?.groupCognitive??'', groupLeisure:existing?.groupLeisure??'', groupPhysical:existing?.groupPhysical??'', tubeFeeding:existing?.tubeFeeding??false })
   const [flags, setFlags] = useState({ basicMedical: false, restraint: false, pressureSore: false, positioning: false })
   const [certs, setCerts] = useState<Certification[]>([
@@ -299,7 +337,7 @@ export function ResidentForm({ existing, onClose }: { existing?: LtcResident; on
     const auto = autoDocEvents(certifications, form.admissionDate)
     try {
       if(existing) {
-        await updateResident(existing.id, form)
+        await updateResident(existing.id, (overCap ? { ...form, allowOverCapacity: true } : form) as any)
         if (docId && certsReady) await residentDocAPI.update(docId, { certifications }).catch(() => alert('인정서 저장에 실패했습니다 — 서류현황에서 다시 시도해주세요.'))
         const newFlags = Object.fromEntries(Object.entries(flags).filter(([k, v]) => v && !existingFlags[k]))
         if (Object.keys(newFlags).length) {
@@ -317,7 +355,7 @@ export function ResidentForm({ existing, onClose }: { existing?: LtcResident; on
           }
         }
       }
-      else await addResident({...form, careGradeStartDate, certifications, contract_lines:auto.contract, plan_lines:auto.plan, eval_lines:auto.eval, status:'active', intakeFlags: flags} as any)
+      else await addResident({...form, careGradeStartDate, certifications, contract_lines:auto.contract, plan_lines:auto.plan, eval_lines:auto.eval, status:'active', intakeFlags: flags, allowOverCapacity: overCap} as any)
       onClose()
     }
     catch (err: any) { alert(err?.response?.data?.detail ?? '저장에 실패했습니다.') }
@@ -355,7 +393,11 @@ export function ResidentForm({ existing, onClose }: { existing?: LtcResident; on
             {roomPickOpen && (
               <RoomPicker current={{ floor: form.floor, room: form.room }}
                 onClose={() => setRoomPickOpen(false)}
-                onPick={(f, r) => { setForm(p => ({ ...p, floor: f, room: r })); setRoomPickOpen(false) }} />
+                onPick={(f, r, force) => {
+                  setForm(p => ({ ...p, floor: f, room: r }))
+                  setOverCap(!!force)
+                  setRoomPickOpen(false)
+                }} />
             )}
           </div>
           <div>
@@ -633,6 +675,7 @@ function QuickPendingModal({ onClose }: { onClose: () => void }) {
   const [room, setRoom] = useState('')
   const [memo, setMemo] = useState('')
   const [pickOpen, setPickOpen] = useState(false)
+  const [overCap, setOverCap] = useState(false)   // 만실 방을 확인하고 고른 경우
   const [saving, setSaving] = useState(false)
   const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10)
 
@@ -644,7 +687,7 @@ function QuickPendingModal({ onClose }: { onClose: () => void }) {
       await addResident({
         name: name.trim(), admissionDate: date, admissionTime: time, careGradeStartDate: date,
         birthDate: '', gender: '', floor, room, memo,
-        status: 'pending',
+        status: 'pending', allowOverCapacity: overCap,
       } as any)
       onClose()
       alert(`${name.trim()} 어르신을 입소 예정자로 등록했습니다.\n입소일(${date})이 되면 자동으로 현원이 됩니다.\n생년월일 등 상세 정보는 확정 후 수정에서 채워주세요.`)
@@ -685,7 +728,7 @@ function QuickPendingModal({ onClose }: { onClose: () => void }) {
           </button>
           {pickOpen && (
             <RoomPicker current={{ floor, room }} onClose={() => setPickOpen(false)}
-              onPick={(f, r) => { setFloor(f); setRoom(r); setPickOpen(false) }} />
+              onPick={(f, r, force) => { setFloor(f); setRoom(r); setOverCap(!!force); setPickOpen(false) }} />
           )}
         </div>
         <input value={memo} onChange={e => setMemo(e.target.value)} className={ic} placeholder="메모 (선택 — 보호자 연락처 등)" />

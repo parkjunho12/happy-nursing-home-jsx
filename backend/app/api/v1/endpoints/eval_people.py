@@ -73,7 +73,9 @@ def create_ltc_resident(
     _: User = Depends(get_current_user),
 ):
     data = payload.model_dump()
-    _check_room_capacity(db, data.get("floor"), data.get("room"))
+    # 컬럼이 아닌 플래그 — LtcResident(**data) 전에 반드시 빼낸다
+    if not data.pop("allow_over_capacity", False):
+        _check_room_capacity(db, data.get("floor"), data.get("room"))
     certifications_in = data.pop("certifications", None)
     contract_in = data.pop("contract_lines", None)
     plan_in = data.pop("plan_lines", None)
@@ -186,22 +188,32 @@ def update_ltc_resident(
     r = db.query(LtcResident).filter(LtcResident.id == rid).first()
     if not r:
         raise HTTPException(404, "Not found")
-    # 방 변경이면 정원부터 확인
-    if payload.room is not None and payload.room:
-        _check_room_capacity(db, payload.floor if payload.floor is not None else r.floor,
-                             payload.room, exclude_id=rid)
+    data = payload.model_dump(exclude_none=True)
+    # 스키마에만 있는 플래그 — 컬럼이 아니므로 반영 전에 빼낸다
+    force = bool(data.pop("allow_over_capacity", False))
+    # 배정 해제('')는 미배정(None)으로 통일 — 층 필터·점유 계산이 빈 문자열을 층으로 세지 않게
+    for _k in ("floor", "room"):
+        if isinstance(data.get(_k), str) and not data[_k].strip():
+            data[_k] = None
+    # 정원은 '방이 실제로 바뀔 때'만 본다.
+    # 안 그러면 강행 배정으로 정원을 넘긴 방에 계신 분은 메모 하나 못 고친다(같은 방인데 409).
+    new_floor = data["floor"] if "floor" in data else r.floor
+    new_room = data["room"] if "room" in data else r.room
+    moved = (new_room or None) != (r.room or None) or (new_floor or None) != (r.floor or None)
+    if new_room and moved and not force:
+        _check_room_capacity(db, new_floor, new_room, exclude_id=rid)
     before = {k: getattr(r, k, None) for k in GROUP_LOG_FIELDS}
-    for k, v in payload.model_dump(exclude_none=True).items():
+    for k, v in data.items():
         setattr(r, k, v)
     _log_group_changes(db, r.name, before,
                        {k: getattr(r, k, None) for k in GROUP_LOG_FIELDS}, current_user)
     db.commit()
     db.refresh(r)
-    # 층 변경 시 연동된 서류현황에도 반영
+    # 층 변경 시 연동된 서류현황에도 반영 (해제는 r.floor와 같은 None으로 — 빈 문자열을 남기지 않는다)
     if payload.floor is not None:
         try:
             from app.models.resident_docs import ResidentDocStatus
-            db.query(ResidentDocStatus).filter(ResidentDocStatus.resident_id == rid).update({"floor": payload.floor})
+            db.query(ResidentDocStatus).filter(ResidentDocStatus.resident_id == rid).update({"floor": r.floor})
             db.commit()
         except Exception:
             db.rollback()

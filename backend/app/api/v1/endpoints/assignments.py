@@ -75,11 +75,14 @@ class AssignBody(BaseModel):
     rehab_staff_id: Optional[str] = None
     note: Optional[str] = None
     room: Optional[str] = None
+    floor: Optional[str] = None
     # 어떤 필드를 보냈는지 구분하기 위한 플래그 (null=해제도 가능해야 해서)
     set_care: Optional[bool] = None
     set_rehab: Optional[bool] = None
     set_note: Optional[bool] = None
     set_room: Optional[bool] = None
+    set_floor: Optional[bool] = None
+    allow_over_capacity: Optional[bool] = None   # 만실 방으로도 옮김(화면에서 확인받음)
 
 
 def _staff_name(db: Session, sid: Optional[str]) -> Optional[str]:
@@ -113,9 +116,29 @@ def assign(resident_id: str, body: AssignBody, db: Session = Depends(get_db),
     if body.set_note:
         _log(db, r, "기타", a.note, body.note, who)
         a.note = (body.note or "").strip() or None
-    if body.set_room:
-        _log(db, r, "호실", r.room, body.room, who)
-        r.room = (body.room or "").strip() or None
+    # 층·호실은 한 번에 바뀌는 일이 많다(다른 층으로 이사) — 정원은 옮길 방 기준으로 한 번만 본다
+    if body.set_room or body.set_floor:
+        new_floor = (body.floor or "").strip() if body.set_floor else (r.floor or "")
+        new_room = (body.room or "").strip() if body.set_room else (r.room or "")
+        # 정원은 방이 실제로 바뀔 때만 — 같은 방 재저장이 409가 되면 안 된다
+        moved = (new_room or None) != (r.room or None) or (new_floor or None) != (r.floor or None)
+        if new_room and moved and not body.allow_over_capacity:
+            from app.api.v1.endpoints.eval_people import _check_room_capacity
+            _check_room_capacity(db, new_floor, new_room, exclude_id=r.id)
+        if body.set_floor:
+            _log(db, r, "층", r.floor, new_floor or None, who)
+            r.floor = new_floor or None
+            # 어르신 서류현황도 같은 층으로 — 수급자 관리에서 바꿨을 때와 동작을 맞춘다
+            try:
+                from app.models.resident_docs import ResidentDocStatus
+                (db.query(ResidentDocStatus)
+                   .filter(ResidentDocStatus.resident_id == r.id)
+                   .update({"floor": r.floor}))
+            except Exception:
+                pass
+        if body.set_room:
+            _log(db, r, "호실", r.room, new_room or None, who)
+            r.room = new_room or None
     a.updated_by = who
     db.commit()
     return ApiResponse(success=True, message="저장했습니다.")
