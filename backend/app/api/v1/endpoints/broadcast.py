@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -441,10 +442,34 @@ def play_now(sid: str, db: Session = Depends(get_db), current_user: User = Depen
     if s.status != ST_READY:
         raise HTTPException(400, "아직 재생할 음원이 준비되지 않았습니다.")
     at = now_kst().replace(microsecond=0)
-    run = BroadcastRun(schedule_id=s.id, occurrence_at=at, status=RUN_PENDING)
-    db.add(run)
-    _audit(db, event="PLAY_NOW", user=current_user, schedule_id=s.id, title=s.title)
-    db.commit(); db.refresh(run)
+    # 버튼을 연타하면 같은 초에 회차가 겹쳐 UNIQUE 위반이 난다.
+    # 두 번 눌렀다고 두 번 나가면 안 되므로, 이미 있으면 그걸 그대로 돌려준다(멱등).
+    run = (db.query(BroadcastRun)
+             .filter(BroadcastRun.schedule_id == s.id,
+                     BroadcastRun.occurrence_at == at).first())
+    created = False
+    if run is None:
+        run = BroadcastRun(schedule_id=s.id, occurrence_at=at, status=RUN_PENDING)
+        db.add(run)
+        created = True
+
+    # 즉시 방송은 '빨리' 나가야 의미가 있다. Agent 의 동기화 주기(기본 5분)를
+    # 기다리면 늦으므로, 다시 받아가라고 알려 heartbeat 주기(기본 30초) 안에 전달한다.
+    db.add(BroadcastCommand(device_id=None, command="RESYNC",
+                            payload={"reason": "play_now", "schedule_id": s.id},
+                            issued_by=getattr(current_user, "name", None)))
+    if created:
+        _audit(db, event="PLAY_NOW", user=current_user, schedule_id=s.id, title=s.title)
+    try:
+        db.commit()
+    except IntegrityError:                 # 동시에 두 명이 눌렀을 때
+        db.rollback()
+        run = (db.query(BroadcastRun)
+                 .filter(BroadcastRun.schedule_id == s.id,
+                         BroadcastRun.occurrence_at == at).first())
+        if run is None:
+            raise HTTPException(409, "지금 방송을 시작할 수 없습니다. 잠시 후 다시 시도해주세요.")
+    db.refresh(run)
     return ApiResponse(success=True, data={"run_id": run.id, "at": at.isoformat()},
                        message="곧 방송됩니다. (방송 PC가 온라인일 때)")
 

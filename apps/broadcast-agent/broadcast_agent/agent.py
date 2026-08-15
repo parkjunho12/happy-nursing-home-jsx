@@ -257,10 +257,16 @@ class BroadcastAgent:
         self.sync_sec = int(cfg.get("sync_sec", 300))
         # 예정 시각 ±이 범위 안이면 '지금 틀 시간'으로 본다
         self.tolerance_sec = int(cfg.get("tolerance_sec", 90))
+        # 즉시 방송은 조금 늦게 받아도 내보낸다(서버의 15분 한도와 맞춤).
+        # 예약 방송은 좁게 유지한다 — 3시간 전 점심 안내가 갑자기 나가면 안 된다.
+        self.immediate_tolerance_sec = int(cfg.get("immediate_tolerance_sec", 900))
         self._stop = threading.Event()
         self._last_sync = 0.0
         self.online = False
         self.now_playing: Optional[str] = None
+        # 서버 시계와의 차이(초). PC 시계가 느리면 음수.
+        # 방송 시각 판단에 이 값을 반영한다 — 안 그러면 시계가 틀어진 만큼 늦게/일찍 나간다.
+        self.clock_skew = 0.0
 
     # ── 동기화 ──
     def sync(self) -> bool:
@@ -298,11 +304,43 @@ class BroadcastAgent:
         try:
             data = self.api.heartbeat(self.now_playing, self.cfg.get("audio_device") or "")
             self.online = True
+            self._check_clock(data.get("server_time"))
             for cmd in data.get("commands", []):
                 self.handle_command(cmd)
         except ServerError as e:
             self.online = False
             logger.debug("heartbeat 실패: %s", e)
+
+    def _check_clock(self, server_time: Optional[str]) -> None:
+        """이 PC 시계가 서버와 얼마나 다른지 본다.
+
+        방송은 '몇 시 몇 분'에 나가야 하는 일이라 PC 시계가 틀어지면 그만큼
+        어긋난다. 5분 느린 PC 는 모든 방송을 5분 늦게 내보낸다.
+
+        그래서 차이를 재서 방송 시각 판단에 반영하고(그래야 실제 시각에 맞게 나간다),
+        동시에 경고를 남긴다 — 근본 해결은 PC 시간 동기화(NTP)다.
+        """
+        if not server_time:
+            return
+        try:
+            skew = (parse_at(server_time) - now_kst()).total_seconds()
+        except (ValueError, TypeError):
+            return
+        # 몇 시간씩 차이 나면 서버 응답이 이상한 것일 수 있다 — 보정하지 않고 알리기만
+        if abs(skew) > 6 * 3600:
+            logger.error("시계 차이가 너무 큽니다(%.0f초). PC 시간을 확인하세요.", skew)
+            return
+        was = self.clock_skew
+        self.clock_skew = skew
+        if abs(skew) >= 30 and abs(skew - was) >= 5:
+            logger.warning(
+                "PC 시계가 서버와 %.0f초 %s. 방송 시각 판단에 보정해 내보내지만, "
+                "PC 시간 동기화(NTP)를 켜주세요.",
+                abs(skew), "느립니다" if skew > 0 else "빠릅니다")
+
+    def server_now(self) -> datetime:
+        """서버 기준 현재 시각 — 방송 시각 판단은 항상 이걸 쓴다."""
+        return now_kst() + timedelta(seconds=self.clock_skew)
 
     def handle_command(self, cmd: dict) -> None:
         name = cmd.get("command")
@@ -314,16 +352,23 @@ class BroadcastAgent:
 
     # ── 재생 ──
     def due_items(self, at: Optional[datetime] = None) -> List[dict]:
-        """지금 틀어야 할 회차들."""
-        at = at or now_kst()
+        """지금 틀어야 할 회차들.
+
+        기준 시각은 서버 시계다(PC 시계가 틀어져 있어도 실제 시각에 맞게 나가도록).
+        즉시 방송은 허용창을 넓게 둔다 — 동기화가 조금 늦게 와도 관리자가 누른
+        방송은 나가야 한다. 반대로 예약 방송은 좁게 둬서 지나간 안내가
+        뒤늦게 튀어나오지 않게 한다.
+        """
+        at = at or self.server_now()
         out = []
         for it in self.store.load_schedule().get("items", []):
             try:
                 when = parse_at(it["occurrence_at"])
             except Exception:
                 continue
+            window = self.immediate_tolerance_sec if it.get("immediate") else self.tolerance_sec
             diff = (at - when).total_seconds()
-            if 0 <= diff <= self.tolerance_sec:
+            if 0 <= diff <= window:
                 if not self.store.is_done(it["schedule_id"], it["occurrence_at"]):
                     out.append(it)
         return out

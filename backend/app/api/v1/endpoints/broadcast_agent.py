@@ -229,6 +229,8 @@ def sync(d: BroadcastDevice = Depends(_device), db: Session = Depends(get_db)):
             continue
         items.append({
             "schedule_id": s.id, "occurrence_at": at.isoformat(), "title": s.title,
+            # 즉시 방송(관리자가 지금 누른 것) — 예약과 달리 조금 늦게 받아도 내보낸다
+            "immediate": True,
             "type": s.type, "volume": s.volume, "zones": s.zones or [ZONE_ALL],
             "max_seconds": s.max_seconds,
             "media": {"id": m.id, "url": m.url, "sha256": m.sha256,
