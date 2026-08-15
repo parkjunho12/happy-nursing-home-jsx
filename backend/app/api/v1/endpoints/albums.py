@@ -367,7 +367,8 @@ def generate_monthly(month: Optional[str] = None, db: Session = Depends(get_db),
                      current_user: User = Depends(get_current_user)):
     """월별 앨범 일괄 생성 — 재원 어르신 전원, 퇴소자 제외, 멱등.
 
-    매월 1일 자동으로도 돌지만, 버튼으로 즉시 만들 수도 있다."""
+    앨범이 만들어지는 유일한 경로다. 자동 생성(매월 1일 루프·수급자 등록 시)은
+    모두 없앴고, 관리자가 이 버튼을 누를 때만 생긴다."""
     _require_can_manage_guardians(current_user)   # ADMIN·사회복지사
     from datetime import datetime
     from app.services.monthly_albums import ensure_monthly_albums
