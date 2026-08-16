@@ -42,6 +42,15 @@ const CL_GROUPS: { tag: string; no: number; label: string; fam: keyof typeof FAM
   { tag: '롱텀케어', no: 11, label: '퇴소 — 롱텀케어',                        fam: 'it' },
 ] as const).map(g => ({ ...g, accent: FAM[g.fam].accent, bar: FAM[g.fam].bar }))
 const TAG_RE = new RegExp(`^\\[(${CL_GROUPS.map(g => g.tag).join('|')})\\]\\s*`)
+/** 담당 팀 — 배정된 직종으로 가른다 (인쇄 쪽 teamOf 와 같은 규칙) */
+const TEAMS = [
+  { key: '간호', label: '간호팀',   dot: 'bg-rose-500',  on: 'bg-rose-600 border-rose-600' },
+  { key: '물리', label: '물리치료', dot: 'bg-blue-500',  on: 'bg-blue-600 border-blue-600' },
+  { key: '복지', label: '복지팀',   dot: 'bg-teal-500',  on: 'bg-teal-600 border-teal-600' },
+] as const
+const teamKeyOf = (c: any) =>
+  c.assignee === '간호팀' ? '간호' : c.assignee === '물리치료사' ? '물리' : '복지'
+
 /** '[오경애] [전산] 상담 4회차' → { tag: '전산', text: '상담 4회차' } */
 function splitClTitle(title: string): { tag: string | null; text: string } {
   let t = title.replace(/^\[[^\]]+\]\s*/, '')   // 이름 프리픽스 제거
@@ -101,6 +110,7 @@ export default function ResidentDetailPage() {
   // 거르는 것은 보기일 뿐이라 체크·전체 체크는 원래 항목 그대로 동작한다.
   const [onlyLeft, setOnlyLeft] = useState(false)
   const [partTag, setPartTag] = useState<string | null>(null)   // null = 전체 파트
+  const [teamKey, setTeamKey] = useState<string | null>(null)   // null = 전체 팀
 
   if (!loaded) return <div className="flex items-center justify-center h-64"><Loader2 className="animate-spin text-gray-300" /></div>
   if (!r) return (
@@ -208,6 +218,31 @@ export default function ResidentDetailPage() {
                   </button>
                 )
               })}
+
+              {/* 팀별 — '우리 팀이 해야 할 것'만 보려고 쓴다. 파트 필터와 같이 걸린다 */}
+              <span className="w-full h-0 md:hidden" />
+              <span className="w-px h-4 bg-gray-200 mx-0.5 hidden md:inline-block" />
+              {TEAMS.map(t => {
+                const list = cls.filter(c => teamKeyOf(c) === t.key)
+                if (list.length === 0) return null
+                const left = leftOf(list as any)
+                const on = teamKey === t.key
+                return (
+                  <button key={t.key} type="button"
+                    onClick={() => setTeamKey(k => k === t.key ? null : t.key)}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors ${
+                      on ? `${t.on} text-white`
+                        : left === 0 ? 'border-gray-100 text-gray-300 hover:bg-gray-50'
+                        : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                    <span className={`w-2 h-2 rounded-full ${on ? 'bg-white/70' : t.dot}`} />
+                    {t.label}
+                    <span className={`font-black ${
+                      on ? 'text-white/70' : left === 0 ? 'text-green-500' : 'text-amber-600'}`}>
+                      {left === 0 ? '✓' : left}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
           )
         })()}
@@ -222,14 +257,21 @@ export default function ResidentDetailPage() {
           const etcAll = cls.filter(c => splitClTitle(c.title).tag === null)
           if (etcAll.length) allGroups.push({ tag: '', no: allGroups.length + 1, label: '기타', accent: 'text-gray-600 bg-gray-50 border-gray-200', bar: 'bg-gray-300', items: etcAll } as any)
 
+          const keep = (c: any) =>
+            (!onlyLeft || !isItemDone(c)) && (teamKey === null || teamKeyOf(c) === teamKey)
           const groups = allGroups
             .filter(g => partTag === null || g.tag === partTag)
-            .map(g => ({ ...g, shown: onlyLeft ? g.items.filter(c => !isItemDone(c)) : g.items }))
+            .map(g => ({ ...g, shown: g.items.filter(keep) }))
             .filter(g => g.shown.length > 0)
+          // 팀을 걸러 보고 있으면 그 팀 것만 체크한다.
+          // 안 그러면 간호팀만 보다가 누른 한 번에 복지팀 것까지 완료로 찍힌다.
+          const teamLabel = TEAMS.find(t => t.key === teamKey)?.label
+          const todoOf = (g: typeof groups[number]) =>
+            g.items.filter(c => !isItemDone(c) && (teamKey === null || teamKeyOf(c) === teamKey))
           const checkAll = async (g: typeof groups[number]) => {
-            const todo = g.items.filter(c => !isItemDone(c))
+            const todo = todoOf(g)
             if (todo.length === 0) return
-            if (!confirm(`「${g.label}」 미완료 ${todo.length}건을 전부 완료 처리할까요?\n체크한 담당자로 내 이름이 기록됩니다.`)) return
+            if (!confirm(`「${g.label}」${teamLabel ? ` · ${teamLabel}` : ''} 미완료 ${todo.length}건을 전부 완료 처리할까요?\n체크한 담당자로 내 이름이 기록됩니다.`)) return
             setBatchTag(g.tag)
             try { for (const c of todo) await toggleComplete(c.id, true) }
             catch (e: any) { alert(e?.response?.data?.detail ?? '일괄 처리 중 오류') }
@@ -238,9 +280,10 @@ export default function ResidentDetailPage() {
           if (groups.length === 0) return (
             <p className="text-xs text-gray-400 text-center py-6">
               {onlyLeft
-                ? (partTag === null ? '남은 항목이 없습니다 — 모두 마쳤어요' : '이 파트는 모두 마쳤어요')
+                ? (teamKey ? `${TEAMS.find(t => t.key === teamKey)?.label}이 할 일은 모두 마쳤어요`
+                   : partTag === null ? '남은 항목이 없습니다 — 모두 마쳤어요' : '이 파트는 모두 마쳤어요')
                 : '해당하는 항목이 없습니다'}
-              <button type="button" onClick={() => { setOnlyLeft(false); setPartTag(null) }}
+              <button type="button" onClick={() => { setOnlyLeft(false); setPartTag(null); setTeamKey(null) }}
                 className="ml-2 font-bold text-teal-600 hover:underline">전체 보기</button>
             </p>
           )
@@ -258,7 +301,7 @@ export default function ResidentDetailPage() {
                   <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden min-w-[40px]">
                     <div className={`h-1.5 rounded-full transition-all ${allDone ? 'bg-green-400' : g.bar}`} style={{ width: `${(gd / g.items.length) * 100}%` }} />
                   </div>
-                  {!allDone && (
+                  {todoOf(g).length > 0 && (
                     <button type="button" onClick={() => checkAll(g)} disabled={batchTag !== null}
                       className="shrink-0 text-[11px] font-bold text-teal-600 border border-teal-200 px-2 py-1 rounded-lg hover:bg-teal-50 disabled:opacity-40">
                       {batchTag === g.tag ? <Loader2 size={11} className="animate-spin" /> : '전체 체크'}
@@ -417,7 +460,7 @@ export default function ResidentDetailPage() {
           it:   { bg: '#f5f3ff', edge: '#a78bfa', text: '#5b21b6' },
           cond: { bg: '#fff7ed', edge: '#fb923c', text: '#9a3412' },
         }
-        const teamOf = (c: any) => c.assignee === '간호팀' ? '간호' : c.assignee === '물리치료사' ? '물리' : '복지'
+        const teamOf = teamKeyOf
         const TEAMC: Record<string, { c: string; bg: string }> = {
           간호: { c: '#be123c', bg: '#ffe4e6' }, 물리: { c: '#1d4ed8', bg: '#dbeafe' }, 복지: { c: '#0f766e', bg: '#ccfbf1' },
         }
