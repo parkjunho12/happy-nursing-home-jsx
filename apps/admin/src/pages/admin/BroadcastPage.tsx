@@ -843,7 +843,7 @@ function PositionCastView({ onChanged }: { onChanged: () => void }) {
           <span className="font-bold">{cfg.mask_names ? '✓ ' : ''}이름 가려서 부르기</span>
           <span className="block text-[10px] opacity-70 mt-0.5">
             {cfg.mask_names
-              ? '이길용 → 이모용 처럼 가운데를 가립니다. 성과 끝 글자가 남아 선생님들은 알아보십니다'
+              ? '이길용 → 이땡용 처럼 가운데를 가립니다. 성과 끝 글자가 남아 선생님들은 알아보십니다'
               : '성함을 그대로 부릅니다. 방문객에게도 들립니다'}
           </span>
         </button>

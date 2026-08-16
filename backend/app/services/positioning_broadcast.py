@@ -62,7 +62,7 @@ DEFAULTS: Dict[str, Any] = {
     "name_style": "name",
     # 이보다 많으면 다 부르지 않고 '외 N분' 으로 줄인다 — 2분 넘는 방송은 아무도 안 듣는다
     "max_names": 20,
-    # 이름 가운데를 가려 부른다. 이길용 → 이모용
+    # 이름 가운데를 가려 부른다. 이길용 → 이땡용
     # 건물 전체로 나가는 방송이라 기본으로 가린다. 선생님들은 성과 끝 글자로 알아보신다.
     "mask_names": True,
 }
@@ -174,19 +174,23 @@ def speak_room(room: Optional[str]) -> str:
     return (out or "공") + "호"
 
 
-def mask_name(name: str) -> str:
-    """이름 가운데를 가린다. 이길용 → 이모용, 김철 → 김모.
+# 가린 자리를 대신 읽는 글자.
+# 'O'·'○'·'0' 을 그대로 넣으면 TTS 가 '2호용', '이는용', '이선무용' 처럼
+# 엉뚱하게 읽는다. 실제로 만들어 받아써 보고 고른 글자다.
+MASK_CHAR = "땡"
 
-    'O' 나 '○' 를 그대로 넣으면 TTS 가 '2호용', '이는용' 처럼 엉뚱하게 읽는다.
-    한국에서 이름을 가릴 때 실제로 쓰는 '모(某)' 를 넣어야 제대로 읽힌다.
+
+def mask_name(name: str) -> str:
+    """이름 가운데를 가린다. 이길용 → 이땡용, 김철 → 김땡.
+
     성과 끝 글자는 남기므로 선생님들은 누구인지 알아보신다.
     """
     n = (name or "").strip()
     if len(n) < 2:
         return n
     if len(n) == 2:
-        return f"{n[0]}모"
-    return f"{n[0]}모{n[-1]}"
+        return f"{n[0]}{MASK_CHAR}"
+    return f"{n[0]}{MASK_CHAR}{n[-1]}"
 
 
 def _label(r: LtcResident, style: str, mask: bool = True) -> str:
