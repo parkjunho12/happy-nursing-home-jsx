@@ -38,7 +38,7 @@ export const operationsAPI = {
   missingPayItems: () => apiClient.get(`${BASE}/missing-pay-items`).then(unwrap<OpContract[]>),
   /** 빠진 계약을 한 번에 납부 대장에 올린다 */
   syncPayItems: () => apiClient.post(`${BASE}/sync-pay-items`, {})
-    .then(unwrap<{ added: number; names: string[] }>),
+    .then(unwrap<{ added: number; created: number; linked: number; names: string[] }>),
 
   payItems: () => apiClient.get(`${BASE}/pay-items`).then(unwrap<OpPayItem[]>),
   createPayItem: (b: Partial<OpPayItem>) => apiClient.post(`${BASE}/pay-items`, b).then(unwrap<OpPayItem>),
