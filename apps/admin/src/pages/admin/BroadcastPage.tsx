@@ -583,6 +583,19 @@ function ScheduleModal({ editing, meta, onClose, onSaved }: {
             </div>
           )}
 
+          {/* 업로드 결과 안내 — 조용히 처리하면 현장에서 "왜 작게 나오지"가 된다 */}
+          {media?.still_quiet && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              원본 소리가 많이 작아 <b>최대치까지만 키웠습니다.</b> 방송이 작게 들릴 수 있으니
+              미리듣기로 확인하고, 필요하면 더 큰 음원으로 다시 올려주세요.
+            </p>
+          )}
+          {media?.audio_only && (
+            <p className="text-xs text-gray-500">
+              영상에서 <b>소리만</b> 뽑아 저장했습니다. (방송에는 오디오만 쓰입니다)
+            </p>
+          )}
+
           {/* 미리듣기 */}
           {media?.url && (
             <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
