@@ -41,7 +41,10 @@ class OpenAITTSProvider(TTSProvider):
             client = OpenAI(api_key=settings.OPENAI_API_KEY, timeout=60)
             resp = client.audio.speech.create(
                 model=settings.BROADCAST_TTS_MODEL or "tts-1",
-                voice=v, input=text, speed=sp, response_format="mp3",
+                voice=v, input=text, speed=sp,
+                # WAV 로 받는다. 만들고 나서 음량을 최대로 키우려면 PCM 이어야 하고,
+                # 서버에는 ffmpeg 이 없어 mp3 를 열 수 없다.
+                response_format="wav",
             )
             audio = resp.read() if hasattr(resp, "read") else bytes(resp.content)
         except TTSError:
@@ -51,7 +54,7 @@ class OpenAITTSProvider(TTSProvider):
             raise TTSError(f"음성 생성에 실패했습니다: {type(e).__name__}") from e
         if not audio:
             raise TTSError("음성 데이터가 비어 있습니다.")
-        return TTSResult(audio=audio, ext="mp3", mime="audio/mpeg", provider=self.name, voice=v)
+        return TTSResult(audio=audio, ext="wav", mime="audio/wav", provider=self.name, voice=v)
 
 
 class LocalTTSProvider(TTSProvider):

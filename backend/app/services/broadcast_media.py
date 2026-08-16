@@ -89,6 +89,74 @@ def validate(filename: str, data: bytes) -> Tuple[str, str, str]:
     return ext, mime, kind
 
 
+# 방송 음량을 이 수준까지 끌어올린다(dBFS). 0 은 클리핑 직전이라 여유를 둔다.
+NORMALIZE_PEAK_DBFS = -1.0
+# 아무리 작은 소리라도 이 이상은 키우지 않는다 — 조용한 구간의 잡음까지 커진다
+NORMALIZE_MAX_GAIN_DB = 30.0
+
+
+def normalize_wav(data: bytes) -> bytes:
+    """WAV 를 클리핑 직전까지 키운다.
+
+    왜 필요한가: Agent 의 볼륨 조절은 '줄이는' 방향뿐이라(-af volume=0.7),
+    원본이 작으면 100% 로 틀어도 작다. 앰프를 올려 보완하면 잡음까지 커진다.
+    그래서 만들 때 최대로 키워두고, 현장에서는 앰프로 낮춰 쓰는 편이 낫다.
+
+    ffmpeg 없이 표준 라이브러리만 쓴다(서버 이미지에 ffmpeg 이 없다).
+    16비트 PCM 이 아니면 원본을 그대로 돌려준다 — 못 다루는 것을 망가뜨리지 않는다.
+    """
+    import array
+    import io
+    import wave
+
+    try:
+        with wave.open(io.BytesIO(data), "rb") as w:
+            if w.getsampwidth() != 2:            # 16비트만 다룬다
+                return data
+            params = w.getparams()
+            frames = w.readframes(w.getnframes())
+    except (wave.Error, EOFError, ValueError):
+        return data
+    if not frames:
+        return data
+
+    samples = array.array("h")
+    samples.frombytes(frames)
+    peak = max(abs(min(samples)), abs(max(samples))) if samples else 0
+    if peak == 0:
+        return data                              # 완전한 무음 — 키울 것이 없다
+
+    target = int(32767 * (10 ** (NORMALIZE_PEAK_DBFS / 20)))
+    gain = target / peak
+    max_gain = 10 ** (NORMALIZE_MAX_GAIN_DB / 20)
+    gain = min(gain, max_gain)
+    if gain <= 1.01:                             # 이미 충분히 크다
+        return data
+
+    for i, v in enumerate(samples):
+        x = int(v * gain)
+        samples[i] = 32767 if x > 32767 else (-32768 if x < -32768 else x)
+
+    out = io.BytesIO()
+    with wave.open(out, "wb") as w:
+        w.setparams(params)
+        w.writeframes(samples.tobytes())
+    logger.info("방송 음원 음량 정규화: %.1f배 (peak %d → %d)", gain, peak, int(peak * gain))
+    return out.getvalue()
+
+
+def wav_duration(data: bytes) -> Optional[int]:
+    """WAV 길이(초) — ffprobe 없이 헤더만 읽는다."""
+    import io
+    import wave
+    try:
+        with wave.open(io.BytesIO(data), "rb") as w:
+            rate = w.getframerate()
+            return int(w.getnframes() / rate) if rate else None
+    except (wave.Error, EOFError, ValueError):
+        return None
+
+
 def probe_duration(path: str) -> Optional[int]:
     """길이(초). ffprobe 가 없으면 None — 없다고 업로드를 막지는 않는다."""
     try:
