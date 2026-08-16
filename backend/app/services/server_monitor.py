@@ -375,6 +375,18 @@ async def monitor_loop() -> None:
                 if alerts:
                     save_state(state)
                     await broadcast_watch.notify(alerts)
+
+                # 쓰지 않는 방송 음원 정리 — 하루 한 번이면 충분하다
+                last_clean = state.get("broadcast_media_cleaned", 0)
+                if time.time() - last_clean >= 24 * 3600:
+                    db = SessionLocal()
+                    try:
+                        from app.services.broadcast_media import cleanup_orphans
+                        cleanup_orphans(db)
+                    finally:
+                        db.close()
+                    state["broadcast_media_cleaned"] = time.time()
+                    save_state(state)
             except Exception as e:
                 logger.warning("방송 PC 감시 오류: %s: %s", type(e).__name__, e)
 

@@ -135,3 +135,38 @@ def remove(filename: Optional[str]) -> None:
         os.remove(os.path.join(BROADCAST_DIR, os.path.basename(filename)))
     except OSError:
         pass
+
+
+def cleanup_orphans(db, older_than_days: int = 30) -> dict:
+    """아무 예약도 쓰지 않는 음원을 지운다.
+
+    예약을 지워도 음원 파일은 남아 디스크에 계속 쌓인다. 50GB 짜리 서버라
+    몇 년 두면 부담이 되고, 무엇보다 '왜 있는지 모르는 파일'이 남는 게 좋지 않다.
+
+    갓 만든 파일은 건드리지 않는다 — 관리자가 TTS 를 만들어놓고 아직 예약에
+    붙이지 않은 상태일 수 있다(그 사이에 지우면 화면이 깨진다).
+    """
+    from datetime import timedelta
+    from app.models.broadcast import BroadcastMedia, BroadcastSchedule, now_kst
+
+    cutoff = now_kst() - timedelta(days=older_than_days)
+    used = {m for (m,) in db.query(BroadcastSchedule.media_id)
+            .filter(BroadcastSchedule.media_id.isnot(None)).all()}
+
+    removed, freed = 0, 0
+    for m in db.query(BroadcastMedia).all():
+        if m.id in used:
+            continue
+        created = m.created_at
+        if created is not None and created.tzinfo is None:
+            created = created.replace(tzinfo=cutoff.tzinfo)
+        if created is not None and created > cutoff:
+            continue                      # 아직 예약에 붙이는 중일 수 있다
+        freed += m.size_bytes or 0
+        remove(m.filename)
+        db.delete(m)
+        removed += 1
+    if removed:
+        db.commit()
+        logger.info("방송 음원 정리: %d개 삭제 (%.1fMB)", removed, freed / 1024 / 1024)
+    return {"removed": removed, "freed_mb": round(freed / 1024 / 1024, 1)}
