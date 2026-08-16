@@ -467,19 +467,19 @@ def play_now(sid: str, db: Session = Depends(get_db), current_user: User = Depen
         raise HTTPException(404, "예약을 찾을 수 없습니다.")
     if s.status != ST_READY:
         raise HTTPException(400, "아직 재생할 음원이 준비되지 않았습니다.")
-    # 이 예약 자체의 회차가 곧(±15분) 있으면 '그 회차'를 튼다.
-    # 새 회차를 따로 만들면 예약의 회차와 즉시 방송의 회차가 둘 다 살아 있어
-    # 같은 방송이 두 번 나간다. (시각이 다르니 UNIQUE 로도 못 막는다)
-    now = now_kst().replace(microsecond=0)
-    near = occurrences(s.scheduled_at, s.repeat_rule,
-                       start=now - timedelta(minutes=15),
-                       end=now + timedelta(minutes=15), limit=1)
-    at = near[0] if near else now
-    # 버튼을 연타하면 같은 초에 회차가 겹쳐 UNIQUE 위반이 난다.
-    # 두 번 눌렀다고 두 번 나가면 안 되므로, 이미 있으면 그걸 그대로 돌려준다(멱등).
-    run = (db.query(BroadcastRun)
-             .filter(BroadcastRun.schedule_id == s.id,
-                     BroadcastRun.occurrence_at == at).first())
+    # 즉시 방송은 언제나 '지금'이다. 예약 시각을 빌려 쓰면 그 시각까지 기다리게 되고,
+    # 이미 지난 시각이면 아예 안 나간다. (중복은 sync 에서 막는다 —
+    # 이 예약의 다른 회차가 근처에 있으면 그쪽을 내려보내지 않는다)
+    at = now_kst().replace(microsecond=0)
+    # 버튼을 연타하면 초가 달라 회차가 여러 개 생기고, 그만큼 방송이 반복된다.
+    # 같은 예약의 '아직 안 나간(또는 나가는 중인)' 최근 회차가 있으면 그걸 그대로 쓴다.
+    recent = (db.query(BroadcastRun)
+                .filter(BroadcastRun.schedule_id == s.id,
+                        BroadcastRun.status.in_([RUN_PENDING, RUN_PLAYING]),
+                        BroadcastRun.occurrence_at >= at - timedelta(minutes=15),
+                        BroadcastRun.occurrence_at <= at + timedelta(minutes=15))
+                .order_by(BroadcastRun.occurrence_at.desc()).first())
+    run = recent
     created = False
     if run is None:
         run = BroadcastRun(schedule_id=s.id, occurrence_at=at, status=RUN_PENDING)
