@@ -249,7 +249,7 @@ export default function OperationsPage() {
                               {c.category}
                               {c.payable && !c.on_ledger && (
                                 // 돈은 나가는데 납부 대장에 없다 — 눈에 띄어야 고친다
-                                <span title="납부 대장에 없습니다 — 계약을 열어 '납부 대장에도 올리기'를 켜주세요"
+                                <span title="납부 대장에 같은 항목이 없습니다 — 납부 대장 탭에서 한 번에 올릴 수 있어요"
                                   className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 align-middle">
                                   납부 대장 없음
                                 </span>
@@ -344,7 +344,9 @@ function PaymentsTab({ items, pays, year, setYear, yearTotal, onCell, onEditItem
       const r = await operationsAPI.syncPayItems()
       await loadMissing()
       onReload()
-      alert(`${r.added}건을 납부 대장에 올렸습니다.`)
+      alert(r.created === r.added
+        ? `${r.added}건을 납부 대장에 올렸습니다.`
+        : `${r.added}건 처리 — 새로 만든 것 ${r.created}건, 이미 있던 항목에 연결 ${r.linked}건`)
     } catch (e: any) { alert(e?.response?.data?.detail ?? '실패') }
     finally { setSyncing(false) }
   }
@@ -415,6 +417,9 @@ function PaymentsTab({ items, pays, year, setYear, yearTotal, onCell, onEditItem
             className="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-bold disabled:opacity-50">
             {syncing ? '올리는 중…' : '납부 대장에 올리기'}
           </button>
+          <p className="text-[10px] text-amber-600 mt-1.5">
+            이름이 같은 항목이 이미 있으면 그것을 쓰고, 정말 없는 것만 새로 만듭니다.
+          </p>
         </div>
       )}
 

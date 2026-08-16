@@ -5,6 +5,7 @@
 - 납부: 항목×월 매트릭스, 한 달에 여러 건 기록 가능
 """
 import logging
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -68,34 +69,95 @@ def _payable(section: Optional[str]) -> bool:
     return (section or "정기") in PAYABLE_SECTIONS
 
 
+def _norm(v: Optional[str]) -> str:
+    """이름 비교용 — 공백·대소문자 차이는 같은 것으로 본다.
+
+    '(주)올바른 씨케이' 와 '(주)올바른씨케이' 는 같은 업체다.
+    """
+    return re.sub(r"\s+", "", (v or "")).strip().lower()
+
+
+def match_items(db: Session) -> dict:
+    """계약 → 그 계약이 쓰는 납부 항목.
+
+    연동을 만들기 전에 넣은 데이터가 대부분이라, 연결(contract_id)만 보면
+    '납부 대장에 있는데 없다'고 잘못 말하게 된다. 실제로 업체명은 자주 다르다
+    (계약 '케이전기안전' ↔ 납부 '한국전력공사' — 안전관리 업체와 납부처가 다르다).
+    그래서 순서대로 짝을 짓는다.
+      1) 연결된 것
+      2) 항목명·업체가 모두 같은 것
+      3) 항목명만 같은 것
+    한 항목은 한 계약에만 붙는다 — 같은 이름 계약이 둘이면 각각 다른 항목을 가져간다.
+    """
+    items = (db.query(OperationPayItem)
+               .order_by(OperationPayItem.sort, OperationPayItem.created_at).all())
+    contracts = (db.query(OperationContract)
+                   .order_by(OperationContract.sort, OperationContract.created_at).all())
+
+    linked = {i.contract_id: i for i in items if i.contract_id and i.active}
+    free = [i for i in items if not i.contract_id and i.active]
+    out: dict = {c.id: linked[c.id] for c in contracts if c.id in linked}
+
+    for exact in (True, False):
+        for c in contracts:
+            if c.id in out or not (_payable(c.section) and c.active):
+                continue
+            m = next((i for i in free
+                      if _norm(i.category) == _norm(c.category)
+                      and (not exact or _norm(i.vendor) == _norm(c.vendor))), None)
+            if m:
+                out[c.id] = m
+                free.remove(m)
+    return out
+
+
 def _sync_pay_item(db: Session, c: OperationContract, *, want: bool) -> Optional[OperationPayItem]:
     """계약에 딸린 납부 항목을 맞춘다.
 
     want=False 면 내린다. 납부 기록이 있으면 지우지 않고 비활성으로만 둔다 —
     기록을 지우는 것은 되돌릴 수 없다.
+
+    '이 계약이 만든 항목'과 '원래 있던 항목을 가져다 쓴 것'을 다르게 다룬다.
+    내가 만든 것은 계약을 따라 통째로 바꾸지만, 원래 있던 것은 비어 있는 칸만
+    채운다 — 납부처가 계약 업체와 다른 경우가 실제로 있어서, 덮어쓰면
+    멀쩡한 기록이 틀어진다.
     """
     from app.services.operations_groups import infer_group
-    item = (db.query(OperationPayItem)
+    mine = (db.query(OperationPayItem)
               .filter(OperationPayItem.contract_id == c.id).first())
 
     if not want:
-        if item:
+        if mine:
             has_pay = db.query(OperationPayment).filter(
-                OperationPayment.item_id == item.id).count() > 0
+                OperationPayment.item_id == mine.id).count() > 0
             if has_pay:
-                item.active = False
+                mine.active = False
             else:
-                db.delete(item)
+                db.delete(mine)
         return None
 
     section = CONTRACT_TO_PAY_SECTION.get(c.section or "정기", "정기")
     grp = c.grp or infer_group(c.category or "", section)
-    if item:
-        item.section, item.category, item.vendor = section, c.category, c.vendor
-        item.grp, item.active = grp, True
+
+    if mine:
+        mine.section, mine.category, mine.vendor = section, c.category, c.vendor
+        mine.grp, mine.active = grp, True
         if c.pay_day:
-            item.method = c.pay_day
-        return item
+            mine.method = c.pay_day
+        return mine
+
+    # 이름이 같은 항목이 이미 있으면 그것을 쓴다 — 같은 항목을 두 줄 만들지 않는다
+    adopt = match_items(db).get(c.id)
+    if adopt is not None:
+        adopt.contract_id = c.id
+        adopt.active = True
+        if not (adopt.vendor or "").strip():
+            adopt.vendor = c.vendor
+        if not (adopt.method or "").strip():
+            adopt.method = c.pay_day
+        if not (adopt.grp or "").strip():
+            adopt.grp = grp
+        return adopt
 
     item = OperationPayItem(
         contract_id=c.id, section=section, category=c.category, vendor=c.vendor,
@@ -142,10 +204,9 @@ class ContractBody(BaseModel):
 @router.get("/contracts")
 def list_contracts(db: Session = Depends(get_db), _: User = Depends(_guard)):
     rows = db.query(OperationContract).order_by(OperationContract.sort, OperationContract.created_at).all()
-    linked = {i.contract_id for i in
-              db.query(OperationPayItem).filter(OperationPayItem.contract_id.isnot(None)).all()}
+    matched = match_items(db)
     for c in rows:
-        c._on_ledger = c.id in linked
+        c._on_ledger = c.id in matched
     return ApiResponse(success=True, data=[_c_view(c) for c in rows])
 
 
@@ -456,21 +517,16 @@ def seed_from_excel(db: Session = Depends(get_db), user: User = Depends(_guard))
 
 @router.get("/missing-pay-items")
 def missing_pay_items(db: Session = Depends(get_db), _: User = Depends(_guard)):
-    """계약 대장에는 있는데 납부 대장에 없는 계약들.
+    """계약 대장에는 있는데 납부 대장에 정말로 없는 계약들.
 
-    연동이 없던 시절에 넣은 계약들이 여기에 잡힌다.
+    화면의 '납부 대장 없음' 배지와 같은 기준(match_items)을 쓴다 —
+    두 곳이 다른 기준을 쓰면 '있는데 없다고 뜬다'가 된다.
     """
-    linked = {i.contract_id for i in
-              db.query(OperationPayItem).filter(OperationPayItem.contract_id.isnot(None)).all()}
+    matched = match_items(db)
     rows = (db.query(OperationContract)
               .filter(OperationContract.active == True)             # noqa: E712
               .order_by(OperationContract.sort, OperationContract.created_at).all())
-    out = [c for c in rows if _payable(c.section) and c.id not in linked]
-    # 이름·업체가 같은 항목이 이미 손으로 들어가 있으면 중복이므로 뺀다
-    have = {((i.category or "").strip(), (i.vendor or "").strip())
-            for i in db.query(OperationPayItem).all()}
-    out = [c for c in out
-           if ((c.category or "").strip(), (c.vendor or "").strip()) not in have]
+    out = [c for c in rows if _payable(c.section) and c.id not in matched]
     for c in out:
         c._on_ledger = False
     return ApiResponse(success=True, data=[_c_view(c) for c in out])
@@ -478,14 +534,26 @@ def missing_pay_items(db: Session = Depends(get_db), _: User = Depends(_guard)):
 
 @router.post("/sync-pay-items")
 def sync_pay_items(db: Session = Depends(get_db), user: User = Depends(_guard)):
-    """빠져 있는 계약을 납부 대장에 한 번에 올린다."""
-    res = missing_pay_items(db=db, _=user)
-    ids = [c["id"] for c in res.data]
-    added = []
-    for cid in ids:
-        c = db.query(OperationContract).filter(OperationContract.id == cid).first()
-        if c and _sync_pay_item(db, c, want=True):
-            added.append(c.category)
+    """빠져 있는 계약을 납부 대장에 올린다.
+
+    이름이 같은 항목이 이미 있으면 그것을 가져다 쓰고(연결만 한다),
+    정말 없는 것만 새로 만든다. 같은 항목이 두 줄이 되면 안 된다.
+    """
+    matched = match_items(db)
+    rows = (db.query(OperationContract)
+              .filter(OperationContract.active == True)             # noqa: E712
+              .order_by(OperationContract.sort, OperationContract.created_at).all())
+    todo = [c for c in rows if _payable(c.section) and c.id not in matched]
+    added, linked_names = [], []
+    for c in todo:
+        before = db.query(OperationPayItem).count()
+        it = _sync_pay_item(db, c, want=True)
+        if it is None:
+            continue
+        (added if db.query(OperationPayItem).count() > before else linked_names).append(c.category)
     db.commit()
-    return ApiResponse(success=True, data={"added": len(added), "names": added[:20]},
-                       message=f"{len(added)}건을 납부 대장에 올렸습니다.")
+    total = len(added) + len(linked_names)
+    return ApiResponse(success=True, data={
+        "added": total, "created": len(added), "linked": len(linked_names),
+        "names": (added + linked_names)[:20]},
+        message=f"{total}건을 납부 대장에 올렸습니다.")
