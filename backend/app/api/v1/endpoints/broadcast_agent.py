@@ -215,30 +215,36 @@ def sync(d: BroadcastDevice = Depends(_device), db: Session = Depends(get_db)):
             })
     items.sort(key=lambda x: x["occurrence_at"])
 
-    # 즉시 방송처럼 서버가 직접 만든 회차도 함께 (반복 계산으로는 안 나온다)
+    # 즉시 방송(관리자가 지금 누른 것) 표시.
+    # 예약의 회차와 같은 시각이면 그 항목에 표시만 하고, 새로 덧붙이지 않는다 —
+    # 덧붙이면 같은 방송이 두 번 나간다.
     adhoc = (db.query(BroadcastRun)
                .filter(BroadcastRun.status == RUN_PENDING,
                        BroadcastRun.occurrence_at >= start,
                        BroadcastRun.occurrence_at <= end).all())
-    known = {(i["schedule_id"], i["occurrence_at"]) for i in items}
+    by_key = {(i["schedule_id"], i["occurrence_at"]): i for i in items}
     for r in adhoc:
         at = to_kst(r.occurrence_at)
         key = (r.schedule_id, at.isoformat())
-        if key in known:
+        hit = by_key.get(key)
+        if hit is not None:
+            hit["immediate"] = True          # 이미 있는 회차 — 표시만 바꾼다
             continue
-        s = next((x for x in scheds if x.id == r.schedule_id), None)
-        m = media.get(s.media_id) if s and s.media_id else None
-        if not s or not m:
+        sc = next((x for x in scheds if x.id == r.schedule_id), None)
+        m = media.get(sc.media_id) if sc and sc.media_id else None
+        if not sc or not m:
             continue
-        items.append({
-            "schedule_id": s.id, "occurrence_at": at.isoformat(), "title": s.title,
-            # 즉시 방송(관리자가 지금 누른 것) — 예약과 달리 조금 늦게 받아도 내보낸다
+        item = {
+            "schedule_id": sc.id, "occurrence_at": at.isoformat(), "title": sc.title,
+            # 즉시 방송 — 예약과 달리 조금 늦게 받아도 내보낸다
             "immediate": True,
-            "type": s.type, "volume": s.volume, "zones": s.zones or [ZONE_ALL],
-            "max_seconds": s.max_seconds,
+            "type": sc.type, "volume": sc.volume, "zones": sc.zones or [ZONE_ALL],
+            "max_seconds": sc.max_seconds,
             "media": {"id": m.id, "url": m.url, "sha256": m.sha256,
                       "filename": m.filename, "duration_sec": m.duration_sec},
-        })
+        }
+        items.append(item)
+        by_key[key] = item
     items.sort(key=lambda x: x["occurrence_at"])
 
     d.last_seen = now_kst()

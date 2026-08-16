@@ -467,7 +467,14 @@ def play_now(sid: str, db: Session = Depends(get_db), current_user: User = Depen
         raise HTTPException(404, "예약을 찾을 수 없습니다.")
     if s.status != ST_READY:
         raise HTTPException(400, "아직 재생할 음원이 준비되지 않았습니다.")
-    at = now_kst().replace(microsecond=0)
+    # 이 예약 자체의 회차가 곧(±15분) 있으면 '그 회차'를 튼다.
+    # 새 회차를 따로 만들면 예약의 회차와 즉시 방송의 회차가 둘 다 살아 있어
+    # 같은 방송이 두 번 나간다. (시각이 다르니 UNIQUE 로도 못 막는다)
+    now = now_kst().replace(microsecond=0)
+    near = occurrences(s.scheduled_at, s.repeat_rule,
+                       start=now - timedelta(minutes=15),
+                       end=now + timedelta(minutes=15), limit=1)
+    at = near[0] if near else now
     # 버튼을 연타하면 같은 초에 회차가 겹쳐 UNIQUE 위반이 난다.
     # 두 번 눌렀다고 두 번 나가면 안 되므로, 이미 있으면 그걸 그대로 돌려준다(멱등).
     run = (db.query(BroadcastRun)
