@@ -409,9 +409,13 @@ class ScheduleUpdate(BaseModel):
     enabled: Optional[bool] = None
 
 
-PROGRAM_LOCK = ("프로그램 시간표에서 자동으로 만든 예약입니다. "
-                "고치려면 프로그램 관리에서 시간표나 자동방송 설정을 바꿔주세요. "
-                "여기서 고쳐도 다음 동기화 때 되돌아갑니다.")
+AUTO_LOCK = {
+    "PROGRAM": ("프로그램 시간표에서 자동으로 만든 예약입니다. "
+                "고치려면 프로그램 관리에서 시간표나 자동방송 설정을 바꿔주세요."),
+    "POSITION": ("체위변경 안내 자동 예약입니다. "
+                 "고치려면 방송 관리의 체위변경 설정이나 "
+                 "수급자 관리의 대상자 표시를 바꿔주세요."),
+}
 
 
 def _reject_program(s: BroadcastSchedule) -> None:
@@ -420,8 +424,9 @@ def _reject_program(s: BroadcastSchedule) -> None:
     막지 않으면 '지웠는데 왜 또 나가지'가 된다 — 동기화가 다시 만들기 때문이다.
     되돌아갈 변경을 받아주는 것보다, 어디서 고쳐야 하는지 알려주는 편이 낫다.
     """
-    if (getattr(s, "source", None) or "MANUAL") == "PROGRAM":
-        raise HTTPException(409, PROGRAM_LOCK)
+    src = getattr(s, "source", None) or "MANUAL"
+    if src in AUTO_LOCK:
+        raise HTTPException(409, AUTO_LOCK[src] + " 여기서 고쳐도 다음 동기화 때 되돌아갑니다.")
 
 
 @router.patch("/schedules/{sid}")
@@ -716,3 +721,78 @@ def program_sync(db: Session = Depends(get_db), current_user: User = Depends(_ma
         raise HTTPException(502, str(e))
     return ApiResponse(success=True, data=result,
                        message="프로그램 시간표에 맞춰 예약을 반영했습니다.")
+
+
+# ──────────────────────────────────────────────────────────────
+# 체위변경 안내방송
+#   수급자 관리에서 '체위변경 대상자'로 표시된 분들의 이름을 부르고
+#   실시를 안내한다. 명단이 바뀌면 음성을 다시 만든다.
+# ──────────────────────────────────────────────────────────────
+class PositionCastConfig(BaseModel):
+    enabled: Optional[bool] = None
+    times: Optional[List[str]] = None
+    volume: Optional[int] = None
+    voice: Optional[str] = None
+    template: Optional[str] = None
+    name_style: Optional[str] = None
+    max_names: Optional[int] = None
+
+
+@router.get("/position/plan")
+def position_plan(db: Session = Depends(get_db), _: User = Depends(_manager)):
+    """대상 어르신이 누구고 몇 시에 어떤 문구가 나가는지 — 미리보기."""
+    from app.services import positioning_broadcast as pos
+    return ApiResponse(success=True, data=pos.plan(db))
+
+
+@router.put("/position/config")
+def position_config_save(body: PositionCastConfig, db: Session = Depends(get_db),
+                         current_user: User = Depends(_manager)):
+    """설정을 저장하고 곧바로 예약에 반영한다.
+
+    켰는데 예약이 안 생기거나 껐는데 계속 나가는 일이 없도록 붙여 둔다.
+    """
+    from app.services import positioning_broadcast as pos
+    patch = {k: v for k, v in body.model_dump().items() if v is not None}
+    before = pos.load_config(db)
+    cfg = pos.save_config(db, patch, actor=getattr(current_user, "name", None))
+    try:
+        result = pos.sync(db, actor=getattr(current_user, "name", None))
+    except Exception as e:
+        logger.warning("체위변경 예약 반영 실패: %s: %s", type(e).__name__, e)
+        result = {"error": f"{type(e).__name__}"}
+    if before.get("enabled") != cfg.get("enabled"):
+        _audit(db, event="POSITION_AUTO", user=current_user,
+               title=("체위변경 방송 켬" if cfg["enabled"] else "체위변경 방송 끔"))
+        db.commit()
+    return ApiResponse(success=True, data={"config": cfg, "result": result})
+
+
+@router.post("/position/sync")
+def position_sync(db: Session = Depends(get_db), current_user: User = Depends(_manager)):
+    """대상 명단·설정에 맞춰 지금 다시 맞춘다."""
+    from app.services import positioning_broadcast as pos
+    try:
+        result = pos.sync(db, actor=getattr(current_user, "name", None))
+    except TTSError as e:
+        raise HTTPException(502, str(e))
+    return ApiResponse(success=True, data=result, message="체위변경 안내방송을 반영했습니다.")
+
+
+@router.post("/position/preview")
+def position_preview(db: Session = Depends(get_db), current_user: User = Depends(_manager)):
+    """지금 명단으로 음성을 만들어 들어본다 — 스피커로는 나가지 않는다."""
+    from app.services import positioning_broadcast as pos
+    cfg = pos.load_config(db)
+    rows = pos.targets(db)
+    if not rows:
+        raise HTTPException(400, "체위변경 대상자가 없습니다. 수급자 관리에서 먼저 표시해주세요.")
+    text = pos.build_text(cfg, rows)
+    try:
+        m = pos._ensure_media(db, text, cfg, getattr(current_user, "name", None))
+    except TTSError as e:
+        raise HTTPException(502, str(e))
+    db.commit()
+    return ApiResponse(success=True, data={
+        "url": m.url, "duration_sec": m.duration_sec, "text": text,
+        "count": len(rows), "played": False})

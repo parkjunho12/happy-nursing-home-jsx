@@ -217,3 +217,18 @@ class BroadcastCommand(Base):
     issued_by   = Column(String(100), nullable=True)
     acked_at    = Column(DateTime(timezone=True), nullable=True)
     created_at  = Column(DateTime(timezone=True), default=now_kst, index=True)
+
+
+class BroadcastAutoSetting(Base):
+    """자동 방송 설정 한 벌.
+
+    '체위변경 안내를 몇 시에, 어떤 문구로' 같은 것을 담는다.
+    종류마다 표를 새로 만들지 않으려고 key 로 나눈다 (POSITION 등).
+    """
+
+    __tablename__ = "broadcast_auto_settings"
+
+    key        = Column(String(30), primary_key=True)
+    value      = Column(JSON, nullable=True)
+    updated_by = Column(String(100), nullable=True)
+    updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)

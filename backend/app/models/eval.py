@@ -266,6 +266,9 @@ class LtcResident(Base):
     group_leisure = Column(String(2), nullable=True)        # 여가 프로그램 그룹 A/B/C
     group_physical = Column(String(2), nullable=True)       # 신체 프로그램 그룹 A/B/C
     tube_feeding = Column(Boolean, nullable=True, default=False)  # 경관식(비위관) — 식수 정산 제외
+    # 체위변경 대상자(와상·욕창 위험). 2시간마다 자세를 바꿔 드려야 하는 분들.
+    # 체위변경 안내방송의 대상 명단이 여기서 나온다.
+    positioning  = Column(Boolean, nullable=True, default=False)
     status = Column(String(20), default="active", index=True)
     memo = Column(Text, default="")
     created_at = Column(DateTime(timezone=True), server_default=func.now())

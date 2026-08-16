@@ -206,6 +206,7 @@ function ResidentCard({ r, onEdit, onDischarge, onDelete, onDetail, checklists, 
               </button>
             )}
             {r.tubeFeeding && <span className="text-[9px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1 py-0.5 rounded">경관식</span>}
+            {(r as any).positioning && <span className="text-[9px] font-bold text-violet-700 bg-violet-50 border border-violet-200 px-1 py-0.5 rounded">체위변경</span>}
             {hasHigh && <AlertTriangle size={13} className="text-red-500"/>}
           </div>
           <p className="text-xs text-gray-400 mt-0.5">{r.birthDate} · 입소 {r.admissionDate}{r.dischargeDate&&` · 퇴소 ${r.dischargeDate}`}</p>
@@ -288,7 +289,7 @@ export function ResidentForm({ existing, onClose }: { existing?: LtcResident; on
   const today = new Date().toISOString().split('T')[0]
   const [roomPickOpen, setRoomPickOpen] = useState(false)
   const [overCap, setOverCap] = useState(false)   // 만실 방을 확인하고 고른 경우
-  const [form, setForm] = useState({ name:existing?.name??'', birthDate:existing?.birthDate??'1930-01-01', gender:existing?.gender??'female', admissionDate:existing?.admissionDate??today, admissionTime:(existing as any)?.admissionTime??'', careGradeStartDate:existing?.careGradeStartDate??today, floor:existing?.floor??'', room:(existing as any)?.room??'', memo:existing?.memo??'', religion:existing?.religion??'', groupCognitive:existing?.groupCognitive??'', groupLeisure:existing?.groupLeisure??'', groupPhysical:existing?.groupPhysical??'', tubeFeeding:existing?.tubeFeeding??false })
+  const [form, setForm] = useState({ name:existing?.name??'', birthDate:existing?.birthDate??'1930-01-01', gender:existing?.gender??'female', admissionDate:existing?.admissionDate??today, admissionTime:(existing as any)?.admissionTime??'', careGradeStartDate:existing?.careGradeStartDate??today, floor:existing?.floor??'', room:(existing as any)?.room??'', memo:existing?.memo??'', religion:existing?.religion??'', groupCognitive:existing?.groupCognitive??'', groupLeisure:existing?.groupLeisure??'', groupPhysical:existing?.groupPhysical??'', tubeFeeding:existing?.tubeFeeding??false, positioning:(existing as any)?.positioning??false })
   const [flags, setFlags] = useState({ basicMedical: false, restraint: false, pressureSore: false, positioning: false })
   const [certs, setCerts] = useState<Certification[]>([
     { grade:'3', cert_no:'', start: today, end: endFromStart(today, 2), benefits:[{ type:'시설', from: today }] },
@@ -425,6 +426,11 @@ export function ResidentForm({ existing, onClose }: { existing?: LtcResident; on
             className={`w-full text-left px-3 py-2.5 rounded-xl border text-sm transition-colors ${form.tubeFeeding ? 'bg-rose-50 border-rose-300 text-rose-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
             <span className="font-bold">{form.tubeFeeding ? '✓ ' : ''}경관식(비위관) 어르신</span>
             <span className="block text-[10px] opacity-70 mt-0.5">체크하면 식수 정산에서 자동으로 제외됩니다</span>
+          </button>
+          <button type="button" onClick={()=>setForm({...form,positioning:!form.positioning})}
+            className={`w-full text-left px-3 py-2.5 rounded-xl border text-sm transition-colors ${form.positioning ? 'bg-violet-50 border-violet-300 text-violet-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+            <span className="font-bold">{form.positioning ? '✓ ' : ''}체위변경 대상자</span>
+            <span className="block text-[10px] opacity-70 mt-0.5">와상·욕창 위험으로 2시간마다 자세를 바꿔 드려야 하는 어르신 · 체위변경 안내방송 명단에 들어갑니다</span>
           </button>
           <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">입소일 *</label>
             {form.admissionDate > new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) && (

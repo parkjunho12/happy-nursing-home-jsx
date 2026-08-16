@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import update
 
@@ -18,6 +18,19 @@ from typing import List
 
 residents_router = APIRouter()
 staff_router = APIRouter()
+
+
+def _resync_position(bg) -> None:
+    """체위변경 대상자·호실이 바뀌면 안내방송 명단도 다시 만든다.
+
+    이름을 부르는 방송이라 명단이 실제와 어긋나면 곧장 사고가 된다.
+    음성 생성이 낄 수 있어 응답을 붙잡지 않고 뒤에서 돌린다.
+    """
+    if bg is None:
+        return
+    from app.core.database import SessionLocal
+    from app.services.positioning_broadcast import sync_quiet
+    bg.add_task(sync_quiet, SessionLocal)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -69,6 +82,7 @@ def _check_room_capacity(db: Session, floor, room, exclude_id=None):
 @residents_router.post("", response_model=ApiResponse, status_code=201)
 def create_ltc_resident(
     payload: LtcResidentCreate,
+    bg: BackgroundTasks,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -148,6 +162,7 @@ def create_ltc_resident(
     # 보호자 앨범은 여기서 만들지 않는다.
     # 앨범 화면의 「이번 달 앨범 만들기」 한 곳으로 창구를 통일했다 —
     # 등록 시점에도 만들면 입소일에 따라 앨범이 제각각 생겨 관리가 어긋난다.
+    _resync_position(bg)
     return ApiResponse(success=True, data=LtcResidentOut.model_validate(r).model_dump())
 
 
@@ -179,6 +194,7 @@ def _log_group_changes(db, name: str, before: dict, after: dict, who):
 def update_ltc_resident(
     rid: str,
     payload: LtcResidentUpdate,
+    bg: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -214,6 +230,7 @@ def update_ltc_resident(
             db.commit()
         except Exception:
             db.rollback()
+    _resync_position(bg)
     return ApiResponse(success=True, data=LtcResidentOut.model_validate(r).model_dump())
 
 
@@ -221,6 +238,7 @@ def update_ltc_resident(
 def discharge_ltc_resident(
     rid: str,
     payload: DischargeRequest,
+    bg: BackgroundTasks,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -243,11 +261,12 @@ def discharge_ltc_resident(
     )
     db.commit()
     db.refresh(r)
+    _resync_position(bg)
     return ApiResponse(success=True, data=LtcResidentOut.model_validate(r).model_dump())
 
 
 @residents_router.delete("/{rid}", response_model=ApiResponse)
-def delete_ltc_resident(rid: str, db: Session = Depends(get_db),
+def delete_ltc_resident(rid: str, bg: BackgroundTasks, db: Session = Depends(get_db),
                         current_user: User = Depends(get_current_user)):
     """수급자 완전 삭제 — 연관 데이터(체크리스트·수행기록·서류현황)도 함께 정리."""
     role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
@@ -279,6 +298,7 @@ def delete_ltc_resident(rid: str, db: Session = Depends(get_db),
         db.rollback()
         raise HTTPException(500, f"수급자 삭제 중 오류가 발생했습니다: {e}")
 
+    _resync_position(bg)
     return ApiResponse(success=True, message="Deleted")
 
 
