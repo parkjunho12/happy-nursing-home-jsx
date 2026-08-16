@@ -38,14 +38,25 @@ logger = logging.getLogger(__name__)
 
 SOURCE_PROGRAM = "PROGRAM"
 
+# 안내방송은 어르신이 아니라 '모셔가는 선생님'에게 하는 말이다.
+# 어르신 대부분은 스스로 이동하지 못하시고, 담당 선생님이 모셔가야 시작된다.
+#
+# TTS 가 어색하게 읽지 않도록 지킨 것들
+#   - 가운뎃점(·)·괄호·물결표를 쓰지 않는다. 붙여 읽거나 건너뛴다
+#   - 시각은 '13시 30분'이 아니라 '오후 1시 30분' 으로 — 말하는 방식대로
+#   - 한 문장을 짧게 끊는다. 마침표마다 쉬어 읽어 알아듣기 쉽다
+#   - 앞뒤에 '안내 말씀드립니다' / '감사합니다' 를 둬서 갑자기 시작하고
+#     끊기는 느낌을 없앤다
 DEFAULT_TEMPLATE = (
-    "안내 말씀드립니다. 잠시 후 {time}부터 {title} 프로그램을 시작합니다. "
-    "{who} 프로그램실로 와 주시기 바랍니다."
+    "안내 말씀드립니다. "
+    "잠시 후 {time}부터 {title} 프로그램이 시작됩니다. "
+    "담당 선생님들께서는 {who} 프로그램실로 모셔 주시기 바랍니다. "
+    "감사합니다."
 )
 
 DEFAULTS: Dict[str, Any] = {
     "enabled": False,          # 기본 꺼짐 — 사람이 확인하고 켠다
-    "lead_min": 10,            # 시작 몇 분 전에 방송할지
+    "lead_min": 20,            # 시작 몇 분 전에 방송할지 — 어르신을 모셔가는 시간이 필요하다
     "volume": 70,
     "voice": None,
     "template": DEFAULT_TEMPLATE,
@@ -84,9 +95,9 @@ def _clean_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
     out = dict(DEFAULTS)
     out["enabled"] = bool(cfg.get("enabled", False))
     try:
-        out["lead_min"] = min(max(int(cfg.get("lead_min", 10)), 0), 60)
+        out["lead_min"] = min(max(int(cfg.get("lead_min", 20)), 0), 60)
     except (TypeError, ValueError):
-        out["lead_min"] = 10
+        out["lead_min"] = 20
     try:
         out["volume"] = min(max(int(cfg.get("volume", 70)), 0), 100)
     except (TypeError, ValueError):
@@ -150,8 +161,23 @@ def parse_start(time_str: Optional[str]) -> Optional[tuple]:
 
 
 def speak_time(h: int, mi: int) -> str:
-    """'10:00' 을 그대로 읽히면 어색하다 — '10시', '10시 30분' 으로."""
-    return f"{h}시" if mi == 0 else f"{h}시 {mi}분"
+    """'13:30' 을 그대로 읽으면 '십삼시 삼십분'이 된다.
+
+    사람이 말하는 대로 '오후 1시 30분' 으로 바꿔서 넘긴다.
+    """
+    ampm = "오전" if h < 12 else "오후"
+    hh = h % 12 or 12
+    return f"{ampm} {hh}시" if mi == 0 else f"{ampm} {hh}시 {mi}분"
+
+
+def _wa(word: str) -> str:
+    """앞말 받침에 따라 '와/과'. 어색한 조사는 귀에 바로 걸린다."""
+    if not word:
+        return "와"
+    ch = word[-1]
+    if "가" <= ch <= "힣":
+        return "과" if (ord(ch) - 0xAC00) % 28 else "와"
+    return "와"                     # 숫자·영문은 알 수 없다 — 무난한 쪽으로
 
 
 def _join_titles(titles: List[str]) -> str:
@@ -160,14 +186,21 @@ def _join_titles(titles: List[str]) -> str:
         return "프로그램"
     if len(ts) == 1:
         return ts[0]
-    return ", ".join(ts[:-1]) + f"와 {ts[-1]}"
+    return ", ".join(ts[:-1]) + f"{_wa(ts[-2])} {ts[-1]}"
 
 
 def _who(groups: List[Optional[str]]) -> str:
+    """모셔가야 할 어르신 — 그룹을 알면 누구를 모셔갈지 분명해진다."""
     gs = list(dict.fromkeys([g.strip() for g in groups if g and g.strip()]))
     if not gs:
-        return "참여하실 어르신께서는"
-    return f"{'·'.join(gs)} 그룹 어르신께서는"
+        return "어르신들을"
+    if len(gs) == 1:
+        return f"{gs[0]} 그룹 어르신들을"
+    if len(gs) == 2:
+        # 가운뎃점은 TTS 가 붙여 읽는다 — 말로 풀어 쓴다
+        return f"{gs[0]} 그룹과 {gs[1]} 그룹 어르신들을"
+    # 셋 이상을 다 읽으면 문장이 길어져 되레 안 들린다
+    return "각 그룹 어르신들을"
 
 
 def build_text(cfg: Dict[str, Any], *, h: int, mi: int,
@@ -282,7 +315,7 @@ def _ensure_media(db: Session, text: str, cfg: Dict[str, Any],
     if m:
         return m
     res = provider.synthesize(text, voice=cfg.get("voice"))
-    audio = media_svc.normalize_wav(res.audio) if res.ext == "wav" else res.audio
+    audio = media_svc.prepare_tts(res.audio, res.ext)
     saved = media_svc.save_bytes(audio, ext=f".{res.ext}", stem=text[:20])
     if saved.get("duration_sec") is None and res.ext == "wav":
         saved["duration_sec"] = media_svc.wav_duration(audio)

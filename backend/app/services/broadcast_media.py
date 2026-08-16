@@ -158,6 +158,54 @@ def normalize_wav(data: bytes) -> bytes:
         return data
 
 
+# 안내방송 앞뒤에 두는 여백(초).
+# TTS 는 첫 글자부터 최대 음량으로 시작하고 마지막 글자에서 뚝 끊긴다.
+# 앰프·스피커를 거치면 앞은 '툭' 하고 튀고 뒤는 잘려 들린다.
+# 사람이 마이크를 잡고 한 박자 쉬었다 말하는 것과 같은 여백을 준다.
+TTS_HEAD_SILENCE = 0.7
+TTS_TAIL_SILENCE = 0.8
+
+
+def pad_wav(data: bytes, head: float = TTS_HEAD_SILENCE,
+            tail: float = TTS_TAIL_SILENCE) -> bytes:
+    """WAV 앞뒤에 무음을 붙인다. 실패하면 원본 그대로 — 여백보다 방송이 우선이다."""
+    import array
+    import io
+    import wave
+
+    try:
+        with wave.open(io.BytesIO(data), "rb") as w:
+            if w.getsampwidth() != 2:
+                return data
+            ch, rate = w.getnchannels(), w.getframerate()
+            frames = w.readframes(w.getnframes())
+        if not frames or not rate:
+            return data
+        gap_head = b"\x00" * (int(rate * max(head, 0)) * ch * 2)
+        gap_tail = b"\x00" * (int(rate * max(tail, 0)) * ch * 2)
+        out = io.BytesIO()
+        with wave.open(out, "wb") as w:
+            w.setnchannels(ch)
+            w.setsampwidth(2)
+            w.setframerate(rate)
+            w.writeframes(gap_head + frames + gap_tail)
+        return out.getvalue()
+    except Exception as e:
+        logger.warning("여백 추가 건너뜀 (%s: %s)", type(e).__name__, e)
+        return data
+
+
+def prepare_tts(data: bytes, ext: str) -> bytes:
+    """TTS 결과를 방송에 쓸 수 있는 형태로 — 음량을 키우고 앞뒤 여백을 준다.
+
+    세 군데(즉시 방송·예약 음성 만들기·프로그램 자동)에서 같은 소리가 나야 하므로
+    한 곳에 모아 둔다.
+    """
+    if ext != "wav":
+        return data                              # 다룰 수 있는 것만 손댄다
+    return pad_wav(normalize_wav(data))
+
+
 def wav_duration(data: bytes) -> Optional[int]:
     """WAV 길이(초).
 
