@@ -4,9 +4,9 @@ import {
   Users, UserCog, MessageSquare, TrendingUp, Calendar,
   AlertTriangle, CheckCircle2, Clock, ChevronRight,
   LogIn, LogOut, UserPlus, UserMinus, ClipboardList,
-  Receipt, Image as ImageIcon, Inbox, Megaphone, Loader2, Check , CalendarClock, ArrowLeftRight
-} from 'lucide-react'
+  Receipt, Image as ImageIcon, Inbox, Megaphone, Loader2, Check , CalendarClock, ArrowLeftRight, CalendarCheck} from 'lucide-react'
 import { dashboardAPI, apiClient } from '@/api/client'
+import { adminRoutineAPI, type RoutineItem, type RoutineMonth } from '@/api/adminRoutineClient'
 import { expenseAPI } from '@/api/expenseClient'
 import { scheduleAPI } from '@/api/scheduleClient'
 import { leaveAPI, swapAPI } from '@/api/leaveClient'
@@ -100,6 +100,50 @@ export default function DashboardPage() {
   }
 
   // 크로스 기능 '처리 대기' 카운트 — 권한 없으면 0으로 폴백(대시보드에 영향 없음)
+  // 월간 업무 — 매달 반복되는 신고·납부·보고. 대시보드에는 급한 5건만 낸다.
+  const [routine, setRoutine] = useState<RoutineMonth | null>(null)
+  const [loadingRoutine, setLoadingRoutine] = useState(true)
+  const [routineBusy, setRoutineBusy] = useState<string | null>(null)
+  const showRoutine = allowed.has('/monthly-routines')
+  useEffect(() => {
+    if (!showRoutine) { setLoadingRoutine(false); return }
+    const ym = new Date().toISOString().slice(0, 7)
+    adminRoutineAPI.month(ym)
+      .then(setRoutine).catch(() => setRoutine(null))
+      .finally(() => setLoadingRoutine(false))
+  }, [showRoutine])
+
+  const routineLeft = useMemo(() => (routine?.items ?? []).filter(i => !i.done), [routine])
+  const routineOverdue = routineLeft.filter(i => i.overdue).length
+  /** 급한 순 5건 — 지난 것 먼저, 그 다음 날짜가 가까운 순.
+   *  다 끝냈으면 그날 한 것을 보여준다(빈 칸보다 낫다). */
+  const routineCards = useMemo(() => {
+    const left = [...routineLeft].sort((a, b) =>
+      Number(b.overdue) - Number(a.overdue) || a.date.localeCompare(b.date))
+    if (left.length > 0) return left.slice(0, 5)
+    return [...(routine?.items ?? [])].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5)
+  }, [routineLeft, routine])
+  const routineRest = Math.max(0, (routineLeft.length || routine?.total || 0) - routineCards.length)
+  const routineDday = (date: string) => {
+    const today = routine?.today ?? new Date().toISOString().slice(0, 10)
+    return Math.max(0, Math.round(
+      (new Date(date + 'T00:00:00').getTime() - new Date(today + 'T00:00:00').getTime()) / 86400000))
+  }
+  /** 대시보드에서 바로 체크 — 그 줄만 고친다(목록을 다시 불러오면 화면이 튄다) */
+  const toggleRoutine = async (it: RoutineItem) => {
+    const next = !it.done
+    const patch = (done: boolean) => setRoutine(d => {
+      if (!d) return d
+      const items = d.items.map(x =>
+        x.id !== it.id ? x : { ...x, done, overdue: !done && x.date < d.today })
+      return { ...d, items, done_count: items.filter(x => x.done).length }
+    })
+    setRoutineBusy(it.id); patch(next)
+    try { await adminRoutineAPI.setDone(it.id, { month: it.date.slice(0, 7), done: next }) }
+    catch (e: any) { patch(it.done); alert(e?.message ?? '저장 실패') }
+    finally { setRoutineBusy(null) }
+  }
+
   const canApproveLeave = authUser?.role === 'ADMIN' || authUser?.position === '시설장'
   const canVisit = authUser?.role === 'ADMIN' || ['시설장', '사회복지사'].includes(authUser?.position ?? '')
   const loadPending = async () => {
@@ -790,6 +834,78 @@ export default function DashboardPage() {
     </section>
   )
 
+  // 월간 업무 (ADMIN 전용) — 매달 같은 날 반복되는 신고·납부·보고
+  const secRoutine = !allowed.has('/monthly-routines') ? null : (
+    <section className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-50">
+        <div className="flex items-center gap-2 min-w-0">
+          <CalendarCheck size={14} className="text-primary-orange shrink-0" />
+          <h2 className="text-sm font-bold text-gray-800">이번 달 업무</h2>
+          {routine && routine.total > 0 && (
+            <span className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${
+              routineOverdue > 0 ? 'bg-red-100 text-red-600'
+                : routineLeft.length === 0 ? 'bg-emerald-100 text-emerald-700'
+                : 'bg-gray-100 text-gray-600'}`}>
+              {routineLeft.length === 0 ? '다 했어요'
+                : routineOverdue > 0 ? `지난 것 ${routineOverdue}건` : `${routineLeft.length}건 남음`}
+            </span>
+          )}
+        </div>
+        <button onClick={() => navigate('/monthly-routines')}
+          className="text-xs text-gray-400 hover:text-primary-orange shrink-0">전체</button>
+      </div>
+
+      {loadingRoutine ? (
+        <div className="flex justify-center py-8">
+          <div className="w-5 h-5 border-2 border-primary-orange border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : routineCards.length === 0 ? (
+        <p className="text-xs text-gray-400 text-center py-8">
+          {routine && routine.total > 0
+            ? '이번 달 업무를 모두 마쳤습니다'
+            : '등록된 월간 업무가 없습니다'}
+        </p>
+      ) : (
+        <div className="divide-y divide-gray-50">
+          {routineCards.map(it => (
+            <div key={it.id} className="flex items-center gap-2.5 px-4 py-2.5 hover:bg-gray-50 transition-colors">
+              <button onClick={() => toggleRoutine(it)} disabled={routineBusy === it.id}
+                title={it.done ? '완료 취소' : '완료로 표시'}
+                className={`w-5 h-5 rounded-md border-2 shrink-0 flex items-center justify-center transition-colors ${
+                  it.done ? 'bg-emerald-500 border-emerald-500 text-white'
+                          : 'border-gray-300 hover:border-primary-orange'} disabled:opacity-40`}>
+                {it.done && <Check size={12} strokeWidth={3} />}
+              </button>
+              <button onClick={() => navigate('/monthly-routines')}
+                className="flex-1 min-w-0 text-left">
+                <p className={`text-sm font-semibold truncate ${it.done ? 'text-gray-300 line-through' : 'text-gray-800'}`}>
+                  {it.title}
+                </p>
+                <p className="text-[11px] text-gray-400 truncate">
+                  {Number(it.date.slice(8, 10))}일 · {it.category}
+                </p>
+              </button>
+              {!it.done && (
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
+                  it.overdue ? 'bg-red-100 text-red-600'
+                    : it.date === routine?.today ? 'bg-orange-100 text-orange-600'
+                    : 'bg-gray-100 text-gray-500'}`}>
+                  {it.overdue ? '지남' : it.date === routine?.today ? '오늘' : `D-${routineDday(it.date)}`}
+                </span>
+              )}
+            </div>
+          ))}
+          {routineRest > 0 && (
+            <button onClick={() => navigate('/monthly-routines')}
+              className="w-full py-2.5 text-xs text-center text-gray-400 hover:text-primary-orange hover:bg-gray-50 transition-colors">
+              나머지 {routineRest}건 더 보기
+            </button>
+          )}
+        </div>
+      )}
+    </section>
+  )
+
   // 요양보호사 인력배치 요약 (ADMIN·시설장)
   const secStaffing = !isManagerView ? null : (
     <button onClick={() => navigate('/staffing')}
@@ -870,6 +986,7 @@ export default function DashboardPage() {
           {secHire}
         </div>
         <div className="lg:col-span-2 space-y-4">
+          {secRoutine}
           {secNotices}
           {secNews}
           {secProgress}
