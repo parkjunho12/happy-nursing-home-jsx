@@ -97,6 +97,11 @@ export default function ResidentDetailPage() {
     && (r?.status !== 'discharged' || c.frequency === 'on_discharge')), [checklists, id, r?.status])
   const done = cls.filter(isItemDone).length
 
+  // 체크리스트 보기 — 스무 개 넘는 항목에서 '아직 안 한 것'만 빨리 보려고 둔다.
+  // 거르는 것은 보기일 뿐이라 체크·전체 체크는 원래 항목 그대로 동작한다.
+  const [onlyLeft, setOnlyLeft] = useState(false)
+  const [partTag, setPartTag] = useState<string | null>(null)   // null = 전체 파트
+
   if (!loaded) return <div className="flex items-center justify-center h-64"><Loader2 className="animate-spin text-gray-300" /></div>
   if (!r) return (
     <div className="p-6 text-center text-gray-400">
@@ -162,15 +167,65 @@ export default function ResidentDetailPage() {
             <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-teal-500" /> 복지팀</span>
           </p>
         )}
+        {cls.length > 0 && (() => {
+          // 파트 단추 — 남은 건수를 같이 보여줘야 어디부터 볼지 정할 수 있다
+          const parts = CL_GROUPS
+            .map(g => ({ ...g, items: cls.filter(c => splitClTitle(c.title).tag === g.tag) }))
+            .filter(g => g.items.length > 0)
+          const etcN = cls.filter(c => splitClTitle(c.title).tag === null)
+          if (etcN.length) parts.push({ tag: '', no: parts.length + 1, label: '기타',
+            accent: 'text-gray-600 bg-gray-50 border-gray-200', bar: 'bg-gray-300', items: etcN } as any)
+          const leftOf = (list: typeof cls) => list.filter(c => !isItemDone(c)).length
+          return (
+            <div className="flex flex-wrap items-center gap-1.5 mb-3 print:hidden">
+              <button type="button" onClick={() => setOnlyLeft(v => !v)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors ${
+                  onlyLeft ? 'bg-amber-500 border-amber-500 text-white'
+                           : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                {onlyLeft ? '✓ ' : ''}안 된 것만 {cls.length - done}건
+              </button>
+              <span className="w-px h-4 bg-gray-200 mx-0.5" />
+              <button type="button" onClick={() => setPartTag(null)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors ${
+                  partTag === null ? 'bg-gray-800 border-gray-800 text-white'
+                                   : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                전체
+              </button>
+              {parts.map(g => {
+                const left = leftOf(g.items as any)
+                return (
+                  <button key={g.tag || '기타'} type="button"
+                    onClick={() => setPartTag(t => t === g.tag ? null : g.tag)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors ${
+                      partTag === g.tag ? 'bg-gray-800 border-gray-800 text-white'
+                        : left === 0 ? 'border-gray-100 text-gray-300 hover:bg-gray-50'
+                        : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                    {g.label}
+                    <span className={`ml-1 font-black ${
+                      partTag === g.tag ? 'text-white/70' : left === 0 ? 'text-green-500' : 'text-amber-600'}`}>
+                      {left === 0 ? '✓' : left}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          )
+        })()}
         {cls.length === 0 ? (
           <p className="text-xs text-gray-400">연결된 체크리스트가 없습니다.</p>
         ) : (() => {
           const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10)
-          const groups = CL_GROUPS
+          // 진행률은 늘 전체 기준으로 낸다 — 걸러 놓고 '3/3 완료'로 보이면 안 된다
+          const allGroups = CL_GROUPS
             .map(g => ({ ...g, items: cls.filter(c => splitClTitle(c.title).tag === g.tag) }))
             .filter(g => g.items.length > 0)
-          const etc = cls.filter(c => splitClTitle(c.title).tag === null)
-          if (etc.length) groups.push({ tag: '', no: groups.length + 1, label: '기타', accent: 'text-gray-600 bg-gray-50 border-gray-200', bar: 'bg-gray-300', items: etc } as any)
+          const etcAll = cls.filter(c => splitClTitle(c.title).tag === null)
+          if (etcAll.length) allGroups.push({ tag: '', no: allGroups.length + 1, label: '기타', accent: 'text-gray-600 bg-gray-50 border-gray-200', bar: 'bg-gray-300', items: etcAll } as any)
+
+          const groups = allGroups
+            .filter(g => partTag === null || g.tag === partTag)
+            .map(g => ({ ...g, shown: onlyLeft ? g.items.filter(c => !isItemDone(c)) : g.items }))
+            .filter(g => g.shown.length > 0)
           const checkAll = async (g: typeof groups[number]) => {
             const todo = g.items.filter(c => !isItemDone(c))
             if (todo.length === 0) return
@@ -180,6 +235,15 @@ export default function ResidentDetailPage() {
             catch (e: any) { alert(e?.response?.data?.detail ?? '일괄 처리 중 오류') }
             finally { setBatchTag(null) }
           }
+          if (groups.length === 0) return (
+            <p className="text-xs text-gray-400 text-center py-6">
+              {onlyLeft
+                ? (partTag === null ? '남은 항목이 없습니다 — 모두 마쳤어요' : '이 파트는 모두 마쳤어요')
+                : '해당하는 항목이 없습니다'}
+              <button type="button" onClick={() => { setOnlyLeft(false); setPartTag(null) }}
+                className="ml-2 font-bold text-teal-600 hover:underline">전체 보기</button>
+            </p>
+          )
           return (
             <div className="space-y-4">
             {groups.map(g => {
@@ -201,9 +265,9 @@ export default function ResidentDetailPage() {
                     </button>
                   )}
                   </div>
-                  {/* 항목 — 가로 풀폭 행 */}
+                  {/* 항목 — 가로 풀폭 행 (거른 결과만 그린다) */}
                   <ul className="space-y-1">
-                  {g.items.map(c => {
+                  {g.shown.map(c => {
                     const ok = isItemDone(c)
                     const late = !ok && !!c.dueDate && c.dueDate < today
                     const dday = c.dueDate ? Math.round((new Date(c.dueDate).getTime() - new Date(today).getTime()) / 86400000) : null
