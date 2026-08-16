@@ -878,6 +878,36 @@ function PositionCastView({ onChanged }: { onChanged: () => void }) {
         )}
       </div>
 
+      <div className="rounded-2xl border border-gray-100 bg-white p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <p className="text-xs font-bold text-gray-600">방송 문구</p>
+          <span className="text-[11px] text-gray-400">{plan.template_help}</span>
+          {cfg.template.trim() !== plan.default_template.trim() && (
+            <button disabled={saving}
+              onClick={() => save({ template: plan.default_template },
+                '문구를 기본 문구로 되돌립니다.\n지금 적어 두신 내용은 사라집니다.')}
+              className="ml-auto text-[11px] text-indigo-600 font-semibold hover:underline disabled:opacity-50">
+              기본 문구로 되돌리기
+            </button>
+          )}
+        </div>
+        <textarea key={cfg.template} defaultValue={cfg.template} rows={5} id="pos-tpl"
+          className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400/40" />
+        <div className="flex items-center gap-2 mt-2">
+          <p className="text-[11px] text-gray-400">
+            {'{names}'} 자리에 대상 어르신 이름이 들어갑니다
+          </p>
+          <button disabled={saving}
+            onClick={() => {
+              const el = document.getElementById('pos-tpl') as HTMLTextAreaElement | null
+              if (el) save({ template: el.value })
+            }}
+            className="ml-auto px-3 py-1.5 rounded-lg bg-gray-900 text-white text-[11px] font-bold disabled:opacity-50">
+            문구 저장
+          </button>
+        </div>
+      </div>
+
       {plan.text && (
         <div className="rounded-2xl border border-gray-100 bg-white p-4">
           <div className="flex items-center gap-2 mb-2">
