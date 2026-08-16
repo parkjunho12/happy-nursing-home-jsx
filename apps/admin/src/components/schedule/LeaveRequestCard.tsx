@@ -25,6 +25,12 @@ const fmtD = (iso: string) => {
 
 const EMPTY_SIG: SigValue = { use_saved: false, signature: null, save: true, ok: false }
 
+/** '2026-08' → '2026-09'. 12월이면 해가 넘어간다. */
+const nextMonth = (ym: string) => {
+  const [y, m] = ym.split('-').map(Number)
+  return m >= 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
+}
+
 export default function LeaveRequestCard({ month: monthProp }: { month?: string } = {}) {
   const now = new Date()
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
@@ -86,9 +92,12 @@ export default function LeaveRequestCard({ month: monthProp }: { month?: string 
   const [hopeBusy, setHopeBusy] = useState(false)
   const [hopeErr, setHopeErr] = useState('')
 
+  // 아직 안 나온 '다음 달' 근무표에 반영해달라고 내는 신청이다.
+  // 보고 있는 달의 다음 달 1일에서 달력이 열려야 매번 넘기지 않는다.
+  const hopeMonth = nextMonth(month)
+
   useEffect(() => {
-    // 달력이 보던 달에서 열리도록
-    if (!hopeDate || hopeDate.slice(0, 7) !== month) setHopeDate(`${month}-01`)
+    if (!hopeDate || hopeDate.slice(0, 7) !== hopeMonth) setHopeDate(`${hopeMonth}-01`)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month])
 
@@ -236,9 +245,20 @@ export default function LeaveRequestCard({ month: monthProp }: { month?: string 
           승인 또는 반려로 알려드립니다 — 결과는 알림으로 와요.
         </p>
 
-        <p className="text-xs font-semibold text-gray-500 mb-1">쉬고 싶은 날</p>
+        <p className="text-xs font-semibold text-gray-500 mb-1">
+          쉬고 싶은 날
+          <span className="ml-1.5 font-normal text-gray-400">
+            {Number(hopeMonth.slice(5, 7))}월 신청이에요
+          </span>
+        </p>
         <input type="date" value={hopeDate} onChange={e => setHopeDate(e.target.value)}
           className="w-full px-3 py-3 text-base border border-gray-200 rounded-xl mb-2" />
+        {hopeDate && hopeDate.slice(0, 7) !== hopeMonth && (
+          // 다른 달을 고를 수는 있게 두되, 알고 고르는 것인지 짚어준다
+          <p className="text-xs text-amber-600 -mt-1 mb-2">
+            {Number(hopeDate.slice(5, 7))}월로 신청됩니다 — 이미 나온 근무표라면 바꾸기 어려울 수 있어요.
+          </p>
+        )}
 
         <label className="flex items-start gap-2 mb-3 p-3 rounded-xl bg-sky-50/60 border border-sky-100 cursor-pointer">
           <input type="checkbox" checked={useAnnual} onChange={e => setUseAnnual(e.target.checked)}
