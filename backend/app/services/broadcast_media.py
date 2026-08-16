@@ -157,6 +157,94 @@ def wav_duration(data: bytes) -> Optional[int]:
         return None
 
 
+def has_ffmpeg() -> bool:
+    """ffmpeg 을 쓸 수 있는지. 없으면 정규화를 건너뛰되 업로드는 막지 않는다."""
+    import shutil
+    return bool(shutil.which("ffmpeg"))
+
+
+def normalize_upload(data: bytes, ext: str) -> Tuple[bytes, str, dict]:
+    """업로드 음원을 TTS 와 같은 음량(-1dBFS)으로 맞춘다.
+
+    왜: TTS 는 최대로 키워 저장하는데 업로드 파일은 원본 그대로라, 방송마다
+    음량이 들쭉날쭉해진다. 앞 방송에 맞춰 앰프를 올려두면 다음 방송이 크게 나간다.
+
+    두 번 훑는다 — 먼저 최대 진폭을 재고(volumedetect), 그만큼 올린다.
+    peak 기준이라 TTS 의 정규화와 같은 잣대다.
+
+    mp4 는 소리만 쓰므로 오디오만 뽑아 저장한다. 영상 트랙은 재생에 쓰지도 않으면서
+    디스크와 전송량만 차지한다.
+
+    반환: (처리된 데이터, 최종 확장자, 정보). 실패하면 원본을 그대로 돌려준다 —
+    음량을 못 맞추는 것보다 방송이 안 나가는 게 나쁘다.
+
+    원본이 너무 작아 상한(30dB)까지 키워도 모자라면 그 사실을 알린다.
+    그냥 두면 "방송이 작게 나온다"는 문제를 나중에 현장에서 겪게 된다.
+    """
+    import tempfile
+
+    info = {"gain_db": 0.0, "still_quiet": False, "audio_only": False}
+    if not has_ffmpeg():
+        return data, ext, info
+    out_ext = ".mp3" if ext == ".mp4" else ext      # 영상은 소리만 남긴다
+    src = dst = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as f:
+            f.write(data); src = f.name
+        dst = src + ".out" + out_ext
+
+        # 1차: 최대 진폭 측정
+        probe = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-nostdin", "-i", src,
+             "-af", "volumedetect", "-vn", "-f", "null", "-"],
+            capture_output=True, text=True, timeout=120)
+        gain_db = 0.0
+        for line in probe.stderr.splitlines():
+            if "max_volume:" in line:
+                try:
+                    peak_db = float(line.split("max_volume:")[1].strip().split()[0])
+                    gain_db = -1.0 - peak_db        # -1dBFS 로 맞춘다
+                except (ValueError, IndexError):
+                    pass
+                break
+        needed = gain_db
+        gain_db = max(min(gain_db, 30.0), 0.0)      # 키우기만 하고, 과증폭은 제한
+        info["gain_db"] = round(gain_db, 1)
+        # 상한까지 올려도 목표에 못 미친다 = 원본이 지나치게 작다
+        info["still_quiet"] = needed > 30.0
+
+        # 1.5dB 미만은 굳이 다시 인코딩하지 않는다 — 체감 차이는 없고 음질만 잃는다
+        if gain_db < 1.5 and out_ext == ext:
+            return data, ext, info
+
+        # 2차: 적용 (+ mp4 면 오디오만 추출)
+        cmd = ["ffmpeg", "-hide_banner", "-nostdin", "-y", "-i", src, "-vn"]
+        if gain_db >= 0.5:
+            cmd += ["-af", f"volume={gain_db:.2f}dB"]
+        cmd += [dst]
+        run = subprocess.run(cmd, capture_output=True, timeout=300)
+        if run.returncode != 0 or not os.path.exists(dst) or os.path.getsize(dst) == 0:
+            logger.warning("음량 정규화 실패 — 원본을 사용합니다")
+            return data, ext, {"gain_db": 0.0, "still_quiet": False, "audio_only": False}
+        with open(dst, "rb") as f:
+            out = f.read()
+        info["audio_only"] = ext == ".mp4"
+        logger.info("업로드 음원 정규화: %+.1fdB%s%s", gain_db,
+                    " (영상에서 오디오만 추출)" if ext == ".mp4" else "",
+                    " — 원본이 너무 작아 최대치까지만" if info["still_quiet"] else "")
+        return out, out_ext, info
+    except (subprocess.SubprocessError, OSError) as e:
+        logger.warning("음량 정규화 건너뜀 (%s)", type(e).__name__)
+        return data, ext, {"gain_db": 0.0, "still_quiet": False, "audio_only": False}
+    finally:
+        for p in (src, dst):
+            if p:
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+
+
 def probe_duration(path: str) -> Optional[int]:
     """길이(초). ffprobe 가 없으면 None — 없다고 업로드를 막지는 않는다."""
     try:

@@ -117,6 +117,12 @@ export interface BroadcastMeta {
 export interface MediaResult {
   id: string
   url: string
+  /** 업로드 시 음량을 얼마나 키웠는지(dB) */
+  gain_db?: number | null
+  /** 원본이 너무 작아 상한까지 키워도 모자란 경우 */
+  still_quiet?: boolean
+  /** 영상에서 오디오만 추출했는지 */
+  audio_only?: boolean
   duration_sec?: number | null
   sha256?: string
   reused?: boolean

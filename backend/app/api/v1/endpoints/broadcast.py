@@ -248,6 +248,10 @@ async def upload_media(file: UploadFile = File(...),
         ext, mime, kind = media_svc.validate(file.filename, data)
     except media_svc.MediaError as e:
         raise HTTPException(400, str(e))
+    # TTS 와 같은 음량으로 맞춘다 — 방송마다 소리 크기가 들쭉날쭉하면
+    # 앞 방송에 맞춰 앰프를 올려둔 상태에서 다음 방송이 크게 나간다.
+    data, ext, norm = media_svc.normalize_upload(data, ext)
+    mime, kind = media_svc.ALLOWED.get(ext, (mime, kind))
     saved = media_svc.save_bytes(data, ext=ext, stem=file.filename)
     m = BroadcastMedia(kind=kind, filename=saved["filename"], url=saved["url"], mime=mime,
                        size_bytes=saved["size_bytes"], sha256=saved["sha256"],
@@ -256,7 +260,10 @@ async def upload_media(file: UploadFile = File(...),
     db.add(m); db.commit(); db.refresh(m)
     return ApiResponse(success=True, data={
         "id": m.id, "kind": m.kind, "url": m.url, "mime": m.mime,
-        "size_bytes": m.size_bytes, "duration_sec": m.duration_sec, "sha256": m.sha256})
+        "size_bytes": m.size_bytes, "duration_sec": m.duration_sec, "sha256": m.sha256,
+        # 음량을 얼마나 키웠는지 — 원본이 너무 작으면 화면에서 미리 알려준다
+        "gain_db": norm.get("gain_db"), "still_quiet": norm.get("still_quiet"),
+        "audio_only": norm.get("audio_only")})
 
 
 class TTSBody(BaseModel):

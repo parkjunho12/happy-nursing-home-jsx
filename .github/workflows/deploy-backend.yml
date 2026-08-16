@@ -76,4 +76,10 @@ jobs:
             docker compose ps
             docker compose logs --tail=50 backend
 
+            # 이전 이미지 정리 — 배포할 때마다 예전 이미지가 태그 없이 남는다.
+            # 이미지가 2GB 대라 몇 번만 배포해도 50GB 디스크를 잠식한다.
+            # dangling(태그 없는) 것만 지우므로 돌고 있는 컨테이너는 영향 없다.
+            docker image prune -f
+            df -h / | tail -1
+
             echo "✅ Backend deployed successfully"
