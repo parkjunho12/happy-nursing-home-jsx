@@ -299,7 +299,7 @@ def make_tts(body: TTSBody, db: Session = Depends(get_db), current_user: User = 
 
     # 만들자마자 음량을 최대로 키운다 — Agent 는 줄이기만 할 수 있어서,
     # 원본이 작으면 현장에서 앰프를 올려야 하고 그러면 잡음도 함께 커진다.
-    audio = media_svc.normalize_wav(res.audio) if res.ext == "wav" else res.audio
+    audio = media_svc.prepare_tts(res.audio, res.ext)
     saved = media_svc.save_bytes(audio, ext=f".{res.ext}", stem=text[:20])
     if saved.get("duration_sec") is None and res.ext == "wav":
         saved["duration_sec"] = media_svc.wav_duration(audio)   # ffprobe 없이도 길이를 안다
@@ -587,7 +587,7 @@ def announce(body: AnnounceBody, db: Session = Depends(get_db),
             res = provider.synthesize(text, voice=body.voice)
         except TTSError as e:
             raise HTTPException(502, str(e))
-        audio = media_svc.normalize_wav(res.audio) if res.ext == "wav" else res.audio
+        audio = media_svc.prepare_tts(res.audio, res.ext)
         saved = media_svc.save_bytes(audio, ext=f".{res.ext}", stem=text[:20])
         if saved.get("duration_sec") is None and res.ext == "wav":
             saved["duration_sec"] = media_svc.wav_duration(audio)

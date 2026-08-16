@@ -1058,14 +1058,25 @@ export default function ProgramPage() {
  * 어르신들이 생활하는 공간이라, 문구를 확인하고 미리 들어본 뒤에만
  * 스피커로 나가게 한다. 바로 방송되는 버튼은 한 번 더 묻는다.
  */
+/** '13:30' → '오후 1시 30분'. 그대로 읽히면 '십삼시 삼십분'이 된다. */
+function speakTime(hhmm?: string | null): string {
+  const m = /^(\d{1,2})\s*[:시]\s*(\d{1,2})?/.exec((hhmm ?? '').split('~')[0].trim())
+  if (!m) return ''
+  const h = Number(m[1]), mi = Number(m[2] ?? 0)
+  if (h > 23 || mi > 59) return ''
+  const hh = h % 12 || 12
+  return `${h < 12 ? '오전' : '오후'} ${hh}시${mi ? ` ${mi}분` : ''}`
+}
+
+/** 자동 예약과 같은 말투를 쓴다 — 서버 program_broadcast.DEFAULT_TEMPLATE 와 맞춘 것.
+ *  어르신이 아니라 모셔가는 선생님께 하는 안내다. */
 function announceText(e: ProgramEntry): string {
-  const when = e.time ? `${e.time.split('~')[0]}부터 ` : ''
+  const t = speakTime(e.time)
+  const when = t ? `${t}부터 ` : ''
   const what = e.title || e.group || '프로그램'
-  const who = e.group
-    ? `${e.group} 그룹 어르신께서는`
-    : '참여하실 어르신께서는'
-  return `안내 말씀드립니다. 잠시 후 ${when}${what} 프로그램을 시작합니다. `
-       + `${who} 프로그램실로 와 주시기 바랍니다.`
+  const who = e.group ? `${e.group} 그룹 어르신들을` : '어르신들을'
+  return `안내 말씀드립니다. 잠시 후 ${when}${what} 프로그램이 시작됩니다. `
+       + `담당 선생님들께서는 ${who} 프로그램실로 모셔 주시기 바랍니다. 감사합니다.`
 }
 
 function ProgramCastModal({ entries, onClose }: {
@@ -1149,7 +1160,7 @@ function ProgramCastModal({ entries, onClose }: {
 
         <label className="block text-xs font-semibold text-gray-600 mb-1.5">방송 문구 (고칠 수 있어요)</label>
         <textarea value={text} onChange={ev => { setText(ev.target.value); setPreview(null) }} rows={4}
-          placeholder="예) 안내 말씀드립니다. 잠시 후 10시부터 색칠공부 프로그램을 시작합니다."
+          placeholder="예) 안내 말씀드립니다. 잠시 후 오전 10시부터 색칠공부 프로그램이 시작됩니다."
           className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400/40" />
 
         {preview && (
@@ -1262,7 +1273,7 @@ function ProgramAutoCast() {
           <select value={cfg.lead_min} disabled={saving}
             onChange={e => save({ lead_min: Number(e.target.value) })}
             className="w-full mt-1 px-2.5 py-2 text-sm border border-gray-200 rounded-xl bg-white">
-            {[0, 5, 10, 15, 20, 30].map(v => <option key={v} value={v}>{v === 0 ? '정각' : `${v}분 전`}</option>)}
+            {[0, 5, 10, 15, 20, 30, 40].map(v => <option key={v} value={v}>{v === 0 ? '정각' : `${v}분 전`}</option>)}
           </select>
         </label>
         <label className="block">
