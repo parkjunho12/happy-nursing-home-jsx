@@ -2,6 +2,13 @@ import { apiClient } from './client'
 
 const BASE = '/api/v1/admin/broadcast'
 
+/** 음원 주소를 절대 주소로 바꾼다.
+ *  Admin 은 admin.도메인, 파일은 api.도메인 에 있다. 상대경로 그대로 쓰면
+ *  admin 쪽 SPA 폴백이 index.html 을 돌려줘 미리듣기가 조용히 실패한다. */
+const MEDIA_ORIGIN = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8010'
+export const mediaUrl = (u?: string | null): string =>
+  !u ? '' : /^(https?:|blob:|data:)/.test(u) ? u : `${MEDIA_ORIGIN}${u.startsWith('/') ? '' : '/'}${u}`
+
 function unwrap<T>(res: any): T {
   if (res?.data?.success) return res.data.data as T
   throw new Error(res?.data?.message ?? res?.data?.error ?? 'API error')
@@ -160,6 +167,11 @@ export const broadcastAPI = {
     return apiClient.post(`${BASE}/media/upload`, fd,
       { headers: { 'Content-Type': 'multipart/form-data' } }).then(unwrap<MediaResult>)
   },
+
+  /** 문구 하나로 바로 방송 — 프로그램 안내처럼 그때그때 만드는 방송용 */
+  announce: (body: { title: string; text: string; volume?: number; voice?: string; preview_only?: boolean }) =>
+    apiClient.post(`${BASE}/announce`, body)
+      .then(unwrap<{ media_id: string; url: string; duration_sec?: number | null; text: string; played: boolean }>),
 
   create: (body: ScheduleInput) => apiClient.post(`${BASE}/schedules`, body).then(unwrap<BroadcastSchedule>),
   update: (id: string, body: Partial<ScheduleInput>) =>

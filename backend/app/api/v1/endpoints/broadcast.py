@@ -533,6 +533,81 @@ def stop_all(body: StopBody, db: Session = Depends(get_db), current_user: User =
                        message="중지 명령을 보냈습니다.")
 
 
+class AnnounceBody(BaseModel):
+    """문구 하나로 바로 방송하기 — 프로그램 안내처럼 그때그때 만드는 방송용."""
+    title: str
+    text: str
+    volume: int = 70
+    voice: Optional[str] = None
+    preview_only: bool = False      # 소리는 내지 않고 음성만 만들어 들어보기
+
+
+@router.post("/announce")
+def announce(body: AnnounceBody, db: Session = Depends(get_db),
+             current_user: User = Depends(_manager)):
+    """문구를 받아 음성을 만들고 즉시 방송한다.
+
+    예약을 만들고 음성을 만들고 즉시방송을 누르는 세 단계를, 부르는 쪽에서
+    한 번에 끝내라고 묶어둔 것이다. 프로그램 안내처럼 '지금 이 문구로'가
+    필요한 곳에서 쓴다.
+
+    preview_only 면 음성만 만들어 돌려준다 — 스피커로는 나가지 않는다.
+    어르신들이 생활하는 공간이라, 문구를 확인하고 내보낼 수 있어야 한다.
+    """
+    text = (body.text or "").strip()
+    if not text:
+        raise HTTPException(400, "읽을 문구를 입력해주세요.")
+    if len(text) > 1000:
+        raise HTTPException(400, "문구가 너무 깁니다. (최대 1000자)")
+
+    provider = get_provider()
+    key = provider.cache_key(text, voice=body.voice)
+    m = db.query(BroadcastMedia).filter(BroadcastMedia.text_hash == key).first()
+    if not m:
+        try:
+            res = provider.synthesize(text, voice=body.voice)
+        except TTSError as e:
+            raise HTTPException(502, str(e))
+        audio = media_svc.normalize_wav(res.audio) if res.ext == "wav" else res.audio
+        saved = media_svc.save_bytes(audio, ext=f".{res.ext}", stem=text[:20])
+        if saved.get("duration_sec") is None and res.ext == "wav":
+            saved["duration_sec"] = media_svc.wav_duration(audio)
+        m = BroadcastMedia(kind=TYPE_TTS, filename=saved["filename"], url=saved["url"],
+                           mime=res.mime, size_bytes=saved["size_bytes"], sha256=saved["sha256"],
+                           duration_sec=saved["duration_sec"], text_hash=key,
+                           tts_provider=res.provider, tts_voice=res.voice,
+                           created_by=getattr(current_user, "name", None))
+        db.add(m); db.commit(); db.refresh(m)
+
+    if body.preview_only:
+        return ApiResponse(success=True, data={
+            "media_id": m.id, "url": m.url, "duration_sec": m.duration_sec,
+            "text": text, "played": False})
+
+    now = now_kst().replace(microsecond=0)
+    sch = BroadcastSchedule(
+        title=body.title.strip()[:200] or "안내방송", type=TYPE_TTS, text=text,
+        media_id=m.id, media_url=m.url,
+        scheduled_at=now, timezone="Asia/Seoul", repeat_rule={"freq": "once"},
+        zones=[ZONE_ALL], volume=min(max(int(body.volume), 0), 100),
+        max_seconds=settings.BROADCAST_MAX_SECONDS, status=ST_READY, enabled=True,
+        created_by=getattr(current_user, "name", None),
+        created_by_id=getattr(current_user, "id", None))
+    db.add(sch); db.flush()
+    run = BroadcastRun(schedule_id=sch.id, occurrence_at=now, status=RUN_PENDING)
+    db.add(run)
+    # 바로 나가야 하므로 Agent 에게 다시 받아가라고 알린다(동기화 주기를 기다리지 않게)
+    db.add(BroadcastCommand(device_id=None, command="RESYNC",
+                            payload={"reason": "announce"},
+                            issued_by=getattr(current_user, "name", None)))
+    _audit(db, event="ANNOUNCE", user=current_user, schedule_id=sch.id, title=sch.title)
+    db.commit()
+    return ApiResponse(success=True, data={
+        "schedule_id": sch.id, "run_id": run.id, "media_id": m.id, "url": m.url,
+        "duration_sec": m.duration_sec, "text": text, "played": True},
+        message="곧 방송됩니다. (방송 PC가 온라인일 때)")
+
+
 @router.post("/schedules/{sid}/preview")
 def preview(sid: str, db: Session = Depends(get_db), _: User = Depends(_manager)):
     """미리듣기 — 브라우저에서 재생할 수 있게 음원 주소를 돌려준다.

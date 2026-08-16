@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { CalendarRange, Clock3, Download, Eye, EyeOff, History, Loader2, MessageCircle, Plus, Printer, Save, Trash2, Upload, Users, X } from 'lucide-react'
+import { CalendarRange, Clock3, Download, Eye, EyeOff, History, Loader2, MessageCircle, Plus, Printer, Radio, Save, Trash2, Upload, Users, X } from 'lucide-react'
 import { programAPI, type ProgramMonthData, type ProgramEntry, type ProgramTime } from '@/api/programClient'
+import { broadcastAPI, mediaUrl } from '@/api/broadcastClient'
+import { useAuthStore } from '@/store/auth'
 import { evalResidentsAPI } from '@/api/evalClient'
 import { isKakaoShareEnabled, shareText } from '@/lib/kakaoShare'
 
@@ -25,10 +27,16 @@ const DOW = ['일', '월', '화', '수', '목', '금', '토']
 export default function ProgramPage() {
   const now = new Date()
   const [ym, setYm] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
+  const curYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   const [data, setData] = useState<ProgramMonthData | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<'sch' | null>(null)
   const [tab, setTab] = useState<'schedule' | 'groups'>('schedule')
+  // 프로그램 안내방송 — 오늘 프로그램을 골라 TTS 로 내보낸다
+  const [castOpen, setCastOpen] = useState(false)
+  // 방송 권한은 방송 관리 페이지와 같은 기준이다 — 여기서만 열어주면 눌러도 403 이 난다
+  const castUser = useAuthStore(s => s.user)
+  const canCast = castUser?.role === 'ADMIN' || ['시설장', '사회복지사'].includes(castUser?.position ?? '')
   const [notesEdit, setNotesEdit] = useState<string | null>(null)   // 편집 중 텍스트(줄 단위)
   const [memoEdit, setMemoEdit] = useState<string | null>(null)     // 보호자 안내 메모 편집
   // 진행 시간 목록('10:00~10:40') — 일자 수정 드롭다운에 쓰인다
@@ -356,6 +364,14 @@ export default function ProgramPage() {
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-gray-500 text-sm font-semibold hover:bg-gray-50">
               <Printer size={13} /> 출력
             </button>
+          )}
+          {/* 프로그램표가 없어도 문구를 직접 적어 방송할 수 있으므로 탭과 무관하게 보인다 */}
+          {canCast && (
+          <button onClick={() => setCastOpen(true)}
+            title="오늘 프로그램을 음성 안내로 방송합니다"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-sm font-semibold hover:bg-indigo-100">
+            <Radio size={13} /> 방송
+          </button>
           )}
           <button onClick={tab === 'groups' ? openGrpLogs : openHist}
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-gray-500 text-sm font-semibold hover:bg-gray-50">
@@ -1025,6 +1041,128 @@ export default function ProgramPage() {
         )
       })()}
 
+      {castOpen && (
+        // 다른 달을 보고 있을 때 그 달 같은 날짜를 '오늘'로 내보내면 안 된다
+        <ProgramCastModal
+          entries={ym === curYm ? dayEntries(new Date().getDate()) : []}
+          onClose={() => setCastOpen(false)} />
+      )}
+    </div>
+  )
+}
+
+
+/* ── 프로그램 안내방송 ─────────────────────────────────────────
+ * 오늘 프로그램을 골라 음성 안내로 내보낸다.
+ * 어르신들이 생활하는 공간이라, 문구를 확인하고 미리 들어본 뒤에만
+ * 스피커로 나가게 한다. 바로 방송되는 버튼은 한 번 더 묻는다.
+ */
+function announceText(e: ProgramEntry): string {
+  const when = e.time ? `${e.time.split('~')[0]}부터 ` : ''
+  const what = e.title || e.group || '프로그램'
+  const who = e.group
+    ? `${e.group} 그룹 어르신께서는`
+    : '참여하실 어르신께서는'
+  return `안내 말씀드립니다. 잠시 후 ${when}${what} 프로그램을 시작합니다. `
+       + `${who} 프로그램실로 와 주시기 바랍니다.`
+}
+
+function ProgramCastModal({ entries, onClose }: {
+  entries: ProgramEntry[]; onClose: () => void
+}) {
+  const [picked, setPicked] = useState<number | null>(entries.length ? 0 : null)
+  const [text, setText] = useState(entries.length ? announceText(entries[0]) : '')
+  const [preview, setPreview] = useState<string | null>(null)
+  const [busy, setBusy] = useState<'preview' | 'cast' | null>(null)
+  const [err, setErr] = useState('')
+
+  const pick = (i: number) => {
+    setPicked(i); setText(announceText(entries[i])); setPreview(null); setErr('')
+  }
+
+  const makePreview = async () => {
+    if (!text.trim()) { setErr('문구를 입력해주세요.'); return }
+    setBusy('preview'); setErr('')
+    try {
+      const r = await broadcastAPI.announce({
+        title: '프로그램 안내', text, preview_only: true })
+      setPreview(r.url)
+    } catch (e: any) { setErr(e?.response?.data?.detail ?? e?.message ?? '음성 생성 실패') }
+    finally { setBusy(null) }
+  }
+
+  const cast = async () => {
+    if (!text.trim()) { setErr('문구를 입력해주세요.'); return }
+    if (!confirm('건물 전체 스피커로 지금 방송합니다.\n\n' + text)) return
+    setBusy('cast'); setErr('')
+    try {
+      await broadcastAPI.announce({ title: '프로그램 안내', text })
+      alert('방송을 요청했습니다. (방송 PC가 온라인일 때 나갑니다)')
+      onClose()
+    } catch (e: any) { setErr(e?.response?.data?.detail ?? e?.message ?? '방송 실패') }
+    finally { setBusy(null) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[88vh] overflow-y-auto p-5"
+        onClick={ev => ev.stopPropagation()}>
+        <div className="flex items-center gap-2 mb-3">
+          <Radio size={18} className="text-indigo-600" />
+          <h3 className="font-bold text-gray-900">프로그램 안내방송</h3>
+          <button onClick={onClose} className="ml-auto text-gray-300 hover:text-gray-500"><X size={18} /></button>
+        </div>
+
+        {entries.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-8">
+            오늘 등록된 프로그램이 없습니다.<br />
+            <span className="text-xs">아래에 문구를 직접 적어 방송할 수 있어요.</span>
+          </p>
+        ) : (
+          <div className="space-y-1.5 mb-4">
+            <p className="text-xs font-semibold text-gray-500">오늘 프로그램</p>
+            {entries.map((e, i) => (
+              <button key={i} onClick={() => pick(i)}
+                className={`w-full text-left px-3 py-2 rounded-xl border text-sm transition-colors ${
+                  picked === i ? 'border-indigo-400 bg-indigo-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                {e.time && <b className="mr-1.5 text-indigo-700">{e.time}</b>}
+                {e.group && <span className="text-xs font-bold text-gray-500 mr-1">[{e.group}]</span>}
+                {e.title}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <label className="block text-xs font-semibold text-gray-600 mb-1.5">방송 문구 (고칠 수 있어요)</label>
+        <textarea value={text} onChange={ev => { setText(ev.target.value); setPreview(null) }} rows={4}
+          placeholder="예) 안내 말씀드립니다. 잠시 후 10시부터 색칠공부 프로그램을 시작합니다."
+          className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400/40" />
+
+        {preview && (
+          <div className="mt-3 rounded-xl border border-gray-200 bg-gray-50 p-3">
+            <p className="text-[11px] font-bold text-gray-500 mb-1.5">
+              미리듣기 — <span className="font-normal">이 PC에서만 들립니다 (스피커로 안 나감)</span>
+            </p>
+            <audio controls autoPlay src={mediaUrl(preview)} className="w-full h-9" />
+          </div>
+        )}
+
+        {err && <p className="text-xs text-rose-600 mt-2">{err}</p>}
+
+        <div className="flex gap-2 mt-4">
+          <button onClick={makePreview} disabled={busy !== null}
+            className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-bold text-gray-600 disabled:opacity-50 inline-flex items-center justify-center gap-1.5">
+            {busy === 'preview' && <Loader2 size={14} className="animate-spin" />} 미리듣기
+          </button>
+          <button onClick={cast} disabled={busy !== null}
+            className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold disabled:opacity-50 inline-flex items-center justify-center gap-1.5">
+            {busy === 'cast' && <Loader2 size={14} className="animate-spin" />} 스피커로 방송
+          </button>
+        </div>
+        <p className="text-[11px] text-gray-400 mt-2 text-center">
+          어르신들이 계신 공간입니다 — 미리듣기로 확인한 뒤 내보내세요.
+        </p>
+      </div>
     </div>
   )
 }

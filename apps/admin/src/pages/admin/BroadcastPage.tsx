@@ -4,7 +4,7 @@ import {
   CalendarClock, History, AlertTriangle, CheckCircle2, Upload, Sparkles,
 } from 'lucide-react'
 import {
-  broadcastAPI, type BroadcastSchedule, type Dashboard, type BroadcastMeta,
+  broadcastAPI, mediaUrl, type BroadcastSchedule, type Dashboard, type BroadcastMeta,
   type BroadcastType, type RepeatRule, type MediaResult, type BroadcastLog,
 } from '@/api/broadcastClient'
 
@@ -241,7 +241,7 @@ export default function BroadcastPage() {
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   {s.media_url && (
-                    <audio controls preload="none" src={s.media_url} className="h-8 max-w-[190px]" title="미리듣기 — 관리자 PC에서만 들립니다" />
+                    <audio controls preload="none" src={mediaUrl(s.media_url)} className="h-8 max-w-[190px]" title="미리듣기 — 관리자 PC에서만 들립니다" />
                   )}
                   <button onClick={() => playNow(s)} disabled={busy === s.id || s.status !== 'READY'}
                     title="지금 바로 방송" className="p-2 rounded-lg text-indigo-600 hover:bg-indigo-50 disabled:opacity-30">
@@ -603,7 +603,7 @@ function ScheduleModal({ editing, meta, onClose, onSaved }: {
                 미리듣기 {media.duration_sec ? `· ${media.duration_sec}초` : ''}
                 <span className="font-normal text-gray-400"> — 이 PC에서만 들립니다(스피커로 안 나감)</span>
               </p>
-              <audio controls src={media.url} className="w-full h-9" />
+              <audio controls src={mediaUrl(media.url)} className="w-full h-9" />
             </div>
           )}
 
