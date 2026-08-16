@@ -102,8 +102,15 @@ def normalize_wav(data: bytes) -> bytes:
     원본이 작으면 100% 로 틀어도 작다. 앰프를 올려 보완하면 잡음까지 커진다.
     그래서 만들 때 최대로 키워두고, 현장에서는 앰프로 낮춰 쓰는 편이 낫다.
 
-    ffmpeg 없이 표준 라이브러리만 쓴다(서버 이미지에 ffmpeg 이 없다).
+    ffmpeg 없이 표준 라이브러리만 쓴다(TTS 결과는 WAV 로 받는다).
     16비트 PCM 이 아니면 원본을 그대로 돌려준다 — 못 다루는 것을 망가뜨리지 않는다.
+
+    헤더의 프레임 수는 믿지 않는다. 길이를 모른 채 흘려보내는 WAV(스트리밍)는
+    그 자리에 실제와 다른 값이 들어 있고, 그대로 복사해 쓰면 헤더를 쓸 때 넘친다.
+    실제로 읽어낸 데이터만 기준으로 삼는다.
+
+    어떤 이유로든 실패하면 원본을 돌려준다 — 음량을 못 키우는 것보다
+    방송을 못 만드는 게 나쁘다.
     """
     import array
     import io
@@ -113,47 +120,62 @@ def normalize_wav(data: bytes) -> bytes:
         with wave.open(io.BytesIO(data), "rb") as w:
             if w.getsampwidth() != 2:            # 16비트만 다룬다
                 return data
-            params = w.getparams()
-            frames = w.readframes(w.getnframes())
-    except (wave.Error, EOFError, ValueError):
+            nchannels = w.getnchannels()
+            framerate = w.getframerate()
+            frames = w.readframes(w.getnframes())   # 남은 만큼만 읽힌다
+        if not frames or len(frames) % 2:
+            return data
+
+        samples = array.array("h")
+        samples.frombytes(frames)
+        if not samples:
+            return data
+        peak = max(abs(min(samples)), abs(max(samples)))
+        if peak == 0:
+            return data                          # 완전한 무음 — 키울 것이 없다
+
+        target = int(32767 * (10 ** (NORMALIZE_PEAK_DBFS / 20)))
+        gain = min(target / peak, 10 ** (NORMALIZE_MAX_GAIN_DB / 20))
+        if gain <= 1.01:                         # 이미 충분히 크다
+            return data
+
+        for i, v in enumerate(samples):
+            x = int(v * gain)
+            samples[i] = 32767 if x > 32767 else (-32768 if x < -32768 else x)
+
+        out = io.BytesIO()
+        with wave.open(out, "wb") as w:
+            # setparams 로 원본 파라미터를 통째로 넘기지 않는다 —
+            # 거기 담긴 프레임 수가 실제와 다를 수 있다. 나머지는 wave 가 센다.
+            w.setnchannels(nchannels)
+            w.setsampwidth(2)
+            w.setframerate(framerate)
+            w.writeframes(samples.tobytes())
+        logger.info("방송 음원 음량 정규화: %.1f배 (peak %d → %d)", gain, peak, int(peak * gain))
+        return out.getvalue()
+    except Exception as e:                       # 정규화 실패가 방송 생성을 막으면 안 된다
+        logger.warning("음량 정규화 건너뜀 (%s: %s)", type(e).__name__, e)
         return data
-    if not frames:
-        return data
-
-    samples = array.array("h")
-    samples.frombytes(frames)
-    peak = max(abs(min(samples)), abs(max(samples))) if samples else 0
-    if peak == 0:
-        return data                              # 완전한 무음 — 키울 것이 없다
-
-    target = int(32767 * (10 ** (NORMALIZE_PEAK_DBFS / 20)))
-    gain = target / peak
-    max_gain = 10 ** (NORMALIZE_MAX_GAIN_DB / 20)
-    gain = min(gain, max_gain)
-    if gain <= 1.01:                             # 이미 충분히 크다
-        return data
-
-    for i, v in enumerate(samples):
-        x = int(v * gain)
-        samples[i] = 32767 if x > 32767 else (-32768 if x < -32768 else x)
-
-    out = io.BytesIO()
-    with wave.open(out, "wb") as w:
-        w.setparams(params)
-        w.writeframes(samples.tobytes())
-    logger.info("방송 음원 음량 정규화: %.1f배 (peak %d → %d)", gain, peak, int(peak * gain))
-    return out.getvalue()
 
 
 def wav_duration(data: bytes) -> Optional[int]:
-    """WAV 길이(초) — ffprobe 없이 헤더만 읽는다."""
+    """WAV 길이(초).
+
+    헤더의 프레임 수 대신 실제로 읽어낸 데이터로 계산한다 —
+    스트리밍 WAV 는 헤더 값이 실제와 다르다.
+    """
     import io
     import wave
     try:
         with wave.open(io.BytesIO(data), "rb") as w:
             rate = w.getframerate()
-            return int(w.getnframes() / rate) if rate else None
-    except (wave.Error, EOFError, ValueError):
+            width = w.getsampwidth() or 2
+            ch = w.getnchannels() or 1
+            raw = w.readframes(w.getnframes())
+        if not rate:
+            return None
+        return int(len(raw) / (width * ch) / rate)
+    except Exception:
         return None
 
 
