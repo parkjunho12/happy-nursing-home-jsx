@@ -39,6 +39,10 @@ class OperationPayItem(Base):
     __tablename__ = "operation_pay_items"
 
     id       = Column(String, primary_key=True, default=_uuid)
+    # 계약 대장에서 올라온 항목이면 그 계약. 계약을 고치면 이 항목도 따라간다.
+    # 계약이 지워져도 납부 기록은 남겨야 하므로 SET NULL 로 끊기만 한다.
+    contract_id = Column(String, ForeignKey("operation_contracts.id", ondelete="SET NULL"),
+                         nullable=True, index=True)
     section  = Column(String(20), nullable=False, default="정기")      # 정기·기타·병원
     category = Column(String(100), nullable=False)
     vendor   = Column(String(200), nullable=True)

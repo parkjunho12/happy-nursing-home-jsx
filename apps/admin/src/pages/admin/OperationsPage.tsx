@@ -16,6 +16,9 @@ import {
 
 const C_SECTIONS = ['정기', '계약', '보험', '기타', '업체', '점검'] as const
 const P_SECTIONS = ['정기', '기타', '병원'] as const
+// 매달 돈이 나가는 계약 구분 — 서버(operations.PAYABLE_SECTIONS)와 같아야 한다.
+// 업체·점검은 연락처·일정 참고용이라 납부 대장에 올리지 않는다.
+const PAYABLE_SECTIONS: string[] = ['정기', '계약', '보험', '기타']
 const SEC_META: Record<string, { label: string; icon: typeof Repeat; dot: string }> = {
   정기: { label: '정기 지출', icon: Repeat, dot: 'bg-sky-500' },
   계약: { label: '위탁 · 용역 계약', icon: FileSignature, dot: 'bg-indigo-500' },
@@ -242,7 +245,16 @@ export default function OperationsPage() {
                         return (
                           <tr key={c.id}
                             className={`border-t border-gray-50 transition-colors hover:bg-slate-50/60 ${!c.active ? 'opacity-40' : ''} ${d !== null && d < 0 && c.active ? 'bg-red-50/40' : ''}`}>
-                            <td className="px-4 py-2.5 font-bold text-gray-800 whitespace-nowrap">{c.category}</td>
+                            <td className="px-4 py-2.5 font-bold text-gray-800 whitespace-nowrap">
+                              {c.category}
+                              {c.payable && !c.on_ledger && (
+                                // 돈은 나가는데 납부 대장에 없다 — 눈에 띄어야 고친다
+                                <span title="납부 대장에 없습니다 — 계약을 열어 '납부 대장에도 올리기'를 켜주세요"
+                                  className="ml-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 align-middle">
+                                  납부 대장 없음
+                                </span>
+                              )}
+                            </td>
                             <td className="px-2 py-2.5 whitespace-nowrap">
                               <p className="text-[13px] text-gray-700 font-semibold">{c.vendor || <span className="text-gray-300">—</span>}</p>
                               {c.contact && <p className="text-[10px] text-gray-400 max-w-[170px] truncate">{c.contact.split('\n')[0]}</p>}
@@ -290,7 +302,8 @@ export default function OperationsPage() {
         </>
       ) : (
         <PaymentsTab items={items} pays={pays} year={year} setYear={setYear} yearTotal={yearTotal}
-          onCell={(item, ym) => setCell({ item, ym })} onEditItem={setEditItem} onAddItem={() => setEditItem('new')} />
+          onCell={(item, ym) => setCell({ item, ym })} onEditItem={setEditItem} onAddItem={() => setEditItem('new')}
+          onReload={load} />
       )}
 
       {editC && <ContractModal existing={editC === 'new' ? undefined : editC} onClose={() => setEditC(null)} onSaved={load} />}
@@ -302,9 +315,10 @@ export default function OperationsPage() {
 }
 
 // ── 납부 대장 ─────────────────────────────────────────────────────────────
-function PaymentsTab({ items, pays, year, setYear, yearTotal, onCell, onEditItem, onAddItem }: {
+function PaymentsTab({ items, pays, year, setYear, yearTotal, onCell, onEditItem, onAddItem, onReload }: {
   items: OpPayItem[]; pays: OpPaymentsMap; year: number; setYear: (y: number) => void; yearTotal: number
   onCell: (item: OpPayItem, ym: string) => void; onEditItem: (i: OpPayItem) => void; onAddItem: () => void
+  onReload: () => void
 }) {
   const months = Array.from({ length: 12 }, (_, i) => i + 1)
   const now = new Date()
@@ -318,6 +332,22 @@ function PaymentsTab({ items, pays, year, setYear, yearTotal, onCell, onEditItem
     return expRows.reduce((a, r) => a + (r.months[ym]?.amount ?? 0), 0)
   }
   const expYearTotal = expRows.reduce((a, r) => a + r.total, 0)
+
+  // 계약 대장에는 있는데 여기 없는 것들 — 두 대장이 어긋난 채로 두지 않는다
+  const [missing, setMissing] = useState<OpContract[]>([])
+  const [syncing, setSyncing] = useState(false)
+  const loadMissing = () => operationsAPI.missingPayItems().then(setMissing).catch(() => setMissing([]))
+  useEffect(() => { loadMissing() }, [items])
+  const syncMissing = async () => {
+    setSyncing(true)
+    try {
+      const r = await operationsAPI.syncPayItems()
+      await loadMissing()
+      onReload()
+      alert(`${r.added}건을 납부 대장에 올렸습니다.`)
+    } catch (e: any) { alert(e?.response?.data?.detail ?? '실패') }
+    finally { setSyncing(false) }
+  }
   const active = items.filter(i => i.active)
   const thisMonthTotal = active.reduce((a, it) => a + (pays[it.id]?.[nowYm] ?? []).reduce((x, p) => x + p.amount, 0), 0)
   const missedCount = active.filter(i => i.section === '정기').reduce((a, it) => {
@@ -370,6 +400,23 @@ function PaymentsTab({ items, pays, year, setYear, yearTotal, onCell, onEditItem
           )
         })}
       </div>
+
+      {missing.length > 0 && (
+        // 연동이 없던 시절에 넣은 계약들 — 여기서 한 번에 올린다
+        <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+          <p className="text-xs font-bold text-amber-800">
+            계약 대장에는 있는데 납부 대장에 없는 계약 {missing.length}건
+          </p>
+          <p className="text-[11px] text-amber-700 mt-0.5 mb-2">
+            {missing.slice(0, 6).map(c => c.category).join(', ')}
+            {missing.length > 6 ? ` 외 ${missing.length - 6}건` : ''}
+          </p>
+          <button onClick={syncMissing} disabled={syncing}
+            className="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-bold disabled:opacity-50">
+            {syncing ? '올리는 중…' : '납부 대장에 올리기'}
+          </button>
+        </div>
+      )}
 
       <div className="flex items-center gap-3 mb-3">
         <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl px-1 py-1">
@@ -563,6 +610,10 @@ function ContractModal({ existing, onClose, onSaved }: { existing?: OpContract; 
     pay_day: existing?.pay_day ?? '', memo: existing?.memo ?? '', active: existing?.active ?? true,
     grp: existing?.grp ?? '',
   })
+  // 매달 돈이 나가는 계약은 납부 대장에도 올린다 — 같은 것을 두 번 적지 않게.
+  // 새 계약은 기본 켬, 이미 있는 계약은 지금 상태를 그대로 가져온다.
+  const [onLedger, setOnLedger] = useState(existing ? !!existing.on_ledger : true)
+  const payable = PAYABLE_SECTIONS.includes(f.section)
   const [periods, setPeriods] = useState<OpPeriod[]>(existing?.periods ?? [])
   const [busy, setBusy] = useState(false)
   // 연장 기록 — 지금 기간을 이력으로 내리고 새 기간을 입력받는다
@@ -578,8 +629,9 @@ function ContractModal({ existing, onClose, onSaved }: { existing?: OpContract; 
     if (!f.category.trim()) { alert('항목명을 입력해주세요.'); return }
     setBusy(true)
     try {
-      if (existing) await operationsAPI.updateContract(existing.id, { ...f, periods } as any)
-      else await operationsAPI.createContract({ ...f, periods } as any)
+      const body = { ...f, periods, on_ledger: payable && onLedger } as any
+      if (existing) await operationsAPI.updateContract(existing.id, body)
+      else await operationsAPI.createContract(body)
       onSaved(); onClose()
     } catch (e: any) { alert(e?.response?.data?.detail ?? '저장 실패') }
     finally { setBusy(false) }
@@ -598,6 +650,22 @@ function ContractModal({ existing, onClose, onSaved }: { existing?: OpContract; 
           <option value="">자동 분류{f.category ? ` (지금 기준: ${inferGrp(f.category)})` : ' (항목명 기준)'}</option>
           {PAY_GROUPS.map(g => <option key={g} value={g}>{g}</option>)}
         </select></div>
+      {payable ? (
+        <button type="button" onClick={() => setOnLedger(v => !v)}
+          className={`w-full text-left px-3 py-2.5 rounded-xl border text-sm transition-colors ${
+            onLedger ? 'bg-sky-50 border-sky-300 text-sky-800' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+          <span className="font-bold">{onLedger ? '✓ ' : ''}납부 대장에도 올리기</span>
+          <span className="block text-[11px] opacity-70 mt-0.5">
+            {onLedger
+              ? '납부 대장에 같은 이름의 항목이 생겨 달마다 금액을 적을 수 있어요'
+              : '계약 대장에만 남습니다 — 납부 기록은 못 적어요'}
+          </span>
+        </button>
+      ) : (
+        <p className="text-[11px] text-gray-400 px-1">
+          {SEC_META[f.section]?.label ?? f.section}은(는) 참고용이라 납부 대장에 올리지 않습니다.
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <div><L>업체명</L><input className={ic} value={f.vendor} onChange={e => setF({ ...f, vendor: e.target.value })} /></div>
         <div><L>월 지출액 (자유 표기)</L><input className={ic} value={f.amount_note} onChange={e => setF({ ...f, amount_note: e.target.value })} placeholder="예: 66,000(VAT포함)" /></div>

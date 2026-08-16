@@ -52,6 +52,60 @@ def _norm_periods(raw) -> list:
     return out
 
 
+
+# ── 계약 → 납부 대장 연동 ───────────────────────────────────────────────
+# 계약 대장에 넣은 계약이 납부 대장에 안 나오는 문제가 있었다.
+# 두 대장이 아무 관계 없이 따로 놀아, 같은 항목을 두 번 적어야 했다.
+#
+# 매달 돈이 나가는 계약만 올린다. '업체(참고)'·'점검(정기 검사)' 은
+# 납부할 것이 아니라 연락처·일정 참고용이라 올리지 않는다.
+PAYABLE_SECTIONS = ("정기", "계약", "보험", "기타")
+# 납부 대장의 구분은 세 가지뿐이다 — 계약의 구분을 여기에 맞춰 옮긴다
+CONTRACT_TO_PAY_SECTION = {"정기": "정기", "계약": "정기", "보험": "정기", "기타": "기타"}
+
+
+def _payable(section: Optional[str]) -> bool:
+    return (section or "정기") in PAYABLE_SECTIONS
+
+
+def _sync_pay_item(db: Session, c: OperationContract, *, want: bool) -> Optional[OperationPayItem]:
+    """계약에 딸린 납부 항목을 맞춘다.
+
+    want=False 면 내린다. 납부 기록이 있으면 지우지 않고 비활성으로만 둔다 —
+    기록을 지우는 것은 되돌릴 수 없다.
+    """
+    from app.services.operations_groups import infer_group
+    item = (db.query(OperationPayItem)
+              .filter(OperationPayItem.contract_id == c.id).first())
+
+    if not want:
+        if item:
+            has_pay = db.query(OperationPayment).filter(
+                OperationPayment.item_id == item.id).count() > 0
+            if has_pay:
+                item.active = False
+            else:
+                db.delete(item)
+        return None
+
+    section = CONTRACT_TO_PAY_SECTION.get(c.section or "정기", "정기")
+    grp = c.grp or infer_group(c.category or "", section)
+    if item:
+        item.section, item.category, item.vendor = section, c.category, c.vendor
+        item.grp, item.active = grp, True
+        if c.pay_day:
+            item.method = c.pay_day
+        return item
+
+    item = OperationPayItem(
+        contract_id=c.id, section=section, category=c.category, vendor=c.vendor,
+        method=c.pay_day, grp=grp,
+        sort=db.query(OperationPayItem).count())
+    db.add(item)
+    db.flush()
+    return item
+
+
 def _c_view(c: OperationContract) -> dict:
     from app.services.operations_groups import infer_group
     return {
@@ -61,6 +115,9 @@ def _c_view(c: OperationContract) -> dict:
         "start_date": c.start_date, "end_date": c.end_date, "pay_day": c.pay_day,
         "periods": _norm_periods(c.periods),
         "memo": c.memo, "active": c.active, "sort": c.sort,
+        # 화면에서 '납부 대장에 올라와 있는지'를 보여주기 위한 값
+        "on_ledger": bool(getattr(c, "_on_ledger", False)),
+        "payable": _payable(c.section),
     }
 
 
@@ -78,11 +135,17 @@ class ContractBody(BaseModel):
     memo: Optional[str] = None
     active: Optional[bool] = None
     sort: Optional[int] = None
+    # 납부 대장에도 올릴지. 안 보내면 '돈 나가는 계약이면 올린다'가 기본이다.
+    on_ledger: Optional[bool] = None
 
 
 @router.get("/contracts")
 def list_contracts(db: Session = Depends(get_db), _: User = Depends(_guard)):
     rows = db.query(OperationContract).order_by(OperationContract.sort, OperationContract.created_at).all()
+    linked = {i.contract_id for i in
+              db.query(OperationPayItem).filter(OperationPayItem.contract_id.isnot(None)).all()}
+    for c in rows:
+        c._on_ledger = c.id in linked
     return ApiResponse(success=True, data=[_c_view(c) for c in rows])
 
 
@@ -99,7 +162,12 @@ def create_contract(body: ContractBody, db: Session = Depends(get_db), user: Use
         updated_by=getattr(user, "name", None),
     )
     db.add(c)
+    db.flush()
+    # 계약을 넣었으면 납부 대장에도 올라와야 한다 — 같은 것을 두 번 적게 하지 않는다
+    want = body.on_ledger if body.on_ledger is not None else _payable(c.section)
+    _sync_pay_item(db, c, want=want)
     db.commit()
+    c._on_ledger = want
     return ApiResponse(success=True, data=_c_view(c))
 
 
@@ -116,7 +184,17 @@ def update_contract(cid: str, body: ContractBody, db: Session = Depends(get_db),
     if body.periods is not None:
         c.periods = _norm_periods(body.periods)
     c.updated_by = getattr(user, "name", None)
+    db.flush()
+    # 항목명·업체를 고치면 납부 대장 쪽도 같이 바뀌어야 한다.
+    # 올릴지 말지를 안 보냈으면 지금 상태를 유지한다 — 다른 것을 고치다
+    # 납부 항목이 말없이 사라지면 안 된다.
+    linked = db.query(OperationPayItem).filter(OperationPayItem.contract_id == c.id).first()
+    want = body.on_ledger if body.on_ledger is not None else linked is not None
+    _sync_pay_item(db, c, want=want and bool(c.active))
     db.commit()
+    c._on_ledger = bool(db.query(OperationPayItem)
+                          .filter(OperationPayItem.contract_id == c.id,
+                                  OperationPayItem.active == True).count())  # noqa: E712
     return ApiResponse(success=True, data=_c_view(c))
 
 
@@ -124,6 +202,12 @@ def update_contract(cid: str, body: ContractBody, db: Session = Depends(get_db),
 def delete_contract(cid: str, db: Session = Depends(get_db), user: User = Depends(_guard)):
     if not _is_admin(user):
         raise HTTPException(403, "삭제는 ADMIN만 가능합니다.")
+    # 납부 기록이 있으면 항목을 남기고 연결만 끊는다 — 지난 지출 기록은 지우지 않는다
+    for it in db.query(OperationPayItem).filter(OperationPayItem.contract_id == cid).all():
+        if db.query(OperationPayment).filter(OperationPayment.item_id == it.id).count():
+            it.contract_id = None
+        else:
+            db.delete(it)
     db.query(OperationContract).filter(OperationContract.id == cid).delete()
     db.commit()
     return ApiResponse(success=True, data={"deleted": cid})
@@ -368,3 +452,40 @@ def seed_from_excel(db: Session = Depends(get_db), user: User = Depends(_guard))
     return ApiResponse(success=True, data={
         "contracts": len(SEED["contracts"]), "items": len(SEED["items"]),
         "payments": len(SEED["payments"])})
+
+
+@router.get("/missing-pay-items")
+def missing_pay_items(db: Session = Depends(get_db), _: User = Depends(_guard)):
+    """계약 대장에는 있는데 납부 대장에 없는 계약들.
+
+    연동이 없던 시절에 넣은 계약들이 여기에 잡힌다.
+    """
+    linked = {i.contract_id for i in
+              db.query(OperationPayItem).filter(OperationPayItem.contract_id.isnot(None)).all()}
+    rows = (db.query(OperationContract)
+              .filter(OperationContract.active == True)             # noqa: E712
+              .order_by(OperationContract.sort, OperationContract.created_at).all())
+    out = [c for c in rows if _payable(c.section) and c.id not in linked]
+    # 이름·업체가 같은 항목이 이미 손으로 들어가 있으면 중복이므로 뺀다
+    have = {((i.category or "").strip(), (i.vendor or "").strip())
+            for i in db.query(OperationPayItem).all()}
+    out = [c for c in out
+           if ((c.category or "").strip(), (c.vendor or "").strip()) not in have]
+    for c in out:
+        c._on_ledger = False
+    return ApiResponse(success=True, data=[_c_view(c) for c in out])
+
+
+@router.post("/sync-pay-items")
+def sync_pay_items(db: Session = Depends(get_db), user: User = Depends(_guard)):
+    """빠져 있는 계약을 납부 대장에 한 번에 올린다."""
+    res = missing_pay_items(db=db, _=user)
+    ids = [c["id"] for c in res.data]
+    added = []
+    for cid in ids:
+        c = db.query(OperationContract).filter(OperationContract.id == cid).first()
+        if c and _sync_pay_item(db, c, want=True):
+            added.append(c.category)
+    db.commit()
+    return ApiResponse(success=True, data={"added": len(added), "names": added[:20]},
+                       message=f"{len(added)}건을 납부 대장에 올렸습니다.")
