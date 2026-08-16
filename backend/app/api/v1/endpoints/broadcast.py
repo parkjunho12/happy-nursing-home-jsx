@@ -736,6 +736,7 @@ class PositionCastConfig(BaseModel):
     template: Optional[str] = None
     name_style: Optional[str] = None
     max_names: Optional[int] = None
+    mask_names: Optional[bool] = None
 
 
 @router.get("/position/plan")

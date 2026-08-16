@@ -38,10 +38,13 @@ SOURCE_POSITION = "POSITION"
 SETTING_KEY = "POSITION"
 
 DEFAULT_TEMPLATE = (
-    "안내 말씀드립니다. "
-    "지금은 체위변경 시간입니다. "
+    "선생님들께 안내드립니다. "
+    "지금은 어르신 체위변경 시간입니다. "
     "대상 어르신은 {names} 어르신입니다. "
-    "담당 선생님들께서는 체위변경을 실시해 주시기 바랍니다. "
+    "담당 어르신의 자세와 피부 상태를 확인하시고, "
+    "안전하게 체위변경을 진행해 주시기 바랍니다. "
+    "어르신 한 분 한 분 세심하게 살펴주시고, "
+    "필요한 사항은 빠짐없이 확인 부탁드립니다. "
     "감사합니다."
 )
 
@@ -59,6 +62,9 @@ DEFAULTS: Dict[str, Any] = {
     "name_style": "name",
     # 이보다 많으면 다 부르지 않고 '외 N분' 으로 줄인다 — 2분 넘는 방송은 아무도 안 듣는다
     "max_names": 20,
+    # 이름 가운데를 가려 부른다. 이길용 → 이모용
+    # 건물 전체로 나가는 방송이라 기본으로 가린다. 선생님들은 성과 끝 글자로 알아보신다.
+    "mask_names": True,
 }
 
 _HHMM = re.compile(r"^(\d{1,2}):(\d{2})$")
@@ -104,6 +110,7 @@ def _clean_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
         out["max_names"] = min(max(int(cfg.get("max_names", 20)), 1), 60)
     except (TypeError, ValueError):
         out["max_names"] = 20
+    out["mask_names"] = bool(cfg.get("mask_names", True))
     return out
 
 
@@ -139,14 +146,57 @@ def targets(db: Session) -> List[LtcResident]:
     return sorted(rows, key=lambda r: (_room_no(r), r.name or ""))
 
 
-def _label(r: LtcResident, style: str) -> str:
-    room = (r.room or "").strip()
-    room_txt = f"{room}호" if room and not room.endswith("호") else room
+_SINO = "공일이삼사오육칠팔구"
+
+
+def speak_room(room: Optional[str]) -> str:
+    """'201' → '이백일호'.
+
+    숫자를 그대로 넘기면 TTS 가 '2.15', '2객 3호' 처럼 뭉갠다.
+    실제로 만들어 받아써 보고 고른 표기다 — 한글로 적어야 또렷하게 읽는다.
+    """
+    raw = re.sub(r"[^0-9]", "", room or "")
+    if not raw:
+        return ""
+    n = int(raw)
+    if n >= 1000:                                # 네 자리 이상은 한 자씩
+        return "".join(_SINO[int(d)] for d in raw) + "호"
+    out = ""
+    if n >= 100:
+        h = n // 100
+        out += ("백" if h == 1 else _SINO[h] + "백")
+    t = (n // 10) % 10
+    if t:
+        out += ("십" if t == 1 else _SINO[t] + "십")
+    u = n % 10
+    if u:
+        out += _SINO[u]
+    return (out or "공") + "호"
+
+
+def mask_name(name: str) -> str:
+    """이름 가운데를 가린다. 이길용 → 이모용, 김철 → 김모.
+
+    'O' 나 '○' 를 그대로 넣으면 TTS 가 '2호용', '이는용' 처럼 엉뚱하게 읽는다.
+    한국에서 이름을 가릴 때 실제로 쓰는 '모(某)' 를 넣어야 제대로 읽힌다.
+    성과 끝 글자는 남기므로 선생님들은 누구인지 알아보신다.
+    """
+    n = (name or "").strip()
+    if len(n) < 2:
+        return n
+    if len(n) == 2:
+        return f"{n[0]}모"
+    return f"{n[0]}모{n[-1]}"
+
+
+def _label(r: LtcResident, style: str, mask: bool = True) -> str:
+    room_txt = speak_room(r.room)
+    name = mask_name(r.name) if mask else (r.name or "")
     if style == "room" and room_txt:
         return room_txt
     if style == "room_name" and room_txt:
-        return f"{room_txt} {r.name}"
-    return r.name or ""
+        return f"{room_txt} {name}".strip()
+    return name
 
 
 def name_list(rows: List[LtcResident], cfg: Dict[str, Any]) -> str:
@@ -156,7 +206,8 @@ def name_list(rows: List[LtcResident], cfg: Dict[str, Any]) -> str:
     가운뎃점은 붙여 읽으니 쓰지 않는다.
     """
     style = cfg.get("name_style", "name")
-    labels = [x for x in (_label(r, style) for r in rows) if x]
+    mask = bool(cfg.get("mask_names", True))
+    labels = [x for x in (_label(r, style, mask) for r in rows) if x]
     if not labels:
         return ""
     cap = int(cfg.get("max_names", 20))

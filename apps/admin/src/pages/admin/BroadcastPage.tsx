@@ -833,6 +833,20 @@ function PositionCastView({ onChanged }: { onChanged: () => void }) {
             </select>
           </label>
         </div>
+        <button type="button" disabled={saving}
+          onClick={() => save({ mask_names: !cfg.mask_names }, cfg.mask_names
+            ? '어르신 성함을 그대로 부릅니다.\n\n건물 전체 스피커로 나가며 방문객에게도 들립니다.\n그대로 진행할까요?'
+            : undefined)}
+          className={`w-full mt-3 text-left px-3 py-2.5 rounded-xl border text-sm transition-colors disabled:opacity-50 ${
+            cfg.mask_names ? 'bg-violet-50 border-violet-300 text-violet-700'
+                           : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+          <span className="font-bold">{cfg.mask_names ? '✓ ' : ''}이름 가려서 부르기</span>
+          <span className="block text-[10px] opacity-70 mt-0.5">
+            {cfg.mask_names
+              ? '이길용 → 이모용 처럼 가운데를 가립니다. 성과 끝 글자가 남아 선생님들은 알아보십니다'
+              : '성함을 그대로 부릅니다. 방문객에게도 들립니다'}
+          </span>
+        </button>
         <p className="text-[11px] text-gray-400 mt-2">
           이름을 부르는 방송입니다. 보호자가 계실 수 있는 시간대라면 「호실만」도 고려해보세요.
         </p>
