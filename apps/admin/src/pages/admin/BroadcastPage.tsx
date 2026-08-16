@@ -761,7 +761,9 @@ function PositionCastView({ onChanged }: { onChanged: () => void }) {
 
   if (loading || !plan) return <p className="text-sm text-gray-400 py-10 text-center">불러오는 중…</p>
   const cfg = plan.config
-  const SLOTS = ['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00']
+  // 07시부터 2시간 간격. 체위변경 기준이 2시간이다.
+  const SLOTS = ['05:00', '07:00', '09:00', '11:00', '13:00', '15:00',
+                 '17:00', '19:00', '21:00', '23:00']
 
   return (
     <div className="space-y-4">
