@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Printer, Save, Eraser, Loader2, CalendarDays, Wand2, Users, History, Sparkles, Inbox, Trash2, FileSpreadsheet } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ChevronLeft, ChevronRight, Printer, Save, Eraser, Loader2, CalendarDays, Wand2, Users, History, Sparkles, Inbox, Trash2, FileSpreadsheet, X } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
 import { apiClient } from '@/api/client'
 import { workScheduleAPI, type ScheduleData, type ScheduleRow, type HolidayInfo } from '@/api/workScheduleClient'
@@ -11,7 +11,7 @@ import AuditPanel from '@/components/schedule/AuditPanel'
 import GeneratePickModal from '@/components/schedule/GeneratePickModal'
 import AttendanceSheets from '@/components/schedule/AttendanceSheets'
 import LeaveInboxPanel from '@/components/schedule/LeaveInboxPanel'
-import { leaveAPI, swapAPI } from '@/api/leaveClient'
+import { leaveAPI, swapAPI, signatureUrl, type LeaveRequest } from '@/api/leaveClient'
 import { TEAM_BAND, canJoinTeam, sortScheduleStaff } from '@/components/schedule/shared'
 import { planDayShift, interleaveByPosition } from '@/utils/dayShiftPlan'
 import { planMembersMonths, type MonthContext, type MemberMonthPlan } from '@/utils/shiftBalance'
@@ -140,6 +140,36 @@ export default function WorkSchedulePage() {
       })
       .finally(() => { if (seq === loadSeq.current) setLoading(false) })
   }, [ym])
+
+  // ── 휴무 신청을 편성표 위에 얹는다 ────────────────────────────
+  // 신청을 따로 열어 보고 다시 표로 돌아오면, 그날 인원이 어떤지 기억해서
+  // 판단해야 한다. 표 위에 바로 보여야 '이날은 되겠다/안 되겠다'가 보인다.
+  const [leaves, setLeaves] = useState<LeaveRequest[]>([])
+  const leaveSeq = useRef(0)
+  const loadLeaves = useCallback(() => {
+    const seq = ++leaveSeq.current
+    Promise.all([
+      leaveAPI.list(ym, 'pending').catch(() => [] as LeaveRequest[]),
+      leaveAPI.list(ym, 'approved').catch(() => [] as LeaveRequest[]),
+    ]).then(([p, a]) => { if (seq === leaveSeq.current) setLeaves([...p, ...a]) })
+  }, [ym])
+  useEffect(() => { loadLeaves() }, [loadLeaves])
+
+  /** 'staffId:일' → 신청들. 한 사람이 같은 날 두 건일 수는 없지만 방어적으로 배열로 둔다 */
+  const leaveAt = useMemo(() => {
+    const m = new Map<string, LeaveRequest[]>()
+    for (const r of leaves) {
+      if (r.date.slice(0, 7) !== ym) continue
+      const k = `${r.staff_id}:${Number(r.date.slice(8, 10))}`
+      ;(m.get(k) ?? m.set(k, []).get(k)!).push(r)
+    }
+    return m
+  }, [leaves, ym])
+  const pendingLeaves = useMemo(
+    () => leaves.filter(r => r.status === 'pending' && r.date.slice(0, 7) === ym)
+                .sort((a, b) => a.date.localeCompare(b.date)), [leaves, ym])
+  // 클릭한 신청 — 표 위에서 바로 승인·반려한다
+  const [leavePick, setLeavePick] = useState<LeaveRequest | null>(null)
 
   const holSeq = useRef(0)
   useEffect(() => {
@@ -784,6 +814,45 @@ export default function WorkSchedulePage() {
           staff={staff.filter(s2 => attPick.has(s2.id))} />
       )}
 
+      {pendingLeaves.length > 0 && (
+        // 표 바로 위에 둔다 — 어느 날인지 짚어 보고 표에서 인원을 확인한 뒤 정한다
+        <div className="print:hidden rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+          <p className="text-xs font-bold text-amber-800 mb-1.5">
+            처리 안 한 휴무 신청 {pendingLeaves.length}건
+            <span className="ml-1.5 font-normal text-amber-600">
+              표에서 주황 모서리(◤)를 누르면 그 자리에서 승인·반려할 수 있어요
+            </span>
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {pendingLeaves.map(r => (
+              <button key={r.id} onClick={() => setLeavePick(r)}
+                onMouseEnter={() => setFocus({ staffId: r.staff_id, day: Number(r.date.slice(8, 10)) })}
+                onMouseLeave={() => setFocus(null)}
+                className="px-2 py-1 rounded-lg bg-white border border-amber-200 text-xs font-semibold text-gray-700 hover:border-amber-400">
+                {Number(r.date.slice(8, 10))}일 · {r.staff_name}
+                <span className={`ml-1 font-normal ${r.kind === '연차' ? 'text-emerald-600' : 'text-sky-600'}`}>
+                  {r.kind}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {leavePick && (
+        <LeaveDecideModal req={leavePick} onClose={() => setLeavePick(null)}
+          onDone={() => {
+            setLeavePick(null)
+            loadLeaves()
+            // 승인이 근무표 칸을 바꿨을 수 있다(연차는 休가 들어간다) — 다시 불러온다
+            workScheduleAPI.get(ym).then(doc => setData(doc.data || {})).catch(() => {})
+            Promise.all([
+              leaveAPI.list(undefined, 'pending').catch(() => []),
+              swapAPI.list('pending').catch(() => []),
+            ]).then(([l, sw]) => setLeavePending(l.length + sw.length))
+          }} />
+      )}
+
       {loading ? (
         <div className="flex justify-center py-16"><Loader2 className="animate-spin text-gray-300" size={22} /></div>
       ) : (
@@ -874,6 +943,7 @@ export default function WorkSchedulePage() {
                       const customH = extraHoursOf(v)
                       const shortened = isShift && customH > 0 && customH < DAILY_HOURS
                         && rotationFor(s.team, day, offsets, ym, anchor) === 'D'
+                      const req = leaveAt.get(`${s.id}:${day}`)?.[0]
                       return (
                         <td key={day}
                           onMouseDown={() => { painting.current = true; setSel({ si, di }); setCell(s.id, day, brush) }}
@@ -887,13 +957,23 @@ export default function WorkSchedulePage() {
                             : mt ? `${mt.label}${mt.time ? ` ${mt.time}` : ''}` : v}
                           data-code={v}
                           data-shorten={shortened ? '1' : undefined}
-                          className={`${td} ws-cell cursor-pointer select-none ${mt ? mt.cls : shortened ? 'bg-violet-100 text-violet-900 text-[9px] leading-tight' : v ? 'bg-yellow-50 text-gray-700 text-[9px] leading-tight' : dayTone(day, dow) === 'red' ? 'bg-red-50/70' : dayTone(day, dow) === 'blue' ? 'bg-blue-50/70' : dayTone(day, dow) === 'paid' ? 'bg-violet-50/60' : ''} ${day === todayCol ? 'ring-1 ring-inset ring-indigo-200' : ''} ${lit ? 'outline outline-2 outline-amber-400' : ''} ${picked ? 'ring-2 ring-inset ring-gray-800' : ''}`}>
+                          className={`${td} ws-cell relative cursor-pointer select-none ${mt ? mt.cls : shortened ? 'bg-violet-100 text-violet-900 text-[9px] leading-tight' : v ? 'bg-yellow-50 text-gray-700 text-[9px] leading-tight' : dayTone(day, dow) === 'red' ? 'bg-red-50/70' : dayTone(day, dow) === 'blue' ? 'bg-blue-50/70' : dayTone(day, dow) === 'paid' ? 'bg-violet-50/60' : ''} ${day === todayCol ? 'ring-1 ring-inset ring-indigo-200' : ''} ${lit ? 'outline outline-2 outline-amber-400' : ''} ${picked ? 'ring-2 ring-inset ring-gray-800' : ''}`}>
                           {(() => {
                             const tr = splitTimeRange(v)
                             // 시간대는 좁은 칸에 한 줄로 안 들어가 잘린다 → 시작/끝을 두 줄로
                             if (tr) return <span className="ws-time">{tr[0]}<br />{tr[1]}</span>
                             return <span className="ws-code">{shortOf(v)}</span>
                           })()}
+                          {req && (
+                            // 신청 표식 — 눌러서 그 자리에서 승인·반려한다.
+                            // 칠하기(mousedown)와 겹치지 않게 이벤트를 여기서 끊는다.
+                            <button
+                              onMouseDown={ev => { ev.stopPropagation(); ev.preventDefault() }}
+                              onClick={ev => { ev.stopPropagation(); setLeavePick(req) }}
+                              title={`${s.name} · ${m}월 ${day}일 ${req.kind} ${req.status === 'pending' ? '신청 (대기)' : '승인됨'}\n눌러서 처리`}
+                              className={`ws-req absolute top-0 right-0 print:hidden ${
+                                req.status === 'pending' ? 'ws-req-wait' : 'ws-req-ok'}`} />
+                          )}
                         </td>
                       )
                     })}
@@ -1014,6 +1094,15 @@ export default function WorkSchedulePage() {
       )}
 
       <style>{`
+        /* ── 휴무 신청 표식 ──────────────────────────────────────
+           칸 오른쪽 위 모서리를 접은 것처럼 보이는 작은 삼각형.
+           칸 글자를 가리지 않으면서 '여기 신청이 있다'를 알린다.
+           대기는 주황(처리해야 할 일), 승인은 파랑(이미 정해진 일). */
+        .ws-req { width: 0; height: 0; border-style: solid; border-width: 0 7px 7px 0; cursor: pointer; }
+        .ws-req-wait { border-color: transparent #f59e0b transparent transparent; }
+        .ws-req-ok   { border-color: transparent #0ea5e9 transparent transparent; }
+        .ws-req:hover { border-width: 0 10px 10px 0; }
+
         /* ── 인쇄 ────────────────────────────────────────────────
            게시용은 벽에 붙여 여러 명이 멀리서 보는 문서다.
            총시간·초과휴 같은 숫자는 '왜 저 사람은 나보다 많지?'라는 오해를 부르므로
@@ -1119,6 +1208,90 @@ export default function WorkSchedulePage() {
           .print-approve .pa-sign  { height: 12mm; }
         }
       `}</style>
+    </div>
+  )
+}
+
+
+/* ── 표 위에서 바로 승인·반려 ───────────────────────────────────
+ * 신청함을 따로 열면 그날 인원이 어땠는지 기억해서 판단해야 한다.
+ * 표를 띄운 채로 정할 수 있게, 필요한 것만 담은 작은 창으로 둔다.
+ */
+function LeaveDecideModal({ req, onClose, onDone }: {
+  req: LeaveRequest; onClose: () => void; onDone: () => void
+}) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const d = Number(req.date.slice(8, 10))
+  const mm = Number(req.date.slice(5, 7))
+  const w = ['일', '월', '화', '수', '목', '금', '토'][
+    new Date(Number(req.date.slice(0, 4)), mm - 1, d).getDay()]
+
+  const decide = async (approve: boolean) => {
+    let note: string | undefined
+    if (!approve) {
+      const t = prompt(`${req.staff_name} · ${mm}월 ${d}일 ${req.kind} 반려 사유 (신청자에게 전달됩니다)`, '')
+      if (t === null) return
+      note = t.trim() || undefined
+    }
+    setBusy(true); setErr('')
+    try { await leaveAPI.decide(req.id, approve, note); onDone() }
+    catch (e: any) { setErr(e?.response?.data?.detail ?? '처리 실패') }
+    finally { setBusy(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center gap-2 mb-3">
+          <h3 className="font-bold text-gray-900">휴무 신청</h3>
+          <button onClick={onClose} className="ml-auto text-gray-300 hover:text-gray-500"><X size={18} /></button>
+        </div>
+
+        <p className="text-lg font-black text-gray-900">{req.staff_name}</p>
+        <p className="text-sm text-gray-500 mt-0.5">
+          {mm}월 {d}일({w}) ·
+          <span className={`ml-1 font-bold ${req.kind === '연차' ? 'text-emerald-600' : 'text-sky-600'}`}>
+            {req.kind}
+          </span>
+          {req.kind === '희망휴무' && (
+            <span className="ml-1 text-xs text-gray-400">
+              {req.use_annual ? '(연차로 반영)' : '(연차 안 씀)'}
+            </span>
+          )}
+        </p>
+        {req.reason && <p className="text-sm text-gray-600 mt-2 bg-gray-50 rounded-xl px-3 py-2">{req.reason}</p>}
+
+        {req.status !== 'pending' ? (
+          <p className="text-sm text-gray-500 mt-4 bg-gray-50 rounded-xl px-3 py-3 text-center">
+            이미 {req.status === 'approved' ? '승인' : '반려'}된 신청입니다
+            {req.decided_by ? ` · ${req.decided_by}` : ''}
+          </p>
+        ) : (<>
+          <p className="text-[11px] text-gray-400 mt-3">
+            표에서 그날 인원을 확인하고 정해주세요. 승인하면 신청자에게 알림이 갑니다.
+          </p>
+          {err && <p className="text-xs text-rose-600 mt-2">{err}</p>}
+          <div className="flex gap-2 mt-3">
+            <button onClick={() => decide(false)} disabled={busy}
+              className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-bold text-gray-600 disabled:opacity-50">
+              반려
+            </button>
+            <button onClick={() => decide(true)} disabled={busy}
+              className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold disabled:opacity-50 inline-flex items-center justify-center gap-1.5">
+              {busy && <Loader2 size={14} className="animate-spin" />} 승인
+            </button>
+          </div>
+        </>)}
+
+        {req.signature_url && (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <p className="text-[11px] font-semibold text-gray-400 mb-1">신청자 서명</p>
+            <img src={signatureUrl(req.signature_url) ?? ''} alt="서명"
+              className="h-12 object-contain" />
+          </div>
+        )}
+      </div>
     </div>
   )
 }
