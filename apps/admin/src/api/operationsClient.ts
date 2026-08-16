@@ -15,10 +15,15 @@ export interface OpContract {
   start_date?: string | null; end_date?: string | null; pay_day?: string | null
   periods?: OpPeriod[]
   memo?: string | null; active: boolean; sort: number
+  /** 납부 대장에 올라와 있는지 (서버 계산) */
+  on_ledger?: boolean
+  /** 매달 돈이 나가는 구분인지 — 업체·점검은 참고용이라 false */
+  payable?: boolean
 }
 export interface OpPayItem {
   id: string; section: string; category: string; vendor?: string | null
   method?: string | null; grp?: string | null; sort: number; active: boolean
+  contract_id?: string | null
 }
 export interface OpPayment { id: string; amount: number; paid_on?: string | null; note?: string | null }
 export type OpPaymentsMap = Record<string, Record<string, OpPayment[]>>
@@ -28,6 +33,12 @@ export const operationsAPI = {
   createContract: (b: Partial<OpContract>) => apiClient.post(`${BASE}/contracts`, b).then(unwrap<OpContract>),
   updateContract: (id: string, b: Partial<OpContract>) => apiClient.put(`${BASE}/contracts/${id}`, b).then(unwrap<OpContract>),
   deleteContract: (id: string) => apiClient.delete(`${BASE}/contracts/${id}`).then(r => r.data),
+
+  /** 계약 대장에는 있는데 납부 대장에 없는 계약들 */
+  missingPayItems: () => apiClient.get(`${BASE}/missing-pay-items`).then(unwrap<OpContract[]>),
+  /** 빠진 계약을 한 번에 납부 대장에 올린다 */
+  syncPayItems: () => apiClient.post(`${BASE}/sync-pay-items`, {})
+    .then(unwrap<{ added: number; names: string[] }>),
 
   payItems: () => apiClient.get(`${BASE}/pay-items`).then(unwrap<OpPayItem[]>),
   createPayItem: (b: Partial<OpPayItem>) => apiClient.post(`${BASE}/pay-items`, b).then(unwrap<OpPayItem>),
