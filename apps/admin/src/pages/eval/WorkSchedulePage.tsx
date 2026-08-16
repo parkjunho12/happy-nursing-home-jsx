@@ -502,6 +502,17 @@ export default function WorkSchedulePage() {
     }, 0)
   }
 
+  /** 대기 중인 휴무 신청을 '전부 승인했다 치고' 남는 주간 요양보호사 수.
+   *  승인 여부를 정하려면 결국 이 숫자를 봐야 한다 — 머릿속으로 빼지 않게 표에 둔다. */
+  const dayCountAfterLeave = (day: number) => {
+    const base = printPick ? staff.filter(s => printPick.has(s.id)) : staff
+    return base.filter(s => canJoinTeam(s.pos)).reduce((acc, s) => {
+      if (countAsOf(data[s.id]?.[String(day)]) !== 'D') return acc
+      const waiting = leaveAt.get(`${s.id}:${day}`)?.some(r => r.status === 'pending')
+      return acc + (waiting ? 0 : 1)
+    }, 0)
+  }
+
   const issues: Issue[] = useMemo(() => auditSchedule({
     days, staff: staff.map(s => ({ id: s.id, name: s.name, team: s.team, pos: s.pos })), data,
     baseHours: Number(baseHours) || 160, minStaffPerDay: minStaff,
@@ -1009,6 +1020,34 @@ export default function WorkSchedulePage() {
                 })}
                 <td className={`${td} ws-agg`} colSpan={8} />
               </tr>
+              {pendingLeaves.length > 0 && (
+                // 신청이 있을 때만 낸다. 없으면 윗줄과 같은 숫자라 눈만 어지럽다.
+                // 벽에 붙는 문서가 아니라 정하려고 보는 줄이므로 인쇄에서는 뺀다.
+                <tr className="ws-row-sum bg-amber-50/70 print:hidden">
+                  <td className={`${td} font-bold text-amber-800 sticky left-0 z-10 bg-amber-50`} colSpan={3}>
+                    신청 다 받아주면 <span className="font-normal text-amber-600">(대기 중 휴무 신청 {pendingLeaves.length}건 뺀 수)</span>
+                  </td>
+                  {days.map(({ day }) => {
+                    const n = dayCountAfterLeave(day)
+                    const before = dayCountBy(day, true)
+                    const cut = before - n
+                    return (
+                      <td key={day}
+                        title={cut > 0
+                          ? `${m}월 ${day}일 — 지금 ${before}명, 신청 ${cut}건 받아주면 ${n}명`
+                          : undefined}
+                        className={`${td} font-bold ${
+                          cut === 0 ? 'text-amber-900/30'
+                          : n === 0 ? 'bg-red-200 text-red-800'
+                          : n < minStaff ? 'bg-red-100 text-red-700'
+                          : 'text-amber-900'} ${focus?.day === day ? 'outline outline-2 outline-amber-400' : ''}`}>
+                        {n || '0'}
+                      </td>
+                    )
+                  })}
+                  <td className={`${td} ws-agg`} colSpan={8} />
+                </tr>
+              )}
               <tr className="ws-row-sum bg-gray-50/60">
                 <td className={`${td} font-semibold text-gray-500 sticky left-0 z-10 bg-gray-50`} colSpan={3}>그 외 주간 인원</td>
                 {days.map(({ day }) => (
