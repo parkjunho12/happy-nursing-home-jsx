@@ -37,6 +37,8 @@ export interface PositionPlan {
   targets: PositionTarget[]
   text: string
   skip: string | null
+  default_template: string
+  template_help: string
 }
 export interface PositionSyncResult {
   enabled: boolean; created: number; updated: number; removed: number

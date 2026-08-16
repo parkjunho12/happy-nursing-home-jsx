@@ -743,7 +743,12 @@ class PositionCastConfig(BaseModel):
 def position_plan(db: Session = Depends(get_db), _: User = Depends(_manager)):
     """대상 어르신이 누구고 몇 시에 어떤 문구가 나가는지 — 미리보기."""
     from app.services import positioning_broadcast as pos
-    return ApiResponse(success=True, data=pos.plan(db))
+    d = pos.plan(db)
+    # 문구를 화면에서 고칠 수 있어야 하고, 되돌릴 곳도 있어야 한다 —
+    # 저장해 둔 예전 문구 때문에 새 기본 문구가 안 보이는 일이 생긴다
+    d["default_template"] = pos.DEFAULT_TEMPLATE
+    d["template_help"] = "{names} 대상 어르신 · {count} 인원수"
+    return ApiResponse(success=True, data=d)
 
 
 @router.put("/position/config")
