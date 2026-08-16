@@ -36,11 +36,14 @@ export default function AdminRoutinePage() {
   const month = monthKey(cursor)
   const isThisMonth = month === monthKey(new Date())
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  /** silent=true 면 스피너를 띄우지 않는다.
+   *  목록을 스피너로 갈아끼우면 화면이 통째로 다시 그려져 보던 자리를 잃는다.
+   *  달을 바꿀 때만 스피너가 필요하다. */
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
     try { setData(await adminRoutineAPI.month(month)) }
-    catch { setData(null) }
-    finally { setLoading(false) }
+    catch { if (!silent) setData(null) }
+    finally { if (!silent) setLoading(false) }
   }, [month])
   useEffect(() => { load() }, [load])
 
@@ -59,24 +62,40 @@ export default function AdminRoutinePage() {
     return [...map.entries()]
   }, [items])
 
+  /** 체크 하나를 바꿀 때는 그 줄만 고친다.
+   *  다시 불러오면 목록이 사라졌다 그려지면서 보던 자리가 맨 위로 올라간다.
+   *  실패하면 원래대로 되돌린다 — 안 되돌리면 화면과 서버가 어긋난 채 남는다. */
+  const patchItem = (id: string, next: boolean, extra: Partial<RoutineItem> = {}) =>
+    setData(d => {
+      if (!d) return d
+      const items = d.items.map(x =>
+        x.id !== id ? x : { ...x, done: next, overdue: !next && x.date < d.today, ...extra })
+      return { ...d, items, done_count: items.filter(x => x.done).length }
+    })
+
   const toggle = async (it: RoutineItem) => {
+    const next = !it.done
     setBusy(it.id)
+    patchItem(it.id, next)                    // 먼저 화면을 바꾼다 — 누른 순간 반응하게
     try {
-      await adminRoutineAPI.setDone(it.id, { month, done: !it.done })
-      await load()
-    } catch (e: any) { alert(e?.message ?? '저장 실패') }
-    finally { setBusy(null) }
+      const r = await adminRoutineAPI.setDone(it.id, { month, done: next })
+      // 완료 시각·완료자는 서버가 정한다
+      patchItem(it.id, r.done, { done_date: r.done_date ?? null, done_by: r.done_by ?? null })
+    } catch (e: any) {
+      patchItem(it.id, it.done, { done_date: it.done_date, done_by: it.done_by })
+      alert(e?.message ?? '저장 실패')
+    } finally { setBusy(null) }
   }
 
   const remove = async (it: RoutineItem) => {
     if (!confirm(`"${it.title}"을(를) 삭제할까요?\n매달 반복 등록이 사라지고, 지난 완료 기록도 함께 지워집니다.`)) return
-    try { await adminRoutineAPI.remove(it.id); load() }
+    try { await adminRoutineAPI.remove(it.id); load(true) }
     catch (e: any) { alert(e?.message ?? '삭제 실패') }
   }
 
   const seed = async () => {
     if (!confirm('요양원에서 매달 반복되는 대표 업무 8건을 넣어드릴까요?\n넣은 뒤 날짜·내용은 자유롭게 고칠 수 있어요.')) return
-    try { await adminRoutineAPI.seedDefaults(); load() }
+    try { await adminRoutineAPI.seedDefaults(); load(true) }
     catch (e: any) { alert(e?.message ?? '실패') }
   }
 
@@ -216,7 +235,7 @@ export default function AdminRoutinePage() {
 
       {editing !== undefined && (
         <RoutineModal editing={editing} onClose={() => setEditing(undefined)}
-          onSaved={() => { setEditing(undefined); load() }} />
+          onSaved={() => { setEditing(undefined); load(true) }} />
       )}
     </div>
   )
