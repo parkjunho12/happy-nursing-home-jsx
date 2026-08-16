@@ -222,14 +222,16 @@ def sync(d: BroadcastDevice = Depends(_device), db: Session = Depends(get_db)):
                .filter(BroadcastRun.status == RUN_PENDING,
                        BroadcastRun.occurrence_at >= start,
                        BroadcastRun.occurrence_at <= end).all())
-    by_key = {(i["schedule_id"], i["occurrence_at"]): i for i in items}
     for r in adhoc:
         at = to_kst(r.occurrence_at)
-        key = (r.schedule_id, at.isoformat())
-        hit = by_key.get(key)
-        if hit is not None:
-            hit["immediate"] = True          # 이미 있는 회차 — 표시만 바꾼다
-            continue
+        # 이 예약의 다른 회차가 근처(±15분)에 있으면 내려보내지 않는다.
+        # 방금 손으로 튼 방송이 몇 분 뒤 예약으로 또 나가면 두 번 들린다.
+        items = [i for i in items
+                 if i["schedule_id"] != r.schedule_id
+                 or abs((to_kst(datetime.fromisoformat(i["occurrence_at"])) - at).total_seconds()) > 900]
+        if any(i["schedule_id"] == r.schedule_id and i["occurrence_at"] == at.isoformat()
+               for i in items):
+            continue                          # 이미 같은 회차가 있다
         sc = next((x for x in scheds if x.id == r.schedule_id), None)
         m = media.get(sc.media_id) if sc and sc.media_id else None
         if not sc or not m:
@@ -244,7 +246,6 @@ def sync(d: BroadcastDevice = Depends(_device), db: Session = Depends(get_db)):
                       "filename": m.filename, "duration_sec": m.duration_sec},
         }
         items.append(item)
-        by_key[key] = item
     items.sort(key=lambda x: x["occurrence_at"])
 
     d.last_seen = now_kst()
