@@ -18,6 +18,30 @@ export type BroadcastType = 'TTS' | 'AUDIO' | 'VIDEO'
 export type RunStatus = 'SUCCESS' | 'FAILED' | 'SKIPPED' | 'PENDING' | 'PLAYING'
 
 /** 반복 규칙 — 0=월 … 6=일 (서버와 동일) */
+/** 체위변경 안내방송 설정 */
+export interface PositionCastConfig {
+  enabled: boolean
+  times: string[]            // 'HH:MM' — 이 시각마다 매일 나간다
+  volume: number
+  voice?: string | null
+  template: string           // {names} {count}
+  name_style: 'name' | 'room_name' | 'room'
+  max_names: number
+}
+export interface PositionTarget { id: string; name: string; room?: string | null; floor?: string | null }
+export interface PositionPlan {
+  config: PositionCastConfig
+  times: string[]
+  count: number
+  targets: PositionTarget[]
+  text: string
+  skip: string | null
+}
+export interface PositionSyncResult {
+  enabled: boolean; created: number; updated: number; removed: number
+  failed: number; planned: number; count: number; reason: string | null; errors: string[]
+}
+
 /** 프로그램 시간표 자동 방송 설정 */
 export interface ProgramCastConfig {
   enabled: boolean
@@ -202,6 +226,14 @@ export const broadcastAPI = {
   announce: (body: { title: string; text: string; volume?: number; voice?: string; preview_only?: boolean }) =>
     apiClient.post(`${BASE}/announce`, body)
       .then(unwrap<{ media_id: string; url: string; duration_sec?: number | null; text: string; played: boolean }>),
+
+  /* 체위변경 안내방송 */
+  positionPlan: () => apiClient.get(`${BASE}/position/plan`).then(unwrap<PositionPlan>),
+  positionSave: (body: Partial<PositionCastConfig>) => apiClient.put(`${BASE}/position/config`, body)
+    .then(unwrap<{ config: PositionCastConfig; result: PositionSyncResult }>),
+  positionSync: () => apiClient.post(`${BASE}/position/sync`, {}).then(unwrap<PositionSyncResult>),
+  positionPreview: () => apiClient.post(`${BASE}/position/preview`, {})
+    .then(unwrap<{ url: string; duration_sec?: number | null; text: string; count: number }>),
 
   /* 프로그램 시간표 자동 예약 */
   programConfig: () => apiClient.get(`${BASE}/program/config`)

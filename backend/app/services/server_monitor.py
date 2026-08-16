@@ -385,6 +385,10 @@ async def monitor_loop() -> None:
                     from app.services.program_broadcast import sync_quiet
                     # 음성 생성이 끼면 몇 초 걸린다 — 이벤트 루프를 세우지 않는다
                     await asyncio.to_thread(sync_quiet, _SL)
+                    # 체위변경 안내도 같이 손본다. 예약은 '매일 반복'이라
+                    # 창을 밀 필요는 없지만, 명단이 어긋난 채 남는 것을 막는 그물이다.
+                    from app.services.positioning_broadcast import sync_quiet as _pos_sync
+                    await asyncio.to_thread(_pos_sync, _SL)
                     state["program_broadcast_synced"] = time.time()
                     save_state(state)
 

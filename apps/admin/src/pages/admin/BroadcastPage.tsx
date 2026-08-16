@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import {
   broadcastAPI, mediaUrl, type BroadcastSchedule, type Dashboard, type BroadcastMeta,
+  type PositionCastConfig, type PositionPlan,
   type BroadcastType, type RepeatRule, type MediaResult, type BroadcastLog,
 } from '@/api/broadcastClient'
 
@@ -48,7 +49,7 @@ export default function BroadcastPage() {
   const [list, setList] = useState<BroadcastSchedule[]>([])
   const [logs, setLogs] = useState<BroadcastLog[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'dashboard' | 'schedules' | 'logs'>('dashboard')
+  const [tab, setTab] = useState<'dashboard' | 'schedules' | 'position' | 'logs'>('dashboard')
   const [editing, setEditing] = useState<BroadcastSchedule | null | undefined>(undefined)
   const [busy, setBusy] = useState<string | null>(null)
 
@@ -197,7 +198,7 @@ export default function BroadcastPage() {
 
       {/* 탭 */}
       <div className="flex gap-1.5">
-        {([['dashboard', '현황'], ['schedules', `예약 (${list.length})`], ['logs', '방송 이력']] as const).map(([k, label]) => (
+        {([['dashboard', '현황'], ['schedules', `예약 (${list.length})`], ['position', '체위변경'], ['logs', '방송 이력']] as const).map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`px-4 py-2 rounded-xl text-sm font-bold border transition-colors ${
               tab === k ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}>
@@ -207,6 +208,8 @@ export default function BroadcastPage() {
       </div>
 
       {tab === 'dashboard' && dash && <DashboardView dash={dash} />}
+
+      {tab === 'position' && <PositionCastView onChanged={load} />}
 
       {tab === 'schedules' && (
         <div className="space-y-2">
@@ -701,6 +704,190 @@ function ScheduleModal({ editing, meta, onClose, onSaved }: {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+
+/* ── 체위변경 안내방송 ──────────────────────────────────────────
+ * 수급자 관리에서 '체위변경 대상자'로 표시된 분들의 이름을 부르고
+ * 실시를 안내한다. 이름이 건물 전체에 나가는 방송이라
+ * 미리 들어보고 켤 수 있게 한다. 대상자가 없으면 아예 나가지 않는다.
+ */
+function PositionCastView({ onChanged }: { onChanged: () => void }) {
+  const [plan, setPlan] = useState<PositionPlan | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [preview, setPreview] = useState<string | null>(null)
+  const [msg, setMsg] = useState('')
+  const [err, setErr] = useState('')
+
+  const load = async () => {
+    setLoading(true); setErr('')
+    try { setPlan(await broadcastAPI.positionPlan()) }
+    catch (e: any) { setErr(e?.message ?? '불러오지 못했습니다') }
+    finally { setLoading(false) }
+  }
+  useEffect(() => { load() }, [])
+
+  const save = async (patch: Partial<PositionCastConfig>, confirmText?: string) => {
+    if (confirmText && !confirm(confirmText)) return
+    setSaving(true); setErr(''); setMsg(''); setPreview(null)
+    try {
+      const r = await broadcastAPI.positionSave(patch)
+      const x = r.result
+      setMsg(x?.enabled === false
+        ? `껐습니다. 잡아둔 ${x.removed}건을 취소했습니다.`
+        : x?.reason ? x.reason
+        : `예약 ${x?.created ?? 0}건 생성 · ${x?.updated ?? 0}건 수정 · ${x?.removed ?? 0}건 취소`)
+      setPlan(await broadcastAPI.positionPlan())
+      onChanged()
+    } catch (e: any) { setErr(e?.response?.data?.detail ?? e?.message ?? '저장 실패') }
+    finally { setSaving(false) }
+  }
+
+  const listen = async () => {
+    setSaving(true); setErr(''); setMsg('')
+    try { setPreview((await broadcastAPI.positionPreview()).url) }
+    catch (e: any) { setErr(e?.response?.data?.detail ?? e?.message ?? '음성 생성 실패') }
+    finally { setSaving(false) }
+  }
+
+  const toggleTime = (t: string) => {
+    if (!plan) return
+    const cur = plan.config.times
+    save({ times: cur.includes(t) ? cur.filter(x => x !== t) : [...cur, t].sort() })
+  }
+
+  if (loading || !plan) return <p className="text-sm text-gray-400 py-10 text-center">불러오는 중…</p>
+  const cfg = plan.config
+  const SLOTS = ['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00']
+
+  return (
+    <div className="space-y-4">
+      <div className={`rounded-2xl border p-4 ${cfg.enabled && plan.count > 0
+        ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200 bg-gray-50'}`}>
+        <div className="flex items-start gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-gray-900">
+              {!cfg.enabled ? '체위변경 안내방송 꺼짐'
+                : plan.count === 0 ? '켜져 있지만 나가지 않습니다'
+                : `체위변경 안내방송 켜짐 — 하루 ${cfg.times.length}회`}
+            </p>
+            <p className="text-[11px] text-gray-500 mt-0.5">
+              {!cfg.enabled
+                ? '지금은 체위변경 시간에 아무 방송도 나가지 않습니다.'
+                : plan.count === 0
+                  ? '체위변경 대상자가 없습니다. 수급자 관리에서 대상 어르신을 표시해주세요.'
+                  : `대상 ${plan.count}명의 이름을 부르고 실시를 안내합니다.`}
+            </p>
+          </div>
+          <button disabled={saving}
+            onClick={() => save({ enabled: !cfg.enabled }, cfg.enabled
+              ? '체위변경 안내방송을 끕니다.\n잡아둔 예약이 모두 취소됩니다.'
+              : `체위변경 안내방송을 켭니다.\n\n대상 ${plan.count}명의 이름이 건물 전체 스피커로 나갑니다.\n하루 ${cfg.times.length}회. 문구를 확인하셨나요?`)}
+            className={`ml-auto shrink-0 px-4 py-2 rounded-xl text-xs font-bold disabled:opacity-50 ${
+              cfg.enabled ? 'border border-gray-200 bg-white text-gray-600' : 'bg-indigo-600 text-white'}`}>
+            {saving ? '…' : cfg.enabled ? '끄기' : '켜기'}
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-gray-100 bg-white p-4">
+        <p className="text-xs font-bold text-gray-600 mb-2">
+          방송 시각 <span className="font-normal text-gray-400">체위변경은 2시간 간격이 기준입니다</span>
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {SLOTS.map(t => (
+            <button key={t} disabled={saving} onClick={() => toggleTime(t)}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-colors disabled:opacity-50 ${
+                cfg.times.includes(t) ? 'bg-indigo-600 text-white border-indigo-600'
+                                      : 'bg-white text-gray-400 border-gray-200 hover:bg-gray-50'}`}>
+              {t}
+            </button>
+          ))}
+        </div>
+        {cfg.times.filter(t => !SLOTS.includes(t)).length > 0 && (
+          <p className="text-[11px] text-gray-400 mt-2">
+            그 밖의 시각: {cfg.times.filter(t => !SLOTS.includes(t)).join(', ')}
+          </p>
+        )}
+
+        <div className="grid grid-cols-2 gap-2 mt-4">
+          <label className="block">
+            <span className="text-[11px] font-semibold text-gray-500">부르는 방식</span>
+            <select value={cfg.name_style} disabled={saving}
+              onChange={e => save({ name_style: e.target.value as PositionCastConfig['name_style'] })}
+              className="w-full mt-1 px-2.5 py-2 text-sm border border-gray-200 rounded-xl bg-white">
+              <option value="name">이름만 (김OO)</option>
+              <option value="room_name">호실 + 이름 (201호 김OO)</option>
+              <option value="room">호실만 (201호)</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="text-[11px] font-semibold text-gray-500">음량</span>
+            <select value={cfg.volume} disabled={saving}
+              onChange={e => save({ volume: Number(e.target.value) })}
+              className="w-full mt-1 px-2.5 py-2 text-sm border border-gray-200 rounded-xl bg-white">
+              {[30, 50, 70, 85, 100].map(v => <option key={v} value={v}>{v}</option>)}
+            </select>
+          </label>
+        </div>
+        <p className="text-[11px] text-gray-400 mt-2">
+          이름을 부르는 방송입니다. 보호자가 계실 수 있는 시간대라면 「호실만」도 고려해보세요.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-gray-100 bg-white p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <p className="text-xs font-bold text-gray-600">대상 어르신</p>
+          <span className="text-[11px] text-gray-400">{plan.count}명</span>
+          <a href="/eval/residents" className="ml-auto text-[11px] text-indigo-600 font-semibold hover:underline">
+            수급자 관리에서 바꾸기 →
+          </a>
+        </div>
+        {plan.count === 0 ? (
+          <p className="text-xs text-gray-400 border border-dashed border-gray-200 rounded-xl py-6 text-center">
+            체위변경 대상자로 표시된 어르신이 없습니다.<br />
+            수급자 관리에서 어르신을 열고 <b>체위변경 대상자</b>를 체크해주세요.
+          </p>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {plan.targets.map(t => (
+              <span key={t.id} className="text-xs px-2 py-1 rounded-lg bg-violet-50 text-violet-700 border border-violet-100">
+                {t.room && <b className="mr-1">{t.room}호</b>}{t.name}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {plan.text && (
+        <div className="rounded-2xl border border-gray-100 bg-white p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <p className="text-xs font-bold text-gray-600">이렇게 나갑니다</p>
+            <button onClick={listen} disabled={saving}
+              className="ml-auto px-3 py-1.5 rounded-lg border border-gray-200 text-[11px] font-bold text-gray-600 disabled:opacity-50">
+              미리듣기
+            </button>
+          </div>
+          <p className="text-sm text-gray-700 leading-relaxed">{plan.text}</p>
+          {preview && (
+            <div className="mt-3">
+              <p className="text-[11px] font-bold text-gray-500 mb-1">
+                미리듣기 — <span className="font-normal">이 PC에서만 들립니다 (스피커로 안 나감)</span>
+              </p>
+              <audio controls autoPlay src={mediaUrl(preview)} className="w-full h-9" />
+            </div>
+          )}
+        </div>
+      )}
+
+      {msg && <p className="text-xs text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">{msg}</p>}
+      {err && <p className="text-xs text-rose-600">{err}</p>}
+      <p className="text-[11px] text-gray-400 text-center">
+        수급자 관리에서 대상자를 바꾸면 명단과 음성이 자동으로 다시 만들어집니다.
+      </p>
     </div>
   )
 }

@@ -222,6 +222,7 @@ class LtcResidentCreate(BaseModel):
     group_leisure:         Optional[str] = None
     group_physical:        Optional[str] = None
     tube_feeding:          Optional[bool] = None
+    positioning:           Optional[bool] = None   # 체위변경 대상자
     certifications:        Optional[List[dict]] = None   # 입소 시 장기요양인정서(등급·기간·급여) → 서류현황 seed용
     contract_lines:        Optional[List[dict]] = None   # 자동 생성된 계약서 일시
     plan_lines:            Optional[List[dict]] = None   # 자동 생성된 계획서 일시
@@ -245,6 +246,7 @@ class LtcResidentUpdate(BaseModel):
     group_leisure:         Optional[str] = None
     group_physical:        Optional[str] = None
     tube_feeding:          Optional[bool] = None
+    positioning:           Optional[bool] = None   # 체위변경 대상자
     memo:                  Optional[str] = None
     # 정원이 찬 방으로도 옮긴다(교체·임시 배정). 화면에서 한 번 더 확인받고 보낸다.
     allow_over_capacity:   Optional[bool] = None
@@ -267,6 +269,7 @@ class LtcResidentOut(BaseModel):
     group_leisure:         Optional[str] = None
     group_physical:        Optional[str] = None
     tube_feeding:          Optional[bool] = None
+    positioning:           Optional[bool] = None   # 체위변경 대상자
     status:                str
     memo:                  str
     created_at:            datetime
