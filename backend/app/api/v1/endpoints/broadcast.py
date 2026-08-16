@@ -85,6 +85,8 @@ def _sched_view(s: BroadcastSchedule, *, nxt: Optional[datetime] = None) -> dict
         "created_by": s.created_by,
         "created_at": _iso(s.created_at), "updated_at": _iso(s.updated_at),
         "next_at": _iso(nxt) if nxt else None,
+        # 프로그램표에서 자동으로 만들어진 예약인지 — 화면에서 구분해 보여준다
+        "source": getattr(s, "source", None) or "MANUAL",
     }
 
 
@@ -407,12 +409,28 @@ class ScheduleUpdate(BaseModel):
     enabled: Optional[bool] = None
 
 
+PROGRAM_LOCK = ("프로그램 시간표에서 자동으로 만든 예약입니다. "
+                "고치려면 프로그램 관리에서 시간표나 자동방송 설정을 바꿔주세요. "
+                "여기서 고쳐도 다음 동기화 때 되돌아갑니다.")
+
+
+def _reject_program(s: BroadcastSchedule) -> None:
+    """자동 예약을 손으로 고치지 못하게 막는다.
+
+    막지 않으면 '지웠는데 왜 또 나가지'가 된다 — 동기화가 다시 만들기 때문이다.
+    되돌아갈 변경을 받아주는 것보다, 어디서 고쳐야 하는지 알려주는 편이 낫다.
+    """
+    if (getattr(s, "source", None) or "MANUAL") == "PROGRAM":
+        raise HTTPException(409, PROGRAM_LOCK)
+
+
 @router.patch("/schedules/{sid}")
 def update_schedule(sid: str, body: ScheduleUpdate, db: Session = Depends(get_db),
                     current_user: User = Depends(_manager)):
     s = db.query(BroadcastSchedule).filter(BroadcastSchedule.id == sid).first()
     if not s:
         raise HTTPException(404, "예약을 찾을 수 없습니다.")
+    _reject_program(s)
     if body.title is not None and body.title.strip():
         s.title = body.title.strip()
     if body.text is not None:
@@ -445,6 +463,7 @@ def delete_schedule(sid: str, db: Session = Depends(get_db), current_user: User 
     s = db.query(BroadcastSchedule).filter(BroadcastSchedule.id == sid).first()
     if not s:
         raise HTTPException(404, "예약을 찾을 수 없습니다.")
+    _reject_program(s)
     title = s.title
     # 아직 안 나간 회차만 정리한다 — 지나간 기록은 남겨야 '무슨 방송이 나갔나'를 볼 수 있다
     (db.query(BroadcastRun)
@@ -620,3 +639,80 @@ def preview(sid: str, db: Session = Depends(get_db), _: User = Depends(_manager)
     if not s.media_url:
         raise HTTPException(400, "아직 준비된 음원이 없습니다.")
     return ApiResponse(success=True, data={"url": s.media_url, "type": s.type})
+
+
+# ──────────────────────────────────────────────────────────────
+# 프로그램 시간표 자동 예약
+#   프로그램표에 시간이 적힌 항목을 읽어 시작 전 안내방송을 자동으로 건다.
+#   기본은 꺼져 있고, 미리보기로 확인한 뒤 사람이 켠다.
+# ──────────────────────────────────────────────────────────────
+class ProgramCastConfig(BaseModel):
+    enabled: Optional[bool] = None
+    lead_min: Optional[int] = None
+    volume: Optional[int] = None
+    voice: Optional[str] = None
+    template: Optional[str] = None
+    exclude_kinds: Optional[List[str]] = None
+    quiet_start: Optional[str] = None
+    quiet_end: Optional[str] = None
+    days_ahead: Optional[int] = None
+
+
+@router.get("/program/config")
+def program_config(db: Session = Depends(get_db), _: User = Depends(_manager)):
+    from app.services import program_broadcast as pb
+    return ApiResponse(success=True, data={
+        "config": pb.load_config(db),
+        "defaults": pb.DEFAULTS,
+        "template_help": "{time} 시각 · {title} 프로그램명 · {who} 대상 어르신",
+    })
+
+
+@router.put("/program/config")
+def program_config_save(body: ProgramCastConfig, db: Session = Depends(get_db),
+                        current_user: User = Depends(_manager)):
+    """설정을 저장하고 곧바로 예약에 반영한다.
+
+    켜고 저장했는데 예약이 안 생기거나, 껐는데 소리가 계속 나가면 안 된다.
+    저장과 반영을 떼어놓지 않는 이유다.
+    """
+    from app.services import program_broadcast as pb
+    patch = {k: v for k, v in body.model_dump().items() if v is not None}
+    before = pb.load_config(db)
+    cfg = pb.save_config(db, patch, actor=getattr(current_user, "name", None))
+    try:
+        result = pb.sync(db, actor=getattr(current_user, "name", None))
+    except Exception as e:                       # 저장은 됐다 — 반영 실패만 알린다
+        logger.warning("프로그램 자동 예약 반영 실패: %s: %s", type(e).__name__, e)
+        result = {"error": f"{type(e).__name__}"}
+    if before.get("enabled") != cfg.get("enabled"):
+        _audit(db, event="PROGRAM_AUTO", user=current_user,
+               title=("프로그램 자동방송 켬" if cfg["enabled"] else "프로그램 자동방송 끔"))
+        db.commit()
+    return ApiResponse(success=True, data={"config": cfg, "result": result})
+
+
+@router.get("/program/plan")
+def program_plan(days: int = Query(7, ge=1, le=31),
+                 db: Session = Depends(get_db), _: User = Depends(_manager)):
+    """앞으로 이렇게 나갑니다 — 미리보기. 소리도 음성 파일도 만들지 않는다."""
+    from app.services import program_broadcast as pb
+    cfg = pb.load_config(db)
+    items = pb.plan(db, cfg, days=days)
+    return ApiResponse(success=True, data={
+        "config": cfg,
+        "items": items,
+        "count": len([i for i in items if not i["skip"]]),
+    })
+
+
+@router.post("/program/sync")
+def program_sync(db: Session = Depends(get_db), current_user: User = Depends(_manager)):
+    """프로그램표에 맞춰 자동 예약을 지금 다시 맞춘다."""
+    from app.services import program_broadcast as pb
+    try:
+        result = pb.sync(db, actor=getattr(current_user, "name", None))
+    except TTSError as e:
+        raise HTTPException(502, str(e))
+    return ApiResponse(success=True, data=result,
+                       message="프로그램 시간표에 맞춰 예약을 반영했습니다.")

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { CalendarRange, Clock3, Download, Eye, EyeOff, History, Loader2, MessageCircle, Plus, Printer, Radio, Save, Trash2, Upload, Users, X } from 'lucide-react'
 import { programAPI, type ProgramMonthData, type ProgramEntry, type ProgramTime } from '@/api/programClient'
-import { broadcastAPI, mediaUrl } from '@/api/broadcastClient'
+import { broadcastAPI, mediaUrl,
+  type ProgramCastConfig, type ProgramCastItem } from '@/api/broadcastClient'
 import { useAuthStore } from '@/store/auth'
 import { evalResidentsAPI } from '@/api/evalClient'
 import { isKakaoShareEnabled, shareText } from '@/lib/kakaoShare'
@@ -1070,6 +1071,7 @@ function announceText(e: ProgramEntry): string {
 function ProgramCastModal({ entries, onClose }: {
   entries: ProgramEntry[]; onClose: () => void
 }) {
+  const [mode, setMode] = useState<'now' | 'auto'>('now')
   const [picked, setPicked] = useState<number | null>(entries.length ? 0 : null)
   const [text, setText] = useState(entries.length ? announceText(entries[0]) : '')
   const [preview, setPreview] = useState<string | null>(null)
@@ -1112,6 +1114,18 @@ function ProgramCastModal({ entries, onClose }: {
           <h3 className="font-bold text-gray-900">프로그램 안내방송</h3>
           <button onClick={onClose} className="ml-auto text-gray-300 hover:text-gray-500"><X size={18} /></button>
         </div>
+
+        <div className="flex gap-1 p-1 bg-gray-100 rounded-xl mb-4">
+          {([['now', '지금 방송'], ['auto', '자동 예약']] as const).map(([k, label]) => (
+            <button key={k} onClick={() => setMode(k)}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                mode === k ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {mode === 'auto' ? <ProgramAutoCast /> : <>
 
         {entries.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-8">
@@ -1162,7 +1176,163 @@ function ProgramCastModal({ entries, onClose }: {
         <p className="text-[11px] text-gray-400 mt-2 text-center">
           어르신들이 계신 공간입니다 — 미리듣기로 확인한 뒤 내보내세요.
         </p>
+        </>}
       </div>
+    </div>
+  )
+}
+
+
+/* ── 프로그램 시간표 자동 예약 ───────────────────────────────────
+ * 시간이 적힌 프로그램마다 시작 몇 분 전에 안내방송이 자동으로 나가게 한다.
+ * 사람 손 없이 스피커가 울리는 기능이라, 먼저 「이렇게 나갑니다」를 보여주고
+ * 확인한 뒤 켜게 한다. 끄면 잡아둔 예약을 실제로 걷어낸다.
+ */
+function ProgramAutoCast() {
+  const [cfg, setCfg] = useState<ProgramCastConfig | null>(null)
+  const [items, setItems] = useState<ProgramCastItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [err, setErr] = useState('')
+
+  const load = async () => {
+    setLoading(true); setErr('')
+    try {
+      const r = await broadcastAPI.programPlan(7)
+      setCfg(r.config); setItems(r.items)
+    } catch (e: any) { setErr(e?.message ?? '불러오지 못했습니다') }
+    finally { setLoading(false) }
+  }
+  useEffect(() => { load() }, [])
+
+  const save = async (patch: Partial<ProgramCastConfig>, confirmText?: string) => {
+    if (confirmText && !confirm(confirmText)) return
+    setSaving(true); setErr(''); setMsg('')
+    try {
+      const r = await broadcastAPI.programSave(patch)
+      setCfg(r.config)
+      const x = r.result
+      setMsg(x?.enabled === false
+        ? `자동 예약을 껐습니다. 잡아둔 ${x.removed}건을 취소했습니다.`
+        : `예약 ${x?.created ?? 0}건 생성 · ${x?.updated ?? 0}건 수정 · ${x?.removed ?? 0}건 취소`)
+      const p = await broadcastAPI.programPlan(7)
+      setItems(p.items)
+    } catch (e: any) { setErr(e?.response?.data?.detail ?? e?.message ?? '저장 실패') }
+    finally { setSaving(false) }
+  }
+
+  if (loading || !cfg) return <p className="text-sm text-gray-400 text-center py-10">불러오는 중…</p>
+
+  const live = items.filter(i => !i.skip)
+  const byDate = live.reduce<Record<string, ProgramCastItem[]>>((a, i) => {
+    (a[i.date] ??= []).push(i); return a
+  }, {})
+
+  return (
+    <div className="space-y-4">
+      <div className={`rounded-xl border p-3 ${cfg.enabled
+        ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200 bg-gray-50'}`}>
+        <div className="flex items-center gap-2">
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-gray-900">
+              {cfg.enabled ? '자동 예약 켜짐' : '자동 예약 꺼짐'}
+            </p>
+            <p className="text-[11px] text-gray-500 mt-0.5">
+              {cfg.enabled
+                ? `시간이 적힌 프로그램마다 ${cfg.lead_min}분 전에 안내방송이 나갑니다.`
+                : '지금은 프로그램 시간에 아무 방송도 나가지 않습니다.'}
+            </p>
+          </div>
+          <button disabled={saving}
+            onClick={() => save({ enabled: !cfg.enabled }, cfg.enabled
+              ? '자동 예약을 끕니다.\n잡아둔 안내방송 예약이 모두 취소됩니다.'
+              : `자동 예약을 켭니다.\n\n앞으로 7일간 ${live.length}건의 안내방송이 스피커로 나갑니다.\n어르신들이 계신 공간입니다 — 아래 목록을 확인하셨나요?`)}
+            className={`ml-auto shrink-0 px-3 py-2 rounded-xl text-xs font-bold disabled:opacity-50 ${
+              cfg.enabled ? 'border border-gray-200 bg-white text-gray-600'
+                          : 'bg-indigo-600 text-white'}`}>
+            {saving ? '…' : cfg.enabled ? '끄기' : '켜기'}
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <label className="block">
+          <span className="text-[11px] font-semibold text-gray-500">몇 분 전에</span>
+          <select value={cfg.lead_min} disabled={saving}
+            onChange={e => save({ lead_min: Number(e.target.value) })}
+            className="w-full mt-1 px-2.5 py-2 text-sm border border-gray-200 rounded-xl bg-white">
+            {[0, 5, 10, 15, 20, 30].map(v => <option key={v} value={v}>{v === 0 ? '정각' : `${v}분 전`}</option>)}
+          </select>
+        </label>
+        <label className="block">
+          <span className="text-[11px] font-semibold text-gray-500">음량</span>
+          <select value={cfg.volume} disabled={saving}
+            onChange={e => save({ volume: Number(e.target.value) })}
+            className="w-full mt-1 px-2.5 py-2 text-sm border border-gray-200 rounded-xl bg-white">
+            {[30, 50, 70, 85, 100].map(v => <option key={v} value={v}>{v}</option>)}
+          </select>
+        </label>
+      </div>
+      <p className="text-[11px] text-gray-400 -mt-2">
+        {cfg.quiet_start}~{cfg.quiet_end} 안에서만 나갑니다. 이 시간대 밖 프로그램은 건너뜁니다.
+        {cfg.exclude_kinds.length > 0 && ` ${cfg.exclude_kinds.join('·')}는 제외합니다.`}
+      </p>
+
+      {msg && <p className="text-xs text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">{msg}</p>}
+      {err && <p className="text-xs text-rose-600">{err}</p>}
+
+      <div>
+        <div className="flex items-center gap-2 mb-1.5">
+          <p className="text-xs font-bold text-gray-600">앞으로 7일 — 이렇게 나갑니다</p>
+          <span className="text-[11px] text-gray-400">{live.length}건</span>
+          <button onClick={load} className="ml-auto text-[11px] text-gray-400 hover:text-gray-600">새로고침</button>
+        </div>
+        {live.length === 0 ? (
+          <p className="text-xs text-gray-400 border border-dashed border-gray-200 rounded-xl py-6 text-center">
+            나갈 안내방송이 없습니다.<br />
+            프로그램표에 <b>시간</b>이 적혀 있어야 예약됩니다.
+          </p>
+        ) : (
+          <div className="border border-gray-100 rounded-xl divide-y divide-gray-50 max-h-56 overflow-y-auto">
+            {Object.entries(byDate).map(([d, list]) => (
+              <div key={d} className="px-3 py-2">
+                <p className="text-[11px] font-bold text-gray-400 mb-1">
+                  {new Date(d + 'T00:00:00').toLocaleDateString('ko-KR',
+                    { month: 'long', day: 'numeric', weekday: 'short' })}
+                </p>
+                {list.map(i => (
+                  <div key={i.source_key} className="flex gap-2 text-xs py-0.5">
+                    <b className="text-indigo-700 shrink-0 w-11">{i.at.slice(11, 16)}</b>
+                    <span className="text-gray-600 truncate" title={i.text}>
+                      {i.titles.join(', ')}
+                      <span className="text-gray-400"> · {i.program_time} 시작</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+        {items.some(i => i.skip) && (
+          <p className="text-[11px] text-gray-400 mt-1.5">
+            건너뛴 것 {items.filter(i => i.skip).length}건 — {
+              Array.from(new Set(items.filter(i => i.skip).map(i => i.skip))).join(', ')}
+          </p>
+        )}
+      </div>
+
+      {live[0] && (
+        <div className="rounded-xl bg-gray-50 border border-gray-100 p-3">
+          <p className="text-[11px] font-bold text-gray-500 mb-1">이런 문구로 나갑니다</p>
+          <p className="text-xs text-gray-600 leading-relaxed">{live[0].text}</p>
+        </div>
+      )}
+
+      <p className="text-[11px] text-gray-400 text-center">
+        프로그램표를 고치면 예약도 자동으로 다시 맞춰집니다.<br />
+        만들어진 예약은 방송 관리 페이지에서 볼 수 있습니다.
+      </p>
     </div>
   )
 }

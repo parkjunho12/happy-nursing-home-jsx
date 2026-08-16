@@ -227,6 +227,12 @@ export default function BroadcastPage() {
                         {s.status === 'DRAFT' ? '음원 없음' : '오류'}
                       </span>
                     )}
+                    {s.source === 'PROGRAM' && (
+                      <span title="프로그램 관리에서 자동으로 만든 예약입니다"
+                        className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-violet-50 text-violet-700 border-violet-200">
+                        프로그램 자동
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-gray-500 mt-1 flex items-center gap-2 flex-wrap">
                     <span className="inline-flex items-center gap-1"><CalendarClock className="w-3 h-3" />
@@ -247,14 +253,21 @@ export default function BroadcastPage() {
                     title="지금 바로 방송" className="p-2 rounded-lg text-indigo-600 hover:bg-indigo-50 disabled:opacity-30">
                     {busy === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
                   </button>
-                  <button onClick={() => toggle(s)} disabled={busy === s.id}
-                    title={s.enabled ? '비활성화' : '활성화'}
-                    className={`px-2 py-1 rounded-lg text-[11px] font-bold border ${
-                      s.enabled ? 'text-emerald-700 border-emerald-200 bg-emerald-50' : 'text-gray-400 border-gray-200'}`}>
-                    {s.enabled ? 'ON' : 'OFF'}
-                  </button>
-                  <button onClick={() => setEditing(s)} className="p-2 rounded-lg text-gray-400 hover:bg-gray-100"><Pencil className="w-4 h-4" /></button>
-                  <button onClick={() => remove(s)} className="p-2 rounded-lg text-gray-300 hover:text-rose-600 hover:bg-rose-50"><Trash2 className="w-4 h-4" /></button>
+                  {s.source === 'PROGRAM' ? (
+                    // 여기서 고쳐도 다음 동기화 때 되돌아간다 — 어디서 고치는지만 알린다
+                    <span className="text-[11px] text-gray-400 px-2 whitespace-nowrap">
+                      프로그램 관리에서 변경
+                    </span>
+                  ) : (<>
+                    <button onClick={() => toggle(s)} disabled={busy === s.id}
+                      title={s.enabled ? '비활성화' : '활성화'}
+                      className={`px-2 py-1 rounded-lg text-[11px] font-bold border ${
+                        s.enabled ? 'text-emerald-700 border-emerald-200 bg-emerald-50' : 'text-gray-400 border-gray-200'}`}>
+                      {s.enabled ? 'ON' : 'OFF'}
+                    </button>
+                    <button onClick={() => setEditing(s)} className="p-2 rounded-lg text-gray-400 hover:bg-gray-100"><Pencil className="w-4 h-4" /></button>
+                    <button onClick={() => remove(s)} className="p-2 rounded-lg text-gray-300 hover:text-rose-600 hover:bg-rose-50"><Trash2 className="w-4 h-4" /></button>
+                  </>)}
                 </div>
               </div>
             </div>
