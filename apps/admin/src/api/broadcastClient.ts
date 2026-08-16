@@ -27,6 +27,7 @@ export interface PositionCastConfig {
   template: string           // {names} {count}
   name_style: 'name' | 'room_name' | 'room'
   max_names: number
+  mask_names: boolean        // 이름 가운데를 가려 부른다 (이길용 → 이모용)
 }
 export interface PositionTarget { id: string; name: string; room?: string | null; floor?: string | null }
 export interface PositionPlan {
