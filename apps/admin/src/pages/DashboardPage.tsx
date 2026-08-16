@@ -144,6 +144,7 @@ export default function DashboardPage() {
     finally { setRoutineBusy(null) }
   }
 
+  const isAdmin = authUser?.role === 'ADMIN'
   const canApproveLeave = authUser?.role === 'ADMIN' || authUser?.position === '시설장'
   const canVisit = authUser?.role === 'ADMIN' || ['시설장', '사회복지사'].includes(authUser?.position ?? '')
   const loadPending = async () => {
@@ -977,16 +978,26 @@ export default function DashboardPage() {
       </div>
 
       {secRunning}
+
+      {/* ADMIN 은 '내가 오늘 할 일'이 먼저 보여야 한다.
+          서류 현황(계획서·계약서)은 어르신별 진행 상황이라 그 아래로 내린다. */}
+      {isAdmin && (
+        <div className="grid lg:grid-cols-5 gap-4">
+          <div className="lg:col-span-3">{secMine}</div>
+          <div className="lg:col-span-2">{secRoutine}</div>
+        </div>
+      )}
+
       {secDocs}
 
       <div className="grid lg:grid-cols-5 gap-4">
         <div className="lg:col-span-3 space-y-4">
-          {secMine}
+          {!isAdmin && secMine}
           {secAdmission}
           {secHire}
         </div>
         <div className="lg:col-span-2 space-y-4">
-          {secRoutine}
+          {!isAdmin && secRoutine}
           {secNotices}
           {secNews}
           {secProgress}
