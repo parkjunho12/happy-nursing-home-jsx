@@ -376,6 +376,18 @@ async def monitor_loop() -> None:
                     save_state(state)
                     await broadcast_watch.notify(alerts)
 
+                # 프로그램 시간표 자동 예약을 앞으로 며칠치 채워둔다.
+                # 창이 하루씩 밀리므로 주기적으로 돌아야 다음 주 것이 생긴다.
+                # (프로그램표를 고치면 그때 바로 반영되므로, 여기서는 창만 채운다)
+                last_prog = state.get("program_broadcast_synced", 0)
+                if time.time() - last_prog >= 6 * 3600:
+                    from app.core.database import SessionLocal as _SL
+                    from app.services.program_broadcast import sync_quiet
+                    # 음성 생성이 끼면 몇 초 걸린다 — 이벤트 루프를 세우지 않는다
+                    await asyncio.to_thread(sync_quiet, _SL)
+                    state["program_broadcast_synced"] = time.time()
+                    save_state(state)
+
                 # 쓰지 않는 방송 음원 정리 — 하루 한 번이면 충분하다
                 last_clean = state.get("broadcast_media_cleaned", 0)
                 if time.time() - last_clean >= 24 * 3600:

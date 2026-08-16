@@ -51,6 +51,9 @@ class ProgramSetting(Base):
 
     id         = Column(String, primary_key=True, default=_uuid)
     times      = Column(JSON, nullable=True)        # ["10:00~10:40", "14:00~15:00", ...]
+    # 프로그램 시간에 맞춰 자동으로 안내방송을 걸지 — program_broadcast.DEFAULTS 참고.
+    # 기본은 꺼져 있다. 어르신들이 생활하는 공간에 소리가 나가는 일이라 사람이 켠다.
+    broadcast  = Column(JSON, nullable=True)
     updated_by = Column(String(100), nullable=True)
     updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)
 

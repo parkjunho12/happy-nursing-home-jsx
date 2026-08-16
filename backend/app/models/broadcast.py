@@ -142,6 +142,13 @@ class BroadcastSchedule(Base):
     max_seconds  = Column(Integer, nullable=False, default=600)
     error_message = Column(Text, nullable=True)
 
+    # 누가 만든 예약인지 — 사람이 만든 것(MANUAL)과 프로그램표에서 자동으로
+    # 만들어진 것(PROGRAM)을 구분한다. 자동 동기화는 PROGRAM 만 손댄다.
+    source       = Column(String(10), nullable=False, default="MANUAL", index=True)
+    # 자동 생성분의 신원 — 'prog:2026-08-16:1000:a1b2c3d4'.
+    # 같은 키면 같은 예약이라 다시 만들지 않고, 없어지면 걷어낸다.
+    source_key   = Column(String(80), nullable=True, unique=True, index=True)
+
     created_by   = Column(String(100), nullable=True)
     created_by_id = Column(String, nullable=True, index=True)
     created_at   = Column(DateTime(timezone=True), default=now_kst)

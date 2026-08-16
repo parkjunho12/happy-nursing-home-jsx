@@ -18,6 +18,34 @@ export type BroadcastType = 'TTS' | 'AUDIO' | 'VIDEO'
 export type RunStatus = 'SUCCESS' | 'FAILED' | 'SKIPPED' | 'PENDING' | 'PLAYING'
 
 /** 반복 규칙 — 0=월 … 6=일 (서버와 동일) */
+/** 프로그램 시간표 자동 방송 설정 */
+export interface ProgramCastConfig {
+  enabled: boolean
+  lead_min: number          // 시작 몇 분 전에 방송할지
+  volume: number
+  voice?: string | null
+  template: string          // {time} {title} {who}
+  exclude_kinds: string[]
+  quiet_start: string       // 이 시각 전에는 방송하지 않는다
+  quiet_end: string
+  days_ahead: number
+}
+/** 미리보기 한 줄 — 언제 무엇이 나가는지 */
+export interface ProgramCastItem {
+  date: string
+  program_time: string
+  at: string
+  titles: string[]
+  groups: string[]
+  text: string
+  source_key: string
+  skip: string | null       // 값이 있으면 이 건은 나가지 않는다
+}
+export interface ProgramSyncResult {
+  enabled: boolean; created: number; updated: number; removed: number
+  failed: number; planned: number; errors: string[]
+}
+
 export interface RepeatRule {
   freq: 'once' | 'daily' | 'weekdays' | 'weekly'
   days?: number[]
@@ -44,6 +72,8 @@ export interface BroadcastSchedule {
   created_by?: string | null
   created_at?: string | null
   next_at?: string | null
+  /** MANUAL=사람이 만든 예약, PROGRAM=프로그램 시간표에서 자동 생성 */
+  source?: 'MANUAL' | 'PROGRAM'
 }
 
 export interface BroadcastDevice {
@@ -172,6 +202,15 @@ export const broadcastAPI = {
   announce: (body: { title: string; text: string; volume?: number; voice?: string; preview_only?: boolean }) =>
     apiClient.post(`${BASE}/announce`, body)
       .then(unwrap<{ media_id: string; url: string; duration_sec?: number | null; text: string; played: boolean }>),
+
+  /* 프로그램 시간표 자동 예약 */
+  programConfig: () => apiClient.get(`${BASE}/program/config`)
+    .then(unwrap<{ config: ProgramCastConfig; defaults: ProgramCastConfig; template_help: string }>),
+  programSave: (body: Partial<ProgramCastConfig>) => apiClient.put(`${BASE}/program/config`, body)
+    .then(unwrap<{ config: ProgramCastConfig; result: ProgramSyncResult }>),
+  programPlan: (days = 7) => apiClient.get(`${BASE}/program/plan`, { params: { days } })
+    .then(unwrap<{ config: ProgramCastConfig; items: ProgramCastItem[]; count: number }>),
+  programSync: () => apiClient.post(`${BASE}/program/sync`, {}).then(unwrap<ProgramSyncResult>),
 
   create: (body: ScheduleInput) => apiClient.post(`${BASE}/schedules`, body).then(unwrap<BroadcastSchedule>),
   update: (id: string, body: Partial<ScheduleInput>) =>

@@ -6,7 +6,8 @@
 from __future__ import annotations
 import re
 from typing import Optional
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import (APIRouter, BackgroundTasks, Depends, File, Form,
+                     HTTPException, Query, UploadFile)
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -18,6 +19,19 @@ from app.schemas.response import ApiResponse
 
 router = APIRouter()
 family_router = APIRouter()
+
+
+def _resync_broadcast(bg: Optional[BackgroundTasks]) -> None:
+    """프로그램표가 바뀌면 자동 안내방송 예약도 다시 맞춘다.
+
+    응답을 붙잡지 않도록 뒤에서 돌린다 — 음성 생성이 끼면 몇 초씩 걸린다.
+    자동방송이 꺼져 있으면 그 안에서 아무것도 하지 않는다.
+    """
+    if bg is None:
+        return
+    from app.core.database import SessionLocal
+    from app.services.program_broadcast import sync_quiet
+    bg.add_task(sync_quiet, SessionLocal)
 
 
 def _guardian_dep():
@@ -79,7 +93,8 @@ async def peek_schedule(file: UploadFile = File(...), _: User = Depends(_editor)
 
 
 @router.post("/upload-schedule")
-async def upload_schedule(file: UploadFile = File(...), month: Optional[str] = Form(None),
+async def upload_schedule(bg: BackgroundTasks, file: UploadFile = File(...),
+                          month: Optional[str] = Form(None),
                           preview: bool = Form(False),
                           db: Session = Depends(get_db),
                           current_user: User = Depends(_editor)):
@@ -118,6 +133,7 @@ async def upload_schedule(file: UploadFile = File(...), month: Optional[str] = F
         row.notes = parsed["notes"]
     row.updated_by = getattr(current_user, "name", None)
     db.commit()
+    _resync_broadcast(bg)
     return ApiResponse(success=True, data={
         "month": parsed["month"], "sheet": parsed["sheet"],
         "day_count": len(parsed["days"]), "published": bool(row.published),
@@ -161,7 +177,8 @@ class DayBody(BaseModel):
 
 
 @router.put("/schedule/{month}/day/{day}")
-def edit_day(month: str, day: str, body: DayBody, db: Session = Depends(get_db),
+def edit_day(month: str, day: str, body: DayBody, bg: BackgroundTasks,
+             db: Session = Depends(get_db),
              current_user: User = Depends(_editor)):
     """하루치 프로그램 수정 — 전후를 이력으로 남긴다."""
     row = db.query(ProgramMonth).filter(ProgramMonth.month == month).first()
@@ -190,6 +207,7 @@ def edit_day(month: str, day: str, body: DayBody, db: Session = Depends(get_db),
     _log(db, month, "수정", current_user, day=d, before=before, after=entries,
          summary=f"{int(d)}일: {_summ(before) or '(없음)'} → {_summ(entries) or '(없음)'}")
     db.commit()
+    _resync_broadcast(bg)
     return ApiResponse(success=True, data={"month": month, "day": d, "entries": entries})
 
 
