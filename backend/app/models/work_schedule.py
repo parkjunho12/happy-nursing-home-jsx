@@ -28,6 +28,10 @@ class WorkSchedule(Base):
     as_of = Column(String(20), nullable=True)        # '( 7월 17일 현재 )' 기준일 ISO
     team_offsets = Column(JSON, nullable=True)      # { 'A조': 2, 'B조': 0, ... } 주주야야휴휴 시작 위치
     notes = Column(JSON, nullable=True)             # { staffId: '한 줄 설명' } — 저장 시 AI가 생성
+    # 확정 잠금 — 채워지면 그 달 근무표는 못 바꾼다.
+    # 붙여 놓고 나서 조용히 바뀌면 사람마다 다른 표를 보게 된다.
+    locked_at = Column(DateTime(timezone=True), nullable=True)
+    locked_by = Column(String(100), nullable=True)
     updated_by = Column(String(100), nullable=True)
     updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Printer, Save, Eraser, Loader2, CalendarDays, Wand2, Users, History, Sparkles, Inbox, Trash2, FileSpreadsheet, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Printer, Save, Eraser, Loader2, CalendarDays, Wand2, Users, History, Sparkles, Inbox, Trash2, FileSpreadsheet, X, Lock, Unlock } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
+import { useAuthStore } from '@/store/auth'
 import { apiClient } from '@/api/client'
 import { workScheduleAPI, type ScheduleData, type ScheduleRow, type HolidayInfo } from '@/api/workScheduleClient'
 import { calcBase, DAILY_HOURS } from '@/utils/baseHours'
@@ -47,6 +48,12 @@ export default function WorkSchedulePage() {
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [updatedBy, setUpdatedBy] = useState<string | null>(null)
+  // 확정 잠금 — 잠긴 달은 아무도 못 고친다. 잠그고 푸는 것은 ADMIN 만.
+  const [lock, setLock] = useState<{ locked: boolean; by?: string | null; at?: string | null }>({ locked: false })
+  const [locking, setLocking] = useState(false)
+  const LOCK_MSG = '확정된 근무표입니다. 고치려면 먼저 잠금을 풀어주세요.'
+  // 짜는 것은 시설장도 하지만, 확정 여부는 한 사람이 정해야 한다
+  const isAdminUser = useAuthStore(st => st.user)?.role === 'ADMIN'
   const [teamOpen, setTeamOpen] = useState(false)
   const [auditOpen, setAuditOpen] = useState(true)
   const [histOpen, setHistOpen] = useState(false)
@@ -133,10 +140,11 @@ export default function WorkSchedulePage() {
         setAsOf(doc.as_of || todayISO())
         setOffsets({ ...DEFAULT_TEAM_OFFSET, ...(doc.team_offsets || {}) })
         setUpdatedBy(doc.updated_by ?? null); setDirty(false)
+        setLock({ locked: !!doc.locked, by: doc.locked_by, at: doc.locked_at })
       })
       .catch(() => {
         if (seq !== loadSeq.current) return
-        setData({}); setRows([]); setUpdatedBy(null)
+        setData({}); setRows([]); setUpdatedBy(null); setLock({ locked: false })
       })
       .finally(() => { if (seq === loadSeq.current) setLoading(false) })
   }, [ym])
@@ -277,6 +285,7 @@ export default function WorkSchedulePage() {
   }, [staffList, rowMap, ym, sortMode])
 
   const setCell = (sid: string, day: number, code: string) => {
+    if (lock.locked) return          // 확정된 달은 칠해지지 않는다
     setData(prev => {
       const row = { ...(prev[sid] ?? {}) }
       if (!code) delete row[String(day)]; else row[String(day)] = code
@@ -285,6 +294,7 @@ export default function WorkSchedulePage() {
     setDirty(true)
   }
   const patchRow = (sid: string, p: Partial<ScheduleRow>) => {
+    if (lock.locked) return
     setRows(prev => {
       const i = prev.findIndex(r => r.staff_id === sid)
       if (i < 0) return [...prev, { staff_id: sid, ...p }]
@@ -295,6 +305,7 @@ export default function WorkSchedulePage() {
 
   /** 주주야야휴휴 자동 편성 — 조가 지정된 직원만 채운다 */
   const autoRotate = (overwrite: boolean) => {
+    if (lock.locked) { alert(LOCK_MSG); return }
     const targets = staff.filter(s => canJoinTeam(s.pos) && (TEAMS as readonly string[]).includes(s.team ?? ''))
     if (targets.length === 0) { alert('먼저 요양보호사에게 조를 지정해주세요.\n(요양보호사만 교대조를 돌 수 있습니다)'); return }
     let filled = 0
@@ -355,6 +366,7 @@ export default function WorkSchedulePage() {
   }
 
   const autoBuild = async (pickedIds: Set<string>) => {
+    if (lock.locked) { alert(LOCK_MSG); return }
     // 선택된 사람만 생성 대상 — 뺀 사람(장기 병가, 별도 스케줄 등)의 칸은 전혀 건드리지 않는다
     const pickedStaff = staff.filter(s => pickedIds.has(s.id))
     const shiftStaff = pickedStaff.filter(s => canJoinTeam(s.pos) && (TEAMS as readonly string[]).includes(s.team ?? ''))
@@ -564,13 +576,27 @@ export default function WorkSchedulePage() {
     finally { setExplaining(false) }
   }
 
+  const toggleLock = async () => {
+    const next = !lock.locked
+    if (dirty && next) { alert('저장하지 않은 변경이 있습니다.\n먼저 저장한 뒤 잠가주세요.'); return }
+    if (!confirm(next
+      ? `${m}월 근무표를 확정하고 잠급니다.\n\n· 근무 칸을 고칠 수 없습니다\n· 휴가·맞교대 승인도 막힙니다\n\n잠금은 ADMIN만 풀 수 있습니다.`
+      : `${m}월 근무표의 잠금을 풉니다.\n확정된 표가 다시 바뀔 수 있습니다.`)) return
+    setLocking(true)
+    try {
+      const doc = await workScheduleAPI.setLock(ym, next)
+      setLock({ locked: !!doc.locked, by: doc.locked_by, at: doc.locked_at })
+    } catch (e: any) { alert(e?.response?.data?.detail ?? '처리 실패') }
+    finally { setLocking(false) }
+  }
+
   const save = async () => {
     setSaving(true)
     try {
       const payload = staff.map((s, i) => ({ staff_id: s.id, position: s.pos, team: s.team, order: i, note: s.note }))
       const doc = await workScheduleAPI.save({ year_month: ym, data, rows: payload, base_hours: baseHours, base_days: baseDays, as_of: asOf, team_offsets: offsets })
       setUpdatedBy(doc.updated_by ?? null); setDirty(false)
-
+      setLock({ locked: !!doc.locked, by: doc.locked_by, at: doc.locked_at })
 
       // 근무표가 나와도 아무도 모르면 소용없다 — 저장 직후 알림을 제안한다.
       // 편집 중간 저장도 있으니 자동 발송은 하지 않고 매번 물어본다.
@@ -677,7 +703,19 @@ export default function WorkSchedulePage() {
               className="inline-flex items-center gap-1.5 px-3 py-2.5 border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-40 text-indigo-700 rounded-xl text-sm font-semibold">
               {explaining ? '생성 중…' : '설명 생성'}
             </button>
-            <button onClick={save} disabled={saving || !dirty} className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-40 text-white rounded-xl text-sm font-semibold shadow-sm">
+            {isAdminUser && (
+              <button onClick={toggleLock} disabled={locking}
+                title={lock.locked ? '잠금을 풀면 다시 고칠 수 있습니다' : '확정하면 아무도 못 고칩니다'}
+                className={`inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-semibold border disabled:opacity-40 ${
+                  lock.locked ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'
+                              : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}>
+                {lock.locked ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                {locking ? '…' : lock.locked ? '잠금 해제' : '확정 잠금'}
+              </button>
+            )}
+            <button onClick={save} disabled={saving || !dirty || lock.locked}
+              title={lock.locked ? '확정 잠금 상태라 저장할 수 없습니다' : undefined}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-40 text-white rounded-xl text-sm font-semibold shadow-sm">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} 저장
             </button>
           </div>
@@ -758,6 +796,7 @@ export default function WorkSchedulePage() {
             <Eraser className="w-3 h-3" /> 지우기
           </button>
           <button onClick={() => {
+            if (lock.locked) { alert(LOCK_MSG); return }
             const filled = Object.values(data).reduce((a, m2) => a + Object.keys(m2 || {}).length, 0)
             if (filled === 0) { alert('지울 근무가 없습니다.'); return }
             if (!confirm(`${Number(ym.slice(5, 7))}월 근무 ${filled}칸을 전부 지울까요?\n(조 편성·비고는 남고, 「저장」을 눌러야 서버에 반영됩니다)`)) return
@@ -823,6 +862,24 @@ export default function WorkSchedulePage() {
       {attPick && (
         <AttendanceSheets ym={ym} holidays={holidays}
           staff={staff.filter(s2 => attPick.has(s2.id))} />
+      )}
+
+      {lock.locked && (
+        <div className="print:hidden rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 flex items-center gap-2">
+          <Lock className="w-4 h-4 text-amber-700 shrink-0" />
+          <p className="text-xs text-amber-800">
+            <b>확정된 근무표입니다 — 고칠 수 없습니다.</b>
+            {lock.by && <span className="ml-1 font-normal">{lock.by}</span>}
+            {lock.at && (
+              <span className="ml-1 font-normal text-amber-600">
+                {new Date(lock.at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+            <span className="block text-[11px] text-amber-600 mt-0.5">
+              휴가·맞교대 승인도 함께 막힙니다. 고치려면 위에서 잠금을 풀어주세요{isAdminUser ? '' : ' (ADMIN만 가능)'}.
+            </span>
+          </p>
+        </div>
       )}
 
       {pendingLeaves.length > 0 && (
@@ -932,6 +989,7 @@ export default function WorkSchedulePage() {
                       <button type="button" tabIndex={-1}
                         onClick={e => {
                           e.stopPropagation()
+                          if (lock.locked) { alert(LOCK_MSG); return }
                           const n = Object.keys(data[s.id] ?? {}).length
                           if (n === 0) { alert(`${s.name} 님은 지울 근무가 없습니다.`); return }
                           if (!confirm(`${s.name} 님의 이번 달 근무 ${n}칸을 지울까요?`)) return
@@ -1122,6 +1180,7 @@ export default function WorkSchedulePage() {
           month={ym}
           onClose={() => setHistOpen(false)}
           onLoad={v => {
+            if (lock.locked) { alert(LOCK_MSG); return }
             // 화면에만 적용 — 저장을 눌러야 확정된다
             setData(v.data || {}); setRows(v.rows || [])
             if (v.base_hours) { setAutoBase(false); setBaseHours(v.base_hours); setBaseDays(v.base_days || '') }

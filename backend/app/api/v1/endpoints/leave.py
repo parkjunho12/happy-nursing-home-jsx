@@ -12,6 +12,7 @@ from app.models.user import User
 from app.models.leave import LeaveRequest, SwapRequest, now_kst
 from app.models.eval import LtcStaffMember
 from app.models.work_schedule import WorkSchedule
+from app.api.v1.endpoints.work_schedule import guard_locked
 from app.schemas.response import ApiResponse
 from app.services.staff_notify import notify_user
 
@@ -333,6 +334,8 @@ def decide(rid: str, body: DecideBody, db: Session = Depends(get_db),
     writes_hyu = r.kind in KIND_CODE or (r.kind == "희망휴무" and r.use_annual)
     if body.approve and writes_hyu:
         ym = r.date[:7]
+        # 확정된 근무표에 休 를 몰래 적으면 붙여 놓은 표와 달라진다
+        guard_locked(db, ym)
         w = db.query(WorkSchedule).filter(WorkSchedule.year_month == ym).first()
         if not w:
             w = WorkSchedule(year_month=ym, data={})
@@ -585,6 +588,10 @@ def decide_swap(rid: str, body: DecideBody, db: Session = Depends(get_db),
 
     swapped = []
     if body.approve:
+        # 한 달이라도 잠겨 있으면 아예 손대지 않는다 —
+        # 한쪽만 바꾸면 두 사람 근무가 어긋난 채로 남는다
+        for d in (r.dates or []):
+            guard_locked(db, d[:7])
         for d in (r.dates or []):
             ym = d[:7]
             w = db.query(WorkSchedule).filter(WorkSchedule.year_month == ym).first()
@@ -728,6 +735,7 @@ def ledger_manual_add(body: LedgerManualBody, db: Session = Depends(get_db),
     if int(body.date[5:7]) in _blocked_months(hire, int(body.date[:4])):
         raise HTTPException(400, "입사 첫 달(★)에는 연차를 쓸 수 없습니다.")
     ym = body.date[:7]
+    guard_locked(db, ym)
     w = db.query(WorkSchedule).filter(WorkSchedule.year_month == ym).first()
     if not w:
         w = WorkSchedule(year_month=ym, data={})
@@ -761,6 +769,7 @@ def ledger_manual_remove(staff_id: str, date: str, db: Session = Depends(get_db)
     if req:
         raise HTTPException(409,
             "이 날짜는 승인된 신청에서 온 사용 기록입니다. 신청 자체를 반려/취소 처리해야 합니다.")
+    guard_locked(db, date[:7])
     w = db.query(WorkSchedule).filter(WorkSchedule.year_month == date[:7]).first()
     day = str(int(date[8:10]))
     if not w or ((w.data or {}).get(staff_id) or {}).get(day) != "休":

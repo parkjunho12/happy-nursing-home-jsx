@@ -29,6 +29,10 @@ export interface WorkScheduleDoc {
   rows_from?: string | null   // 조 편성을 물려받은 달 (없으면 이번 달 것)
   updated_by?: string | null
   updated_at?: string | null
+  /** 확정 잠금 — 켜져 있으면 이 달은 아무도 못 고친다 */
+  locked?: boolean
+  locked_by?: string | null
+  locked_at?: string | null
 }
 /** 내 근무표 응답 */
 export interface MySchedule {
@@ -70,6 +74,9 @@ export interface ScheduleVersionFull extends ScheduleVersion {
 export const workScheduleAPI = {
   get: (month: string) => apiClient.get(BASE, { params: { month } }).then(unwrap<WorkScheduleDoc>),
   save: (body: SavePayload) => apiClient.put(BASE, body).then(unwrap<WorkScheduleDoc>),
+  /** 확정 잠금 — ADMIN만. 잠그면 저장·휴가 승인·맞교대가 모두 막힌다 */
+  setLock: (year_month: string, locked: boolean) =>
+    apiClient.post(`${BASE}/lock`, { year_month, locked }).then(unwrap<WorkScheduleDoc>),
   /** 근무표 발표 알림 — 전 직원 푸시 */
   notify: (year_month: string) =>
     apiClient.post(`${BASE}/notify`, { year_month }).then(unwrap<{ tokens: number; recipients?: number; sent: number; failed: number }>),

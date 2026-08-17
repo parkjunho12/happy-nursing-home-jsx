@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
-from app.models.work_schedule import WorkSchedule, WorkScheduleVersion, WorkScheduleConfig
+from app.models.work_schedule import (WorkSchedule, WorkScheduleVersion,
+                                      WorkScheduleConfig, now_kst)
 from app.models.eval import LtcStaffMember
 from app.services.staff_notify import notify_all_staff
 from app.models.staffing import HolidayCalendar
@@ -73,6 +74,9 @@ def _view(w: Optional[WorkSchedule], ym: str, db: Optional[Session] = None) -> d
         "team_offsets": (w.team_offsets if w and w.team_offsets else None),
         "updated_by": (w.updated_by if w else None),
         "updated_at": (w.updated_at.isoformat() if w and w.updated_at else None),
+        "locked": bool(w and w.locked_at),
+        "locked_by": (w.locked_by if w else None),
+        "locked_at": (w.locked_at.isoformat() if w and w.locked_at else None),
     }
 
 
@@ -573,6 +577,7 @@ def explain_schedule(body: ExplainBody, db: Session = Depends(get_db),
 def save_schedule(body: ScheduleBody, db: Session = Depends(get_db), current_user: User = Depends(_manager)):
     if not _YM.match(body.year_month or ""):
         raise HTTPException(400, "year_month 형식은 YYYY-MM 이어야 합니다.")
+    guard_locked(db, body.year_month)
     w = db.query(WorkSchedule).filter(WorkSchedule.year_month == body.year_month).first()
     if not w:
         w = WorkSchedule(year_month=body.year_month)
@@ -613,6 +618,58 @@ def save_schedule(body: ScheduleBody, db: Session = Depends(get_db), current_use
 
     db.commit(); db.refresh(w)
     return ApiResponse(success=True, data=_view(w, body.year_month))
+
+
+# ── 확정 잠금 ──────────────────────────────────────────────────────────────
+# 근무표는 붙여 놓고 여러 사람이 보는 문서다. 확정한 뒤 조용히 바뀌면
+# 사람마다 다른 표를 보게 되고, 그날 누가 나오는지가 어긋난다.
+# 그래서 잠글 수 있게 하고, 잠근 달은 어디에서도 못 고치게 막는다.
+
+def schedule_locked(db: Session, ym: str) -> Optional[str]:
+    """잠겨 있으면 사람이 읽을 안내 문구, 아니면 None."""
+    w = db.query(WorkSchedule).filter(WorkSchedule.year_month == ym).first()
+    if not w or not w.locked_at:
+        return None
+    who = f" ({w.locked_by})" if w.locked_by else ""
+    return (f"{int(ym[5:7])}월 근무표는 확정되어 잠겨 있습니다{who}. "
+            f"고치려면 근무표 화면에서 잠금을 풀어주세요. (ADMIN만 가능)")
+
+
+def guard_locked(db: Session, ym: str) -> None:
+    msg = schedule_locked(db, ym)
+    if msg:
+        raise HTTPException(409, msg)
+
+
+class LockBody(BaseModel):
+    year_month: str
+    locked: bool
+
+
+@router.post("/lock")
+def set_lock(body: LockBody, db: Session = Depends(get_db),
+             current_user: User = Depends(get_current_user)):
+    """근무표 확정 잠금 — ADMIN만.
+
+    시설장도 근무표를 짜지만, 확정 여부는 한 사람이 정해야 한다.
+    """
+    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    if role != "ADMIN":
+        raise HTTPException(403, "근무표 잠금은 ADMIN만 할 수 있습니다.")
+    if not _YM.match(body.year_month or ""):
+        raise HTTPException(400, "year_month 형식은 YYYY-MM 이어야 합니다.")
+    w = db.query(WorkSchedule).filter(WorkSchedule.year_month == body.year_month).first()
+    if not w:
+        raise HTTPException(404, "저장된 근무표가 없습니다. 먼저 저장해주세요.")
+    if body.locked:
+        w.locked_at = now_kst()
+        w.locked_by = getattr(current_user, "name", None)
+    else:
+        w.locked_at = None
+        w.locked_by = None
+    db.commit(); db.refresh(w)
+    return ApiResponse(success=True, data=_view(w, body.year_month),
+                       message="확정 잠금했습니다." if body.locked else "잠금을 풀었습니다.")
 
 
 @router.get("/versions")
