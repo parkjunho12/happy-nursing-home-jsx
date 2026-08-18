@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import {
-  CalendarCheck, ChevronLeft, ChevronRight, Plus, Pencil, Trash2, Loader2,
-  Check, AlertTriangle, X, ShieldCheck, Sparkles,
-} from 'lucide-react'
+import { CalendarCheck, ChevronLeft, ChevronRight, Plus, Pencil, Trash2, Loader2, Check, AlertTriangle, X, ShieldCheck } from 'lucide-react'
 import {
   adminRoutineAPI, ROUTINE_CATEGORIES, type RoutineItem, type RoutineMonth,
 } from '@/api/adminRoutineClient'
@@ -93,12 +90,6 @@ export default function AdminRoutinePage() {
     catch (e: any) { alert(e?.message ?? '삭제 실패') }
   }
 
-  const seed = async () => {
-    if (!confirm('매달 반복되는 대표 업무 8건을 내 목록에 넣어드릴까요?\n넣은 뒤 날짜·내용은 자유롭게 고칠 수 있어요.')) return
-    try { await adminRoutineAPI.seedDefaults(); load(true) }
-    catch (e: any) { alert(e?.message ?? '실패') }
-  }
-
   return (
     <div className="p-4 md:p-6 max-w-4xl">
       {/* 헤더 */}
@@ -165,14 +156,8 @@ export default function AdminRoutinePage() {
           <CalendarCheck className="w-10 h-10 text-gray-200 mx-auto mb-3" />
           <p className="text-sm text-gray-500 mb-1">아직 등록한 월간 업무가 없습니다.</p>
           <p className="text-xs text-gray-400 mb-5">매달 같은 날 반복되는 일을 등록해두세요.</p>
-          <div className="flex items-center justify-center gap-2">
-            <button onClick={() => setEditing(null)}
-              className="px-4 py-2 rounded-xl bg-primary-orange text-white text-sm font-bold">업무 추가</button>
-            <button onClick={seed}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50">
-              <Sparkles className="w-4 h-4" /> 기본 항목 채우기
-            </button>
-          </div>
+          <button onClick={() => setEditing(null)}
+            className="px-4 py-2 rounded-xl bg-primary-orange text-white text-sm font-bold">업무 추가</button>
         </div>
       ) : (
         <div className="space-y-3">

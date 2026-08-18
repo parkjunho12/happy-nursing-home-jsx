@@ -54,5 +54,4 @@ export const adminRoutineAPI = {
   remove: (id: string) => apiClient.delete(`${BASE}/${id}`).then(r => r.data),
   setDone: (id: string, body: { month?: string; done: boolean; done_date?: string; memo?: string }) =>
     apiClient.post(`${BASE}/${id}/done`, body).then(unwrap<{ done: boolean; done_date?: string; done_by?: string }>),
-  seedDefaults: () => apiClient.post(`${BASE}/seed-defaults`, {}).then(r => r.data),
 }
