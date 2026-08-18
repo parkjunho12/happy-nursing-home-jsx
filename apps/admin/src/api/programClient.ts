@@ -67,6 +67,9 @@ export const programAPI = {
   updatePhoto: (id: string, b: { day?: number; title?: string; grp?: string; caption?: string }) =>
     apiClient.patch(`${BASE}/photos/${id}`, b).then(unwrap<ProgramPhoto>),
   deletePhoto: (id: string) => apiClient.delete(`${BASE}/photos/${id}`).then(r => r.data),
+  /** 여러 장 한 번에 — 한 장씩 지우면 스무 장에 스무 번을 눌러야 한다 */
+  deletePhotos: (ids: string[]) =>
+    apiClient.post(`${BASE}/photos/delete`, { ids }).then(unwrap<{ deleted: number }>),
 
   peekSchedule: (file: File) =>
     apiClient.post(`${BASE}/peek-schedule`, form(file), { headers: { 'Content-Type': undefined as any } })

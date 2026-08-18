@@ -1372,6 +1372,9 @@ function ProgramPhotoTab({ ym, onMove, days, draft }: {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [openDay, setOpenDay] = useState<number | null>(null)
+  // 고른 사진들 — 스무 장을 한 장씩 지우게 하지 않는다
+  const [sel, setSel] = useState<Set<string>>(new Set())
+  const [deleting, setDeleting] = useState(false)
   const [viewer, setViewer] = useState<ProgramPhoto | null>(null)
   const [err, setErr] = useState('')
   const [msg, setMsg] = useState('')
@@ -1418,10 +1421,23 @@ function ProgramPhotoTab({ ym, onMove, days, draft }: {
     } catch (e: any) { alert(e?.response?.data?.detail ?? '저장 실패') }
   }
 
-  const remove = async (p: ProgramPhoto) => {
-    if (!confirm('이 사진을 지울까요?\n저장소에서도 함께 지워집니다.')) return
-    try { await programAPI.deletePhoto(p.id); setViewer(null); load() }
-    catch (e: any) { alert(e?.response?.data?.detail ?? '삭제 실패') }
+  /** 지우기 — 한 장이든 여러 장이든 여기 하나로.
+   *  저장소에서 정말 지워지므로 되돌릴 수 없다. 그래서 몇 장인지 밝히고 한 번만 묻는다. */
+  const removeMany = async (ids: string[]) => {
+    if (ids.length === 0) return
+    if (!confirm(ids.length === 1
+      ? '이 사진을 지울까요?\n저장소에서도 지워지며 되돌릴 수 없습니다.'
+      : `고른 사진 ${ids.length}장을 지울까요?\n저장소에서도 지워지며 되돌릴 수 없습니다.`)) return
+    setDeleting(true)
+    try {
+      await programAPI.deletePhotos(ids)
+      const gone = new Set(ids)
+      setRows(prev => prev.filter(x => !gone.has(x.id)))
+      setSel(prev => { const n = new Set(prev); ids.forEach(i => n.delete(i)); return n })
+      setViewer(v => (v && gone.has(v.id)) ? null : v)
+      setMsg(`${ids.length}장을 지웠습니다.`)
+    } catch (e: any) { setErr(e?.response?.data?.detail ?? '삭제 실패') }
+    finally { setDeleting(false) }
   }
 
   const thumb = (p: ProgramPhoto) => p.thumbnail_url || p.file_url
@@ -1476,8 +1492,14 @@ function ProgramPhotoTab({ ym, onMove, days, draft }: {
           {byDay.map(([d, list]) => {
             const untagged = list.filter(p => !p.title).length
             return (
-              <button key={d} onClick={() => setOpenDay(d)}
-                className="text-left bg-white rounded-2xl border border-gray-100 hover:border-violet-300 transition-colors overflow-hidden">
+              <div key={d} className="group relative bg-white rounded-2xl border border-gray-100 hover:border-violet-300 transition-colors overflow-hidden">
+              <button onClick={() => removeMany(list.map(p => p.id))} disabled={deleting}
+                title={`${m}월 ${d}일 사진 ${list.length}장 전부 지우기`}
+                className="absolute top-1.5 right-1.5 z-10 p-1.5 rounded-lg bg-white/85 text-gray-400 opacity-0 group-hover:opacity-100 hover:text-rose-600 transition-opacity disabled:opacity-40">
+                <Trash2 size={13} />
+              </button>
+              <button onClick={() => { setSel(new Set()); setOpenDay(d) }}
+                className="block w-full text-left">
                 <div className="aspect-[4/3] bg-gray-50 grid grid-cols-2 gap-px">
                   {list.slice(0, 4).map(p => (
                     <img key={p.id} src={thumb(p)} alt="" loading="lazy"
@@ -1494,29 +1516,64 @@ function ProgramPhotoTab({ ym, onMove, days, draft }: {
                   </p>
                 </div>
               </button>
+              </div>
             )
           })}
         </div>
       )}
 
       {/* 날짜 폴더 열기 */}
-      {openDay !== null && (
+      {openDay !== null && (() => {
+      const dayRows = rows.filter(p => p.day === openDay)
+      const picked = dayRows.filter(p => sel.has(p.id)).map(p => p.id)
+      const allPicked = dayRows.length > 0 && picked.length === dayRows.length
+      return (
         <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4"
           onClick={() => setOpenDay(null)}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[88vh] overflow-y-auto p-5"
             onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-2 mb-3">
               <h3 className="font-bold text-gray-900">{m}월 {openDay}일 ({dow(openDay)})</h3>
-              <span className="text-xs text-gray-400">
-                {(rows.filter(p => p.day === openDay)).length}장
-              </span>
+              <span className="text-xs text-gray-400">{dayRows.length}장</span>
               <button onClick={() => setOpenDay(null)} className="ml-auto text-gray-300 hover:text-gray-500">
                 <X size={18} />
               </button>
             </div>
+
+            {/* 고르기 막대 — 여러 장을 한 번에 지울 때 쓴다 */}
+            {dayRows.length > 0 && (
+              <div className="flex items-center gap-2 mb-2 sticky top-0 bg-white z-10 py-1">
+                <button onClick={() => setSel(allPicked ? new Set() : new Set(dayRows.map(p => p.id)))}
+                  className="text-[11px] font-bold text-gray-500 hover:text-gray-800 px-2 py-1 rounded-lg border border-gray-200">
+                  {allPicked ? '선택 해제' : '전체 선택'}
+                </button>
+                {picked.length > 0 && (
+                  <>
+                    <span className="text-[11px] font-bold text-violet-700">{picked.length}장 선택</span>
+                    <button onClick={() => removeMany(picked)} disabled={deleting}
+                      className="ml-auto inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-rose-600 text-white text-[11px] font-bold disabled:opacity-50">
+                      {deleting ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
+                      선택 삭제
+                    </button>
+                  </>
+                )}
+                {picked.length === 0 && (
+                  <span className="ml-auto text-[11px] text-gray-400">사진을 골라 한 번에 지울 수 있어요</span>
+                )}
+              </div>
+            )}
             <div className="space-y-2">
-              {rows.filter(p => p.day === openDay).map(p => (
-                <div key={p.id} className="flex items-center gap-2.5 p-2 rounded-xl border border-gray-100">
+              {dayRows.map(p => (
+                <div key={p.id}
+                  className={`group flex items-center gap-2.5 p-2 rounded-xl border transition-colors ${
+                    sel.has(p.id) ? 'border-violet-300 bg-violet-50/60' : 'border-gray-100'}`}>
+                  <input type="checkbox" checked={sel.has(p.id)}
+                    onChange={() => setSel(prev => {
+                      const n = new Set(prev)
+                      n.has(p.id) ? n.delete(p.id) : n.add(p.id)
+                      return n
+                    })}
+                    className="shrink-0 w-4 h-4 accent-violet-600 cursor-pointer" />
                   <button onClick={() => setViewer(p)} className="shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-gray-50">
                     {p.media_type === 'video'
                       ? <video src={p.file_url} className="w-full h-full object-cover" />
@@ -1550,9 +1607,14 @@ function ProgramPhotoTab({ ym, onMove, days, draft }: {
                       <option key={d} value={d}>{d}일</option>
                     ))}
                   </select>
+                  <button onClick={() => removeMany([p.id])} disabled={deleting}
+                    title="이 사진 지우기"
+                    className="shrink-0 p-1.5 rounded-lg text-gray-300 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-40">
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               ))}
-              {rows.filter(p => p.day === openDay).length === 0 && (
+              {dayRows.length === 0 && (
                 <p className="text-xs text-gray-400 text-center py-8">이 날의 사진이 없습니다.</p>
               )}
             </div>
@@ -1561,7 +1623,7 @@ function ProgramPhotoTab({ ym, onMove, days, draft }: {
             </p>
           </div>
         </div>
-      )}
+      )})()}
 
       {viewer && (
         <div className="fixed inset-0 z-[80] bg-black/80 flex items-center justify-center p-4"
@@ -1577,8 +1639,10 @@ function ProgramPhotoTab({ ym, onMove, days, draft }: {
               {viewer.taken_at && <span className="text-xs text-white/50">{hm(viewer.taken_at)} 촬영</span>}
               <a href={viewer.file_url} target="_blank" rel="noreferrer"
                 className="ml-auto text-xs font-bold text-white/70 hover:text-white">원본 열기</a>
-              <button onClick={() => remove(viewer)}
-                className="text-xs font-bold text-rose-300 hover:text-rose-200">삭제</button>
+              <button onClick={() => removeMany([viewer.id])} disabled={deleting}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-600/90 hover:bg-rose-600 text-white text-xs font-bold disabled:opacity-50">
+                <Trash2 size={12} /> 삭제
+              </button>
               <button onClick={() => setViewer(null)} className="text-white/60 hover:text-white">
                 <X size={18} />
               </button>
