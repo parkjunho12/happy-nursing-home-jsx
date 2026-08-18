@@ -340,10 +340,11 @@ export function getNavConfig(
     }
   }
 
-  // 일반 직원 (사회복지사·간호팀·물리치료사·대표·이사)
+  // 일반 직원 (사회복지사·간호팀·물리/작업치료사·대표·이사)
   // — ADMIN·시설장과 같은 소분류(어르신/직원·근무/일정·소통/기록·안전/평가)를 권한만큼만 보여준다
   const isNurse = ['간호팀장', '간호사', '간호조무사'].includes(user?.position ?? '')
-  const isCareTeam = isNurse || user?.position === '물리치료사'
+  // 물리치료사·작업치료사는 하는 일이 같아 권한도 같이 간다
+  const isCareTeam = isNurse || ['물리치료사', '작업치료사'].includes(user?.position ?? '')
   const canEnteral = isSocialWorker || isNurse || isManager
   const canHandover = isSocialWorker || isNurse || user?.position === '시설장'
   const canMeal = isSocialWorker || isManager

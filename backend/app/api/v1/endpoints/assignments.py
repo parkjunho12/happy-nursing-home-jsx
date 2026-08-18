@@ -21,7 +21,8 @@ from app.schemas.response import ApiResponse
 router = APIRouter()
 
 CARE_POSITIONS = ("요양보호사",)                 # 담당 요양팀 후보
-REHAB_POSITIONS = ("물리치료사",)                # 담당 재활팀 = 물리치료사
+# 담당 재활팀 — 물리치료사·작업치료사. 하는 일이 같아 권한도 같이 간다.
+REHAB_POSITIONS = ("물리치료사", "작업치료사")
 
 
 def _editor(current_user: User = Depends(get_current_user)) -> User:

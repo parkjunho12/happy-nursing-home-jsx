@@ -441,7 +441,7 @@ const SORTS: { v: StaffSort; label: string }[] = [
   { v: 'position', label: '직종순' },
 ]
 // 직종 정렬은 지시 체계 순 — 근무표와 같은 기준
-const POS_RANK = ['시설장', '간호팀장', '사무국장', '사회복지사', '간호사', '간호조무사', '물리치료사', '요양팀장', '요양보호사', '조리원', '영양사', '위생원', '사무원']
+const POS_RANK = ['시설장', '간호팀장', '사무국장', '사회복지사', '간호사', '간호조무사', '물리치료사', '작업치료사', '요양팀장', '요양보호사', '조리원', '영양사', '위생원', '사무원']
 const posRank = (p?: string | null) => { const i = POS_RANK.indexOf(p ?? ''); return i === -1 ? 99 : i }
 
 function StaffDetailTable({ staff }: { staff: LtcStaff[] }) {

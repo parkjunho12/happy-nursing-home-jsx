@@ -149,7 +149,7 @@ function ResidentCard({ r, onEdit, onDischarge, onDelete, onDetail, checklists, 
   r: LtcResident; onEdit:()=>void; onDischarge:()=>void; onDelete:()=>void; onDetail:()=>void;
   checklists: ChecklistItem[]; onAddGuardian:()=>void;
 }) {
-  // 케어팀(간호팀장·물리치료사)은 열람·체크 중심 — 삭제는 숨긴다
+  // 케어팀(간호팀장·물리/작업치료사)은 열람·체크 중심 — 삭제는 숨긴다
   const canDelete = useAuthStore(st => st.user?.role === 'ADMIN' || ['사회복지사', '시설장', '대표', '이사'].includes(st.user?.position ?? ''))
   // 호실은 목록에서 바로 바꾼다 — 수정 모달을 열고 저장까지 갈 일이 아니다
   const updateResident = useLtcStore(st => st.updateResident)

@@ -202,10 +202,10 @@ function MealRoute({ children }: { children: React.ReactNode }) {
 }
 
 function ResidentCareRoute({ children }: { children: React.ReactNode }) {
-  // 수급자 관리·상세 — 케어팀(간호팀장·물리치료사)도 체크리스트 확인·토글을 위해 접근
+  // 수급자 관리·상세 — 케어팀(간호팀장·물리·작업치료사)도 체크리스트 확인·토글을 위해 접근
   const { isAuthenticated, user } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
-  const ok = user?.role === 'ADMIN' || ['사회복지사', '시설장', '대표', '이사', '간호팀장', '간호사', '간호조무사', '물리치료사'].includes(user?.position ?? '')
+  const ok = user?.role === 'ADMIN' || ['사회복지사', '시설장', '대표', '이사', '간호팀장', '간호사', '간호조무사', '물리치료사', '작업치료사'].includes(user?.position ?? '')
   if (!ok) return <Navigate to="/eval/checklist" replace />
   return <>{children}</>
 }

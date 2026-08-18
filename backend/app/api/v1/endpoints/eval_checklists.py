@@ -116,9 +116,9 @@ def list_checklists(
     pos = pos.value if hasattr(pos, "value") else str(pos or "")
 
     # 핵심: STAFF는 본인에게 배정된 것만 — 시설장은 전체,
-    # 사회복지사·간호팀장·물리치료사는 인물(수급자·직원) 연결 항목까지 열람
+    # 사회복지사·간호팀장·물리/작업치료사는 인물(수급자·직원) 연결 항목까지 열람
     if role != "ADMIN" and pos != "시설장":
-        if pos in ("사회복지사", "간호팀장", "간호사", "간호조무사", "물리치료사"):
+        if pos in ("사회복지사", "간호팀장", "간호사", "간호조무사", "물리치료사", "작업치료사"):
             from sqlalchemy import or_
             q = q.filter(or_(ChecklistItem.assigned_user_id == current_user.id,
                              ChecklistItem.person_id.isnot(None)))
