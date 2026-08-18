@@ -24,6 +24,7 @@ export interface ProgramPhoto {
   media_type: 'photo' | 'video'
   file_size?: number | null
   caption?: string | null
+  taken_at?: string | null      // 찍은 시각 (EXIF → 파일 수정시각 순)
   uploaded_by?: string | null
   created_at?: string | null
 }
@@ -48,16 +49,23 @@ export const programAPI = {
   /* ── 프로그램 사진 (R2 저장) ── */
   photos: (month: string) =>
     apiClient.get(`${BASE}/photos`, { params: { month } }).then(unwrap<ProgramPhoto[]>),
-  uploadPhotos: (b: { month: string; day: number; title: string; grp?: string | null
-                      caption?: string | null; files: File[] }) => {
+  /** 날짜·프로그램을 비우면 사진에 박힌 찍은 시각으로 서버가 날짜를 정한다 */
+  uploadPhotos: (b: { month: string; day?: number | null; title?: string | null
+                      grp?: string | null; caption?: string | null; files: File[] }) => {
     const f = new FormData()
-    f.append('month', b.month); f.append('day', String(b.day)); f.append('title', b.title)
+    f.append('month', b.month)
+    if (b.day) f.append('day', String(b.day))
+    if (b.title) f.append('title', b.title)
     if (b.grp) f.append('grp', b.grp)
     if (b.caption) f.append('caption', b.caption)
+    // EXIF 가 없는 사진(캡처·다운로드본)을 위한 보조 — 파일 순서대로 보낸다
+    f.append('taken_ms', b.files.map(x => x.lastModified || '').join(','))
     b.files.forEach(x => f.append('files', x))
     return apiClient.post(`${BASE}/photos`, f, { headers: { 'Content-Type': undefined as any } })
       .then(unwrap<{ uploaded: ProgramPhoto[]; failed: string[] }>)
   },
+  updatePhoto: (id: string, b: { day?: number; title?: string; grp?: string; caption?: string }) =>
+    apiClient.patch(`${BASE}/photos/${id}`, b).then(unwrap<ProgramPhoto>),
   deletePhoto: (id: string) => apiClient.delete(`${BASE}/photos/${id}`).then(r => r.data),
 
   peekSchedule: (file: File) =>

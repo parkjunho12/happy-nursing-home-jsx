@@ -4,8 +4,10 @@
 권한: ADMIN · 시설장 · 사회복지사
 """
 from __future__ import annotations
+import io
 import logging
 import re
+from datetime import datetime, timezone as _tz_p, timedelta as _td_p
 from typing import Optional
 from fastapi import (APIRouter, BackgroundTasks, Depends, File, Form,
                      HTTPException, Query, UploadFile)
@@ -20,6 +22,7 @@ from app.models.program import (ProgramMonth, ProgramGroupSet, ProgramChangeLog,
 from app.schemas.response import ApiResponse
 
 logger = logging.getLogger(__name__)
+_KST_P = _tz_p(_td_p(hours=9))
 router = APIRouter()
 family_router = APIRouter()
 
@@ -413,11 +416,53 @@ MAX_PHOTO_MB = 25
 MAX_PER_UPLOAD = 20
 
 
+def _exif_taken(data: bytes) -> Optional[datetime]:
+    """사진에 박힌 찍은 시각(EXIF DateTimeOriginal).
+
+    스마트폰·카메라 사진에는 거의 항상 들어 있다. 이게 있어야 '언제 찍은 사진인지'
+    를 사람이 일일이 고르지 않아도 된다. 없거나 이상하면 None 을 준다.
+    """
+    try:
+        from PIL import Image
+        img = Image.open(io.BytesIO(data))
+        exif = img.getexif()
+        if not exif:
+            return None
+        # 36867 DateTimeOriginal, 36868 DateTimeDigitized, 306 DateTime
+        raw = None
+        for tag in (36867, 36868, 306):
+            v = exif.get(tag)
+            if not v and hasattr(exif, "get_ifd"):
+                v = (exif.get_ifd(0x8769) or {}).get(tag)
+            if v:
+                raw = str(v).strip()
+                break
+        if not raw:
+            return None
+        dt = datetime.strptime(raw[:19], "%Y:%m:%d %H:%M:%S")
+        return dt.replace(tzinfo=_KST_P)
+    except Exception:
+        return None
+
+
+def _pick_day(month: str, taken: Optional[datetime], fallback: Optional[datetime]) -> tuple:
+    """그 사진이 이 달 며칠 것인지. (day, taken_at)
+
+    찍은 달이 관리 중인 달과 다르면 날짜를 믿지 않는다 — 지난달 사진이
+    이번 달 3일에 끼면 더 헷갈린다. 그런 것은 1일에 모아두고 사람이 옮긴다.
+    """
+    for t in (taken, fallback):
+        if t and t.strftime("%Y-%m") == month:
+            return t.day, t
+    return 1, (taken or fallback)
+
+
 def _photo_view(p: ProgramPhoto) -> dict:
     return {
         "id": p.id, "month": p.month, "day": p.day, "title": p.title, "grp": p.grp,
         "file_url": p.file_url, "thumbnail_url": p.thumbnail_url,
         "media_type": p.media_type, "file_size": p.file_size, "caption": p.caption,
+        "taken_at": p.taken_at.isoformat() if p.taken_at else None,
         "uploaded_by": p.uploaded_by,
         "created_at": p.created_at.isoformat() if p.created_at else None,
     }
@@ -438,21 +483,27 @@ def list_photos(month: str = Query(...), db: Session = Depends(get_db),
 @router.post("/photos")
 async def upload_photos(
     month: str = Form(...),
-    day: int = Form(...),
-    title: str = Form(...),
+    day: Optional[int] = Form(None),
+    title: Optional[str] = Form(None),
     grp: Optional[str] = Form(None),
     caption: Optional[str] = Form(None),
+    # 브라우저가 아는 파일 수정시각(밀리초). EXIF 가 없는 사진의 보조 수단이다.
+    taken_ms: Optional[str] = Form(None),
     files: list[UploadFile] = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(_editor),
 ):
+    """사진을 올린다.
+
+    프로그램(title)을 안 정해도 된다 — 먼저 날짜별로 담아두고 나중에 붙인다.
+    날짜는 사진에 박힌 찍은 시각(EXIF)으로 정한다. 스무 장을 한 번에 올리고
+    사람이 일일이 날짜를 고르는 것은 현실적이지 않다.
+    """
     from app.services.r2_storage import r2
     if not _YM.match(month):
         raise HTTPException(400, "month는 YYYY-MM 형식이어야 합니다.")
-    if not (1 <= int(day) <= 31):
+    if day is not None and not (1 <= int(day) <= 31):
         raise HTTPException(400, "일자가 올바르지 않습니다.")
-    if not (title or "").strip():
-        raise HTTPException(400, "어느 프로그램인지 골라주세요.")
     if not r2.is_configured():
         raise HTTPException(503, "사진 저장소(R2)가 설정되지 않았습니다. 관리자에게 알려주세요.")
     files = [f for f in (files or []) if f and f.filename]
@@ -461,41 +512,80 @@ async def upload_photos(
     if len(files) > MAX_PER_UPLOAD:
         raise HTTPException(400, f"한 번에 {MAX_PER_UPLOAD}장까지 올릴 수 있습니다.")
 
+    # 파일 순서대로 대응하는 수정시각 목록 (없으면 빈 칸)
+    ms_list = [x.strip() for x in (taken_ms or "").split(",")]
+
     out, failed = [], []
-    for f in files:
+    for idx, f in enumerate(files):
         try:
-            # 용량은 올리기 전에 본다 — R2 에 올려놓고 되돌리는 것보다 낫다
             head = await f.read(MAX_PHOTO_MB * 1024 * 1024 + 1)
             if len(head) > MAX_PHOTO_MB * 1024 * 1024:
                 failed.append(f"{f.filename} (용량 초과 · 최대 {MAX_PHOTO_MB}MB)")
                 continue
+            taken = _exif_taken(head)
+            mtime = None
+            if idx < len(ms_list) and ms_list[idx].isdigit():
+                mtime = datetime.fromtimestamp(int(ms_list[idx]) / 1000, _KST_P)
             await f.seek(0)
             url, thumb, kind, size = r2.upload_file(f, month, prefix="programs")
         except HTTPException as e:
             failed.append(f"{f.filename} ({e.detail})")
             continue
-        except Exception as e:                    # 한 장이 실패해도 나머지는 올린다
+        except Exception as e:
             logger.warning("프로그램 사진 업로드 실패 %s: %s", f.filename, e)
             failed.append(f"{f.filename} (업로드 실패)")
             continue
+        # 사람이 날짜를 골랐으면 그것이 우선이다
+        auto_day, taken_at = _pick_day(month, taken, mtime)
         row = ProgramPhoto(
-            month=month, day=int(day), title=title.strip()[:200],
+            month=month, day=int(day) if day else auto_day,
+            title=(title or "").strip()[:200] or None,
             grp=(grp or "").strip()[:50] or None,
             file_url=url, thumbnail_url=thumb or None, media_type=kind, file_size=size,
             caption=(caption or "").strip()[:300] or None,
+            taken_at=taken_at,
             uploaded_by=getattr(current_user, "name", None))
         db.add(row)
         out.append(row)
     db.commit()
     for r in out:
         db.refresh(r)
-    _log(db, month, "수정", current_user, day=str(int(day)),
-         summary=f"{int(day)}일 「{title.strip()}」 사진 {len(out)}장 등록")
+    _log(db, month, "수정", current_user,
+         day=str(int(day)) if day else None,
+         summary=f"사진 {len(out)}장 등록" + (f" — 「{title.strip()}」" if title else ""))
     db.commit()
     return ApiResponse(success=True,
                        data={"uploaded": [_photo_view(p) for p in out], "failed": failed},
                        message=f"{len(out)}장을 올렸습니다." +
                                (f" ({len(failed)}장 실패)" if failed else ""))
+
+
+class PhotoPatch(BaseModel):
+    day: Optional[int] = None
+    title: Optional[str] = None
+    grp: Optional[str] = None
+    caption: Optional[str] = None
+
+
+@router.patch("/photos/{pid}")
+def update_photo(pid: str, body: PhotoPatch, db: Session = Depends(get_db),
+                 current_user: User = Depends(_editor)):
+    """날짜를 옮기거나 어느 프로그램인지 붙인다."""
+    p = db.query(ProgramPhoto).filter(ProgramPhoto.id == pid).first()
+    if not p:
+        raise HTTPException(404, "사진을 찾을 수 없습니다.")
+    if body.day is not None:
+        if not (1 <= int(body.day) <= 31):
+            raise HTTPException(400, "일자가 올바르지 않습니다.")
+        p.day = int(body.day)
+    if body.title is not None:
+        p.title = body.title.strip()[:200] or None
+    if body.grp is not None:
+        p.grp = body.grp.strip()[:50] or None
+    if body.caption is not None:
+        p.caption = body.caption.strip()[:300] or None
+    db.commit(); db.refresh(p)
+    return ApiResponse(success=True, data=_photo_view(p))
 
 
 @router.delete("/photos/{pid}")
