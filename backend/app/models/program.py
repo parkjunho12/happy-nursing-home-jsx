@@ -100,8 +100,13 @@ class ProgramPhoto(Base):
     id         = Column(String, primary_key=True, default=_uuid)
     month      = Column(String(7), index=True, nullable=False)    # 'YYYY-MM'
     day        = Column(Integer, nullable=False)                  # 1~31
-    title      = Column(String(200), nullable=False)              # 프로그램명
+    # 아직 어느 프로그램인지 안 정한 사진은 비어 있다.
+    # 사진은 먼저 날짜별로 담기고, 프로그램은 나중에 붙인다.
+    title      = Column(String(200), nullable=True)               # 프로그램명
     grp        = Column(String(50), nullable=True)                # 그룹 (인지A 등)
+    # 찍은 시각 — 날짜별로 담을 때 이걸 기준으로 한다.
+    # EXIF 가 있으면 EXIF, 없으면 파일 수정시각, 그것도 없으면 올린 시각.
+    taken_at   = Column(DateTime(timezone=True), nullable=True)
 
     file_url      = Column(String(500), nullable=False)
     thumbnail_url = Column(String(500), nullable=True)

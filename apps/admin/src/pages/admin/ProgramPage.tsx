@@ -937,7 +937,7 @@ export default function ProgramPage() {
 
       {/* 그룹 분류 (내부용) */}
       {tab === 'photos' && (
-        <ProgramPhotoTab ym={ym} days={data?.days ?? {}} draft={draft} />
+        <ProgramPhotoTab ym={ym} onMove={move} days={data?.days ?? {}} draft={draft} />
       )}
 
       {tab === 'groups' && (() => {
@@ -1358,22 +1358,25 @@ function ProgramAutoCast() {
  * 그날 그 프로그램을 찍은 사진을 올려 둔다. 파일은 R2 에 저장한다 —
  * 서버 디스크에 쌓이면 방송 음원·업로드와 같이 차올라 어느 날 저장이 멈춘다.
  *
- * 어느 프로그램인지는 (달·일·프로그램명) 으로 가리킨다. 일정표 항목에는
- * 고유 번호가 없기 때문이다. 일정표에서 이름이 바뀌면 사진은 옛 이름에 남고,
- * 화면에서 「일정표에 없는 프로그램」으로 따로 보여준다 — 지우지 않는다.
+ * 흐름: 한 달을 골라 사진을 한꺼번에 올리면, 사진에 박힌 찍은 시각(EXIF)으로
+ * 날짜 폴더에 저절로 담긴다. 어느 프로그램인지는 그 다음에 붙인다.
+ * 스무 장을 올리며 사람이 일일이 날짜를 고르는 것은 현실적이지 않다.
  */
-function ProgramPhotoTab({ ym, days, draft }: {
+function ProgramPhotoTab({ ym, onMove, days, draft }: {
   ym: string
+  onMove: (delta: number) => void
   days: Record<string, ProgramEntry[]>
   draft: Record<string, ProgramEntry[]>
 }) {
   const [rows, setRows] = useState<ProgramPhoto[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
-  const [pick, setPick] = useState<{ day: number; title: string; grp?: string | null } | null>(null)
+  const [openDay, setOpenDay] = useState<number | null>(null)
   const [viewer, setViewer] = useState<ProgramPhoto | null>(null)
   const [err, setErr] = useState('')
+  const [msg, setMsg] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+  const [y, m] = ym.split('-').map(Number)
 
   const load = () => {
     setLoading(true)
@@ -1381,44 +1384,38 @@ function ProgramPhotoTab({ ym, days, draft }: {
   }
   useEffect(load, [ym])
 
-  // 이 달에 실제로 있는 프로그램들 (저장 전 수정본이 있으면 그것을 본다)
-  const slots = useMemo(() => {
-    const out: { day: number; title: string; grp?: string | null }[] = []
+  /** 그 달 프로그램 목록 — 사진에 붙일 후보 */
+  const progsOf = (day: number) => {
     const all = { ...days, ...draft }
-    Object.entries(all).forEach(([d, list]) => {
-      (list ?? []).forEach(e => {
-        const t = (e.title || '').trim()
-        if (t) out.push({ day: Number(d), title: t, grp: e.group })
-      })
-    })
-    return out.sort((a, b) => a.day - b.day || a.title.localeCompare(b.title))
-  }, [days, draft])
+    return (all[String(day)] ?? []).filter(e => (e.title || '').trim())
+  }
 
-  const key = (d: number, t: string) => `${d}|${t}`
-  const byKey = useMemo(() => {
-    const m = new Map<string, ProgramPhoto[]>()
-    rows.forEach(p => {
-      const k = key(p.day, p.title)
-      ;(m.get(k) ?? m.set(k, []).get(k)!).push(p)
-    })
-    return m
+  const byDay = useMemo(() => {
+    const m2 = new Map<number, ProgramPhoto[]>()
+    rows.forEach(p => { (m2.get(p.day) ?? m2.set(p.day, []).get(p.day)!).push(p) })
+    return [...m2.entries()].sort((a, b) => a[0] - b[0])
   }, [rows])
-  // 일정표에서 사라진 프로그램의 사진 — 지우지 않고 따로 보여준다
-  const orphan = useMemo(() => {
-    const live = new Set(slots.map(s => key(s.day, s.title)))
-    return rows.filter(p => !live.has(key(p.day, p.title)))
-  }, [rows, slots])
 
   const onFiles = async (files: FileList | null) => {
-    if (!files?.length || !pick) return
-    setBusy(true); setErr('')
+    if (!files?.length) return
+    setBusy(true); setErr(''); setMsg('')
     try {
-      const r = await programAPI.uploadPhotos({
-        month: ym, day: pick.day, title: pick.title, grp: pick.grp, files: Array.from(files) })
+      // 날짜·프로그램을 비워 보낸다 — 서버가 찍은 시각으로 날짜를 정한다
+      const r = await programAPI.uploadPhotos({ month: ym, files: Array.from(files) })
       if (r.failed.length) setErr(`올리지 못한 파일: ${r.failed.join(', ')}`)
+      const ds = Array.from(new Set(r.uploaded.map(x => x.day))).sort((a, b) => a - b)
+      if (r.uploaded.length) setMsg(`${r.uploaded.length}장을 ${ds.map(d => `${d}일`).join(', ')} 폴더에 담았습니다.`)
       load()
     } catch (e: any) { setErr(e?.response?.data?.detail ?? '업로드 실패') }
     finally { setBusy(false); if (fileRef.current) fileRef.current.value = '' }
+  }
+
+  const patch = async (p: ProgramPhoto, b: { day?: number; title?: string; grp?: string }) => {
+    try {
+      const n = await programAPI.updatePhoto(p.id, b)
+      setRows(prev => prev.map(x => x.id === p.id ? n : x))
+      setViewer(v => v?.id === p.id ? n : v)
+    } catch (e: any) { alert(e?.response?.data?.detail ?? '저장 실패') }
   }
 
   const remove = async (p: ProgramPhoto) => {
@@ -1428,8 +1425,9 @@ function ProgramPhotoTab({ ym, days, draft }: {
   }
 
   const thumb = (p: ProgramPhoto) => p.thumbnail_url || p.file_url
-
-  if (loading) return <p className="text-sm text-gray-400 text-center py-16">불러오는 중…</p>
+  const hm = (iso?: string | null) =>
+    iso ? new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : ''
+  const dow = (d: number) => ['일', '월', '화', '수', '목', '금', '토'][new Date(y, m - 1, d).getDay()]
 
   return (
     <div className="space-y-4">
@@ -1443,94 +1441,147 @@ function ProgramPhotoTab({ ym, days, draft }: {
           보호자에게 보여드릴 사진은 <b>보호자 앨범</b>에 올려주세요.
         </p>
       </div>
-      <p className="text-xs text-gray-500">
-        프로그램을 고르고 사진을 올리세요. 한 번에 20장까지, 한 장 최대 25MB입니다.
+
+      {/* 월 이동 + 올리기 */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="inline-flex items-center border border-gray-200 rounded-xl overflow-hidden bg-white">
+          <button onClick={() => onMove(-1)} className="px-2.5 py-2 hover:bg-gray-50 text-gray-500">‹</button>
+          <span className="px-3 text-sm font-bold text-gray-800">{m}월</span>
+          <button onClick={() => onMove(1)} className="px-2.5 py-2 hover:bg-gray-50 text-gray-500">›</button>
+        </div>
+        <span className="text-[11px] text-gray-400">{y}년 · 사진 {rows.length}장</span>
+        <button disabled={busy} onClick={() => { setErr(''); setMsg(''); fileRef.current?.click() }}
+          className="ml-auto inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 text-white text-sm font-bold disabled:opacity-50">
+          {busy ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+          사진 올리기
+        </button>
+      </div>
+      <p className="text-[11px] text-gray-400 -mt-2">
+        한 번에 20장까지 · 한 장 25MB까지. 사진에 찍힌 시각을 보고 <b>날짜 폴더</b>에 저절로 담깁니다.
+        찍은 달이 다르거나 시각을 알 수 없는 사진은 1일에 모읍니다.
       </p>
+
+      {msg && <p className="text-xs text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">{msg}</p>}
       {err && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{err}</p>}
 
-      {slots.length === 0 ? (
+      {loading ? (
+        <p className="text-sm text-gray-400 text-center py-16">불러오는 중…</p>
+      ) : byDay.length === 0 ? (
         <p className="text-sm text-gray-400 text-center py-16">
-          이 달 일정표가 없습니다. 먼저 「월간 일정표」에서 프로그램을 등록해주세요.
+          {m}월에 올린 사진이 없습니다.<br />
+          <span className="text-xs">사진을 올리면 찍은 날짜별로 담깁니다.</span>
         </p>
       ) : (
-        <div className="space-y-3">
-          {slots.map(s => {
-            const list = byKey.get(key(s.day, s.title)) ?? []
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
+          {byDay.map(([d, list]) => {
+            const untagged = list.filter(p => !p.title).length
             return (
-              <div key={`${s.day}-${s.title}`} className="bg-white rounded-2xl border border-gray-100 p-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-[11px] font-black text-violet-700 bg-violet-50 border border-violet-100 px-2 py-0.5 rounded-lg">
-                    {s.day}일
-                  </span>
-                  <p className="text-sm font-bold text-gray-800 truncate">{s.title}</p>
-                  {s.grp && <span className="text-[11px] font-bold text-gray-400">{s.grp}</span>}
-                  <span className={`text-[11px] font-bold ${list.length ? 'text-gray-400' : 'text-gray-300'}`}>
-                    {list.length ? `${list.length}장` : '사진 없음'}
-                  </span>
-                  <button disabled={busy}
-                    onClick={() => { setPick(s); setErr(''); fileRef.current?.click() }}
-                    className="ml-auto shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-violet-600 text-white text-[11px] font-bold disabled:opacity-50">
-                    {busy && pick?.day === s.day && pick?.title === s.title
-                      ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
-                    사진 올리기
-                  </button>
+              <button key={d} onClick={() => setOpenDay(d)}
+                className="text-left bg-white rounded-2xl border border-gray-100 hover:border-violet-300 transition-colors overflow-hidden">
+                <div className="aspect-[4/3] bg-gray-50 grid grid-cols-2 gap-px">
+                  {list.slice(0, 4).map(p => (
+                    <img key={p.id} src={thumb(p)} alt="" loading="lazy"
+                      className={`w-full h-full object-cover ${list.length === 1 ? 'col-span-2 row-span-2' : ''}`} />
+                  ))}
                 </div>
-                {list.length > 0 && (
-                  <div className="flex gap-1.5 overflow-x-auto pb-1">
-                    {list.map(p => (
-                      <button key={p.id} onClick={() => setViewer(p)}
-                        className="relative shrink-0 w-20 h-20 rounded-xl overflow-hidden border border-gray-100 bg-gray-50">
-                        {p.media_type === 'video'
-                          ? <video src={p.file_url} className="w-full h-full object-cover" />
-                          : <img src={thumb(p)} alt="" className="w-full h-full object-cover" loading="lazy" />}
-                        {p.media_type === 'video' && (
-                          <span className="absolute bottom-0.5 right-1 text-[9px] font-bold text-white drop-shadow">영상</span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+                <div className="p-2.5">
+                  <p className="text-sm font-bold text-gray-800">
+                    {m}월 {d}일 <span className="text-gray-400 font-semibold">({dow(d)})</span>
+                  </p>
+                  <p className="text-[11px] text-gray-400">
+                    {list.length}장
+                    {untagged > 0 && <span className="text-amber-600 font-bold"> · 프로그램 미지정 {untagged}</span>}
+                  </p>
+                </div>
+              </button>
             )
           })}
         </div>
       )}
 
-      {orphan.length > 0 && (
-        <div className="bg-white rounded-2xl border border-amber-200 p-3">
-          <p className="text-xs font-bold text-amber-800 mb-1">
-            일정표에 없는 프로그램의 사진 {orphan.length}장
-          </p>
-          <p className="text-[11px] text-amber-600 mb-2">
-            일정표에서 프로그램 이름이 바뀌었거나 지워진 경우입니다. 사진은 그대로 두었습니다.
-          </p>
-          <div className="flex gap-1.5 overflow-x-auto pb-1">
-            {orphan.map(p => (
-              <button key={p.id} onClick={() => setViewer(p)}
-                className="shrink-0 w-20 h-20 rounded-xl overflow-hidden border border-gray-100 bg-gray-50">
-                <img src={thumb(p)} alt="" className="w-full h-full object-cover" loading="lazy" />
+      {/* 날짜 폴더 열기 */}
+      {openDay !== null && (
+        <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4"
+          onClick={() => setOpenDay(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[88vh] overflow-y-auto p-5"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-3">
+              <h3 className="font-bold text-gray-900">{m}월 {openDay}일 ({dow(openDay)})</h3>
+              <span className="text-xs text-gray-400">
+                {(rows.filter(p => p.day === openDay)).length}장
+              </span>
+              <button onClick={() => setOpenDay(null)} className="ml-auto text-gray-300 hover:text-gray-500">
+                <X size={18} />
               </button>
-            ))}
+            </div>
+            <div className="space-y-2">
+              {rows.filter(p => p.day === openDay).map(p => (
+                <div key={p.id} className="flex items-center gap-2.5 p-2 rounded-xl border border-gray-100">
+                  <button onClick={() => setViewer(p)} className="shrink-0 w-16 h-16 rounded-lg overflow-hidden bg-gray-50">
+                    {p.media_type === 'video'
+                      ? <video src={p.file_url} className="w-full h-full object-cover" />
+                      : <img src={thumb(p)} alt="" className="w-full h-full object-cover" loading="lazy" />}
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] text-gray-400 mb-1">
+                      {p.taken_at ? `${hm(p.taken_at)} 촬영` : '촬영 시각 없음'}
+                      {p.uploaded_by && ` · ${p.uploaded_by}`}
+                    </p>
+                    <select value={p.title ?? ''}
+                      onChange={e => {
+                        const t = e.target.value
+                        const g = progsOf(openDay).find(x => (x.title || '').trim() === t)?.group ?? ''
+                        patch(p, { title: t, grp: g })
+                      }}
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white">
+                      <option value="">프로그램 지정 안 함</option>
+                      {progsOf(openDay).map((e2, i) => (
+                        <option key={i} value={(e2.title || '').trim()}>
+                          {e2.time ? `${e2.time.split('~')[0]} ` : ''}{e2.title}{e2.group ? ` (${e2.group})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <select value={p.day}
+                    onChange={e => patch(p, { day: Number(e.target.value) })}
+                    title="다른 날로 옮기기"
+                    className="shrink-0 px-1.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white">
+                    {Array.from({ length: new Date(y, m, 0).getDate() }, (_, i) => i + 1).map(d => (
+                      <option key={d} value={d}>{d}일</option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+              {rows.filter(p => p.day === openDay).length === 0 && (
+                <p className="text-xs text-gray-400 text-center py-8">이 날의 사진이 없습니다.</p>
+              )}
+            </div>
+            <p className="text-[11px] text-gray-400 mt-3 text-center">
+              어느 프로그램인지 골라주세요. 날짜가 틀렸으면 오른쪽에서 옮길 수 있어요.
+            </p>
           </div>
         </div>
       )}
 
       {viewer && (
-        <div className="fixed inset-0 z-[70] bg-black/80 flex items-center justify-center p-4"
+        <div className="fixed inset-0 z-[80] bg-black/80 flex items-center justify-center p-4"
           onClick={() => setViewer(null)}>
           <div className="max-w-3xl w-full" onClick={e => e.stopPropagation()}>
             {viewer.media_type === 'video'
               ? <video src={viewer.file_url} controls autoPlay className="w-full max-h-[75vh] rounded-xl" />
               : <img src={viewer.file_url} alt="" className="w-full max-h-[75vh] object-contain rounded-xl" />}
             <div className="flex items-center gap-2 mt-3 text-white">
-              <p className="text-sm font-bold">{viewer.day}일 · {viewer.title}</p>
-              {viewer.uploaded_by && <span className="text-xs text-white/50">{viewer.uploaded_by}</span>}
+              <p className="text-sm font-bold">
+                {m}월 {viewer.day}일{viewer.title ? ` · ${viewer.title}` : ''}
+              </p>
+              {viewer.taken_at && <span className="text-xs text-white/50">{hm(viewer.taken_at)} 촬영</span>}
               <a href={viewer.file_url} target="_blank" rel="noreferrer"
                 className="ml-auto text-xs font-bold text-white/70 hover:text-white">원본 열기</a>
               <button onClick={() => remove(viewer)}
                 className="text-xs font-bold text-rose-300 hover:text-rose-200">삭제</button>
-              <button onClick={() => setViewer(null)}
-                className="text-white/60 hover:text-white"><X size={18} /></button>
+              <button onClick={() => setViewer(null)} className="text-white/60 hover:text-white">
+                <X size={18} />
+              </button>
             </div>
           </div>
         </div>
