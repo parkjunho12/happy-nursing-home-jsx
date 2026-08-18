@@ -588,6 +588,39 @@ def update_photo(pid: str, body: PhotoPatch, db: Session = Depends(get_db),
     return ApiResponse(success=True, data=_photo_view(p))
 
 
+class PhotoIds(BaseModel):
+    ids: list[str]
+
+
+@router.post("/photos/delete")
+def delete_photos(body: PhotoIds, db: Session = Depends(get_db),
+                  current_user: User = Depends(_editor)):
+    """여러 장을 한 번에 지운다.
+
+    한 장씩 지우면 스무 장을 정리하는 데 스무 번을 눌러야 한다.
+    한 장이 저장소에서 안 지워져도 나머지는 계속 지운다 — 목록에 유령이 남는
+    것보다 낫다.
+    """
+    from app.services.r2_storage import r2
+    ids = [x for x in (body.ids or []) if x][:200]
+    if not ids:
+        raise HTTPException(400, "지울 사진을 골라주세요.")
+    rows = db.query(ProgramPhoto).filter(ProgramPhoto.id.in_(ids)).all()
+    if not rows:
+        raise HTTPException(404, "사진을 찾을 수 없습니다.")
+    month = rows[0].month
+    for p in rows:
+        try:
+            r2.delete_file(p.file_url, p.thumbnail_url)
+        except Exception as e:
+            logger.warning("R2 삭제 실패(기록은 삭제): %s", e)
+        db.delete(p)
+    _log(db, month, "수정", current_user, summary=f"사진 {len(rows)}장 삭제")
+    db.commit()
+    return ApiResponse(success=True, data={"deleted": len(rows)},
+                       message=f"{len(rows)}장을 지웠습니다.")
+
+
 @router.delete("/photos/{pid}")
 def delete_photo(pid: str, db: Session = Depends(get_db), current_user: User = Depends(_editor)):
     from app.services.r2_storage import r2
