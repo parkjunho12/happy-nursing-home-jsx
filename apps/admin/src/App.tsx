@@ -335,7 +335,8 @@ function App() {
             <Route path="meals"                    element={<ExtOr menu="/meals" otherwise={MealRoute}><MealPlanPage /></ExtOr>} />
             <Route path="meal-count"               element={<MealRoute><MealCountPage /></MealRoute>} />
             <Route path="operations"               element={<AdminRoute><OperationsPage /></AdminRoute>} />
-            <Route path="monthly-routines"         element={<AdminRoute><AdminRoutinePage /></AdminRoute>} />
+            {/* 월간 업무 — 전 직원. 각자 자기 것만 보고 관리한다(서버가 주인으로 거른다) */}
+            <Route path="monthly-routines"         element={<AdminRoutinePage />} />
             <Route path="broadcast"                element={<BroadcastRoute><BroadcastPage /></BroadcastRoute>} />
             <Route path="staff-hr"                 element={<StaffAdminRoute><StaffHrPage /></StaffAdminRoute>} />
             <Route path="staffing"                 element={<ManagerRoute><StaffingSimulatorPage /></ManagerRoute>} />

@@ -1,4 +1,4 @@
-"""ADMIN 전용 월간 업무 — 매달 반복되는 일(신고·납부·급여·보고)을 규칙으로 한 번만 등록한다.
+"""월간 업무 — 매달 반복되는 일(신고·납부·급여·보고)을 규칙으로 한 번만 등록한다.
 
 규칙(admin_routines) 1건이 매달 1건씩 화면에 뜨고, 완료 여부는 달마다(admin_routine_dones) 따로 남는다.
 그래서 이번 달에 뭘 아직 안 했는지가 매달 초기화된 채로 보인다.
@@ -27,6 +27,9 @@ class AdminRoutine(Base):
     __tablename__ = "admin_routines"
 
     id       = Column(String, primary_key=True, default=_uuid)
+    # 이 업무의 주인. 사람마다 자기 것만 보고 관리한다 —
+    # 남의 목록에 내 일이 섞이면 아무도 자기 일로 안 본다.
+    owner_id = Column(String, nullable=False, index=True)
     title    = Column(String(200), nullable=False)
     # 매월 며칠 — 1~31. 그 달에 없는 날(2월 31일 등)은 조회 시 말일로 당겨 표시한다.
     day      = Column(Integer, nullable=False, default=1)

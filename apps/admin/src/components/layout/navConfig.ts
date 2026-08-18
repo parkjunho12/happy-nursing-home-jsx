@@ -193,7 +193,7 @@ export function getNavConfig(
           label: '일정 · 소통',
           items: [
             { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
-            // ADMIN 블록에만 있다 — 매달 반복되는 관리자 업무 목록
+            // 매달 반복되는 내 업무 — 사람마다 자기 것만 본다
             { to: '/monthly-routines', icon: CalendarCheck, label: '월간 업무' },
             { to: '/broadcast', icon: Radio, label: '방송 관리' },
             { to: '/notices', icon: Bell, label: '내부 공지 관리' },
@@ -290,6 +290,7 @@ export function getNavConfig(
           label: '일정 · 소통',
           items: [
             { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
+            { to: '/monthly-routines', icon: CalendarCheck, label: '월간 업무' },
             { to: '/broadcast', icon: Radio, label: '방송 관리' },
             { to: '/notices', icon: Bell, label: '내부 공지 관리' },
             { to: '/facility-news', icon: Megaphone, label: '시설소식' },
@@ -353,6 +354,8 @@ export function getNavConfig(
     { to: '/contacts', icon: MessageSquare, label: '상담 관리' },
     { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
     { to: '/my-schedule', icon: CalendarDays, label: '내 근무표' },
+    // 매달 반복되는 내 업무 — 자기 것만 보인다
+    { to: '/monthly-routines', icon: CalendarCheck, label: '월간 업무' },
   ]
   if (isManager) operItems.push({ to: '/work-schedule-view', icon: CalendarClock, label: '전체 근무표 보기' })
 

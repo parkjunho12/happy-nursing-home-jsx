@@ -94,7 +94,7 @@ export default function AdminRoutinePage() {
   }
 
   const seed = async () => {
-    if (!confirm('요양원에서 매달 반복되는 대표 업무 8건을 넣어드릴까요?\n넣은 뒤 날짜·내용은 자유롭게 고칠 수 있어요.')) return
+    if (!confirm('매달 반복되는 대표 업무 8건을 내 목록에 넣어드릴까요?\n넣은 뒤 날짜·내용은 자유롭게 고칠 수 있어요.')) return
     try { await adminRoutineAPI.seedDefaults(); load(true) }
     catch (e: any) { alert(e?.message ?? '실패') }
   }
@@ -111,10 +111,13 @@ export default function AdminRoutinePage() {
             <h1 className="text-xl font-bold text-gray-900 flex items-center gap-1.5">
               월간 업무
               <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded border bg-zinc-100 text-zinc-700 border-zinc-300">
-                <ShieldCheck className="w-3 h-3" /> ADMIN 전용
+                <ShieldCheck className="w-3 h-3" /> 나만 보임
               </span>
             </h1>
-            <p className="text-xs text-gray-400">매달 반복되는 일을 한 번만 등록해두면, 달마다 이 목록으로 돌아옵니다.</p>
+            <p className="text-xs text-gray-400">
+              매달 반복되는 <b>내 일</b>을 한 번만 등록해두면, 달마다 이 목록으로 돌아옵니다.
+              다른 사람에게는 보이지 않습니다.
+            </p>
           </div>
         </div>
         <button onClick={() => setEditing(null)}
@@ -160,7 +163,7 @@ export default function AdminRoutinePage() {
       ) : items.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 py-16 px-6 text-center">
           <CalendarCheck className="w-10 h-10 text-gray-200 mx-auto mb-3" />
-          <p className="text-sm text-gray-500 mb-1">아직 등록된 월간 업무가 없습니다.</p>
+          <p className="text-sm text-gray-500 mb-1">아직 등록한 월간 업무가 없습니다.</p>
           <p className="text-xs text-gray-400 mb-5">매달 같은 날 반복되는 일을 등록해두세요.</p>
           <div className="flex items-center justify-center gap-2">
             <button onClick={() => setEditing(null)}
