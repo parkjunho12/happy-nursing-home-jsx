@@ -16,6 +16,18 @@ export interface ProgramMonthData {
   updated_by?: string | null
   updated_at?: string | null
 }
+/** 프로그램 사진 한 장 — R2 에 저장된다 */
+export interface ProgramPhoto {
+  id: string
+  month: string; day: number; title: string; grp?: string | null
+  file_url: string; thumbnail_url?: string | null
+  media_type: 'photo' | 'video'
+  file_size?: number | null
+  caption?: string | null
+  uploaded_by?: string | null
+  created_at?: string | null
+}
+
 export interface ProgramTime { time: string; category?: string | null }
 export interface ProgramGroup {
   category: string; grade: string; members: string[]
@@ -33,6 +45,21 @@ const form = (file: File) => {
 }
 
 export const programAPI = {
+  /* ── 프로그램 사진 (R2 저장) ── */
+  photos: (month: string) =>
+    apiClient.get(`${BASE}/photos`, { params: { month } }).then(unwrap<ProgramPhoto[]>),
+  uploadPhotos: (b: { month: string; day: number; title: string; grp?: string | null
+                      caption?: string | null; files: File[] }) => {
+    const f = new FormData()
+    f.append('month', b.month); f.append('day', String(b.day)); f.append('title', b.title)
+    if (b.grp) f.append('grp', b.grp)
+    if (b.caption) f.append('caption', b.caption)
+    b.files.forEach(x => f.append('files', x))
+    return apiClient.post(`${BASE}/photos`, f, { headers: { 'Content-Type': undefined as any } })
+      .then(unwrap<{ uploaded: ProgramPhoto[]; failed: string[] }>)
+  },
+  deletePhoto: (id: string) => apiClient.delete(`${BASE}/photos/${id}`).then(r => r.data),
+
   peekSchedule: (file: File) =>
     apiClient.post(`${BASE}/peek-schedule`, form(file), { headers: { 'Content-Type': undefined as any } })
       .then(unwrap<{ months: string[] }>).then(r => r.months),

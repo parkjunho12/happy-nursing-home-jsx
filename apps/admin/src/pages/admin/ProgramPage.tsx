@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { CalendarRange, Clock3, Download, Eye, EyeOff, History, Loader2, MessageCircle, Plus, Printer, Radio, Save, Trash2, Upload, Users, X } from 'lucide-react'
-import { programAPI, type ProgramMonthData, type ProgramEntry, type ProgramTime } from '@/api/programClient'
+import { programAPI, type ProgramMonthData, type ProgramEntry, type ProgramTime,
+  type ProgramPhoto } from '@/api/programClient'
 import { broadcastAPI, mediaUrl,
   type ProgramCastConfig, type ProgramCastItem } from '@/api/broadcastClient'
 import { useAuthStore } from '@/store/auth'
@@ -32,7 +33,7 @@ export default function ProgramPage() {
   const [data, setData] = useState<ProgramMonthData | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<'sch' | null>(null)
-  const [tab, setTab] = useState<'schedule' | 'groups'>('schedule')
+  const [tab, setTab] = useState<'schedule' | 'groups' | 'photos'>('schedule')
   // 프로그램 안내방송 — 오늘 프로그램을 골라 TTS 로 내보낸다
   const [castOpen, setCastOpen] = useState(false)
   // 방송 권한은 방송 관리 페이지와 같은 기준이다 — 여기서만 열어주면 눌러도 403 이 난다
@@ -392,7 +393,7 @@ export default function ProgramPage() {
 
       {/* 탭 — 일정표(게시 대상) / 그룹 분류(내부용) */}
       <div className="flex gap-1.5 mb-3">
-        {([['schedule', '월간 일정표'], ['groups', '그룹 분류 (내부용)']] as const).map(([v, label]) => (
+        {([['schedule', '월간 일정표'], ['groups', '그룹 분류 (내부용)'], ['photos', '프로그램 사진']] as const).map(([v, label]) => (
           <button key={v} onClick={() => setTab(v)}
             className={`px-4 py-2 rounded-xl text-sm font-bold border transition-all ${tab === v ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-gray-500 border-gray-200'}`}>
             {label}
@@ -935,6 +936,10 @@ export default function ProgramPage() {
       )}
 
       {/* 그룹 분류 (내부용) */}
+      {tab === 'photos' && (
+        <ProgramPhotoTab ym={ym} days={data?.days ?? {}} draft={draft} />
+      )}
+
       {tab === 'groups' && (() => {
         const act = residents.filter(r0 => r0.status === 'active')
         const CATS = [
@@ -1344,6 +1349,185 @@ function ProgramAutoCast() {
         프로그램표를 고치면 예약도 자동으로 다시 맞춰집니다.<br />
         만들어진 예약은 방송 관리 페이지에서 볼 수 있습니다.
       </p>
+    </div>
+  )
+}
+
+
+/* ── 프로그램 사진 ──────────────────────────────────────────────
+ * 그날 그 프로그램을 찍은 사진을 올려 둔다. 파일은 R2 에 저장한다 —
+ * 서버 디스크에 쌓이면 방송 음원·업로드와 같이 차올라 어느 날 저장이 멈춘다.
+ *
+ * 어느 프로그램인지는 (달·일·프로그램명) 으로 가리킨다. 일정표 항목에는
+ * 고유 번호가 없기 때문이다. 일정표에서 이름이 바뀌면 사진은 옛 이름에 남고,
+ * 화면에서 「일정표에 없는 프로그램」으로 따로 보여준다 — 지우지 않는다.
+ */
+function ProgramPhotoTab({ ym, days, draft }: {
+  ym: string
+  days: Record<string, ProgramEntry[]>
+  draft: Record<string, ProgramEntry[]>
+}) {
+  const [rows, setRows] = useState<ProgramPhoto[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [pick, setPick] = useState<{ day: number; title: string; grp?: string | null } | null>(null)
+  const [viewer, setViewer] = useState<ProgramPhoto | null>(null)
+  const [err, setErr] = useState('')
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const load = () => {
+    setLoading(true)
+    programAPI.photos(ym).then(setRows).catch(() => setRows([])).finally(() => setLoading(false))
+  }
+  useEffect(load, [ym])
+
+  // 이 달에 실제로 있는 프로그램들 (저장 전 수정본이 있으면 그것을 본다)
+  const slots = useMemo(() => {
+    const out: { day: number; title: string; grp?: string | null }[] = []
+    const all = { ...days, ...draft }
+    Object.entries(all).forEach(([d, list]) => {
+      (list ?? []).forEach(e => {
+        const t = (e.title || '').trim()
+        if (t) out.push({ day: Number(d), title: t, grp: e.group })
+      })
+    })
+    return out.sort((a, b) => a.day - b.day || a.title.localeCompare(b.title))
+  }, [days, draft])
+
+  const key = (d: number, t: string) => `${d}|${t}`
+  const byKey = useMemo(() => {
+    const m = new Map<string, ProgramPhoto[]>()
+    rows.forEach(p => {
+      const k = key(p.day, p.title)
+      ;(m.get(k) ?? m.set(k, []).get(k)!).push(p)
+    })
+    return m
+  }, [rows])
+  // 일정표에서 사라진 프로그램의 사진 — 지우지 않고 따로 보여준다
+  const orphan = useMemo(() => {
+    const live = new Set(slots.map(s => key(s.day, s.title)))
+    return rows.filter(p => !live.has(key(p.day, p.title)))
+  }, [rows, slots])
+
+  const onFiles = async (files: FileList | null) => {
+    if (!files?.length || !pick) return
+    setBusy(true); setErr('')
+    try {
+      const r = await programAPI.uploadPhotos({
+        month: ym, day: pick.day, title: pick.title, grp: pick.grp, files: Array.from(files) })
+      if (r.failed.length) setErr(`올리지 못한 파일: ${r.failed.join(', ')}`)
+      load()
+    } catch (e: any) { setErr(e?.response?.data?.detail ?? '업로드 실패') }
+    finally { setBusy(false); if (fileRef.current) fileRef.current.value = '' }
+  }
+
+  const remove = async (p: ProgramPhoto) => {
+    if (!confirm('이 사진을 지울까요?\n저장소에서도 함께 지워집니다.')) return
+    try { await programAPI.deletePhoto(p.id); setViewer(null); load() }
+    catch (e: any) { alert(e?.response?.data?.detail ?? '삭제 실패') }
+  }
+
+  const thumb = (p: ProgramPhoto) => p.thumbnail_url || p.file_url
+
+  if (loading) return <p className="text-sm text-gray-400 text-center py-16">불러오는 중…</p>
+
+  return (
+    <div className="space-y-4">
+      <input ref={fileRef} type="file" accept="image/*,video/*" multiple className="hidden"
+        onChange={e => onFiles(e.target.files)} />
+
+      <p className="text-xs text-gray-500">
+        프로그램을 고르고 사진을 올리세요. 한 번에 20장까지, 한 장 최대 25MB입니다.
+      </p>
+      {err && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{err}</p>}
+
+      {slots.length === 0 ? (
+        <p className="text-sm text-gray-400 text-center py-16">
+          이 달 일정표가 없습니다. 먼저 「월간 일정표」에서 프로그램을 등록해주세요.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {slots.map(s => {
+            const list = byKey.get(key(s.day, s.title)) ?? []
+            return (
+              <div key={`${s.day}-${s.title}`} className="bg-white rounded-2xl border border-gray-100 p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[11px] font-black text-violet-700 bg-violet-50 border border-violet-100 px-2 py-0.5 rounded-lg">
+                    {s.day}일
+                  </span>
+                  <p className="text-sm font-bold text-gray-800 truncate">{s.title}</p>
+                  {s.grp && <span className="text-[11px] font-bold text-gray-400">{s.grp}</span>}
+                  <span className={`text-[11px] font-bold ${list.length ? 'text-gray-400' : 'text-gray-300'}`}>
+                    {list.length ? `${list.length}장` : '사진 없음'}
+                  </span>
+                  <button disabled={busy}
+                    onClick={() => { setPick(s); setErr(''); fileRef.current?.click() }}
+                    className="ml-auto shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-violet-600 text-white text-[11px] font-bold disabled:opacity-50">
+                    {busy && pick?.day === s.day && pick?.title === s.title
+                      ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
+                    사진 올리기
+                  </button>
+                </div>
+                {list.length > 0 && (
+                  <div className="flex gap-1.5 overflow-x-auto pb-1">
+                    {list.map(p => (
+                      <button key={p.id} onClick={() => setViewer(p)}
+                        className="relative shrink-0 w-20 h-20 rounded-xl overflow-hidden border border-gray-100 bg-gray-50">
+                        {p.media_type === 'video'
+                          ? <video src={p.file_url} className="w-full h-full object-cover" />
+                          : <img src={thumb(p)} alt="" className="w-full h-full object-cover" loading="lazy" />}
+                        {p.media_type === 'video' && (
+                          <span className="absolute bottom-0.5 right-1 text-[9px] font-bold text-white drop-shadow">영상</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {orphan.length > 0 && (
+        <div className="bg-white rounded-2xl border border-amber-200 p-3">
+          <p className="text-xs font-bold text-amber-800 mb-1">
+            일정표에 없는 프로그램의 사진 {orphan.length}장
+          </p>
+          <p className="text-[11px] text-amber-600 mb-2">
+            일정표에서 프로그램 이름이 바뀌었거나 지워진 경우입니다. 사진은 그대로 두었습니다.
+          </p>
+          <div className="flex gap-1.5 overflow-x-auto pb-1">
+            {orphan.map(p => (
+              <button key={p.id} onClick={() => setViewer(p)}
+                className="shrink-0 w-20 h-20 rounded-xl overflow-hidden border border-gray-100 bg-gray-50">
+                <img src={thumb(p)} alt="" className="w-full h-full object-cover" loading="lazy" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {viewer && (
+        <div className="fixed inset-0 z-[70] bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setViewer(null)}>
+          <div className="max-w-3xl w-full" onClick={e => e.stopPropagation()}>
+            {viewer.media_type === 'video'
+              ? <video src={viewer.file_url} controls autoPlay className="w-full max-h-[75vh] rounded-xl" />
+              : <img src={viewer.file_url} alt="" className="w-full max-h-[75vh] object-contain rounded-xl" />}
+            <div className="flex items-center gap-2 mt-3 text-white">
+              <p className="text-sm font-bold">{viewer.day}일 · {viewer.title}</p>
+              {viewer.uploaded_by && <span className="text-xs text-white/50">{viewer.uploaded_by}</span>}
+              <a href={viewer.file_url} target="_blank" rel="noreferrer"
+                className="ml-auto text-xs font-bold text-white/70 hover:text-white">원본 열기</a>
+              <button onClick={() => remove(viewer)}
+                className="text-xs font-bold text-rose-300 hover:text-rose-200">삭제</button>
+              <button onClick={() => setViewer(null)}
+                className="text-white/60 hover:text-white"><X size={18} /></button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
