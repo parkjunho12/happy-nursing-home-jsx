@@ -47,17 +47,22 @@ export default function AdminRoutinePage() {
   const items = data?.items ?? []
   const remain = items.filter(i => !i.done)
   const overdue = remain.filter(i => i.overdue)
+  // 진행률은 늘 전체 기준이다 — 걸러 놓고 '3/3 완료' 로 보이면 안 된다
   const pct = items.length ? Math.round((items.length - remain.length) / items.length * 100) : 0
+
+  // 무엇만 볼지 — 스무 개가 넘으면 '아직 뭘 안 했지' 를 눈으로 훑게 된다
+  const [view, setView] = useState<'all' | 'left' | 'overdue'>('all')
+  const shown = view === 'left' ? remain : view === 'overdue' ? overdue : items
 
   // 날짜별 묶음 — "쭉 나오는 리스트"의 기본 정렬은 날짜순
   const groups = useMemo(() => {
     const map = new Map<string, RoutineItem[]>()
-    for (const i of items) {
+    for (const i of shown) {
       if (!map.has(i.date)) map.set(i.date, [])
       map.get(i.date)!.push(i)
     }
     return [...map.entries()]
-  }, [items])
+  }, [shown])
 
   /** 체크 하나를 바꿀 때는 그 줄만 고친다.
    *  다시 불러오면 목록이 사라졌다 그려지면서 보던 자리가 맨 위로 올라간다.
@@ -146,6 +151,29 @@ export default function AdminRoutinePage() {
         <div className="mt-3 h-2 rounded-full bg-gray-100 overflow-hidden">
           <div className="h-full bg-primary-orange transition-all" style={{ width: `${pct}%` }} />
         </div>
+
+        {items.length > 0 && (
+          <div className="flex items-center gap-1.5 mt-3">
+            {([['all', '전체', items.length],
+               ['left', '안 한 것', remain.length],
+               ['overdue', '기한 지남', overdue.length]] as const).map(([k, label, n]) => (
+              <button key={k} onClick={() => setView(k)}
+                disabled={n === 0 && k !== 'all'}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors disabled:opacity-40 ${
+                  view === k
+                    ? k === 'overdue' ? 'bg-rose-600 border-rose-600 text-white'
+                      : k === 'left' ? 'bg-amber-500 border-amber-500 text-white'
+                      : 'bg-gray-800 border-gray-800 text-white'
+                    : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                {label}
+                <span className={`ml-1 font-black ${
+                  view === k ? 'text-white/70'
+                    : k === 'overdue' ? 'text-rose-600'
+                    : k === 'left' ? 'text-amber-600' : 'text-gray-400'}`}>{n}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 목록 */}
@@ -158,6 +186,15 @@ export default function AdminRoutinePage() {
           <p className="text-xs text-gray-400 mb-5">매달 같은 날 반복되는 일을 등록해두세요.</p>
           <button onClick={() => setEditing(null)}
             className="px-4 py-2 rounded-xl bg-primary-orange text-white text-sm font-bold">업무 추가</button>
+        </div>
+      ) : groups.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-gray-100 py-14 px-6 text-center">
+          <CalendarCheck className="w-9 h-9 text-emerald-200 mx-auto mb-3" />
+          <p className="text-sm text-gray-500">
+            {view === 'overdue' ? '기한 지난 업무가 없습니다' : '이번 달 업무를 모두 마쳤습니다'}
+          </p>
+          <button onClick={() => setView('all')}
+            className="mt-3 text-xs font-bold text-primary-orange hover:underline">전체 보기</button>
         </div>
       ) : (
         <div className="space-y-3">
