@@ -32,8 +32,9 @@ CATEGORIES = ["방문상담", "외부방문", "회의", "행사", "외래·병�
 ADMIN_ONLY_CATEGORIES = ("관리자",)
 
 
-# 모든 일정 수정·삭제 가능(관리자급)
-EVENT_ADMIN_POSITIONS = ("대표", "이사")
+# 모든 일정 수정·삭제 가능(관리자급).
+# 시설장은 직원이지만 시설 운영을 총괄하므로 남이 넣은 일정도 정리할 수 있어야 한다.
+EVENT_ADMIN_POSITIONS = ("시설장", "대표", "이사")
 
 
 def _is_admin(user: User) -> bool:
