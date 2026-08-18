@@ -24,19 +24,6 @@ _KST = timezone(timedelta(hours=9))
 
 CATEGORIES = ["신고·납부", "급여", "보고", "점검", "기타"]
 
-# 처음 열었을 때 빈 화면이 아니도록 — 장기요양기관에서 매달 돌아오는 대표 업무들.
-# 날짜·내용은 시설마다 다르니 등록 후 수정해서 쓰라는 전제의 출발점이다.
-DEFAULT_ROUTINES = [
-    {"day": 5,  "category": "보고",     "title": "전월 근무표·근무기록 마감 확인",   "memo": ""},
-    {"day": 10, "category": "신고·납부", "title": "원천세 신고·납부",                "memo": "홈택스 — 전월 급여분"},
-    {"day": 10, "category": "신고·납부", "title": "4대보험 보험료 납부",             "memo": "4대사회보험 정보연계센터"},
-    {"day": 15, "category": "신고·납부", "title": "입·퇴사자 4대보험 취득·상실 신고", "memo": "변동 있을 때만"},
-    {"day": 20, "category": "보고",     "title": "장기요양급여비용 청구",            "memo": "공단 요양기관정보마당"},
-    {"day": 25, "category": "급여",     "title": "급여 계산·이체",                   "memo": ""},
-    {"day": 25, "category": "급여",     "title": "급여명세서 교부",                  "memo": "법정 의무 — 교부 기록 남기기"},
-    {"day": 31, "category": "점검",     "title": "월말 지출결의·통장 대사",          "memo": "말일 기준"},
-]
-
 
 def _require_admin(current_user: User = Depends(get_current_user)) -> User:
     """로그인한 직원이면 누구나 쓴다 — 대신 자기 업무만 보고 고친다.
@@ -242,19 +229,3 @@ def toggle_done(rid: str, body: DoneBody, db: Session = Depends(get_db),
     return ApiResponse(success=True, data={
         "done": True, "done_date": rec.done_date, "done_by": rec.done_by,
     })
-
-
-@router.post("/seed-defaults")
-def seed_defaults(db: Session = Depends(get_db), current_user: User = Depends(_require_admin)):
-    """기본 항목 채우기 — 내 목록이 비어 있을 때만.
-
-    남의 목록은 보지 않는다. 사람마다 자기 목록을 따로 채운다.
-    """
-    if db.query(AdminRoutine).filter(AdminRoutine.owner_id == current_user.id).count() > 0:
-        raise HTTPException(status_code=400, detail="이미 등록된 업무가 있습니다.")
-    for i, d in enumerate(DEFAULT_ROUTINES):
-        db.add(AdminRoutine(owner_id=current_user.id,
-                            title=d["title"], day=d["day"], category=d["category"],
-                            memo=d["memo"] or None, sort=i))
-    db.commit()
-    return ApiResponse(success=True, message=f"{len(DEFAULT_ROUTINES)}건을 추가했습니다.")
