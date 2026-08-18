@@ -56,10 +56,16 @@ def _get_client():
     )
 
 
-def _r2_key(album_id: str, file_id: str, ext: str, is_thumb: bool = False) -> str:
-    """R2 오브젝트 키 생성: albums/{album_id}/{file_id}.ext"""
-    prefix = "thumbnails" if is_thumb else "albums"
-    return f"{prefix}/{album_id}/{file_id}{ext}"
+def _r2_key(album_id: str, file_id: str, ext: str, is_thumb: bool = False,
+            prefix: str = "albums") -> str:
+    """R2 오브젝트 키 생성: {prefix}/{album_id}/{file_id}.ext
+
+    prefix 로 쓰임새를 나눈다 — 보호자 앨범(albums)과 프로그램 사진(programs)이
+    같은 폴더에 섞이면 나중에 정리·정산이 어렵다.
+    """
+    # 앨범 썸네일 경로는 예전 그대로 둔다 — 이미 올라간 파일들과 어긋나면 안 된다
+    head = ("thumbnails" if prefix == "albums" else f"thumbnails/{prefix}") if is_thumb else prefix
+    return f"{head}/{album_id}/{file_id}{ext}"
 
 
 def _make_cdn_url(key: str) -> str:
@@ -104,6 +110,7 @@ class R2Storage:
         self,
         file: UploadFile,
         album_id: str,
+        prefix: str = "albums",
     ) -> Tuple[str, str, str, int]:
         """
         파일을 R2에 업로드
@@ -124,7 +131,7 @@ class R2Storage:
         client = _get_client()
 
         # 원본 업로드
-        key = _r2_key(album_id, file_id, ext)
+        key = _r2_key(album_id, file_id, ext, prefix=prefix)
         client.put_object(
             Bucket=_bucket(),
             Key=key,
@@ -138,7 +145,7 @@ class R2Storage:
         thumb_url = ""
         thumb_data = _make_thumbnail(data, ext)
         if thumb_data:
-            thumb_key = _r2_key(album_id, file_id, ".webp", is_thumb=True)
+            thumb_key = _r2_key(album_id, file_id, ".webp", is_thumb=True, prefix=prefix)
             client.put_object(
                 Bucket=_bucket(),
                 Key=thumb_key,

@@ -4,6 +4,7 @@
 권한: ADMIN · 시설장 · 사회복지사
 """
 from __future__ import annotations
+import logging
 import re
 from typing import Optional
 from fastapi import (APIRouter, BackgroundTasks, Depends, File, Form,
@@ -14,9 +15,11 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
-from app.models.program import ProgramMonth, ProgramGroupSet, ProgramChangeLog, ProgramSetting, ProgramGroupLog
+from app.models.program import (ProgramMonth, ProgramGroupSet, ProgramChangeLog,
+                                ProgramSetting, ProgramGroupLog, ProgramPhoto)
 from app.schemas.response import ApiResponse
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 family_router = APIRouter()
 
@@ -394,3 +397,116 @@ def latest_groups(db: Session = Depends(get_db), _: User = Depends(_editor)):
     return ApiResponse(success=True, data=None if not row else {
         "based_on": row.based_on, **(row.data or {}), "updated_by": row.updated_by,
     })
+
+
+# ══════════════════════════════════════════════════════════════
+# 프로그램 사진 — 그날 그 프로그램을 찍은 사진·영상
+#
+# 파일은 R2 에 둔다. 서버 디스크(50GB)에 사진이 쌓이면 방송 음원·업로드와
+# 같이 차올라 어느 날 갑자기 저장이 실패한다.
+# ══════════════════════════════════════════════════════════════
+MAX_PHOTO_MB = 25
+MAX_PER_UPLOAD = 20
+
+
+def _photo_view(p: ProgramPhoto) -> dict:
+    return {
+        "id": p.id, "month": p.month, "day": p.day, "title": p.title, "grp": p.grp,
+        "file_url": p.file_url, "thumbnail_url": p.thumbnail_url,
+        "media_type": p.media_type, "file_size": p.file_size, "caption": p.caption,
+        "uploaded_by": p.uploaded_by,
+        "created_at": p.created_at.isoformat() if p.created_at else None,
+    }
+
+
+@router.get("/photos")
+def list_photos(month: str = Query(...), db: Session = Depends(get_db),
+                _: User = Depends(_editor)):
+    """그 달 사진 전부 — 화면에서 날짜·프로그램별로 묶는다."""
+    if not _YM.match(month):
+        raise HTTPException(400, "month는 YYYY-MM 형식이어야 합니다.")
+    rows = (db.query(ProgramPhoto)
+              .filter(ProgramPhoto.month == month)
+              .order_by(ProgramPhoto.day, ProgramPhoto.created_at).all())
+    return ApiResponse(success=True, data=[_photo_view(p) for p in rows])
+
+
+@router.post("/photos")
+async def upload_photos(
+    month: str = Form(...),
+    day: int = Form(...),
+    title: str = Form(...),
+    grp: Optional[str] = Form(None),
+    caption: Optional[str] = Form(None),
+    files: list[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_editor),
+):
+    from app.services.r2_storage import r2
+    if not _YM.match(month):
+        raise HTTPException(400, "month는 YYYY-MM 형식이어야 합니다.")
+    if not (1 <= int(day) <= 31):
+        raise HTTPException(400, "일자가 올바르지 않습니다.")
+    if not (title or "").strip():
+        raise HTTPException(400, "어느 프로그램인지 골라주세요.")
+    if not r2.is_configured():
+        raise HTTPException(503, "사진 저장소(R2)가 설정되지 않았습니다. 관리자에게 알려주세요.")
+    files = [f for f in (files or []) if f and f.filename]
+    if not files:
+        raise HTTPException(400, "올릴 파일이 없습니다.")
+    if len(files) > MAX_PER_UPLOAD:
+        raise HTTPException(400, f"한 번에 {MAX_PER_UPLOAD}장까지 올릴 수 있습니다.")
+
+    out, failed = [], []
+    for f in files:
+        try:
+            # 용량은 올리기 전에 본다 — R2 에 올려놓고 되돌리는 것보다 낫다
+            head = await f.read(MAX_PHOTO_MB * 1024 * 1024 + 1)
+            if len(head) > MAX_PHOTO_MB * 1024 * 1024:
+                failed.append(f"{f.filename} (용량 초과 · 최대 {MAX_PHOTO_MB}MB)")
+                continue
+            await f.seek(0)
+            url, thumb, kind, size = r2.upload_file(f, month, prefix="programs")
+        except HTTPException as e:
+            failed.append(f"{f.filename} ({e.detail})")
+            continue
+        except Exception as e:                    # 한 장이 실패해도 나머지는 올린다
+            logger.warning("프로그램 사진 업로드 실패 %s: %s", f.filename, e)
+            failed.append(f"{f.filename} (업로드 실패)")
+            continue
+        row = ProgramPhoto(
+            month=month, day=int(day), title=title.strip()[:200],
+            grp=(grp or "").strip()[:50] or None,
+            file_url=url, thumbnail_url=thumb or None, media_type=kind, file_size=size,
+            caption=(caption or "").strip()[:300] or None,
+            uploaded_by=getattr(current_user, "name", None))
+        db.add(row)
+        out.append(row)
+    db.commit()
+    for r in out:
+        db.refresh(r)
+    _log(db, month, "수정", current_user, day=str(int(day)),
+         summary=f"{int(day)}일 「{title.strip()}」 사진 {len(out)}장 등록")
+    db.commit()
+    return ApiResponse(success=True,
+                       data={"uploaded": [_photo_view(p) for p in out], "failed": failed},
+                       message=f"{len(out)}장을 올렸습니다." +
+                               (f" ({len(failed)}장 실패)" if failed else ""))
+
+
+@router.delete("/photos/{pid}")
+def delete_photo(pid: str, db: Session = Depends(get_db), current_user: User = Depends(_editor)):
+    from app.services.r2_storage import r2
+    p = db.query(ProgramPhoto).filter(ProgramPhoto.id == pid).first()
+    if not p:
+        raise HTTPException(404, "사진을 찾을 수 없습니다.")
+    try:
+        r2.delete_file(p.file_url, p.thumbnail_url)
+    except Exception as e:                        # 저장소에서 못 지워도 목록에서는 내린다
+        logger.warning("R2 삭제 실패(기록은 삭제): %s", e)
+    month, day, title = p.month, p.day, p.title
+    db.delete(p)
+    _log(db, month, "수정", current_user, day=str(day),
+         summary=f"{day}일 「{title}」 사진 1장 삭제")
+    db.commit()
+    return ApiResponse(success=True, data={"deleted": pid})

@@ -5,7 +5,7 @@
 """
 import uuid
 from datetime import datetime, timezone, timedelta
-from sqlalchemy import Column, String, Boolean, DateTime, JSON, Text
+from sqlalchemy import Column, String, Boolean, DateTime, Integer, JSON, Text
 from app.core.database import Base
 
 KST = timezone(timedelta(hours=9))
@@ -84,3 +84,30 @@ class ProgramChangeLog(Base):
     summary    = Column(String(300), nullable=True)
     changed_by = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_kst, index=True)
+
+
+class ProgramPhoto(Base):
+    """프로그램 사진 — 그날 그 프로그램을 찍은 사진·영상 한 장.
+
+    프로그램 항목에는 고유 id 가 없다(일정표 JSON 안의 한 줄이다).
+    그래서 (달·일·프로그램명) 으로 어느 프로그램인지 가리킨다.
+    일정표에서 프로그램 이름이 바뀌면 사진은 옛 이름에 남는다 —
+    지워지는 것보다 낫고, 화면에서 '연결이 끊긴 사진'으로 보여준다.
+    """
+
+    __tablename__ = "program_photos"
+
+    id         = Column(String, primary_key=True, default=_uuid)
+    month      = Column(String(7), index=True, nullable=False)    # 'YYYY-MM'
+    day        = Column(Integer, nullable=False)                  # 1~31
+    title      = Column(String(200), nullable=False)              # 프로그램명
+    grp        = Column(String(50), nullable=True)                # 그룹 (인지A 등)
+
+    file_url      = Column(String(500), nullable=False)
+    thumbnail_url = Column(String(500), nullable=True)
+    media_type    = Column(String(10), nullable=False, default="photo")   # photo | video
+    file_size     = Column(Integer, nullable=True)
+    caption       = Column(String(300), nullable=True)
+
+    uploaded_by = Column(String(100), nullable=True)
+    created_at  = Column(DateTime(timezone=True), default=now_kst, index=True)
