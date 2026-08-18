@@ -39,10 +39,22 @@ DEFAULT_ROUTINES = [
 
 
 def _require_admin(current_user: User = Depends(get_current_user)) -> User:
-    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
-    if role != "ADMIN":
-        raise HTTPException(status_code=403, detail="권한이 없습니다.")
+    """로그인한 직원이면 누구나 쓴다 — 대신 자기 업무만 보고 고친다.
+
+    예전에는 ADMIN 전용이었다. 매달 반복되는 일은 관리자만의 것이 아니라
+    간호팀·복지팀도 각자 있어서, 화면을 열되 남의 것은 보이지 않게 한다.
+    """
     return current_user
+
+
+def _mine(db: Session, rid: str, user: User) -> AdminRoutine:
+    """내 업무만 꺼낸다. 남의 것을 건드리면 '없는 업무' 로 답한다 —
+    남이 무엇을 등록해 뒀는지 알려줄 이유가 없다."""
+    r = (db.query(AdminRoutine)
+           .filter(AdminRoutine.id == rid, AdminRoutine.owner_id == user.id).first())
+    if not r:
+        raise HTTPException(status_code=404, detail="업무를 찾을 수 없습니다.")
+    return r
 
 
 def _this_month() -> str:
@@ -79,15 +91,18 @@ def list_routines(
     """그 달에 해야 할 업무 목록 — 날짜순. 완료 여부는 그 달 기록만 본다."""
     year, mon, period = _parse_month(month)
 
-    q = db.query(AdminRoutine)
+    q = db.query(AdminRoutine).filter(AdminRoutine.owner_id == current_user.id)
     if not include_inactive:
         q = q.filter(AdminRoutine.active == True)  # noqa: E712
     rows = q.all()
 
+    ids = [r.id for r in rows]
     dones = {
         d.routine_id: d
-        for d in db.query(AdminRoutineDone).filter(AdminRoutineDone.period_key == period).all()
-    }
+        for d in db.query(AdminRoutineDone)
+                   .filter(AdminRoutineDone.period_key == period,
+                           AdminRoutineDone.routine_id.in_(ids)).all()
+    } if ids else {}
 
     today = datetime.now(_KST).strftime("%Y-%m-%d")
     items = []
@@ -136,6 +151,7 @@ def create_routine(body: RoutineBody, db: Session = Depends(get_db),
     if not body.title.strip():
         raise HTTPException(status_code=400, detail="업무명을 입력해주세요.")
     r = AdminRoutine(
+        owner_id=current_user.id,
         title=body.title.strip(),
         day=min(max(body.day, 1), 31),
         category=body.category if body.category in CATEGORIES else "기타",
@@ -159,9 +175,7 @@ class RoutineUpdate(BaseModel):
 @router.patch("/{rid}")
 def update_routine(rid: str, body: RoutineUpdate, db: Session = Depends(get_db),
                    current_user: User = Depends(_require_admin)):
-    r = db.query(AdminRoutine).filter(AdminRoutine.id == rid).first()
-    if not r:
-        raise HTTPException(status_code=404, detail="업무를 찾을 수 없습니다.")
+    r = _mine(db, rid, current_user)
     if body.title is not None and body.title.strip():
         r.title = body.title.strip()
     if body.day is not None:
@@ -182,9 +196,7 @@ def update_routine(rid: str, body: RoutineUpdate, db: Session = Depends(get_db),
 @router.delete("/{rid}")
 def delete_routine(rid: str, db: Session = Depends(get_db),
                    current_user: User = Depends(_require_admin)):
-    r = db.query(AdminRoutine).filter(AdminRoutine.id == rid).first()
-    if not r:
-        raise HTTPException(status_code=404, detail="업무를 찾을 수 없습니다.")
+    r = _mine(db, rid, current_user)
     # 규칙이 사라지면 지난 달 완료 기록도 볼 일이 없다 — 같이 정리한다
     db.query(AdminRoutineDone).filter(AdminRoutineDone.routine_id == rid).delete()
     db.delete(r); db.commit()
@@ -202,9 +214,7 @@ class DoneBody(BaseModel):
 def toggle_done(rid: str, body: DoneBody, db: Session = Depends(get_db),
                 current_user: User = Depends(_require_admin)):
     """그 달의 완료 체크 — 다음 달에는 다시 미완료로 뜬다."""
-    r = db.query(AdminRoutine).filter(AdminRoutine.id == rid).first()
-    if not r:
-        raise HTTPException(status_code=404, detail="업무를 찾을 수 없습니다.")
+    r = _mine(db, rid, current_user)
     _, _, period = _parse_month(body.month)
 
     rec = (db.query(AdminRoutineDone)
@@ -236,11 +246,15 @@ def toggle_done(rid: str, body: DoneBody, db: Session = Depends(get_db),
 
 @router.post("/seed-defaults")
 def seed_defaults(db: Session = Depends(get_db), current_user: User = Depends(_require_admin)):
-    """기본 항목 채우기 — 이미 등록된 업무가 있으면 아무것도 하지 않는다."""
-    if db.query(AdminRoutine).count() > 0:
+    """기본 항목 채우기 — 내 목록이 비어 있을 때만.
+
+    남의 목록은 보지 않는다. 사람마다 자기 목록을 따로 채운다.
+    """
+    if db.query(AdminRoutine).filter(AdminRoutine.owner_id == current_user.id).count() > 0:
         raise HTTPException(status_code=400, detail="이미 등록된 업무가 있습니다.")
     for i, d in enumerate(DEFAULT_ROUTINES):
-        db.add(AdminRoutine(title=d["title"], day=d["day"], category=d["category"],
+        db.add(AdminRoutine(owner_id=current_user.id,
+                            title=d["title"], day=d["day"], category=d["category"],
                             memo=d["memo"] or None, sort=i))
     db.commit()
     return ApiResponse(success=True, message=f"{len(DEFAULT_ROUTINES)}건을 추가했습니다.")
