@@ -45,11 +45,12 @@ const TAG_RE = new RegExp(`^\\[(${CL_GROUPS.map(g => g.tag).join('|')})\\]\\s*`)
 /** 담당 팀 — 배정된 직종으로 가른다 (인쇄 쪽 teamOf 와 같은 규칙) */
 const TEAMS = [
   { key: '간호', label: '간호팀',   dot: 'bg-rose-500',  on: 'bg-rose-600 border-rose-600' },
-  { key: '물리', label: '물리치료', dot: 'bg-blue-500',  on: 'bg-blue-600 border-blue-600' },
+  { key: '물리', label: '물리·작업치료', dot: 'bg-blue-500', on: 'bg-blue-600 border-blue-600' },
   { key: '복지', label: '복지팀',   dot: 'bg-teal-500',  on: 'bg-teal-600 border-teal-600' },
 ] as const
+const REHAB = ['물리치료사', '작업치료사']     // 하는 일이 같아 한 팀으로 본다
 const teamKeyOf = (c: any) =>
-  c.assignee === '간호팀' ? '간호' : c.assignee === '물리치료사' ? '물리' : '복지'
+  c.assignee === '간호팀' ? '간호' : REHAB.includes(c.assignee) ? '물리' : '복지'
 
 /** '[오경애] [전산] 상담 4회차' → { tag: '전산', text: '상담 4회차' } */
 function splitClTitle(title: string): { tag: string | null; text: string } {
@@ -173,7 +174,7 @@ export default function ResidentDetailPage() {
             ))}
             <span className="w-px h-3 bg-gray-200" />
             <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500" /> 간호팀</span>
-            <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500" /> 물리치료사</span>
+            <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500" /> 물리·작업치료</span>
             <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-teal-500" /> 복지팀</span>
           </p>
         )}
@@ -315,7 +316,7 @@ export default function ResidentDetailPage() {
                     const late = !ok && !!c.dueDate && c.dueDate < today
                     const dday = c.dueDate ? Math.round((new Date(c.dueDate).getTime() - new Date(today).getTime()) / 86400000) : null
                     const { text } = splitClTitle(c.title)
-                    const team = c.assignee === '간호팀' ? '간호' : c.assignee === '물리치료사' ? '물리'
+                    const team = c.assignee === '간호팀' ? '간호' : REHAB.includes(c.assignee ?? '') ? '물리'
                       : (c.assignee === '복지팀' || c.assignee === '담당 사회복지사') ? '복지' : null
                     const rowCls = ok ? 'bg-green-50/60 border-green-100'
                       : late ? 'bg-red-50 border-red-100'
@@ -505,7 +506,7 @@ export default function ResidentDetailPage() {
                   fontSize: 7.5, fontWeight: 800, color: TEAMC[x.t].c, background: TEAMC[x.t].bg,
                   border: `0.8px solid ${TEAMC[x.t].c}33`, borderRadius: 999, padding: '2px 8px',
                 }}>
-                  {x.t === '간호' ? '간호팀' : x.t === '물리' ? '물리치료사' : '복지팀'} {x.d}/{x.n}
+                  {x.t === '간호' ? '간호팀' : x.t === '물리' ? '물리·작업치료' : '복지팀'} {x.d}/{x.n}
                 </span>
               ))}
               <span style={{ marginLeft: 'auto', fontSize: 7, color: '#94a3b8', alignSelf: 'center' }}>

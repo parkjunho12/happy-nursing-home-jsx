@@ -57,6 +57,7 @@ const StaffPage = () => {
       '요양보호사': 'bg-green-100 text-green-700',
       '영양사': 'bg-purple-100 text-purple-700',
       '물리치료사': 'bg-orange-100 text-orange-700',
+      '작업치료사': 'bg-orange-100 text-orange-700',
     }
     
     return (

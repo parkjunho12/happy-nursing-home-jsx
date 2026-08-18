@@ -20,9 +20,9 @@ export interface StaffRow {
 
 
 /** 근무표 직종 정렬 순서 — 시설 요청 순.
- *  시설장 → 사회복지사 → 간호(조무사·팀장·간호사) → 물리치료사 → 기타 →
+ *  시설장 → 사회복지사 → 간호(조무사·팀장·간호사) → 물리·작업치료사 → 기타 →
  *  요양보호사(교대조 먼저, 주간 아래). 묶음 안은 입사 빠른 순. */
-export const SCHEDULE_POS_ORDER = ['시설장', '사회복지사', '간호조무사', '간호팀장', '간호사', '물리치료사', '팀장', '요양팀장', '조리원', '위생원', '사무원', '요양보호사']
+export const SCHEDULE_POS_ORDER = ['시설장', '사회복지사', '간호조무사', '간호팀장', '간호사', '물리치료사', '작업치료사', '팀장', '요양팀장', '조리원', '위생원', '사무원', '요양보호사']
 
 export interface SortableStaff { pos: string; team?: string | null; hireDate?: string | null; name: string }
 
