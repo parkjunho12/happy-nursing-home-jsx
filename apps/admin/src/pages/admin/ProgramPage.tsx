@@ -393,7 +393,7 @@ export default function ProgramPage() {
 
       {/* 탭 — 일정표(게시 대상) / 그룹 분류(내부용) */}
       <div className="flex gap-1.5 mb-3">
-        {([['schedule', '월간 일정표'], ['groups', '그룹 분류 (내부용)'], ['photos', '프로그램 사진']] as const).map(([v, label]) => (
+        {([['schedule', '월간 일정표'], ['groups', '그룹 분류 (내부용)'], ['photos', '프로그램 사진 (내부용)']] as const).map(([v, label]) => (
           <button key={v} onClick={() => setTab(v)}
             className={`px-4 py-2 rounded-xl text-sm font-bold border transition-all ${tab === v ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-gray-500 border-gray-200'}`}>
             {label}
@@ -1436,6 +1436,13 @@ function ProgramPhotoTab({ ym, days, draft }: {
       <input ref={fileRef} type="file" accept="image/*,video/*" multiple className="hidden"
         onChange={e => onFiles(e.target.files)} />
 
+      <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5">
+        <p className="text-xs font-bold text-gray-700">내부용 — 보호자앱에는 보이지 않습니다</p>
+        <p className="text-[11px] text-gray-500 mt-0.5">
+          일정표를 「게시」해도 이 사진들은 함께 나가지 않습니다.
+          보호자에게 보여드릴 사진은 <b>보호자 앨범</b>에 올려주세요.
+        </p>
+      </div>
       <p className="text-xs text-gray-500">
         프로그램을 고르고 사진을 올리세요. 한 번에 20장까지, 한 장 최대 25MB입니다.
       </p>
