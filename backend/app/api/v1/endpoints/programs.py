@@ -6,6 +6,7 @@
 from __future__ import annotations
 import io
 import logging
+import os
 import re
 from datetime import datetime, timezone as _tz_p, timedelta as _td_p
 from typing import Optional
@@ -586,6 +587,66 @@ def update_photo(pid: str, body: PhotoPatch, db: Session = Depends(get_db),
         p.caption = body.caption.strip()[:300] or None
     db.commit(); db.refresh(p)
     return ApiResponse(success=True, data=_photo_view(p))
+
+
+@router.get("/photos/download")
+def download_photos(month: str = Query(...), day: Optional[int] = Query(None),
+                    db: Session = Depends(get_db), _: User = Depends(_editor)):
+    """그날 사진을 하나로 묶어 내려준다.
+
+    한 장씩 눌러 받으면 스무 번이다. 서버가 R2 에서 읽어 zip 으로 묶는다 —
+    브라우저에서 직접 받으면 다른 도메인이라 막힌다.
+
+    파일 이름은 '14일_1032_색칠공부_1.jpg' 로 — 폴더에 풀었을 때 시간순으로
+    정렬되고 어느 프로그램인지 보인다.
+    """
+    import re as _re
+    import zipfile
+    from tempfile import SpooledTemporaryFile
+    from fastapi.responses import StreamingResponse
+    from app.services.r2_storage import r2
+
+    if not _YM.match(month):
+        raise HTTPException(400, "month는 YYYY-MM 형식이어야 합니다.")
+    q = db.query(ProgramPhoto).filter(ProgramPhoto.month == month)
+    if day is not None:
+        q = q.filter(ProgramPhoto.day == int(day))
+    rows = q.order_by(ProgramPhoto.day, ProgramPhoto.taken_at,
+                      ProgramPhoto.created_at).all()
+    if not rows:
+        raise HTTPException(404, "받을 사진이 없습니다.")
+
+    def safe(v: str) -> str:
+        return _re.sub(r"[^0-9A-Za-z가-힣_\-]+", "", (v or "")).strip()[:40]
+
+    # 20장 × 25MB 를 통째로 메모리에 들면 서버가 휘청인다.
+    # 일정 크기를 넘으면 디스크로 흘리는 임시 파일에 담는다.
+    tmp = SpooledTemporaryFile(max_size=32 * 1024 * 1024)
+    missing = 0
+    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED) as z:   # 사진은 이미 압축돼 있다
+        for i, p in enumerate(rows, 1):
+            data = r2.read_bytes(p.file_url)
+            if data is None:
+                missing += 1
+                continue
+            ext = os.path.splitext((p.file_url or "").split("?")[0])[1] or ".jpg"
+            hm = p.taken_at.strftime("%H%M") if p.taken_at else "----"
+            name = f"{p.day}일_{hm}_{safe(p.title) or '미지정'}_{i}{ext}"
+            z.writestr(name, data)
+    if missing == len(rows):
+        raise HTTPException(502, "사진을 가져오지 못했습니다. 저장소를 확인해주세요.")
+    tmp.seek(0)
+
+    label = f"{month}" + (f"-{int(day):02d}" if day is not None else "")
+    fname = f"{label}_프로그램사진.zip"
+    from urllib.parse import quote
+    return StreamingResponse(
+        tmp, media_type="application/zip",
+        headers={
+            # 한글 파일명은 filename* 로 보내야 브라우저가 제대로 받는다
+            "Content-Disposition": f"attachment; filename=photos.zip; filename*=UTF-8''{quote(fname)}",
+            "X-Photo-Count": str(len(rows) - missing),
+        })
 
 
 class PhotoIds(BaseModel):

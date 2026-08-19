@@ -67,6 +67,22 @@ export const programAPI = {
   updatePhoto: (id: string, b: { day?: number; title?: string; grp?: string; caption?: string }) =>
     apiClient.patch(`${BASE}/photos/${id}`, b).then(unwrap<ProgramPhoto>),
   deletePhoto: (id: string) => apiClient.delete(`${BASE}/photos/${id}`).then(r => r.data),
+  /** 그날(또는 그 달) 사진을 zip 하나로.
+   *  로그인 상태로 받아야 하므로 주소를 새 창으로 여는 대신 파일을 받아 저장한다. */
+  downloadPhotos: async (month: string, day?: number) => {
+    const r = await apiClient.get(`${BASE}/photos/download`, {
+      params: { month, ...(day ? { day } : {}) }, responseType: 'blob',
+    })
+    const cd = String(r.headers['content-disposition'] ?? '')
+    const m = /filename\*=UTF-8''([^;]+)/.exec(cd)
+    const name = m ? decodeURIComponent(m[1]) : `${month}_프로그램사진.zip`
+    const url = URL.createObjectURL(r.data as Blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = name; a.click()
+    URL.revokeObjectURL(url)
+    return Number(r.headers['x-photo-count'] ?? 0)
+  },
+
   /** 여러 장 한 번에 — 한 장씩 지우면 스무 장에 스무 번을 눌러야 한다 */
   deletePhotos: (ids: string[]) =>
     apiClient.post(`${BASE}/photos/delete`, { ids }).then(unwrap<{ deleted: number }>),

@@ -1375,6 +1375,7 @@ function ProgramPhotoTab({ ym, onMove, days, draft }: {
   // 고른 사진들 — 스무 장을 한 장씩 지우게 하지 않는다
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
+  const [zipping, setZipping] = useState<number | 'all' | null>(null)
   const [viewer, setViewer] = useState<ProgramPhoto | null>(null)
   const [err, setErr] = useState('')
   const [msg, setMsg] = useState('')
@@ -1440,6 +1441,16 @@ function ProgramPhotoTab({ ym, onMove, days, draft }: {
     finally { setDeleting(false) }
   }
 
+  /** 묶어서 내려받기 — 사진이 많으면 몇 초 걸린다. 무엇을 받는 중인지 표시한다. */
+  const download = async (day?: number) => {
+    setZipping(day ?? 'all'); setErr(''); setMsg('')
+    try {
+      const n = await programAPI.downloadPhotos(ym, day)
+      setMsg(`${n}장을 내려받았습니다.`)
+    } catch (e: any) { setErr('내려받기에 실패했습니다. 잠시 후 다시 시도해주세요.') }
+    finally { setZipping(null) }
+  }
+
   const thumb = (p: ProgramPhoto) => p.thumbnail_url || p.file_url
   const hm = (iso?: string | null) =>
     iso ? new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : ''
@@ -1466,8 +1477,16 @@ function ProgramPhotoTab({ ym, onMove, days, draft }: {
           <button onClick={() => onMove(1)} className="px-2.5 py-2 hover:bg-gray-50 text-gray-500">›</button>
         </div>
         <span className="text-[11px] text-gray-400">{y}년 · 사진 {rows.length}장</span>
+        {rows.length > 0 && (
+          <button onClick={() => download()} disabled={zipping !== null}
+            title={`${m}월 사진 ${rows.length}장 전부 받기`}
+            className="ml-auto inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+            {zipping === 'all' ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+            이 달 전부 받기
+          </button>
+        )}
         <button disabled={busy} onClick={() => { setErr(''); setMsg(''); fileRef.current?.click() }}
-          className="ml-auto inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 text-white text-sm font-bold disabled:opacity-50">
+          className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 text-white text-sm font-bold disabled:opacity-50 ${rows.length ? '' : 'ml-auto'}`}>
           {busy ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
           사진 올리기
         </button>
@@ -1493,11 +1512,18 @@ function ProgramPhotoTab({ ym, onMove, days, draft }: {
             const untagged = list.filter(p => !p.title).length
             return (
               <div key={d} className="group relative bg-white rounded-2xl border border-gray-100 hover:border-violet-300 transition-colors overflow-hidden">
-              <button onClick={() => removeMany(list.map(p => p.id))} disabled={deleting}
-                title={`${m}월 ${d}일 사진 ${list.length}장 전부 지우기`}
-                className="absolute top-1.5 right-1.5 z-10 p-1.5 rounded-lg bg-white/85 text-gray-400 opacity-0 group-hover:opacity-100 hover:text-rose-600 transition-opacity disabled:opacity-40">
-                <Trash2 size={13} />
-              </button>
+              <div className="absolute top-1.5 right-1.5 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onClick={() => download(d)} disabled={zipping !== null}
+                  title={`${m}월 ${d}일 사진 ${list.length}장 한 번에 받기`}
+                  className="p-1.5 rounded-lg bg-white/85 text-gray-400 hover:text-violet-600 disabled:opacity-40">
+                  {zipping === d ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+                </button>
+                <button onClick={() => removeMany(list.map(p => p.id))} disabled={deleting}
+                  title={`${m}월 ${d}일 사진 ${list.length}장 전부 지우기`}
+                  className="p-1.5 rounded-lg bg-white/85 text-gray-400 hover:text-rose-600 disabled:opacity-40">
+                  <Trash2 size={13} />
+                </button>
+              </div>
               <button onClick={() => { setSel(new Set()); setOpenDay(d) }}
                 className="block w-full text-left">
                 <div className="aspect-[4/3] bg-gray-50 grid grid-cols-2 gap-px">
@@ -1535,7 +1561,15 @@ function ProgramPhotoTab({ ym, onMove, days, draft }: {
             <div className="flex items-center gap-2 mb-3">
               <h3 className="font-bold text-gray-900">{m}월 {openDay}일 ({dow(openDay)})</h3>
               <span className="text-xs text-gray-400">{dayRows.length}장</span>
-              <button onClick={() => setOpenDay(null)} className="ml-auto text-gray-300 hover:text-gray-500">
+              {dayRows.length > 0 && (
+                <button onClick={() => download(openDay)} disabled={zipping !== null}
+                  className="ml-auto inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-200 text-[11px] font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+                  {zipping === openDay ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
+                  전부 받기
+                </button>
+              )}
+              <button onClick={() => setOpenDay(null)}
+                className={`text-gray-300 hover:text-gray-500 ${dayRows.length > 0 ? '' : 'ml-auto'}`}>
                 <X size={18} />
               </button>
             </div>
