@@ -821,6 +821,9 @@ class AudioConfigBody(BaseModel):
     release_ms: Optional[float] = None
     target_lufs: Optional[float] = None
     ceiling_db: Optional[float] = None
+    eq: Optional[List[float]] = None      # 8밴드 증감(dB)
+    knee_db: Optional[float] = None
+    makeup_db: Optional[float] = None
 
 
 @router.get("/audio/config")

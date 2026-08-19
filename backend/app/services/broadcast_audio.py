@@ -38,27 +38,43 @@ PRESETS: Dict[str, Dict[str, Any]] = {
     "off": {
         "label": "끄기", "hint": "원본 그대로 — 세기 차이가 그대로 나갑니다",
         "threshold_db": 0, "ratio": 1, "attack_ms": 20, "release_ms": 250,
-        "target_lufs": None,
+        "target_lufs": None, "eq": [0, 0, 0, 0, 0, 0, 0, 0],
     },
     "soft": {
         "label": "부드럽게", "hint": "살짝만 고르게 — 말맛이 가장 많이 남습니다",
         "threshold_db": -18, "ratio": 2.5, "attack_ms": 20, "release_ms": 300,
         "target_lufs": -18,
+        # 웅웅거리는 저음만 살짝 덜어낸다
+        "eq": [-3, -2, 0, 0, 1, 1, 0, 0],
     },
     "normal": {
         "label": "보통 (권장)", "hint": "콘덴서 마이크로 잡은 방송 느낌 — 어디서나 또렷합니다",
         "threshold_db": -22, "ratio": 4, "attack_ms": 10, "release_ms": 220,
         "target_lufs": -16,
+        # 저음을 덜고 자음 대역(2~4k)을 올린다 — 방송에서 말이 또렷해지는 자리다
+        "eq": [-5, -3, -1, 0, 2, 3, 2, 0],
     },
     "strong": {
         "label": "강하게", "hint": "복도·식당처럼 시끄러운 곳 — 작은 말도 끌어올립니다",
         "threshold_db": -26, "ratio": 6, "attack_ms": 5, "release_ms": 160,
         "target_lufs": -14,
+        # 시끄러운 곳 — 저음을 더 덜고 자음을 더 세운다
+        "eq": [-7, -4, -2, 0, 3, 4, 3, 1],
     },
 }
 
+# 8밴드 이큐 — 한 옥타브 간격. 사람 목소리와 안내방송에 필요한 대역만 고른다.
+#   63/125 저음(웅웅거림) · 250/500 두께 · 1k/2k 또렷함(자음) · 4k/8k 치찰음·공기감
+EQ_BANDS = [63, 125, 250, 500, 1000, 2000, 4000, 8000]
+EQ_Q = 1.4              # 약 한 옥타브 폭 — 옆 대역을 크게 물지 않는다
+EQ_MAX_DB = 12.0        # 이보다 올리면 찌그러지기 시작한다
+
 DEFAULTS: Dict[str, Any] = {
     "preset": "normal",
+    # 대역별 증감(dB). 0 이면 손대지 않는다.
+    "eq": [0, 0, 0, 0, 0, 0, 0, 0],
+    "knee_db": 6.0,         # 기준선 근처를 부드럽게 넘기는 폭
+    "makeup_db": 0.0,       # 누른 만큼 다시 올리기
     # 프리셋을 쓰지 않고 직접 맞추고 싶을 때만 켠다
     "custom": False,
     "threshold_db": -22,
@@ -102,6 +118,18 @@ def clean_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
     tl = cfg.get("target_lufs")
     out["target_lufs"] = None if tl in (None, "") else num("target_lufs", -30, -8, -16)
     out["ceiling_db"] = num("ceiling_db", -6, -0.1, DEFAULTS["ceiling_db"])
+    out["knee_db"] = num("knee_db", 0, 24, DEFAULTS["knee_db"])
+    out["makeup_db"] = num("makeup_db", -12, 12, DEFAULTS["makeup_db"])
+
+    eq = cfg.get("eq")
+    band = []
+    for i in range(len(EQ_BANDS)):
+        try:
+            v = float((eq or [])[i])
+        except (TypeError, ValueError, IndexError):
+            v = 0.0
+        band.append(round(min(max(v, -EQ_MAX_DB), EQ_MAX_DB), 1))
+    out["eq"] = band
     return out
 
 
@@ -113,6 +141,7 @@ def effective(cfg: Dict[str, Any]) -> Dict[str, Any]:
     out = dict(cfg)
     out.update({k: p[k] for k in
                 ("threshold_db", "ratio", "attack_ms", "release_ms", "target_lufs")})
+    out["eq"] = list(p.get("eq") or [0] * len(EQ_BANDS))
     return out
 
 
@@ -193,21 +222,41 @@ def _has_ffmpeg() -> bool:
 
 
 def build_filter(cfg: Dict[str, Any]) -> Optional[str]:
-    """ffmpeg 필터 한 줄. 끄기면 None."""
+    """ffmpeg 필터 한 줄. 아무것도 안 건드리면 None.
+
+    화면(브라우저)에서 듣고 맞춘 값을 여기서 그대로 쓴다.
+    이큐는 양쪽 다 피킹 바이쿼드라 계산이 같고, 컴프레서는 구현이 달라
+    소리가 미세하게 다를 수 있다 — 그래서 화면에 서버가 만든 음성을
+    바로 들어볼 수 있는 자리를 따로 둔다.
+    """
     e = effective(cfg)
-    if (e.get("preset") == "off" and not e.get("custom")) or float(e["ratio"]) <= 1.01:
+    eq = [float(x) for x in (e.get("eq") or [])]
+    comp_on = not ((e.get("preset") == "off" and not e.get("custom"))
+                   or float(e["ratio"]) <= 1.01)
+    eq_on = any(abs(g) >= 0.1 for g in eq)
+    if not comp_on and not eq_on:
         return None
     ceiling = float(e["ceiling_db"])
-    parts = [
-        # 컴프레서 — threshold 는 0~1 진폭으로 넘긴다
-        "acompressor="
-        f"threshold={10 ** (float(e['threshold_db']) / 20):.6f}:"
-        f"ratio={float(e['ratio']):.2f}:"
-        f"attack={float(e['attack_ms']):.0f}:"
-        f"release={float(e['release_ms']):.0f}:"
-        "makeup=1:detection=rms",
-    ]
-    if e.get("target_lufs") is not None:
+    parts = []
+    # 이큐가 먼저다 — 깎아낼 것을 깎고 나서 눌러야, 웅웅거리는 저음 때문에
+    # 컴프레서가 엉뚱한 데서 물지 않는다
+    for f, g in zip(EQ_BANDS, eq):
+        if abs(g) >= 0.1:
+            parts.append(f"equalizer=f={f}:t=q:w={EQ_Q}:g={g:.1f}")
+    if comp_on:
+        parts.append(
+            # 컴프레서 — threshold 는 0~1 진폭으로 넘긴다
+            "acompressor="
+            f"threshold={10 ** (float(e['threshold_db']) / 20):.6f}:"
+            f"ratio={float(e['ratio']):.2f}:"
+            f"attack={float(e['attack_ms']):.0f}:"
+            f"release={float(e['release_ms']):.0f}:"
+            f"knee={max(float(e.get('knee_db', 6)), 0.1):.1f}:"
+            "makeup=1:detection=rms")
+    mk = float(e.get("makeup_db") or 0)
+    if abs(mk) >= 0.1:
+        parts.append(f"volume={mk:.1f}dB")
+    if comp_on and e.get("target_lufs") is not None:
         # 사람이 느끼는 크기를 맞춘다. 한 번만 훑는 방식이라 몇 초짜리 안내방송에 알맞다.
         parts.append(f"loudnorm=I={float(e['target_lufs']):.1f}:TP={ceiling:.1f}:LRA=7")
     # 마지막 안전장치 — 어떤 경우에도 천장을 넘지 않게
