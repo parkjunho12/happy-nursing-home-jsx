@@ -29,6 +29,7 @@ from app.models.broadcast import (
 )
 from app.models.eval import LtcResident
 from app.services import broadcast_media as media_svc
+from app.services import broadcast_audio
 from app.services.broadcast_schedule import to_kst
 from app.services.tts import TTSError, get_provider
 
@@ -284,7 +285,8 @@ def _ensure_media(db: Session, text: str, cfg: Dict[str, Any],
     if m:
         return m
     res = provider.synthesize(text, voice=cfg.get("voice"))
-    audio = media_svc.prepare_tts(res.audio, res.ext)
+    audio = media_svc.prepare_tts(res.audio, res.ext,
+                                  audio_cfg=broadcast_audio.load_config(db))
     saved = media_svc.save_bytes(audio, ext=f".{res.ext}", stem="체위변경 안내")
     if saved.get("duration_sec") is None and res.ext == "wav":
         saved["duration_sec"] = media_svc.wav_duration(audio)
