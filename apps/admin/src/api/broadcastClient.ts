@@ -18,6 +18,33 @@ export type BroadcastType = 'TTS' | 'AUDIO' | 'VIDEO'
 export type RunStatus = 'SUCCESS' | 'FAILED' | 'SKIPPED' | 'PENDING' | 'PLAYING'
 
 /** 반복 규칙 — 0=월 … 6=일 (서버와 동일) */
+/** 음질 — 다이나믹 레인지를 눌러 어디서나 또렷하게 */
+export interface AudioConfig {
+  preset: 'off' | 'soft' | 'normal' | 'strong'
+  custom: boolean
+  threshold_db: number      // 이 세기를 넘으면 누르기 시작
+  ratio: number             // 넘은 만큼을 몇 대 1로 줄일지
+  attack_ms: number
+  release_ms: number
+  target_lufs: number | null   // 사람이 느끼는 크기 목표
+  ceiling_db: number           // 넘지 못하게 막는 천장
+}
+export interface AudioPreset {
+  key: string; label: string; hint: string
+  threshold_db: number; ratio: number; attack_ms: number; release_ms: number
+  target_lufs: number | null
+}
+/** 실제로 잰 값 — 귀로만 고르면 결국 찌그러진다 */
+export interface AudioStats {
+  ok?: boolean
+  url?: string
+  peak_db: number      // 가장 큰 순간
+  rms_db: number       // 전체적으로 느껴지는 크기
+  crest_db: number     // 둘의 차이 — 클수록 '어떤 데만 크다'
+  range_db: number     // 말소리 안에서의 세기 차이
+  duration_sec?: number
+}
+
 /** 체위변경 안내방송 설정 */
 export interface PositionCastConfig {
   enabled: boolean
@@ -229,6 +256,18 @@ export const broadcastAPI = {
   announce: (body: { title: string; text: string; volume?: number; voice?: string; preview_only?: boolean }) =>
     apiClient.post(`${BASE}/announce`, body)
       .then(unwrap<{ media_id: string; url: string; duration_sec?: number | null; text: string; played: boolean }>),
+
+  /* 음질 (컴프레서) */
+  audioConfig: () => apiClient.get(`${BASE}/audio/config`)
+    .then(unwrap<{ config: AudioConfig; effective: AudioConfig; presets: AudioPreset[]; ffmpeg: boolean }>),
+  audioSave: (b: Partial<AudioConfig>) => apiClient.put(`${BASE}/audio/config`, b)
+    .then(unwrap<{ config: AudioConfig; effective: AudioConfig }>),
+  /** 같은 문구를 원본·보정 둘로 만들어 듣고 숫자로 비교한다 */
+  audioPreview: (b: { text?: string; config?: Partial<AudioConfig> }) =>
+    apiClient.post(`${BASE}/audio/preview`, b)
+      .then(unwrap<{ text: string; config: AudioConfig; effective: AudioConfig
+                     before: AudioStats; after: AudioStats
+                     filter: string | null; ffmpeg: boolean }>),
 
   /* 체위변경 안내방송 */
   positionPlan: () => apiClient.get(`${BASE}/position/plan`).then(unwrap<PositionPlan>),

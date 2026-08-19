@@ -6,6 +6,7 @@ import {
 import {
   broadcastAPI, mediaUrl, type BroadcastSchedule, type Dashboard, type BroadcastMeta,
   type PositionCastConfig, type PositionPlan,
+  type AudioConfig, type AudioPreset, type AudioStats,
   type BroadcastType, type RepeatRule, type MediaResult, type BroadcastLog,
 } from '@/api/broadcastClient'
 
@@ -49,7 +50,7 @@ export default function BroadcastPage() {
   const [list, setList] = useState<BroadcastSchedule[]>([])
   const [logs, setLogs] = useState<BroadcastLog[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'dashboard' | 'schedules' | 'position' | 'logs'>('dashboard')
+  const [tab, setTab] = useState<'dashboard' | 'schedules' | 'position' | 'audio' | 'logs'>('dashboard')
   const [editing, setEditing] = useState<BroadcastSchedule | null | undefined>(undefined)
   const [busy, setBusy] = useState<string | null>(null)
 
@@ -198,7 +199,7 @@ export default function BroadcastPage() {
 
       {/* 탭 */}
       <div className="flex gap-1.5">
-        {([['dashboard', '현황'], ['schedules', `예약 (${list.length})`], ['position', '체위변경'], ['logs', '방송 이력']] as const).map(([k, label]) => (
+        {([['dashboard', '현황'], ['schedules', `예약 (${list.length})`], ['position', '체위변경'], ['audio', '음질'], ['logs', '방송 이력']] as const).map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`px-4 py-2 rounded-xl text-sm font-bold border transition-colors ${
               tab === k ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}>
@@ -210,6 +211,8 @@ export default function BroadcastPage() {
       {tab === 'dashboard' && dash && <DashboardView dash={dash} />}
 
       {tab === 'position' && <PositionCastView onChanged={load} />}
+
+      {tab === 'audio' && <AudioShapeView />}
 
       {tab === 'schedules' && (
         <div className="space-y-2">
@@ -934,6 +937,191 @@ function PositionCastView({ onChanged }: { onChanged: () => void }) {
       <p className="text-[11px] text-gray-400 text-center">
         수급자 관리에서 대상자를 바꾸면 명단과 음성이 자동으로 다시 만들어집니다.
       </p>
+    </div>
+  )
+}
+
+/* ── 음질 (컴프레서) ────────────────────────────────────────────
+ * TTS 음성은 문장 안에서 세기가 들쭉날쭉하다. 어떤 음절만 튀면 앰프를 올릴 때
+ * 그 음절만 귀를 때리고, 맞춰 낮추면 나머지 말이 안 들린다.
+ * 큰 데를 눌러(컴프레서) 어디서나 또렷하게 만든다 — 방송용 마이크가 하는 일이다.
+ *
+ * 귀로만 고르면 '조금 더 크게' 를 반복하다 결국 찌그러진다.
+ * 그래서 재본 숫자를 함께 보여주고 원본과 나란히 듣게 한다.
+ */
+function AudioShapeView() {
+  const [cfg, setCfg] = useState<AudioConfig | null>(null)
+  const [presets, setPresets] = useState<AudioPreset[]>([])
+  const [ffmpeg, setFfmpeg] = useState(true)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [cmp, setCmp] = useState<{ before: AudioStats; after: AudioStats; filter: string | null } | null>(null)
+  const [msg, setMsg] = useState('')
+  const [err, setErr] = useState('')
+
+  useEffect(() => {
+    broadcastAPI.audioConfig()
+      .then(r => { setCfg(r.config); setPresets(r.presets); setFfmpeg(r.ffmpeg) })
+      .catch(() => setErr('설정을 불러오지 못했습니다'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const save = async (patch: Partial<AudioConfig>) => {
+    setSaving(true); setErr(''); setMsg('')
+    try {
+      const r = await broadcastAPI.audioSave(patch)
+      setCfg(r.config); setCmp(null)
+      setMsg('저장했습니다. 앞으로 만드는 음성부터 적용됩니다.')
+    } catch (e: any) { setErr(e?.response?.data?.detail ?? '저장 실패') }
+    finally { setSaving(false) }
+  }
+
+  const listen = async () => {
+    setTesting(true); setErr(''); setMsg('')
+    try {
+      const r = await broadcastAPI.audioPreview({})
+      setCmp({ before: r.before, after: r.after, filter: r.filter })
+    } catch (e: any) { setErr(e?.response?.data?.detail ?? '만들지 못했습니다') }
+    finally { setTesting(false) }
+  }
+
+  if (loading || !cfg) return <p className="text-sm text-gray-400 py-10 text-center">불러오는 중…</p>
+
+  /** 숫자를 막대로 — dB 는 눈에 안 들어온다 */
+  const Bar = ({ label, v, lo, hi, tone, hint }: {
+    label: string; v: number; lo: number; hi: number; tone: string; hint?: string
+  }) => {
+    const pct = Math.max(0, Math.min(100, ((v - lo) / (hi - lo)) * 100))
+    return (
+      <div>
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-[11px] font-bold text-gray-600">{label}</span>
+          <span className="text-[11px] font-black text-gray-900 tabular-nums">{v.toFixed(1)}dB</span>
+          {hint && <span className="text-[10px] text-gray-400">{hint}</span>}
+        </div>
+        <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden mt-0.5">
+          <div className={`h-full ${tone}`} style={{ width: `${pct}%` }} />
+        </div>
+      </div>
+    )
+  }
+
+  const Card = ({ t, s2 }: { t: string; s2: AudioStats }) => (
+    <div className="rounded-xl border border-gray-100 bg-white p-3 space-y-2">
+      <p className="text-xs font-bold text-gray-700">{t}</p>
+      {s2.url && <audio controls src={mediaUrl(s2.url)} className="w-full h-9" />}
+      <Bar label="가장 큰 순간" v={s2.peak_db} lo={-24} hi={0} tone="bg-rose-400" />
+      <Bar label="느껴지는 크기" v={s2.rms_db} lo={-40} hi={-6} tone="bg-emerald-500" />
+      <Bar label="세기 차이" v={s2.crest_db} lo={4} hi={26} tone="bg-amber-500"
+        hint={s2.crest_db > 17 ? '어떤 데만 크게 들립니다' : s2.crest_db > 13 ? '보통' : '고릅니다'} />
+    </div>
+  )
+
+  return (
+    <div className="space-y-4">
+      {!ffmpeg && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+          <p className="text-xs font-bold text-amber-800">서버에 ffmpeg 이 없어 음질 보정을 할 수 없습니다</p>
+          <p className="text-[11px] text-amber-600 mt-0.5">
+            지금은 음량만 맞춰 내보냅니다. 관리자에게 알려주세요.
+          </p>
+        </div>
+      )}
+
+      <div className="rounded-2xl border border-gray-100 bg-white p-4">
+        <p className="text-sm font-bold text-gray-800">방송 음질</p>
+        <p className="text-[11px] text-gray-500 mt-0.5 mb-3">
+          어떤 음절만 크게 튀면 앰프를 맞추기 어렵습니다. 큰 데를 눌러 어디서나 또렷하게 만듭니다.
+          <span className="block mt-0.5">앞으로 <b>새로 만드는 음성</b>부터 적용됩니다 — 이미 만들어 둔 음원은 그대로입니다.</span>
+        </p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+          {presets.map(p => {
+            const on = !cfg.custom && cfg.preset === p.key
+            return (
+              <button key={p.key} disabled={saving}
+                onClick={() => save({ preset: p.key as AudioConfig['preset'], custom: false })}
+                className={`text-left p-3 rounded-xl border transition-colors disabled:opacity-50 ${
+                  on ? 'border-indigo-400 bg-indigo-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                <p className={`text-sm font-bold ${on ? 'text-indigo-800' : 'text-gray-800'}`}>
+                  {on ? '✓ ' : ''}{p.label}
+                </p>
+                <p className="text-[10.5px] text-gray-500 mt-0.5 leading-snug">{p.hint}</p>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-gray-100 bg-white p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <p className="text-xs font-bold text-gray-700">들어보고 고르기</p>
+          <span className="text-[11px] text-gray-400">원본과 나란히 듣습니다 · 스피커로 안 나갑니다</span>
+          <button onClick={listen} disabled={testing}
+            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-900 text-white text-[11px] font-bold disabled:opacity-50">
+            {testing && <Loader2 size={11} className="animate-spin" />}
+            {cmp ? '다시 만들기' : '만들어 듣기'}
+          </button>
+        </div>
+        {!cmp ? (
+          <p className="text-xs text-gray-400 py-6 text-center">
+            「만들어 듣기」를 누르면 같은 문구를 원본·보정 두 가지로 만들어 비교합니다.
+          </p>
+        ) : (
+          <>
+            <div className="grid md:grid-cols-2 gap-2.5">
+              <Card t="원본 (음량만 맞춤)" s2={cmp.before} />
+              <Card t="지금 설정으로 보정" s2={cmp.after} />
+            </div>
+            <p className="text-[11px] text-gray-500 mt-2.5">
+              <b>세기 차이</b>가 줄고 <b>느껴지는 크기</b>가 커졌다면 잘 맞은 것입니다.
+              가장 큰 순간은 어느 설정에서도 천장({cfg.ceiling_db}dB)을 넘지 않습니다.
+            </p>
+            {cmp.filter && (
+              <p className="text-[10px] text-gray-300 mt-1 font-mono break-all">{cmp.filter}</p>
+            )}
+          </>
+        )}
+      </div>
+
+      <details className="rounded-2xl border border-gray-100 bg-white p-4">
+        <summary className="text-xs font-bold text-gray-600 cursor-pointer">
+          직접 맞추기 <span className="font-normal text-gray-400">— 프리셋으로 안 될 때만</span>
+        </summary>
+        <div className="mt-3 space-y-3">
+          <button type="button" onClick={() => save({ custom: !cfg.custom })} disabled={saving}
+            className={`w-full text-left px-3 py-2.5 rounded-xl border text-sm transition-colors disabled:opacity-50 ${
+              cfg.custom ? 'bg-indigo-50 border-indigo-300 text-indigo-800' : 'border-gray-200 text-gray-500'}`}>
+            <span className="font-bold">{cfg.custom ? '✓ ' : ''}아래 값을 직접 쓰기</span>
+            <span className="block text-[10.5px] opacity-70 mt-0.5">
+              끄면 위에서 고른 프리셋 값을 씁니다
+            </span>
+          </button>
+          {([
+            ['threshold_db', '누르기 시작하는 세기', -40, -6, 1, 'dB — 낮출수록 더 많이 눌립니다'],
+            ['ratio', '누르는 정도', 1, 12, 0.5, ': 1 — 높을수록 강하게'],
+            ['attack_ms', '무는 속도', 1, 60, 1, 'ms — 빠를수록 튀는 소리를 잘 잡습니다'],
+            ['release_ms', '놓는 속도', 60, 600, 10, 'ms — 너무 짧으면 소리가 출렁입니다'],
+            ['target_lufs', '느껴지는 크기 목표', -24, -10, 0.5, 'LUFS — 높을수록 크게'],
+          ] as const).map(([k, label, lo, hi, step, unit]) => (
+            <label key={k} className="block">
+              <span className="text-[11px] font-semibold text-gray-600">
+                {label} <b className="text-gray-900 tabular-nums">{(cfg as any)[k] ?? '-'}</b>
+                <span className="font-normal text-gray-400"> {unit}</span>
+              </span>
+              <input type="range" min={lo} max={hi} step={step}
+                value={Number((cfg as any)[k] ?? lo)} disabled={!cfg.custom || saving}
+                onChange={e => setCfg(c => c && ({ ...c, [k]: Number(e.target.value) }))}
+                onMouseUp={e => cfg.custom && save({ [k]: Number((e.target as HTMLInputElement).value) } as any)}
+                onTouchEnd={e => cfg.custom && save({ [k]: Number((e.target as HTMLInputElement).value) } as any)}
+                className="w-full accent-indigo-600 disabled:opacity-40" />
+            </label>
+          ))}
+        </div>
+      </details>
+
+      {msg && <p className="text-xs text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">{msg}</p>}
+      {err && <p className="text-xs text-rose-600">{err}</p>}
     </div>
   )
 }

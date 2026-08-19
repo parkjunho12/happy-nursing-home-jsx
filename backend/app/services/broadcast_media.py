@@ -195,15 +195,24 @@ def pad_wav(data: bytes, head: float = TTS_HEAD_SILENCE,
         return data
 
 
-def prepare_tts(data: bytes, ext: str) -> bytes:
-    """TTS 결과를 방송에 쓸 수 있는 형태로 — 음량을 키우고 앞뒤 여백을 준다.
+def prepare_tts(data: bytes, ext: str, audio_cfg: Optional[dict] = None) -> bytes:
+    """TTS 결과를 방송에 쓸 수 있는 형태로 — 세기를 고르고 앞뒤 여백을 준다.
 
-    세 군데(즉시 방송·예약 음성 만들기·프로그램 자동)에서 같은 소리가 나야 하므로
+    네 군데(즉시 방송·예약 음성·프로그램 자동·체위변경)에서 같은 소리가 나야 하므로
     한 곳에 모아 둔다.
+
+    컴프레서를 쓰면 그 안에서 음량까지 맞춰지므로(loudnorm) 따로 최대치를
+    올리지 않는다 — 두 번 맞추면 애써 고른 세기가 도로 벌어진다.
     """
     if ext != "wav":
         return data                              # 다룰 수 있는 것만 손댄다
-    return pad_wav(normalize_wav(data))
+    out, shaped = data, False
+    if audio_cfg:
+        from app.services import broadcast_audio
+        out, shaped = broadcast_audio.process(data, audio_cfg)
+    if not shaped:
+        out = normalize_wav(out)                 # 못 다듬었으면 음량이라도 맞춘다
+    return pad_wav(out)
 
 
 def wav_duration(data: bytes) -> Optional[int]:

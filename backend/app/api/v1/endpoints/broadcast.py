@@ -30,6 +30,7 @@ from app.models.broadcast import (
 )
 from app.schemas.response import ApiResponse
 from app.services import broadcast_media as media_svc
+from app.services import broadcast_audio
 from app.services.broadcast_schedule import (
     KST, occurrences, next_occurrence, normalize_rule, describe_rule, to_kst,
 )
@@ -299,7 +300,8 @@ def make_tts(body: TTSBody, db: Session = Depends(get_db), current_user: User = 
 
     # 만들자마자 음량을 최대로 키운다 — Agent 는 줄이기만 할 수 있어서,
     # 원본이 작으면 현장에서 앰프를 올려야 하고 그러면 잡음도 함께 커진다.
-    audio = media_svc.prepare_tts(res.audio, res.ext)
+    audio = media_svc.prepare_tts(res.audio, res.ext,
+                                  audio_cfg=broadcast_audio.load_config(db))
     saved = media_svc.save_bytes(audio, ext=f".{res.ext}", stem=text[:20])
     if saved.get("duration_sec") is None and res.ext == "wav":
         saved["duration_sec"] = media_svc.wav_duration(audio)   # ffprobe 없이도 길이를 안다
@@ -592,7 +594,8 @@ def announce(body: AnnounceBody, db: Session = Depends(get_db),
             res = provider.synthesize(text, voice=body.voice)
         except TTSError as e:
             raise HTTPException(502, str(e))
-        audio = media_svc.prepare_tts(res.audio, res.ext)
+        audio = media_svc.prepare_tts(res.audio, res.ext,
+                                  audio_cfg=broadcast_audio.load_config(db))
         saved = media_svc.save_bytes(audio, ext=f".{res.ext}", stem=text[:20])
         if saved.get("duration_sec") is None and res.ext == "wav":
             saved["duration_sec"] = media_svc.wav_duration(audio)
@@ -802,3 +805,103 @@ def position_preview(db: Session = Depends(get_db), current_user: User = Depends
     return ApiResponse(success=True, data={
         "url": m.url, "duration_sec": m.duration_sec, "text": text,
         "count": len(rows), "played": False})
+
+
+# ──────────────────────────────────────────────────────────────
+# 음질 — 다이나믹 레인지를 재고 눌러준다
+#   TTS 음성은 문장 안에서 세기가 들쭉날쭉하다. 어떤 음절만 튀면 앰프를 올릴 때
+#   그 음절만 귀를 때린다. 컴프레서로 큰 데를 눌러 어디서나 또렷하게 만든다.
+# ──────────────────────────────────────────────────────────────
+class AudioConfigBody(BaseModel):
+    preset: Optional[str] = None
+    custom: Optional[bool] = None
+    threshold_db: Optional[float] = None
+    ratio: Optional[float] = None
+    attack_ms: Optional[float] = None
+    release_ms: Optional[float] = None
+    target_lufs: Optional[float] = None
+    ceiling_db: Optional[float] = None
+
+
+@router.get("/audio/config")
+def audio_config(db: Session = Depends(get_db), _: User = Depends(_manager)):
+    cfg = broadcast_audio.load_config(db)
+    return ApiResponse(success=True, data={
+        "config": cfg,
+        "effective": broadcast_audio.effective(cfg),
+        "presets": [{"key": k, **{kk: vv for kk, vv in v.items()}}
+                    for k, v in broadcast_audio.PRESETS.items()],
+        "ffmpeg": media_svc.has_ffmpeg(),
+    })
+
+
+@router.put("/audio/config")
+def audio_config_save(body: AudioConfigBody, db: Session = Depends(get_db),
+                      current_user: User = Depends(_manager)):
+    patch = {k: v for k, v in body.model_dump().items() if v is not None}
+    cfg = broadcast_audio.save_config(db, patch, actor=getattr(current_user, "name", None))
+    _audit(db, event="AUDIO_SET", user=current_user,
+           title=f"음질 {broadcast_audio.PRESETS.get(cfg['preset'], {}).get('label', cfg['preset'])}")
+    db.commit()
+    return ApiResponse(success=True, data={
+        "config": cfg, "effective": broadcast_audio.effective(cfg)},
+        message="음질 설정을 저장했습니다. 앞으로 만드는 음성부터 적용됩니다.")
+
+
+class AudioPreviewBody(BaseModel):
+    text: Optional[str] = None
+    # 저장하지 않고 이 설정으로만 들어보기
+    config: Optional[AudioConfigBody] = None
+
+
+SAMPLE_TEXT = ("선생님들께 안내드립니다. 지금은 어르신 체위변경 시간입니다. "
+               "담당 어르신의 자세와 피부 상태를 확인하시고, "
+               "안전하게 체위변경을 진행해 주시기 바랍니다. 감사합니다.")
+
+
+@router.post("/audio/preview")
+def audio_preview(body: AudioPreviewBody, db: Session = Depends(get_db),
+                  current_user: User = Depends(_manager)):
+    """같은 문구를 원본과 다듬은 것 둘로 만들어 들어보고 숫자로 비교한다.
+
+    귀로만 고르면 '조금 더 크게' 를 반복하다 결국 찌그러진다.
+    다이나믹 레인지를 같이 보여줘야 어디까지 눌렀는지 알 수 있다.
+    """
+    text = (body.text or SAMPLE_TEXT).strip()[:500]
+    if not text:
+        raise HTTPException(400, "들어볼 문구를 입력해주세요.")
+    cfg = (broadcast_audio.clean_config(
+              {**broadcast_audio.load_config(db),
+               **{k: v for k, v in body.config.model_dump().items() if v is not None}})
+           if body.config else broadcast_audio.load_config(db))
+
+    provider = get_provider()
+    try:
+        res = provider.synthesize(text)
+    except TTSError as e:
+        raise HTTPException(502, str(e))
+    if res.ext != "wav":
+        raise HTTPException(400, "이 음성 형식은 비교할 수 없습니다.")
+
+    raw = media_svc.pad_wav(media_svc.normalize_wav(res.audio))
+    shaped = media_svc.prepare_tts(res.audio, res.ext, audio_cfg=cfg)
+
+    def save(data: bytes, tag: str) -> dict:
+        info = media_svc.save_bytes(data, ext=".wav", stem=f"음질비교 {tag}")
+        m = BroadcastMedia(kind=TYPE_TTS, filename=info["filename"], url=info["url"],
+                           mime="audio/wav", size_bytes=info["size_bytes"],
+                           sha256=info["sha256"],
+                           duration_sec=info.get("duration_sec") or media_svc.wav_duration(data),
+                           tts_provider=res.provider, tts_voice=res.voice,
+                           created_by=getattr(current_user, "name", None))
+        db.add(m)
+        return {"url": info["url"], **broadcast_audio.analyze(data)}
+
+    before, after = save(raw, "원본"), save(shaped, "보정")
+    db.commit()
+    return ApiResponse(success=True, data={
+        "text": text, "config": cfg, "effective": broadcast_audio.effective(cfg),
+        "before": before, "after": after,
+        "filter": broadcast_audio.build_filter(cfg),
+        "ffmpeg": media_svc.has_ffmpeg(),
+    })
