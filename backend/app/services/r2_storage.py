@@ -156,26 +156,38 @@ class R2Storage:
 
         return file_url, thumb_url, media_type, file_size
 
+    def key_of(self, url: str) -> Optional[str]:
+        """주소에서 R2 키를 뽑는다.
+
+        R2_PUBLIC_URL 방식: https://cdn.example.com/albums/...
+        r2:// 방식:        r2://bucket/albums/...
+        기존 로컬 경로(/uploads/...)는 R2 파일이 아니므로 None.
+        """
+        if not url:
+            return None
+        if url.startswith("r2://"):
+            return url.split("/", 3)[-1]
+        if _public_url() and url.startswith(_public_url()):
+            return url[len(_public_url()):].lstrip("/")
+        return None
+
+    def read_bytes(self, file_url: str) -> Optional[bytes]:
+        """R2 에서 파일을 그대로 읽어온다 — 묶어서 내려줄 때 쓴다."""
+        key = self.key_of(file_url or "")
+        if not key:
+            return None
+        try:
+            obj = _get_client().get_object(Bucket=_bucket(), Key=key)
+            return obj["Body"].read()
+        except ClientError:
+            return None
+
     def delete_file(self, file_url: str, thumbnail_url: Optional[str] = None) -> None:
         """R2에서 파일 삭제"""
         if not file_url:
             return
         client = _get_client()
-
-        # file_url에서 key 추출
-        # R2_PUBLIC_URL 방식: https://cdn.example.com/albums/...
-        # r2:// 방식: r2://bucket/albums/...
-        def _extract_key(url: str) -> Optional[str]:
-            if not url:
-                return None
-            if url.startswith("r2://"):
-                return url.split("/", 3)[-1]
-            if _public_url() and url.startswith(_public_url()):
-                return url[len(_public_url()):].lstrip("/")
-            # 기존 로컬 경로 (/uploads/albums/...) 는 무시
-            if url.startswith("/uploads/"):
-                return None
-            return None
+        _extract_key = self.key_of
 
         for url in [file_url, thumbnail_url]:
             key = _extract_key(url or "")
