@@ -28,11 +28,19 @@ export interface AudioConfig {
   release_ms: number
   target_lufs: number | null   // 사람이 느끼는 크기 목표
   ceiling_db: number           // 넘지 못하게 막는 천장
+  eq: number[]                 // 8밴드 증감(dB) — 63/125/250/500/1k/2k/4k/8k
+  knee_db: number              // 기준선 근처를 부드럽게 넘기는 폭
+  makeup_db: number            // 누른 만큼 다시 올리기
 }
+/** 이큐 대역 — 서버(broadcast_audio.EQ_BANDS)와 같아야 한다 */
+export const EQ_BANDS = [63, 125, 250, 500, 1000, 2000, 4000, 8000]
+export const EQ_Q = 1.4
+export const EQ_MAX_DB = 12
 export interface AudioPreset {
   key: string; label: string; hint: string
   threshold_db: number; ratio: number; attack_ms: number; release_ms: number
   target_lufs: number | null
+  eq?: number[]
 }
 /** 실제로 잰 값 — 귀로만 고르면 결국 찌그러진다 */
 export interface AudioStats {
