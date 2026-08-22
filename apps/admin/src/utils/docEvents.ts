@@ -54,26 +54,32 @@ export const isExplicitDone = (e: DocEvent): boolean => e.status === '완료' ||
  *
  * 아직 오지 않은 일시는 '챙겨야 하는 서류'다.
  */
-export const effStatus = (e: DocEvent): EventStatus | null => {
+export const effStatus = (e: DocEvent, admission?: string | null): EventStatus | null => {
   if (e.status === '완료' || e.done) return '완료'
   const late = !!e.date && e.date < todayISO()
   // 사람이 미비·서명미비로 표시한 것은 무슨 일이 있어도 그대로 둔다.
   // ('챙길것' 은 자동으로 붙는 시작 상태라 사람의 판단이 아니다)
   if (e.status && e.status !== '챙길것') return e.status
   // 입소일에 쓰는 서류는 입소 절차에서 그 자리에 받는다.
-  // 예전에 상태 없이 저장된 것도 날짜가 지났으면 받은 것으로 본다.
+  // 구분이 '입소'가 아니어도 날짜가 입소일과 같으면 그날 받은 서류다 —
+  // 계약서·계획서·결과평가 모두 마찬가지다.
+  if (isAdmissionDay(e, admission)) return '완료'
   if (e.kind === '입소' && late) return '완료'
   if (!e.date) return null                          // 날짜 미정은 아직 판단할 수 없다
   return late ? '미비' : '챙길것'
 }
+
+/** 입소일 그날의 서류인지 */
+export const isAdmissionDay = (e: DocEvent, admission?: string | null): boolean =>
+  !!admission && !!e.date && e.date === admission
 
 /** 지난 날짜라서 완료로 간주된 것 — 이제는 그렇게 보지 않는다(항상 false).
  *  화면 쪽 호출부를 한 번에 지우지 않으려고 남겨 둔다. */
 export const isImplicitDone = (_e: DocEvent): boolean => false
 
 /** 조치가 필요한 항목인지 (미비·서명미비·챙길것) */
-export const isAlert = (e: DocEvent): boolean => {
-  const m = statusMeta(effStatus(e))
+export const isAlert = (e: DocEvent, admission?: string | null): boolean => {
+  const m = statusMeta(effStatus(e, admission))
   return !!m?.alert
 }
 
@@ -198,11 +204,17 @@ export function autoDocEvents(certs: Certification[], admissionDate?: string | n
     // 평가: 입소/갱신 후 첫 기준일부터 6개월마다
     cycle.slice(1).forEach(d => evl.push({ date: d, kind: '기준', memo: null, ...TODO }))
   }
+  // 입소일과 같은 날짜의 일시는 구분과 무관하게 완료로 둔다.
+  // 6개월 기준일이 입소일과 겹치는 경우가 있고, 그날 것은 입소 절차에서 함께 받는다.
+  const markAdmissionDay = (list: DocEvent[]) => list.map(e =>
+    admDate && e.date === admDate && !e.status
+      ? { ...e, status: '완료' as EventStatus, done: true } : e)
+
   const bydate = (a: DocEvent, b: DocEvent) => (a.date || '9999').localeCompare(b.date || '9999')
   return {
-    contract: _dedupe(contract).sort(bydate),
-    plan: _dedupe(plan).sort(bydate),
-    eval: _dedupe(evl).sort(bydate),
+    contract: markAdmissionDay(_dedupe(contract)).sort(bydate),
+    plan: markAdmissionDay(_dedupe(plan)).sort(bydate),
+    eval: markAdmissionDay(_dedupe(evl)).sort(bydate),
   }
 }
 

@@ -133,7 +133,8 @@ export default function ResidentDocsPage() {
   }
   /** 조치가 필요한 일시(미비·서명미비·챙길것) 건수 */
   const alertCount = (r: ResidentDoc) =>
-    [...(r.contract_lines ?? []), ...(r.plan_lines ?? []), ...(r.eval_lines ?? [])].map(asEvent).filter(isAlert).length
+    [...(r.contract_lines ?? []), ...(r.plan_lines ?? []), ...(r.eval_lines ?? [])]
+      .map(asEvent).filter(e => isAlert(e, r.admission_date)).length
   /** 서류가 통째로 비어 있는 어르신 — 신규 입소 직후라 챙겨야 한다 */
   const isEmpty = (r: ResidentDoc) =>
     !(r.certifications?.length) && !(r.contract_lines?.length) && !(r.plan_lines?.length) && !(r.eval_lines?.length)
@@ -199,7 +200,7 @@ export default function ResidentDocsPage() {
 
     const dated = evs.filter(e => e.date).sort(byDate)
     const undated = evs.filter(e => !e.date)                       // '시설급여 나온시점'처럼 날짜 미정
-    const isDone = (e: DocEvent) => effStatus(e) === '완료'
+    const isDone = (e: DocEvent) => effStatus(e, admission) === '완료'
     const upcoming = dated.filter(e => !isDone(e) && e.date! >= today)
     const overdue = dated.filter(e => !isDone(e) && e.date! < today)
     const past = dated.filter(e => isDone(e) || e.date! < today)
@@ -213,7 +214,7 @@ export default function ResidentDocsPage() {
 
     const row = (e: DocEvent, rk: string, mode: 'next' | 'dim' | 'plain' = 'plain') => {
       const meta = kindMeta(type, e.kind) ?? KINDS[type][0]
-      const st = statusMeta(effStatus(e))          // 상태(완료·미비·서명미비·챙길것)가 색을 결정
+      const st = statusMeta(effStatus(e, admission))   // 상태(완료·미비·서명미비·챙길것)가 색을 결정
       const done = st?.v === '완료'
       const marked = isExplicitDone(e)             // 직접 완료 체크한 것만 체크표시/취소선
       const late = !done && !!e.date && e.date < today
@@ -751,19 +752,19 @@ function DocFormModal({ editing, residents = [], docByResident = new Map<string,
             <p className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 mb-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500" /> 계약서 일시
             </p>
-            <DocEventsEditor type="contract" value={f.contract_lines} onChange={v => setF({ ...f, contract_lines: v })} defaultAddKind="변경" addLabel="+ 일시 추가" />
+            <DocEventsEditor type="contract" value={f.contract_lines} onChange={v => setF({ ...f, contract_lines: v })} defaultAddKind="변경" addLabel="+ 일시 추가" admission={f.admission_date} />
           </div>
           <div className="rounded-xl border border-sky-100 bg-sky-50/40 p-3">
             <p className="flex items-center gap-1.5 text-xs font-bold text-sky-700 mb-2">
               <span className="w-2 h-2 rounded-full bg-sky-500" /> 급여제공계획서 일시
             </p>
-            <DocEventsEditor type="plan" value={f.plan_lines} onChange={v => setF({ ...f, plan_lines: v })} defaultAddKind="변화" addLabel="+ 일시 추가" />
+            <DocEventsEditor type="plan" value={f.plan_lines} onChange={v => setF({ ...f, plan_lines: v })} defaultAddKind="변화" addLabel="+ 일시 추가" admission={f.admission_date} />
           </div>
           <div className="rounded-xl border border-fuchsia-100 bg-fuchsia-50/40 p-3">
             <p className="flex items-center gap-1.5 text-xs font-bold text-fuchsia-700 mb-2">
               <span className="w-2 h-2 rounded-full bg-fuchsia-500" /> 급여제공 결과평가 일시
             </p>
-            <DocEventsEditor type="eval" value={f.eval_lines} onChange={v => setF({ ...f, eval_lines: v })} defaultAddKind="변화" addLabel="+ 일시 추가" />
+            <DocEventsEditor type="eval" value={f.eval_lines} onChange={v => setF({ ...f, eval_lines: v })} defaultAddKind="변화" addLabel="+ 일시 추가" admission={f.admission_date} />
           </div>
           <Sec n="4" t="상태" />
           <div className="flex items-center gap-2">
