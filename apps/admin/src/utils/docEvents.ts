@@ -57,7 +57,12 @@ export const isExplicitDone = (e: DocEvent): boolean => e.status === '완료' ||
 export const effStatus = (e: DocEvent): EventStatus | null => {
   if (e.status === '완료' || e.done) return '완료'
   const late = !!e.date && e.date < todayISO()
-  if (e.status) return late && e.status === '챙길것' ? '미비' : e.status
+  // 사람이 미비·서명미비로 표시한 것은 무슨 일이 있어도 그대로 둔다.
+  // ('챙길것' 은 자동으로 붙는 시작 상태라 사람의 판단이 아니다)
+  if (e.status && e.status !== '챙길것') return e.status
+  // 입소일에 쓰는 서류는 입소 절차에서 그 자리에 받는다.
+  // 예전에 상태 없이 저장된 것도 날짜가 지났으면 받은 것으로 본다.
+  if (e.kind === '입소' && late) return '완료'
   if (!e.date) return null                          // 날짜 미정은 아직 판단할 수 없다
   return late ? '미비' : '챙길것'
 }
@@ -148,12 +153,13 @@ export function autoDocEvents(certs: Certification[], admissionDate?: string | n
   const admDate = admissionDate || earliest?.start || cur?.start || null
 
   // 입소: 인정서와 무관하게 입소일 기준으로 항상 생성 (검정)
-  // 입소일에 작성하는 서류는 입소 절차에서 이미 받으므로 완료로 둔다.
-  // 단 입소일이 아직 오지 않았다면(입소 예정자) 완료로 볼 수 없다.
+  // 입소일에 쓰는 계약서·계획서는 입소 절차에서 그 자리에 받는 서류다.
+  // 그래서 완료로 둔다 — 입소 예정자도 마찬가지다. 입소하면 받게 되어 있고,
+  // 안 그러면 입소일이 지나자마자 전부 '미비'로 뜬다.
   if (admDate) {
-    const doneIfPast: Partial<DocEvent> = admDate <= todayISO() ? { status: '완료', done: true } : {}
-    contract.push({ date: admDate, kind: '입소', memo: null, ...doneIfPast })
-    plan.push({ date: admDate, kind: '입소', memo: null, ...doneIfPast })
+    const done: Partial<DocEvent> = { status: '완료', done: true }
+    contract.push({ date: admDate, kind: '입소', memo: null, ...done })
+    plan.push({ date: admDate, kind: '입소', memo: null, ...done })
   }
 
   // 그 외 정기 일시는 현재(최신) 인정서 기준으로만 생성. 이전 인정서는 사용 안 함.
