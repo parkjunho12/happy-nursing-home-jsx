@@ -7,7 +7,7 @@ import DocEventsEditor from '@/components/eval/DocEventsEditor'
 import DocChangesModal from '@/components/eval/DocChangesModal'
 import { CARE_TYPES, careMeta, deriveCare, needsFacilityApply, APPLY_STAGES, stageMeta, stageProgress } from '@/utils/careType'
 import { currentCert, certState, renewalDue, daysUntil, gradeLabel, benefitLabel } from '@/utils/cert'
-import { type DocEvent, type DocType, KINDS, kindMeta, asEvent, fmtYMD, fmtMD, autoDocEvents, appendAuto, fixRenewalDates, todayISO, STATUSES, statusMeta, effStatus, isAlert, isExplicitDone, isImplicitDone } from '@/utils/docEvents'
+import { type DocEvent, type DocType, KINDS, kindMeta, asEvent, fmtYMD, fmtMD, autoDocEvents, appendAuto, fixRenewalDates, todayISO, STATUSES, statusMeta, effStatus, isAlert, isExplicitDone } from '@/utils/docEvents'
 import { useLtcStore, type LtcResident } from '@/store/ltc'
 
 const fmtD = (s?: string | null) => {
@@ -182,8 +182,9 @@ export default function ResidentDocsPage() {
       (a.name ?? '').localeCompare(b.name ?? '', 'ko')
   }), [rows, search, fee, floorF, quick, sortMode])
 
-  const th = 'px-1.5 py-1.5 text-[11px] font-bold text-gray-500 whitespace-nowrap text-center border-b border-gray-200'
-  const td = 'px-1.5 py-1.5 text-xs align-top border-b border-gray-50'
+  // 표는 열·행 선이 또렷해야 눈이 줄을 따라간다. 서류 현황은 가로로 훑는 표다.
+  const th = 'px-2 py-2 text-[11px] font-bold text-gray-600 whitespace-nowrap text-center border-b-2 border-gray-300 border-r border-gray-200 last:border-r-0'
+  const td = 'px-2 py-2 text-xs align-top border-b border-gray-200 border-r border-gray-100 last:border-r-0'
 
   /**
    * 서류 일시 셀 — '다음에 할 일'이 먼저 보이도록 구성한다.
@@ -215,14 +216,13 @@ export default function ResidentDocsPage() {
       const st = statusMeta(effStatus(e))          // 상태(완료·미비·서명미비·챙길것)가 색을 결정
       const done = st?.v === '완료'
       const marked = isExplicitDone(e)             // 직접 완료 체크한 것만 체크표시/취소선
-      const implicit = isImplicitDone(e)           // 날짜가 지나 완료로 본 것 — 흐리게만
       const late = !done && !!e.date && e.date < today
       return (
         <div key={rk} className="whitespace-nowrap flex items-center gap-1">
           {marked
             ? <Check className="w-3 h-3 shrink-0 text-green-600" strokeWidth={3} />
-            : <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${st && !implicit ? st.dot : meta.dot} ${mode === 'dim' || implicit ? 'opacity-40' : ''}`} />}
-          <span className={`font-semibold ${marked ? 'line-through text-gray-400' : implicit ? 'text-gray-400' : st ? st.text : mode === 'dim' ? 'text-gray-400' : late ? 'text-red-600' : meta.text} ${mode === 'next' ? 'text-[13px]' : ''}`}>
+            : <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${st ? st.dot : meta.dot} ${mode === 'dim' ? 'opacity-40' : ''}`} />}
+          <span className={`font-semibold ${marked ? 'line-through text-gray-400' : st ? st.text : mode === 'dim' ? 'text-gray-400' : late ? 'text-red-600' : meta.text} ${mode === 'next' ? 'text-[13px]' : ''}`}>
             {e.date ? fmtYMD(e.date) : '미정'}
           </span>
           {st && st.alert && <span className={`text-[9px] font-bold px-1 py-0.5 rounded border ${st.chip}`}>{st.short}</span>}
@@ -379,9 +379,11 @@ export default function ResidentDocsPage() {
           <table className="w-full border-collapse">
             <thead className="sticky top-0 z-30 bg-white">
               <tr className="bg-gray-50/90">
-                <th className={`${th} sticky left-0 z-20 bg-gray-50 text-left border-r border-gray-200 min-w-[110px]`}>어르신 <span className="font-normal text-gray-400">· 입소일</span></th>
+                <th className={`${th} sticky left-0 z-20 bg-gray-50 text-left border-r-2 border-gray-300 min-w-[128px]`}>어르신</th>
+                <th className={`${th} min-w-[76px]`}>입소일</th>
                 <th className={`${th} text-left`}>인정서 기간</th>
-                <th className={th}>등급/급여 <span className="font-normal text-gray-400">· 기준일</span></th>
+                <th className={`${th} min-w-[72px]`}>등급/급여</th>
+                <th className={`${th} min-w-[104px]`}>기준일</th>
                 <th className={`${th} text-left bg-emerald-50/70 text-emerald-800`}>
                   <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 align-middle" />계약서 일시</th>
                 <th className={`${th} text-left bg-sky-50/70 text-sky-800`}>
@@ -391,7 +393,7 @@ export default function ResidentDocsPage() {
                 <th className={th}></th>
               </tr>
               {rulesOn && (() => {
-                const rc = 'px-2.5 py-1.5 text-[10.5px] leading-snug text-amber-800 align-top border-b border-amber-200 bg-amber-50/70'
+                const rc = 'px-2 py-1.5 text-[10.5px] leading-snug text-amber-800 align-top border-b-2 border-amber-300 border-r border-amber-200 last:border-r-0 bg-amber-50/70'
                 const cell = (k: string) => (
                   <td className={rc}>
                     {(COL_RULES[k] ?? []).map((t, i) => <div key={i} className="whitespace-nowrap">· {t}</div>)}
@@ -399,13 +401,13 @@ export default function ResidentDocsPage() {
                 )
                 return (
                   <tr>
-                    <td className={`${rc} sticky left-0 z-20 bg-amber-50 border-r border-amber-200`}>
+                    <td className={`${rc} sticky left-0 z-20 bg-amber-50 border-r-2 border-amber-300`}>
                       <div className="whitespace-nowrap">· ㄱㄴㄷ순 정렬</div>
                     </td>
+                    <td className={rc}><div className="whitespace-nowrap">· 계약 기준일</div></td>
                     {cell('cert')}
-                    <td className={rc}>
-                      {[...(COL_RULES['grade'] ?? []), ...(COL_RULES['base'] ?? [])].map((t, i) => <div key={i} className="whitespace-nowrap">· {t}</div>)}
-                    </td>
+                    {cell('grade')}
+                    {cell('base')}
                     {cell('contract')}{cell('plan')}{cell('eval')}
                     <td className={rc} />
                   </tr>
@@ -427,7 +429,7 @@ export default function ResidentDocsPage() {
                     return st.status === 'expired' ? 'shadow-[inset_3px_0_0_#dc2626]'
                       : st.status === 'renew' ? 'shadow-[inset_3px_0_0_#f59e0b]' : ''
                   })()}`}>
-                  <td className={`${td} sticky left-0 z-10 bg-white group-hover:bg-teal-50/40 border-r border-gray-100 whitespace-nowrap`}>
+                  <td className={`${td} sticky left-0 z-10 bg-white group-hover:bg-teal-50/40 border-r-2 border-gray-300 whitespace-nowrap`}>
                     <div className="flex items-baseline gap-1.5">
                       <span className="text-[10px] text-gray-300">{rankById.get(r.id)}</span>
                       <span className="text-sm font-bold text-gray-800">{r.name || '-'}</span>
@@ -463,6 +465,12 @@ export default function ResidentDocsPage() {
                         </div>
                       )
                     })()}
+                  </td>
+                  {/* 입소일 — 이름과 붙여두면 어느 쪽이 날짜인지 헷갈린다 */}
+                  <td className={`${td} text-center whitespace-nowrap`}>
+                    {r.admission_date
+                      ? <span className="text-[11px] font-semibold text-gray-600">{fmtD(r.admission_date)}</span>
+                      : <span className="text-gray-300">-</span>}
                   </td>
                   <td className={`${td} text-gray-500`}>
                     {r.certifications && r.certifications.length > 0 ? (() => {
@@ -536,14 +544,18 @@ export default function ResidentDocsPage() {
                       )
                     })() : <span className="text-gray-300">-</span>}
                   </td>
-                  <td className={`${td} text-gray-600 text-center whitespace-pre-line ${docInfo(r).renew ? 'bg-blue-50' : ''}`}>
+                  <td className={`${td} text-gray-600 text-center whitespace-pre-line`}>
                     {r.grade || '-'}
-                    {r.base_date && (
-                      <div className="text-[10px] text-gray-400 mt-0.5 whitespace-nowrap">
-                        기준 {fmtMD(r.base_date)} <span className="text-gray-300">(6개월 {plus6(r.base_date)})</span>
-                        {docInfo(r).renew && <span className="ml-1 inline-block text-[9px] font-bold text-blue-600 bg-blue-100 px-1 py-0.5 rounded-full">이번 달</span>}
+                  </td>
+                  {/* 기준일 — 등급과 다른 열로 나눈다. 6개월 뒤가 언제인지가 이 열의 핵심이다 */}
+                  <td className={`${td} text-center whitespace-nowrap ${docInfo(r).renew ? 'bg-blue-50' : ''}`}>
+                    {r.base_date ? (
+                      <div className="text-[11px] text-gray-600">
+                        {fmtMD(r.base_date)}
+                        <div className="text-[10px] text-gray-400">6개월 {plus6(r.base_date)}</div>
+                        {docInfo(r).renew && <span className="inline-block mt-0.5 text-[9px] font-bold text-blue-600 bg-blue-100 px-1 py-0.5 rounded-full">이번 달</span>}
                       </div>
-                    )}
+                    ) : <span className="text-gray-300">-</span>}
                   </td>
                   <td className={`${td} text-gray-500 bg-emerald-50/25`}><DocCell id={r.id} type="contract" items={r.contract_lines} admission={r.admission_date} /></td>
                   <td className={`${td} text-gray-500 bg-sky-50/25`}><DocCell id={r.id} type="plan" items={r.plan_lines} admission={r.admission_date} /></td>
@@ -563,7 +575,7 @@ export default function ResidentDocsPage() {
           </table>
         </div>
       )}
-      <p className="text-[11px] text-gray-400 mt-2">💡 계약서·계획서·평가 칸에는 <b className="text-gray-500">다음에 할 일</b>이 D-day와 함께 맨 위에 옵니다. 「전체 N건」을 누르면 지난 기록까지 펼쳐집니다. 열별 작성 규칙이 항상 표시됩니다 — 필요 없으면 상단 「작성 기준」 버튼으로 끄세요.</p>
+      <p className="text-[11px] text-gray-400 mt-2">💡 계약서·계획서·평가 칸에는 <b className="text-gray-500">다음에 할 일</b>이 D-day와 함께 맨 위에 옵니다. 자동으로 만들어진 일시는 <b className="text-yellow-700">챙겨야 하는 서류</b>로 시작하고, <b className="text-red-600">그 날짜가 지나도 완료로 표시하지 않으면 미비 서류</b>가 됩니다. 「전체 N건」을 누르면 지난 기록까지 펼쳐집니다.</p>
 
       {histOpen && (
         <DocChangesModal docId={histOpen.id} name={histOpen.name} onClose={() => setHistOpen(null)} />
