@@ -29,18 +29,24 @@ export interface AudioConfig {
   target_lufs: number | null   // 사람이 느끼는 크기 목표
   ceiling_db: number           // 넘지 못하게 막는 천장
   eq: number[]                 // 8밴드 증감(dB) — 63/125/250/500/1k/2k/4k/8k
-  knee_db: number              // 기준선 근처를 부드럽게 넘기는 폭
-  makeup_db: number            // 누른 만큼 다시 올리기
+  /* 컴프레서 — X32 다이내믹스와 같은 항목 */
+  knee: number                 // 0(딱딱) ~ 5(부드럽게)
+  mix: number                  // 병렬 압축 비율(%) — 100이면 전부 눌린 소리
+  gain_db: number              // 누른 뒤 다시 올리기 (X32 GAIN)
+  detection: 'rms' | 'peak'
 }
 /** 이큐 대역 — 서버(broadcast_audio.EQ_BANDS)와 같아야 한다 */
 export const EQ_BANDS = [63, 125, 250, 500, 1000, 2000, 4000, 8000]
 export const EQ_Q = 1.4
 export const EQ_MAX_DB = 12
+/** 비율은 X32 와 같은 단계로만 — 4.3:1 은 귀로 구분되지 않는다. 1.0 은 '누르지 않음' */
+export const RATIO_STEPS = [1.0, 1.1, 1.3, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 7.0, 10.0, 20.0]
 export interface AudioPreset {
   key: string; label: string; hint: string
   threshold_db: number; ratio: number; attack_ms: number; release_ms: number
   target_lufs: number | null
   eq?: number[]
+  knee?: number; mix?: number; gain_db?: number; detection?: 'rms' | 'peak'
 }
 /** 실제로 잰 값 — 귀로만 고르면 결국 찌그러진다 */
 export interface AudioStats {
@@ -267,7 +273,8 @@ export const broadcastAPI = {
 
   /* 음질 (컴프레서) */
   audioConfig: () => apiClient.get(`${BASE}/audio/config`)
-    .then(unwrap<{ config: AudioConfig; effective: AudioConfig; presets: AudioPreset[]; ffmpeg: boolean }>),
+    .then(unwrap<{ config: AudioConfig; effective: AudioConfig; presets: AudioPreset[]
+                   bands: number[]; ratio_steps: number[]; ffmpeg: boolean }>),
   audioSave: (b: Partial<AudioConfig>) => apiClient.put(`${BASE}/audio/config`, b)
     .then(unwrap<{ config: AudioConfig; effective: AudioConfig }>),
   /** 같은 문구를 원본·보정 둘로 만들어 듣고 숫자로 비교한다 */

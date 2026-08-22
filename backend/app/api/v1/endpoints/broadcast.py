@@ -822,8 +822,11 @@ class AudioConfigBody(BaseModel):
     target_lufs: Optional[float] = None
     ceiling_db: Optional[float] = None
     eq: Optional[List[float]] = None      # 8밴드 증감(dB)
-    knee_db: Optional[float] = None
-    makeup_db: Optional[float] = None
+    # 컴프레서 — X32 다이내믹스와 같은 항목
+    knee: Optional[float] = None          # 0(딱딱) ~ 5(부드럽게)
+    mix: Optional[float] = None           # 병렬 압축 비율(%)
+    gain_db: Optional[float] = None       # 누른 뒤 다시 올리기
+    detection: Optional[str] = None       # rms | peak
 
 
 @router.get("/audio/config")
@@ -834,6 +837,8 @@ def audio_config(db: Session = Depends(get_db), _: User = Depends(_manager)):
         "effective": broadcast_audio.effective(cfg),
         "presets": [{"key": k, **{kk: vv for kk, vv in v.items()}}
                     for k, v in broadcast_audio.PRESETS.items()],
+        "bands": broadcast_audio.EQ_BANDS,
+        "ratio_steps": broadcast_audio.RATIO_STEPS,
         "ffmpeg": media_svc.has_ffmpeg(),
     })
 
