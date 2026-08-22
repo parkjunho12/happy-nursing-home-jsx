@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Loader2, Play, Square, RotateCcw, Save } from 'lucide-react'
 import {
-  broadcastAPI, mediaUrl, EQ_BANDS, EQ_Q, EQ_MAX_DB,
+  broadcastAPI, mediaUrl, EQ_BANDS, EQ_Q, EQ_MAX_DB, RATIO_STEPS,
   type AudioConfig, type AudioPreset,
 } from '@/api/broadcastClient'
 
@@ -12,8 +12,11 @@ import {
  * 한 번 고칠 때마다 몇 초씩 기다린다. 그래서는 '어디를 얼마나' 를 못 찾는다.
  * 슬라이더를 움직이는 즉시 소리가 바뀌고 눈에도 보여야 귀로 찾을 수 있다.
  *
- * 신호 흐름 (Web Audio)
- *   음원 → [입력 분석] → 8밴드 이큐 → 컴프레서 → 보정볼륨 → [출력 분석] → 스피커
+ * 신호 흐름 — X32 채널 스트립과 같은 순서로 한 줄이다.
+ *   음원 → [IN] → 8밴드 EQ → COMP(병렬 믹스 포함) → GAIN → [OUT] → 스피커
+ *
+ * EQ 를 먼저 두는 이유: 웅웅거리는 저음을 깎기 전에 누르면, 컴프레서가 그
+ * 저음에 물려 정작 말소리는 안 눌린다. X32 도 기본이 EQ→COMP 다.
  *
  * 맞춘 값은 서버에 저장되고, 서버가 음성을 만들 때 같은 값으로 처리한다.
  * 이큐는 양쪽 다 피킹 바이쿼드라 계산이 같지만 컴프레서는 구현이 달라
@@ -26,10 +29,13 @@ type Nodes = {
   ctx: AudioContext
   src: AudioBufferSourceNode
   inAn: AnalyserNode
+  eqAn: AnalyserNode          // EQ 만 지난 소리 — 흐름을 단계별로 보려고
   outAn: AnalyserNode
   bands: BiquadFilterNode[]
   comp: DynamicsCompressorNode
-  makeup: GainNode
+  wet: GainNode               // 눌린 소리
+  dry: GainNode               // 안 누른 소리 (MIX)
+  gain: GainNode              // X32 GAIN
 }
 
 export default function AudioShaper() {
@@ -54,6 +60,7 @@ export default function AudioShaper() {
   const grRef = useRef<HTMLDivElement | null>(null)      // 눌린 양 막대
   const grTxtRef = useRef<HTMLSpanElement | null>(null)
   const inRef = useRef<HTMLDivElement | null>(null)
+  const eqRef = useRef<HTMLDivElement | null>(null)
   const outRef = useRef<HTMLDivElement | null>(null)
   // 슬라이더를 움직일 때마다 노드에 바로 반영하려면 최신 설정이 필요하다
   const cfgRef = useRef<AudioConfig | null>(null)
@@ -107,10 +114,14 @@ export default function AudioShaper() {
     n.bands.forEach((b, i) => b.gain.setTargetAtTime(c.eq?.[i] ?? 0, t, 0.01))
     n.comp.threshold.setTargetAtTime(c.threshold_db, t, 0.01)
     n.comp.ratio.setTargetAtTime(Math.max(c.ratio, 1), t, 0.01)
-    n.comp.knee.setTargetAtTime(c.knee_db ?? 6, t, 0.01)
     n.comp.attack.setTargetAtTime((c.attack_ms ?? 10) / 1000, t, 0.01)
     n.comp.release.setTargetAtTime((c.release_ms ?? 220) / 1000, t, 0.01)
-    n.makeup.gain.setTargetAtTime(db2lin(c.makeup_db ?? 0), t, 0.01)
+    // X32 눈금(0~5) → Web Audio 는 dB 로 받는다
+    n.comp.knee.setTargetAtTime(Math.min(40, (c.knee ?? 3) * 8), t, 0.01)
+    const mix = Math.min(Math.max(c.mix ?? 100, 0), 100) / 100
+    n.wet.gain.setTargetAtTime(mix, t, 0.01)
+    n.dry.gain.setTargetAtTime(1 - mix, t, 0.01)
+    n.gain.gain.setTargetAtTime(db2lin(c.gain_db ?? 0), t, 0.01)
   }
 
   /* ── 듣기 ─────────────────────────────────────────────── */
@@ -152,15 +163,23 @@ export default function AudioShaper() {
         b.gain.value = c.eq?.[i] ?? 0
         return b
       })
+      const eqAn = ctx.createAnalyser(); eqAn.fftSize = 2048; eqAn.smoothingTimeConstant = 0.75
       const comp = ctx.createDynamicsCompressor()
-      const makeup = ctx.createGain()
+      const wet = ctx.createGain()
+      const dry = ctx.createGain()
+      const gain = ctx.createGain()
 
+      // X32 채널 스트립과 같은 한 줄 — IN → EQ → COMP → GAIN → OUT
       src.connect(inAn)
       let node: AudioNode = inAn
       bands.forEach(b => { node.connect(b); node = b })
-      node.connect(comp); comp.connect(makeup); makeup.connect(outAn); outAn.connect(ctx.destination)
+      node.connect(eqAn)
+      // MIX — 눌린 소리와 안 누른 소리를 섞는다(병렬 압축)
+      eqAn.connect(comp); comp.connect(wet); wet.connect(gain)
+      eqAn.connect(dry); dry.connect(gain)
+      gain.connect(outAn); outAn.connect(ctx.destination)
 
-      nodesRef.current = { ctx, src, inAn, outAn, bands, comp, makeup }
+      nodesRef.current = { ctx, src, inAn, eqAn, outAn, bands, comp, wet, dry, gain }
       applyLive(c)
       src.start()
       setPlaying(true)
@@ -179,6 +198,7 @@ export default function AudioShaper() {
     if (!g) return
     const W = cv.width, H = cv.height
     const inBuf = new Uint8Array(n.inAn.frequencyBinCount)
+    const eqBuf = new Uint8Array(n.eqAn.frequencyBinCount)
     const outBuf = new Uint8Array(n.outAn.frequencyBinCount)
     const rate = n.ctx.sampleRate
     // 로그 주파수 축 — 사람이 소리를 듣는 방식이다
@@ -189,6 +209,7 @@ export default function AudioShaper() {
       const nn = nodesRef.current
       if (!nn) return
       nn.inAn.getByteFrequencyData(inBuf)
+      nn.eqAn.getByteFrequencyData(eqBuf)
       nn.outAn.getByteFrequencyData(outBuf)
       g.clearRect(0, 0, W, H)
 
@@ -244,6 +265,7 @@ export default function AudioShaper() {
         return Math.min(100, (s / buf.length / 140) * 100)
       }
       if (inRef.current) inRef.current.style.width = `${lvl(inBuf)}%`
+      if (eqRef.current) eqRef.current.style.width = `${lvl(eqBuf)}%`
       if (outRef.current) outRef.current.style.width = `${lvl(outBuf)}%`
 
       rafRef.current = requestAnimationFrame(tick)
@@ -327,25 +349,32 @@ export default function AudioShaper() {
           </p>
         )}
 
-        <div className="grid grid-cols-3 gap-3 mt-3">
-          <div>
-            <p className="text-[10px] font-bold text-gray-500 mb-1">들어온 소리</p>
-            <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-              <div ref={inRef} className="h-full bg-slate-400 transition-[width] duration-75" style={{ width: '0%' }} />
+        {/* 신호 흐름 — X32 채널 스트립처럼 한 줄. 단계마다 소리 크기가 보인다 */}
+        <div className="flex items-stretch gap-1.5 mt-3">
+          {([
+            ['IN', '들어온 소리', inRef, 'bg-slate-400'],
+            ['EQ', '이큐 지난 뒤', eqRef, 'bg-emerald-500'],
+            ['COMP', '컴프 지난 뒤', outRef, 'bg-indigo-500'],
+          ] as const).map(([tag, label, ref, tone], i) => (
+            <div key={tag} className="flex items-stretch gap-1.5 flex-1">
+              <div className="flex-1 rounded-xl border border-gray-100 bg-gray-50/60 px-2.5 py-2">
+                <p className="text-[10px] font-black text-gray-700">{tag}</p>
+                <p className="text-[9.5px] text-gray-400 mb-1">{label}</p>
+                <div className="h-2 rounded-full bg-gray-200/70 overflow-hidden">
+                  <div ref={ref} className={`h-full ${tone} transition-[width] duration-75`} style={{ width: '0%' }} />
+                </div>
+              </div>
+              {i < 2 && <span className="self-center text-gray-300 text-xs">▸</span>}
             </div>
-          </div>
-          <div>
-            <p className="text-[10px] font-bold text-gray-500 mb-1">
-              눌린 양 <span ref={grTxtRef} className="font-black text-amber-600 tabular-nums">-0.0dB</span>
+          ))}
+          <span className="self-center text-gray-300 text-xs">▸</span>
+          <div className="w-32 rounded-xl border border-amber-100 bg-amber-50/70 px-2.5 py-2">
+            <p className="text-[10px] font-black text-amber-800">눌린 양</p>
+            <p className="text-[9.5px] text-amber-600 mb-1">
+              <span ref={grTxtRef} className="font-black tabular-nums">-0.0dB</span> · 3~8dB가 알맞음
             </p>
-            <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+            <div className="h-2 rounded-full bg-amber-200/60 overflow-hidden">
               <div ref={grRef} className="h-full bg-amber-500 transition-[width] duration-75" style={{ width: '0%' }} />
-            </div>
-          </div>
-          <div>
-            <p className="text-[10px] font-bold text-gray-500 mb-1">나가는 소리</p>
-            <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-              <div ref={outRef} className="h-full bg-indigo-500 transition-[width] duration-75" style={{ width: '0%' }} />
             </div>
           </div>
         </div>
@@ -385,19 +414,68 @@ export default function AudioShaper() {
         </div>
       </div>
 
-      {/* 컴프레서 */}
+      {/* 컴프레서 — X32 다이내믹스 */}
       <div className="rounded-2xl border border-gray-100 bg-white p-4">
-        <p className="text-sm font-bold text-gray-800 mb-1">컴프레서</p>
+        <div className="flex items-center gap-2 mb-1">
+          <p className="text-sm font-bold text-gray-800">컴프레서</p>
+          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
+            EQ 다음 · X32 다이내믹스와 같은 항목
+          </span>
+        </div>
         <p className="text-[11px] text-gray-400 mb-3">
           큰 소리만 눌러 세기를 고르게 만듭니다. 「눌린 양」이 말할 때 3~8dB 정도 움직이면 알맞습니다.
         </p>
+
         <div className="grid md:grid-cols-2 gap-x-4 gap-y-3">
-          <Slider k="threshold_db" label="누르기 시작하는 세기" lo={-50} hi={0} step={1} unit="dB" />
-          <Slider k="ratio" label="누르는 정도" lo={1} hi={12} step={0.5} unit=": 1" />
-          <Slider k="knee_db" label="부드럽게 넘기는 폭" lo={0} hi={24} step={1} unit="dB" />
-          <Slider k="makeup_db" label="누른 뒤 다시 올리기" lo={-12} hi={12} step={0.5} unit="dB" />
-          <Slider k="attack_ms" label="무는 속도" lo={1} hi={100} step={1} unit="ms" />
-          <Slider k="release_ms" label="놓는 속도" lo={50} hi={800} step={10} unit="ms" />
+          <Slider k="threshold_db" label="THRESHOLD 누르기 시작하는 세기" lo={-60} hi={0} step={1} unit="dB" />
+
+          {/* 비율은 X32 처럼 단계로 — 4.3:1 은 귀로 구분되지 않는다 */}
+          <label className="block">
+            <span className="text-[11px] font-semibold text-gray-600">
+              RATIO 누르는 정도 <b className="text-gray-900 tabular-nums">
+                {cfg.ratio === 1 ? '안 누름' : `${cfg.ratio} : 1`}</b>
+            </span>
+            <div className="flex flex-wrap gap-1 mt-1">
+              {RATIO_STEPS.map(r => (
+                <button key={r} onClick={() => patch({ ratio: r })}
+                  className={`px-2 py-1 rounded-md text-[10.5px] font-bold border transition-colors ${
+                    cfg.ratio === r ? 'bg-indigo-600 border-indigo-600 text-white'
+                                    : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                  {r === 1 ? 'off' : r}
+                </button>
+              ))}
+            </div>
+          </label>
+
+          <Slider k="knee" label="KNEE 부드럽게 넘기기" lo={0} hi={5} step={0.5}
+            unit="— 0 딱딱 · 5 부드럽게" />
+          <Slider k="gain_db" label="GAIN 누른 뒤 다시 올리기" lo={0} hi={24} step={0.5} unit="dB" />
+          <Slider k="attack_ms" label="ATTACK 무는 속도" lo={0.5} hi={120} step={0.5} unit="ms" />
+          <Slider k="release_ms" label="RELEASE 놓는 속도" lo={5} hi={2000} step={5} unit="ms" />
+
+          <label className="block">
+            <span className="text-[11px] font-semibold text-gray-600">
+              MIX 병렬 압축 <b className="text-gray-900 tabular-nums">{cfg.mix}%</b>
+              <span className="font-normal text-gray-400"> — 낮추면 원래 소리가 섞여 자연스러워집니다</span>
+            </span>
+            <input type="range" min={0} max={100} step={5} value={cfg.mix}
+              onChange={e => patch({ mix: Number(e.target.value) })}
+              className="w-full accent-indigo-600" />
+          </label>
+
+          <div>
+            <span className="text-[11px] font-semibold text-gray-600">DETECTION 무엇을 보고 누를지</span>
+            <div className="flex gap-1 mt-1">
+              {([['rms', 'RMS — 부드럽게'], ['peak', 'PEAK — 튀는 것을 잡음']] as const).map(([k2, label]) => (
+                <button key={k2} onClick={() => patch({ detection: k2 })}
+                  className={`flex-1 px-2 py-1.5 rounded-lg text-[10.5px] font-bold border transition-colors ${
+                    cfg.detection === k2 ? 'bg-indigo-600 border-indigo-600 text-white'
+                                         : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
