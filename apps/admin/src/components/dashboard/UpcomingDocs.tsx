@@ -90,8 +90,8 @@ export default function UpcomingDocs() {
     const out: TaskRow[] = []
     rows.forEach(r => {
       ((r[field] as DocEvent[]) ?? []).map(asEvent).forEach((e, idx) => {
-        // 지난 날짜에 아무 표시가 없으면 이미 작성한 것으로 본다 → 할 일에서 제외.
-        // 안 된 건은 미비·서명미비·챙길것으로 표시해야 여기에 남는다.
+        // 완료로 표시한 것만 할 일에서 빠진다.
+        // 날짜가 지났는데 표시가 없으면 미비 서류이므로 여기에 남는다.
         if (!e.date || effStatus(e) === '완료') return
         const d = dday(e.date)
         if (d > UPCOMING_WINDOW) return

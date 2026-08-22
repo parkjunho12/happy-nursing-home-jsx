@@ -46,20 +46,25 @@ export const isExplicitDone = (e: DocEvent): boolean => e.status === '완료' ||
 
 /**
  * 상태 해석.
- * 기존 시트에서는 날짜가 지난 칸은 '이미 작성한 기록'이고, 문제가 있는 것만 색을 칠했다.
- * 그래서 여기서도 날짜가 지났는데 아무 표시가 없으면 완료로 본다.
- * 안 된 것은 미비·서명미비·챙길것으로 명시해야 한다.
+ *
+ * 완료로 표시하지 않은 채 날짜가 지났다면 '미비 서류'다.
+ * 예전에는 지난 날짜를 '이미 작성한 기록'으로 보고 완료 처리했는데,
+ * 그러면 정말 빠뜨린 서류가 조용히 완료로 묻혀 아무도 모른다.
+ * 완료는 사람이 표시해야 완료다.
+ *
+ * 아직 오지 않은 일시는 '챙겨야 하는 서류'다.
  */
 export const effStatus = (e: DocEvent): EventStatus | null => {
-  if (e.status) return e.status
-  if (e.done) return '완료'
-  if (e.date && e.date < todayISO()) return '완료'   // 지난 기록 = 작성 완료로 간주
-  return null
+  if (e.status === '완료' || e.done) return '완료'
+  const late = !!e.date && e.date < todayISO()
+  if (e.status) return late && e.status === '챙길것' ? '미비' : e.status
+  if (!e.date) return null                          // 날짜 미정은 아직 판단할 수 없다
+  return late ? '미비' : '챙길것'
 }
 
-/** 지난 날짜라서 완료로 간주된 것 (직접 체크한 건 아님) */
-export const isImplicitDone = (e: DocEvent): boolean =>
-  !e.status && !e.done && !!e.date && e.date < todayISO()
+/** 지난 날짜라서 완료로 간주된 것 — 이제는 그렇게 보지 않는다(항상 false).
+ *  화면 쪽 호출부를 한 번에 지우지 않으려고 남겨 둔다. */
+export const isImplicitDone = (_e: DocEvent): boolean => false
 
 /** 조치가 필요한 항목인지 (미비·서명미비·챙길것) */
 export const isAlert = (e: DocEvent): boolean => {
@@ -152,16 +157,20 @@ export function autoDocEvents(certs: Certification[], admissionDate?: string | n
   }
 
   // 그 외 정기 일시는 현재(최신) 인정서 기준으로만 생성. 이전 인정서는 사용 안 함.
+  // 앞으로 챙겨야 할 일시는 '챙겨야 하는 서류'로 만든다.
+  // 상태를 비워두면 목록에서 아무 색도 없어 무엇을 해야 하는지 보이지 않는다.
+  const TODO: Partial<DocEvent> = { status: '챙길것' }
+
   if (cur && cur.start) {
     const S = _pd(cur.start)!, E = _pd(cur.end)
     const isRenewal = valid.length > 1              // 이전 인정서가 있으면 현재는 갱신 인정서
     // 갱신 인정서면 시작일에 체결한 갱신계약을 남긴다
-    if (isRenewal) contract.push({ date: cur.start!, kind: '갱신', memo: '갱신계약' })
+    if (isRenewal) contract.push({ date: cur.start!, kind: '갱신', memo: '갱신계약', ...TODO })
     // 계약서: 매년 1/1=변경계약
     if (E) {
       for (let y = S.getFullYear() + 1; y <= E.getFullYear(); y++) {
         const jan = `${y}-01-01`, jd = _pd(jan)!
-        if (jd > S && jd <= E) contract.push({ date: jan, kind: '변경계약', memo: '변경계약' })
+        if (jd > S && jd <= E) contract.push({ date: jan, kind: '변경계약', memo: '변경계약', ...TODO })
       }
     }
     // 갱신은 인정서 마지막 날이 아니라 '그 다음 날'이다.
@@ -169,19 +178,19 @@ export function autoDocEvents(certs: Certification[], admissionDate?: string | n
     // 그날 계약서만 쓰는 게 아니라 급여제공계획서·결과평가도 새 기준으로 함께 작성한다.
     if (E) {
       const renewAt = _f(addDays(E, 1))
-      contract.push({ date: renewAt, kind: '갱신', memo: '갱신계약' })
+      contract.push({ date: renewAt, kind: '갱신', memo: '갱신계약', ...TODO })
       // 계획서·평가에는 '갱신' 구분이 없다 — 새 인정서의 첫 기준일이므로 '기준'으로 남긴다
-      plan.push({ date: renewAt, kind: '기준', memo: '갱신 기준일' })
-      evl.push({ date: renewAt, kind: '기준', memo: '갱신 기준일' })
+      plan.push({ date: renewAt, kind: '기준', memo: '갱신 기준일', ...TODO })
+      evl.push({ date: renewAt, kind: '기준', memo: '갱신 기준일', ...TODO })
     }
     // 6개월 기준 사이클 [S, S+6, ...] ≤ E
     const cycle: string[] = []
     let c2 = S
     while (!E || c2 <= E) { cycle.push(_f(c2)); c2 = addMonths(c2, 6); if (cycle.length > 40) break; if (!E) break }
     // 계획서 기준: 신규=입소(S) 다음부터, 갱신=새 기준일(S)부터
-    cycle.slice(isRenewal ? 0 : 1).forEach(d => plan.push({ date: d, kind: '기준', memo: null }))
+    cycle.slice(isRenewal ? 0 : 1).forEach(d => plan.push({ date: d, kind: '기준', memo: null, ...TODO }))
     // 평가: 입소/갱신 후 첫 기준일부터 6개월마다
-    cycle.slice(1).forEach(d => evl.push({ date: d, kind: '기준', memo: null }))
+    cycle.slice(1).forEach(d => evl.push({ date: d, kind: '기준', memo: null, ...TODO }))
   }
   const bydate = (a: DocEvent, b: DocEvent) => (a.date || '9999').localeCompare(b.date || '9999')
   return {
@@ -202,8 +211,9 @@ export function appendAuto(existing: DocEvent[] | undefined, auto: DocEvent[]): 
   // 갱신계약 기준일이 '인정서 마지막 날'에서 '그 다음 날'로 바뀌었다.
   // 예전 기준으로 저장된 갱신 항목이 그대로 남아 있으면 하루 차이로 두 건이 된다.
   // 손대지 않은 항목이면 날짜만 옮기고, 이미 처리한 항목이면 건드리지 않는다.
+  // '챙길것' 은 자동으로 붙는 시작 상태다 — 사람이 손댄 것으로 보면 안 된다
   const untouched = (e: DocEvent) =>
-    !e.done && !e.status && (!e.memo || e.memo === '갱신계약')
+    !e.done && (!e.status || e.status === '챙길것') && (!e.memo || e.memo === '갱신계약')
   let moved = 0
   const skip = new Set<string>()          // 이관으로 해결돼 새로 넣을 필요가 없는 날짜
   for (const a of auto) {
