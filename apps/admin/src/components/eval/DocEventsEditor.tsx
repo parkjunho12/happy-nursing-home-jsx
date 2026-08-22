@@ -15,9 +15,11 @@ interface Props {
   onChange: (next: DocEvent[]) => void
   addLabel?: string
   defaultAddKind?: string
+  /** 입소일 — 그날 서류는 완료로 본다 */
+  admission?: string | null
 }
 
-export default function DocEventsEditor({ type, value, onChange, addLabel = '+ 일시 추가', defaultAddKind }: Props) {
+export default function DocEventsEditor({ type, value, onChange, addLabel = '+ 일시 추가', defaultAddKind, admission }: Props) {
   const items = (value ?? []).map(asEvent)
   const kinds = KINDS[type]
   const [dragI, setDragI] = useState<number | null>(null)
@@ -71,7 +73,7 @@ export default function DocEventsEditor({ type, value, onChange, addLabel = '+ �
             <DateField value={it.date} onChange={v => patch(i, { date: v })} className={inp} wrapperClassName="flex-1 min-w-[8rem]" placeholder="날짜(선택)" />
             <input value={it.memo ?? ''} onChange={e => patch(i, { memo: e.target.value })} placeholder="메모(선택)" className={`${inp} flex-1 min-w-[7rem]`} />
             {(() => {
-              const cur = effStatus(it)
+              const cur = effStatus(it, admission)
               const sm = statusMeta(cur)
               return (
                 <select

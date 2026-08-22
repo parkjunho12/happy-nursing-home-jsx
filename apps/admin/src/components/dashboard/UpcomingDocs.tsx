@@ -62,7 +62,8 @@ export default function UpcomingDocs() {
       if (!doc) return
       const next = ((doc[field] as DocEvent[]) ?? []).map(asEvent).map((e, i) => i === p.idx ? { ...e, done: true, status: '완료' as const } : e)
       const saved = await residentDocAPI.update(p.docId, { [field]: next })
-      const savedDone = effStatus(((saved[field] as DocEvent[]) ?? []).map(asEvent)[p.idx] ?? {}) === '완료'
+      const savedDone = effStatus(((saved[field] as DocEvent[]) ?? []).map(asEvent)[p.idx] ?? {},
+                                  doc.admission_date) === '완료'
       if (!savedDone) {
         setErr('완료 상태가 서버에 저장되지 않았습니다. 백엔드가 최신 버전인지 확인해주세요.')
         return
@@ -92,7 +93,7 @@ export default function UpcomingDocs() {
       ((r[field] as DocEvent[]) ?? []).map(asEvent).forEach((e, idx) => {
         // 완료로 표시한 것만 할 일에서 빠진다.
         // 날짜가 지났는데 표시가 없으면 미비 서류이므로 여기에 남는다.
-        if (!e.date || effStatus(e) === '완료') return
+        if (!e.date || effStatus(e, r.admission_date) === '완료') return
         const d = dday(e.date)
         if (d > UPCOMING_WINDOW) return
         out.push({ docId: r.id, idx, name: r.name ?? '-', date: e.date, kind: e.kind, d, care: deriveCare(r.certifications) })
