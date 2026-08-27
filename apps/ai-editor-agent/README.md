@@ -136,11 +136,14 @@ sudo systemctl daemon-reload && sudo systemctl enable --now ai-editor-agent
 
 ```bash
 # 필수 — 없으면 배포가 멈춥니다
-AI_EDITOR_REPO_URL=https://<GH_TOKEN>@github.com/parkjunho12/happy-nursing-home-jsx.git
+# 저장소가 공개라 클론에는 토큰이 필요 없습니다. 주소에 토큰을 박지 마세요 —
+# 박으면 /repo 볼륨의 .git/config 에 평문으로 남고, 볼륨은 컨테이너를 지워도 남습니다.
+# 브랜치를 미는 인증은 entrypoint 가 `gh auth setup-git` 으로 붙여줍니다.
+AI_EDITOR_REPO_URL=https://github.com/parkjunho12/happy-nursing-home-jsx.git
 AI_EDITOR_ENROLL_CODE=<아무도 모르는 긴 문자열>
 ANTHROPIC_API_KEY=sk-ant-...
 
-# PR 을 만들려면 필요 (repo 권한)
+# 브랜치 push · PR 생성에 필요 (repo 권한)
 GH_TOKEN=ghp_...
 
 # 미리보기를 밖에서 열려면
