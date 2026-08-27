@@ -63,6 +63,40 @@ jobs:
             done
             grep -q "^GH_TOKEN=" .env || echo "⚠ GH_TOKEN 이 없습니다 — PR 을 만들 수 없습니다"
 
+            # 미리보기 비밀번호 해시 — 여기서 막지 않으면 사이트 전체가 내려간다.
+            #
+            # bcrypt 해시에는 $ 가 세 개 들어간다($2a$14$...). .env 에 그냥 붙여넣으면
+            # docker compose 가 이걸 변수로 읽어 먹어치운다. 실제로 재봤다:
+            #   그냥 붙여넣기 → '$2a$14' 로 잘림   큰따옴표 → 똑같이 잘림
+            #   작은따옴표   → 온전히 보존        $$ 로 이스케이프 → 온전히 보존
+            # 그리고 그 결과가 Caddy 에서 어떻게 되는지도 재봤다:
+            #   잘린 해시 → Caddy 는 뜨고 전부 401. 잠기기만 하니 그나마 낫다
+            #   빈 해시   → Caddy 컨테이너가 죽는다. 요양원 사이트가 통째로 내려간다
+            # 그래서 빈 값은 배포를 세우고, 잘린 값은 미리 잡는다.
+            if grep -q "^PREVIEW_PASS_HASH=[[:space:]]*$" .env; then
+              echo "❌ infra/.env 의 PREVIEW_PASS_HASH 가 비어 있습니다."
+              echo "   값을 채우거나, 그 줄을 통째로 지우세요(지우면 Caddyfile 기본값을 씁니다)."
+              exit 1
+            fi
+            raw=$(sed -n "s/^PREVIEW_PASS_HASH=//p" .env | tr -d '\r')
+            ph=$(printf '%s' "$raw" | tr -d "\"'")
+            if [ -n "$ph" ]; then
+              if [ "${#ph}" -lt 60 ] || [ "${ph#\$2}" = "$ph" ]; then
+                echo "❌ PREVIEW_PASS_HASH 가 온전하지 않습니다 (${#ph}자, 정상은 60자이고 \$2 로 시작)."
+                echo "   만들기: docker run --rm caddy:2.7-alpine caddy hash-password --plaintext '비밀번호'"
+                exit 1
+              fi
+              # .env 파일 안에서는 60자라도, 작은따옴표가 없으면 컨테이너에 들어갈 때
+              # 잘린다. 파일만 봐서는 멀쩡해 보이므로 여기서 따옴표를 직접 확인한다.
+              case "$raw" in
+                "'"*"'") : ;;
+                *) echo "❌ PREVIEW_PASS_HASH 를 작은따옴표로 감싸주세요."
+                   echo "   bcrypt 해시의 \$ 를 docker compose 가 변수로 읽어 값이 잘립니다."
+                   echo "   PREVIEW_PASS_HASH='\$2a\$14\$...'  ← 이렇게"
+                   exit 1 ;;
+              esac
+            fi
+
             docker compose build ai-editor
             docker compose up -d --force-recreate ai-editor
 

@@ -171,6 +171,16 @@ services:
     environment:
       # ✅ Caddy에서 ACME/TLS 쓸 때 이메일 추천(선택)
       - ACME_AGREE=true
+      # ✅ 미리보기(preview.도메인) 아이디·비밀번호.
+      #    Caddyfile 이 {$PREVIEW_USER} / {$PREVIEW_PASS_HASH} 로 읽는데,
+      #    여기서 넘겨주지 않으면 .env 에 아무리 적어도 Caddy 안까지 닿지 않는다.
+      #    해시 만들기:
+      #      docker run --rm caddy:2.7-alpine caddy hash-password --plaintext '비밀번호'
+      #    값 없이 이름만 적는다. .env 에 없으면 컨테이너로 아예 넘어가지 않고,
+      #    Caddyfile 에 적힌 기본값이 그대로 산다. `=${...:-}` 로 적으면 빈 문자열이
+      #    넘어가 해시가 비어버리고 — Caddy 가 아예 못 뜬다. 사이트 전체가 내려간다.
+      - PREVIEW_USER
+      - PREVIEW_PASS_HASH
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
