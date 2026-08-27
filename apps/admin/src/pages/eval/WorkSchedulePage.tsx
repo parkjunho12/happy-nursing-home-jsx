@@ -36,7 +36,7 @@ const todayISO = () => { const d = new Date(); const p = (n: number) => String(n
 
 
 export default function WorkSchedulePage() {
-  const { staffList, loadAll } = useLtcStore()
+  const { staffList, residents, loadAll } = useLtcStore()
   const [ym, setYm] = useState(thisMonth())
   const [data, setData] = useState<ScheduleData>({})
   const [rows, setRows] = useState<ScheduleRow[]>([])
@@ -55,6 +55,9 @@ export default function WorkSchedulePage() {
   // 짜는 것은 시설장도 하지만, 확정 여부는 한 사람이 정해야 한다
   const isAdminUser = useAuthStore(st => st.user)?.role === 'ADMIN'
   const [teamOpen, setTeamOpen] = useState(false)
+  // 층은 늘 필요한 정보가 아니다 — 볼 사람만 켠다. 이 브라우저에 기억한다.
+  const [showFloor, setShowFloor] = useState(() => localStorage.getItem('ws.floor') === '1')
+  useEffect(() => { localStorage.setItem('ws.floor', showFloor ? '1' : '0') }, [showFloor])
   const [auditOpen, setAuditOpen] = useState(true)
   const [histOpen, setHistOpen] = useState(false)
   const [pickOpen, setPickOpen] = useState(false)   // 자동 생성 대상 선택
@@ -276,13 +279,23 @@ export default function WorkSchedulePage() {
       })
       .map(s => {
         const r = rowMap.get(s.id)
-        return { ...s, team: r?.team ?? '', note: r?.note ?? '', pos: r?.position ?? s.position ?? '' }
+        return { ...s, team: r?.team ?? '', floor: r?.floor ?? '', note: r?.note ?? '', pos: r?.position ?? s.position ?? '' }
       })
     if (sortMode === 'name') return [...base].sort((a, b) => a.name.localeCompare(b.name, 'ko'))
     if (sortMode === 'hire') return [...base].sort((a, b) =>
       (a.hireDate || '9999').localeCompare(b.hireDate || '9999') || a.name.localeCompare(b.name, 'ko'))
     return sortScheduleStaff(base)
   }, [staffList, rowMap, ym, sortMode])
+
+  /** 고를 수 있는 층 — 어르신이 실제로 계신 층에서 뽑는다.
+   *  없으면 흔히 쓰는 값으로 둔다(수급자를 아직 안 넣은 경우). */
+  const floors = useMemo(() => {
+    const set = new Set<string>()
+    residents.forEach(r => { if (r.floor) set.add(r.floor) })
+    rows.forEach(r => { if (r.floor) set.add(r.floor) })
+    const list = [...set].sort((a, b) => a.localeCompare(b, 'ko', { numeric: true }))
+    return list.length ? list : ['2층', '3층', '4층']
+  }, [residents, rows])
 
   const setCell = (sid: string, day: number, code: string) => {
     if (lock.locked) return          // 확정된 달은 칠해지지 않는다
@@ -593,7 +606,7 @@ export default function WorkSchedulePage() {
   const save = async () => {
     setSaving(true)
     try {
-      const payload = staff.map((s, i) => ({ staff_id: s.id, position: s.pos, team: s.team, order: i, note: s.note }))
+      const payload = staff.map((s, i) => ({ staff_id: s.id, position: s.pos, team: s.team, floor: s.floor, order: i, note: s.note }))
       const doc = await workScheduleAPI.save({ year_month: ym, data, rows: payload, base_hours: baseHours, base_days: baseDays, as_of: asOf, team_offsets: offsets })
       setUpdatedBy(doc.updated_by ?? null); setDirty(false)
       setLock({ locked: !!doc.locked, by: doc.locked_by, at: doc.locked_at })
@@ -633,6 +646,11 @@ export default function WorkSchedulePage() {
               {leavePending > 0 && (
                 <span className="absolute -top-1.5 -right-1.5 text-[10px] font-extrabold bg-amber-500 text-white rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">{leavePending}</span>
               )}
+            </button>
+            <button onClick={() => setShowFloor(v => !v)}
+              title="요양보호사 담당 층을 표에 보여줍니다 (인쇄에도 나옵니다)"
+              className={`inline-flex items-center gap-1.5 px-3 py-2.5 border rounded-xl text-sm font-semibold ${showFloor ? 'bg-teal-50 border-teal-300 text-teal-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+              {showFloor ? '✓ ' : ''}층 표시
             </button>
             <button onClick={() => setTeamOpen(v => !v)} className={`inline-flex items-center gap-1.5 px-3 py-2.5 border rounded-xl text-sm font-semibold ${teamOpen ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
               <Users className="w-4 h-4" /> 조 편성
@@ -811,6 +829,7 @@ export default function WorkSchedulePage() {
         {teamOpen && (
           <TeamPanel
             staff={staff} patchRow={patchRow} offsets={offsets} setOffsets={setOffsets} setDirty={setDirty}
+            floors={floors}
             anchor={anchor} setAnchor={setAnchor} settleStart={settleStart} setSettleStart={setSettleStart}
           />
         )}
@@ -927,7 +946,7 @@ export default function WorkSchedulePage() {
         <div className={`ws-wrap overflow-x-auto border border-gray-200 rounded-xl bg-white outline-none ${attPick ? 'print:hidden' : ''}`} tabIndex={0} onKeyDown={onKey}>
           <table className="ws-table border-collapse" style={{ minWidth: 1400 }}>
             <colgroup>
-              <col className="c-pos" /><col className="c-team" /><col className="c-name" />
+              <col className="c-pos" /><col className="c-team" />{showFloor && <col className="c-floor" />}<col className="c-name" />
               {days.map(({ day }) => <col key={day} />)}
               <col className="c-agg c-sum" /><col className="c-agg c-cnt" /><col className="c-agg c-cnt" />
               <col className="c-agg c-off" /><col className="c-agg c-off" /><col className="c-agg c-comp" />
@@ -937,6 +956,7 @@ export default function WorkSchedulePage() {
               <tr>
                 <th className={`${th} sticky left-0 z-20`}>직종</th>
                 <th className={th}>조</th>
+                {showFloor && <th className={th}>층</th>}
                 <th className={`${th} sticky left-0 z-20`}>성명</th>
                 {days.map(({ day, dow }) => {
                   const t = dayTone(day, dow)
@@ -957,7 +977,7 @@ export default function WorkSchedulePage() {
                 <th className={`${th} ws-agg`}>비고</th>
               </tr>
               <tr>
-                <th className={th} colSpan={3}><span className="print:hidden">{baseHours}시간 / {baseDays}일 기준</span></th>
+                <th className={th} colSpan={showFloor ? 4 : 3}><span className="print:hidden">{baseHours}시간 / {baseDays}일 기준</span></th>
                 {days.map(({ day, dow }) => {
                   const t = dayTone(day, dow)
                   const h = holidays[iso(day)]?.name
@@ -984,6 +1004,9 @@ export default function WorkSchedulePage() {
                       {s.pos || '-'}
                     </td>
                     <td className={`${td} text-gray-500`}>{s.team || ''}</td>
+                    {showFloor && (
+                      <td className={`${td} text-gray-500 font-semibold`}>{s.floor || ''}</td>
+                    )}
                     <td className={`${td} ws-name sticky left-0 z-10 bg-white font-bold text-gray-800 group/nm relative`}>
                       {s.name}
                       <button type="button" tabIndex={-1}
@@ -1066,7 +1089,7 @@ export default function WorkSchedulePage() {
                 )
               })}
               <tr className="ws-row-sum bg-gray-50">
-                <td className={`${td} font-bold text-gray-600 sticky left-0 z-10 bg-gray-50`} colSpan={3}>요양보호사 주간 인원 <span className="font-normal text-gray-400">(야간 제외)</span></td>
+                <td className={`${td} font-bold text-gray-600 sticky left-0 z-10 bg-gray-50`} colSpan={showFloor ? 4 : 3}>요양보호사 주간 인원 <span className="font-normal text-gray-400">(야간 제외)</span></td>
                 {days.map(({ day }) => {
                   const n = dayCountBy(day, true)
                   return (
@@ -1082,7 +1105,7 @@ export default function WorkSchedulePage() {
                 // 신청이 있을 때만 낸다. 없으면 윗줄과 같은 숫자라 눈만 어지럽다.
                 // 벽에 붙는 문서가 아니라 정하려고 보는 줄이므로 인쇄에서는 뺀다.
                 <tr className="ws-row-sum bg-amber-50/70 print:hidden">
-                  <td className={`${td} font-bold text-amber-800 sticky left-0 z-10 bg-amber-50`} colSpan={3}>
+                  <td className={`${td} font-bold text-amber-800 sticky left-0 z-10 bg-amber-50`} colSpan={showFloor ? 4 : 3}>
                     신청 다 받아주면 <span className="font-normal text-amber-600">(대기 중 휴무 신청 {pendingLeaves.length}건 뺀 수)</span>
                   </td>
                   {days.map(({ day }) => {
@@ -1107,7 +1130,7 @@ export default function WorkSchedulePage() {
                 </tr>
               )}
               <tr className="ws-row-sum bg-gray-50/60">
-                <td className={`${td} font-semibold text-gray-500 sticky left-0 z-10 bg-gray-50`} colSpan={3}>그 외 주간 인원</td>
+                <td className={`${td} font-semibold text-gray-500 sticky left-0 z-10 bg-gray-50`} colSpan={showFloor ? 4 : 3}>그 외 주간 인원</td>
                 {days.map(({ day }) => (
                   <td key={day} className={`${td} text-gray-500`}>{dayCountBy(day, false) || '0'}</td>
                 ))}
@@ -1269,6 +1292,7 @@ export default function WorkSchedulePage() {
           /* 고정열 폭 */
           .ws-table col.c-pos { width: 14mm; }
           .ws-table col.c-team { width: 7mm; }
+          .ws-table col.c-floor { width: 8mm; }
           .ws-table col.c-name { width: 20mm; }
 
           /* ① 기본 — 집계 열은 통째로 빼고 근무만 크게.

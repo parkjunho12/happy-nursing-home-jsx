@@ -11,6 +11,7 @@ export const TEAM_BAND: Record<string, string> = {
 
 /** 표에 실리는 직원 행 */
 export interface StaffRow {
+  floor?: string | null       // 담당 층 — 근무표에서 선택적으로 보여준다
   id: string
   name: string
   pos: string
