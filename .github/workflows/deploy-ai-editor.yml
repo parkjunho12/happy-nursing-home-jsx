@@ -117,7 +117,13 @@ jobs:
 
             # 디스크가 차면 다음 배포가 실패한다 — 매번 쓸어낸다
             docker image prune -f
+
+            # 서버 형편을 매 배포마다 남긴다. 편집기의 병목은 디스크가 아니라
+            # 메모리라, 나중에 '왜 빌드가 죽었나' 를 볼 때 이 줄이 근거가 된다.
+            echo "--- 서버 형편 ---"
             df -h / | tail -1
+            free -h | sed -n '1,2p'
+            echo "편집기 상한: $(docker inspect -f '{{.HostConfig.Memory}} bytes / CPU {{.HostConfig.NanoCpus}}' happy_ai_editor 2>/dev/null)"
 
             echo "--- 30초 지켜본다 ---"
             sleep 30
