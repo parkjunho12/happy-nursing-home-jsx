@@ -605,6 +605,7 @@ SUMMARY>>>
         본 흐름과 갈라 둔다 — 의존성 설치가 10분씩 걸리는데 그동안 작업을
         못 받으면 안 된다.
         """
+        tries = 0
         while not self._stop.is_set():
             try:
                 if self._previews:
@@ -613,6 +614,18 @@ SUMMARY>>>
                         logger.info("작업 미리보기에 자리를 내줍니다")
                         self.stop_base_preview()
                 else:
+                    # 무엇을 띄울지 아직 못 정했으면 다시 물어본다.
+                    #
+                    # 부팅 때 한 번만 물어보면 안 된다 — 배포는 백엔드와 이
+                    # 컨테이너를 같이 세우므로, 하필 백엔드가 아직 안 떠서
+                    # 실패하기 쉽다. 그러면 누군가 화면을 열어 줄 때까지
+                    # 미리보기가 영영 안 뜬다. 10회(약 30초)마다 다시 묻는다.
+                    if not self._want:
+                        if tries % 10 == 0:
+                            self._want = self.first_service_key()
+                        tries += 1
+                    else:
+                        tries = 0
                     want = self._want
                     dead = self._base is not None and self._base.poll() is not None
                     if want and (self._base is None or dead or self._base_key != want):
@@ -928,9 +941,10 @@ SUMMARY>>>
     def run_forever(self) -> None:
         logger.info("편집 에이전트 시작 — %s", self.cfg.server_url)
         threading.Thread(target=self.heartbeat_loop, daemon=True).start()
-        # 아무도 고르기 전에도 화면이 보이도록 첫 서비스를 미리 띄워 둔다
+        # 아무도 고르기 전에도 화면이 보이도록 첫 서비스를 띄워 둔다.
+        # 무엇을 띄울지는 base_loop 이 알아서 물어본다 — 여기서 물어보면
+        # 백엔드가 아직 안 떴을 때 한 번 실패하고 끝난다.
         if self.cfg.base_preview:
-            self._want = self.first_service_key()
             threading.Thread(target=self.base_loop, daemon=True).start()
         idle = 0
         while not self._stop.is_set():
