@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   Crosshair, FileCode2, Loader2, Play, Search, Square, GitPullRequest,
-  Check, RotateCcw, ExternalLink, AlertTriangle,
+  Check, RotateCcw, ExternalLink, AlertTriangle, Rocket,
 } from 'lucide-react'
 import {
   SCOPE_META, JOB_STATUS_META,
@@ -26,7 +26,7 @@ const EXAMPLES = [
 
 export default function CommandPane({
   target, job, events, busy, canRun, onRun, onAnalyze, onCancel,
-  onApprove, onRevise, onRollback, baseBranch,
+  onApprove, onDeploy, onRevise, onRollback, baseBranch,
 }: {
   target: PickedTarget | null
   job: AiJob | null
@@ -37,6 +37,8 @@ export default function CommandPane({
   onAnalyze: (b: Body) => void
   onCancel: () => void
   onApprove: (merge: boolean) => void
+  /** 병합에 이어 운영까지 — 확인 창은 부모가 띄운다 */
+  onDeploy: () => void
   onRevise: (text: string) => void
   onRollback: () => void
   /** 이 서비스의 기준 브랜치 — 병합이 배포로 이어지는지 판단한다 */
@@ -267,6 +269,27 @@ export default function CommandPane({
                 </div>
               )}
 
+              {/* 무엇이 바뀌었는지 — 파일 이름과 줄 수만으로는 알 수 없다.
+                  운영에 올릴지 말지는 실제로 바뀐 줄을 보고 정하는 것이다. */}
+              {!!job.diff && (
+                <div className="rounded-xl border border-gray-100 bg-white p-2.5">
+                  <p className="text-[11px] font-bold text-gray-500 mb-1.5">바뀐 내용</p>
+                  <div className="rounded-lg bg-gray-900 overflow-auto max-h-72">
+                    <pre className="text-[10px] font-mono leading-relaxed p-2">
+                      {job.diff.split('\n').map((ln, i) => (
+                        <div key={i} className={
+                          ln.startsWith('+++') || ln.startsWith('---') ? 'text-gray-500'
+                          : ln.startsWith('@@') ? 'text-sky-400'
+                          : ln.startsWith('+') ? 'text-emerald-400'
+                          : ln.startsWith('-') ? 'text-rose-400'
+                          : ln.startsWith('diff ') ? 'text-amber-300 mt-1.5'
+                          : 'text-gray-300'}>{ln || ' '}</div>
+                      ))}
+                    </pre>
+                  </div>
+                </div>
+              )}
+
               {job.plan && (
                 <div className="rounded-xl border border-sky-100 bg-sky-50/50 p-2.5">
                   <p className="text-[11px] font-bold text-sky-800 mb-1">변경안</p>
@@ -319,15 +342,24 @@ export default function CommandPane({
                         수정 요청
                       </button>
                     </div>
+                    {/* 확인이 끝났으면 여기서 바로 운영까지 간다.
+                        수정을 보고 판단한 그 자리에서 결정하는 것이 자연스럽다. */}
+                    <button onClick={() => onDeploy()} disabled={!checksOk}
+                      title={checksOk ? '병합하고 운영까지 올립니다'
+                                      : '검증을 통과해야 배포할 수 있습니다'}
+                      className="w-full inline-flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-[11.5px] font-bold disabled:opacity-40">
+                      <Rocket size={12} /> 운영에 배포할까요?
+                    </button>
                     <div className="grid grid-cols-2 gap-1.5">
                       <button onClick={() => onApprove(false)} disabled={!checksOk}
                         title={checksOk ? '' : '검증을 통과해야 승인할 수 있습니다'}
                         className="inline-flex items-center justify-center gap-1.5 py-2 rounded-xl border border-teal-200 bg-teal-50 text-teal-700 text-[11px] font-bold disabled:opacity-40">
-                        <GitPullRequest size={11} /> PR 생성
+                        <GitPullRequest size={11} /> PR만 만들기
                       </button>
                       <button onClick={() => onApprove(true)} disabled={!checksOk}
-                        className="inline-flex items-center justify-center gap-1.5 py-2 rounded-xl bg-emerald-600 text-white text-[11px] font-bold disabled:opacity-40">
-                        <Check size={11} /> {deploysOnMerge(baseBranch) ? '승인 및 배포' : '승인 및 병합'}
+                        title={`${baseBranch || '기준 브랜치'} 에 병합만 하고 배포는 나중에`}
+                        className="inline-flex items-center justify-center gap-1.5 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-[11px] font-bold disabled:opacity-40">
+                        <Check size={11} /> {deploysOnMerge(baseBranch) ? '승인 및 배포' : '병합만'}
                       </button>
                     </div>
                   </>

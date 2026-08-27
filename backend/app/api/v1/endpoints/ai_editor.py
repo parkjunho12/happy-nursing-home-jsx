@@ -401,6 +401,7 @@ def cancel_job(jid: str, db: Session = Depends(get_db), current_user: User = Dep
 
 class ApproveBody(BaseModel):
     merge: bool = False        # PR 만 만들지, 병합까지 갈지
+    deploy: bool = False       # 병합에 이어 운영까지 올릴지
 
 
 @router.post("/jobs/{jid}/approve")
@@ -414,12 +415,24 @@ def approve_job(jid: str, body: ApproveBody, db: Session = Depends(get_db),
         raise HTTPException(400, "미리보기 확인이 끝난 작업만 승인할 수 있습니다.")
     if not (j.checks and all(c.get("ok") for c in j.checks)):
         raise HTTPException(400, "검증을 통과하지 못한 작업은 승인할 수 없습니다.")
+    deploy = bool(body.deploy) and bool(body.merge)
     j.target = {**(j.target or {}),
                 "_approved": True, "_merge": bool(body.merge),
+                "_deploy": deploy,
                 "_approved_by": getattr(current_user, "name", None)}
-    j.step = "승인됨 — PR을 만드는 중" if not body.merge else "승인됨 — 병합하는 중"
+    # 상태를 다시 큐로 돌려놓아야 에이전트가 가져간다.
+    # 이게 없어서 승인을 눌러도 아무 일이 일어나지 않았다 — 에이전트는
+    # QUEUED 만 집어가는데 작업은 PREVIEW 에 머물러 있었다.
+    j.status = ST_QUEUED
+    j.progress = 0
+    j.ended_at = None
+    j.cancel_requested = False
+    j.step = ("승인됨 — 병합하고 운영까지 올립니다" if deploy
+              else "승인됨 — 병합하는 중" if body.merge
+              else "승인됨 — PR을 만드는 중")
     log_event(db, jid, f"승인 — {getattr(current_user, 'name', '')}"
-                       + (" (병합까지)" if body.merge else " (PR만)"))
+                       + (" (병합 + 운영 반영)" if deploy
+                          else " (병합까지)" if body.merge else " (PR만)"))
     db.commit(); db.refresh(j)
     return ApiResponse(success=True, data=_job_view(j))
 

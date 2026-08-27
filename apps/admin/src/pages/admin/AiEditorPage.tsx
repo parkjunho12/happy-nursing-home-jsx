@@ -374,6 +374,18 @@ export default function AiEditorPage() {
               onAnalyze={b => submit(b, true)}
               onCancel={() => jobId && act(() => aiEditorAPI.cancel(jobId),
                 '작업을 중지합니다.\n지금 하던 단계를 마치고 멈춥니다.')}
+              onDeploy={() => {
+                if (!jobId || !job) return
+                const files = (job.files ?? []).map(f => `  · ${f.path}`).join('\n')
+                if (!confirm(
+                  `이 수정을 운영에 배포합니다.\n\n` +
+                  `${job.title}\n${files ? files + '\n' : ''}\n` +
+                  `${svc?.base_branch} 에 병합한 뒤 ${svc?.deploy_branch} 로 올립니다.\n` +
+                  `배포가 끝나면 어르신·직원이 쓰는 화면에 반영됩니다.\n\n` +
+                  `※ ${svc?.base_branch} 에 아직 안 올라간 다른 변경이 있으면 함께 갑니다.\n\n` +
+                  `계속할까요?`)) return
+                act(() => aiEditorAPI.approve(jobId, true, true))
+              }}
               onApprove={merge => jobId && act(() => aiEditorAPI.approve(jobId, merge),
                 merge ? mergeConfirmText(svc?.base_branch)
                       : 'PR 을 만듭니다. 병합은 GitHub 에서 직접 하시면 됩니다.')}
