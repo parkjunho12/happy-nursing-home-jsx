@@ -527,6 +527,23 @@ export default function WorkSchedulePage() {
     }, 0)
   }
 
+  /** 그 날 그 층에 나오는 주간 인원. 층을 지정한 사람만 센다.
+   *  요양보호사는 주간(D)만, 그 외 직종은 근무가 있으면 나온 것으로 본다. */
+  const dayCountFloor = (day: number, floor: string) => {
+    const base = printPick ? staff.filter(s => printPick.has(s.id)) : staff
+    return base.filter(s => (s.floor || '') === floor).reduce((acc, s) => {
+      const c = countAsOf(data[s.id]?.[String(day)])
+      const working = canJoinTeam(s.pos) ? c === 'D' : c !== null
+      return acc + (working ? 1 : 0)
+    }, 0)
+  }
+  /** 표에 실제로 쓰인 층 — 아무도 배정 안 한 층은 줄을 내지 않는다 */
+  const usedFloors = useMemo(() => {
+    const set = new Set<string>()
+    staff.forEach(s => { if (s.floor) set.add(s.floor) })
+    return [...set].sort((a, b) => a.localeCompare(b, 'ko', { numeric: true }))
+  }, [staff])
+
   /** 대기 중인 휴무 신청을 '전부 승인했다 치고' 남는 주간 요양보호사 수.
    *  승인 여부를 정하려면 결국 이 숫자를 봐야 한다 — 머릿속으로 빼지 않게 표에 둔다. */
   const dayCountAfterLeave = (day: number) => {
@@ -1136,6 +1153,24 @@ export default function WorkSchedulePage() {
                 ))}
                 <td className={`${td} ws-agg`} colSpan={8} />
               </tr>
+              {/* 층별 주간 인원 — 층을 켰을 때만. 어느 층이 비는지 바로 보인다 */}
+              {showFloor && usedFloors.map(f => (
+                <tr key={f} className="ws-row-sum bg-teal-50/40">
+                  <td className={`${td} font-semibold text-teal-800 sticky left-0 z-10 bg-teal-50`} colSpan={4}>
+                    {f} 주간 인원
+                  </td>
+                  {days.map(({ day }) => {
+                    const n = dayCountFloor(day, f)
+                    return (
+                      <td key={day}
+                        className={`${td} font-bold ${n === 0 ? 'bg-red-100 text-red-700' : 'text-teal-800'} ${focus?.day === day ? 'outline outline-2 outline-amber-400' : ''}`}>
+                        {n || '0'}
+                      </td>
+                    )
+                  })}
+                  <td className={`${td} ws-agg`} colSpan={8} />
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
