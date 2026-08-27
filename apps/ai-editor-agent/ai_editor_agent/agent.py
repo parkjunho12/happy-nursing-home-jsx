@@ -180,6 +180,10 @@ class Config:
     preview_host: str = "127.0.0.1"
     # 미리보기 주소를 밖에서 열어야 하면 여기에 공개 주소를 적는다
     preview_base: Optional[str] = None
+    # 정해진 포트 하나만 쓴다(서버). 앞단(Caddy)이 이 포트만 바라보면 되고,
+    # 한 번에 한 건만 도는 구조라 포트를 여러 개 열 이유가 없다.
+    # 0 이면 비어 있는 포트를 그때그때 고른다(개발자 PC).
+    preview_port: int = 0
     keep_worktrees: int = 5             # 최근 몇 개까지 남겨둘지
 
 
@@ -363,7 +367,13 @@ SUMMARY>>>
         if not dev:
             return None
         self.stop_preview(job_id)
-        port = free_port()
+        port = self.cfg.preview_port or free_port()
+        if self.cfg.preview_port:
+            for _ in range(15):
+                with socket.socket() as s:
+                    if s.connect_ex(("127.0.0.1", port)) != 0:
+                        break
+                time.sleep(1)
         cmd = dev.replace("{port}", str(port))
         self.say(f"미리보기를 띄웁니다 (포트 {port})", step="미리보기 준비", progress=85)
         p = subprocess.Popen(cmd, cwd=wt, shell=True,
@@ -371,12 +381,14 @@ SUMMARY>>>
                              start_new_session=True)
         self._previews[job_id] = p
         # 뜰 때까지 잠깐 기다린다 — 바로 열면 빈 화면이 뜬다
-        for _ in range(60):
+        page = (self.job or {}).get("page_url") or ""
+        probe_host = "127.0.0.1" if self.cfg.preview_host in ("0.0.0.0", "") else self.cfg.preview_host
+        for _ in range(90):
             time.sleep(1)
             with socket.socket() as s:
-                if s.connect_ex((self.cfg.preview_host, port)) == 0:
-                    base = self.cfg.preview_base or f"http://{self.cfg.preview_host}:{port}"
-                    return base.rstrip("/") + (job.get("page_url") or "" if (job := self.job) else "")
+                if s.connect_ex((probe_host, port)) == 0:
+                    base = self.cfg.preview_base or f"http://{probe_host}:{port}"
+                    return base.rstrip("/") + page
             if p.poll() is not None:
                 self.say("미리보기 서버가 바로 꺼졌습니다", level="warn")
                 return None

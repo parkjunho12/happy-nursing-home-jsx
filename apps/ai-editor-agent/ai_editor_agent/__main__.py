@@ -43,7 +43,8 @@ def cfg_of(d: dict) -> Config:
         name=d.get("name") or "편집 에이전트",
         agent_token=d.get("agent_token"),
         preview_host=d.get("preview_host") or "127.0.0.1",
-        preview_base=d.get("preview_base"),
+        preview_base=d.get("preview_base") or None,
+        preview_port=int(d.get("preview_port") or 0),
         keep_worktrees=int(d.get("keep_worktrees") or 5),
     )
 
