@@ -32,6 +32,33 @@ export interface AiAgent {
   now_job_id?: string | null
 }
 
+/**
+ * 지금 미리보기 자리에 무엇이 떠 있는가.
+ *
+ * 포트가 하나뿐이라 미리보기도 한 번에 하나다.
+ *   base — 작업과 무관한 기준 브랜치. 화면만 골라도 바로 볼 수 있다
+ *   job  — 어떤 작업의 결과. 뜨는 동안 base 는 자리를 비켜준다
+ */
+export type PreviewState = 'off' | 'starting' | 'installing' | 'ready' | 'failed'
+
+export interface PreviewInfo {
+  state: PreviewState
+  url?: string | null
+  kind?: 'base' | 'job' | null
+  service_key?: string | null
+  want_service?: string | null
+  msg?: string | null
+  agent_id?: string | null
+}
+
+export const PREVIEW_META: Record<PreviewState, { label: string; hint: string }> = {
+  off:        { label: '꺼짐',     hint: '편집 에이전트가 미리보기를 띄우지 않았습니다.' },
+  starting:   { label: '여는 중',  hint: '미리보기 서버를 여는 중입니다.' },
+  installing: { label: '설치 중',  hint: '의존성을 설치하는 중입니다 — 처음 한 번은 5~10분 걸립니다.' },
+  ready:      { label: '준비됨',   hint: '' },
+  failed:     { label: '실패',     hint: '미리보기를 띄우지 못했습니다.' },
+}
+
 export type JobStatus =
   | 'QUEUED' | 'RUNNING' | 'ANALYZING' | 'CHECKING'
   | 'PREVIEW' | 'PR_OPEN' | 'MERGED' | 'DEPLOYED' | 'FAILED' | 'CANCELLED'
@@ -118,7 +145,17 @@ export const SCOPE_META = [
 
 export const aiEditorAPI = {
   services: () => apiClient.get(`${BASE}/services`)
-    .then(unwrap<{ services: AiService[]; agents: AiAgent[]; online_agents: number }>),
+    .then(unwrap<{
+      services: AiService[]; agents: AiAgent[]; online_agents: number
+      preview: PreviewInfo
+    }>),
+
+  /**
+   * '이 서비스를 미리보기에 띄워줘' 라고 부탁한다.
+   * 서버가 직접 띄우지 않는다 — 부탁만 남기고 편집 에이전트가 가져가 띄운다.
+   */
+  requestPreview: (service_key: string) =>
+    apiClient.post(`${BASE}/preview`, { service_key }).then(unwrap<PreviewInfo>),
 
   /** 처음 한 번 — 이 저장소의 관리자 화면을 기본값으로 등록 */
   seed: () => apiClient.post(`${BASE}/services/seed`, {}).then(unwrap<AiService>),

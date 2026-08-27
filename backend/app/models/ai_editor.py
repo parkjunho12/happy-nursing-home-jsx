@@ -111,6 +111,23 @@ class AiEditAgent(Base):
     active      = Column(Boolean, nullable=False, default=True)
     created_at  = Column(DateTime(timezone=True), default=now_kst)
 
+    # ── 상시 미리보기 ────────────────────────────────────────────
+    # 작업을 걸지 않아도 화면을 바로 볼 수 있어야 한다. 그래야 '무엇을
+    # 고칠지' 를 보면서 정한다. 그래서 에이전트는 작업이 없을 때 기준
+    # 브랜치로 미리보기 서버를 하나 띄워 둔다.
+    #
+    # 포트는 하나뿐이다(앞단이 그 포트만 바라본다). 그래서 작업 미리보기가
+    # 뜰 때는 기본 미리보기가 자리를 비켜주고, 작업이 끝나면 돌아온다.
+    # 아래 값들은 '지금 그 자리에 무엇이 떠 있는가' 를 화면에 알려준다.
+    preview_kind    = Column(String(10), nullable=True)   # base | job
+    preview_service = Column(String(40), nullable=True)
+    preview_state   = Column(String(12), nullable=True)   # off|starting|installing|ready|failed
+    preview_url     = Column(String(300), nullable=True)
+    preview_msg     = Column(String(300), nullable=True)
+    # 화면에서 '이 서비스를 보여줘' 라고 부탁한 값. 에이전트가 heartbeat 로
+    # 받아 가서 그쪽으로 바꾼다.
+    want_service    = Column(String(40), nullable=True)
+
 
 class AiEditJob(Base):
     """수정 요청 한 건 — 접수부터 배포까지의 한 줄기."""

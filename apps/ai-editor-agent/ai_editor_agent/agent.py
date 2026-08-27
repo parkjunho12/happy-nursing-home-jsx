@@ -49,6 +49,8 @@ PREVIEW_PORT_TO = 4349
 CLAUDE_TIMEOUT = 900
 CHECK_TIMEOUT = 900
 GIT_TIMEOUT = 180
+# 의존성 설치는 처음 한 번이 특히 길다. 여기서 끊기면 미리보기가 영영 안 뜬다.
+INSTALL_TIMEOUT = 1800
 
 
 class AgentError(Exception):
@@ -115,9 +117,15 @@ class ApiClient:
             "tools": tools})
         return d["agent_token"]
 
-    def heartbeat(self, now_job_id: Optional[str], tools: dict) -> dict:
-        return self._req("POST", "/api/v1/ai-editor-agent/heartbeat",
-                         {"now_job_id": now_job_id, "tools": tools})
+    def heartbeat(self, now_job_id: Optional[str], tools: dict,
+                  preview: Optional[dict] = None) -> dict:
+        body = {"now_job_id": now_job_id, "tools": tools}
+        body.update(preview or {})
+        return self._req("POST", "/api/v1/ai-editor-agent/heartbeat", body)
+
+    def services(self) -> List[dict]:
+        d = self._req("GET", "/api/v1/ai-editor-agent/services")
+        return d.get("services") or []
 
     def claim(self) -> Optional[dict]:
         d = self._req("POST", "/api/v1/ai-editor-agent/claim", {})
@@ -165,6 +173,53 @@ def free_port() -> int:
     raise AgentError("미리보기에 쓸 포트가 남아 있지 않습니다.")
 
 
+# 개발 서버가 loopback 에만 묶이면, 컨테이너 밖(앞단 Caddy)에서는 절대 닿지 못한다.
+# 개발자 PC 에서는 127.0.0.1 이 맞고 컨테이너에서는 0.0.0.0 이어야 하는데,
+# 그 사정을 레지스트리의 dev_cmd 가 알 수는 없다. 그래서 에이전트가 맞춰 넣는다.
+_HOST_FLAG = re.compile(r"(--host[= ])(?:\d{1,3}(?:\.\d{1,3}){3}|localhost)")
+
+
+def _kill(p: subprocess.Popen) -> None:
+    """개발 서버를 접는다.
+
+    프로세스 하나만 죽이면 안 된다 — 셸을 거쳐 띄웠으므로 node 가 자식으로
+    남고, 그러면 포트를 계속 쥐고 있어 다음 미리보기가 --strictPort 로 죽는다.
+    그래서 프로세스 그룹째 접는다.
+    """
+    try:
+        os.killpg(os.getpgid(p.pid), signal.SIGTERM)
+    except Exception:
+        try:
+            p.terminate()
+        except Exception:
+            return
+    try:
+        p.wait(timeout=10)
+    except Exception:
+        try:
+            os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+        except Exception:
+            pass
+
+
+def apply_host(cmd: str, host: str) -> str:
+    """dev_cmd 의 바인딩 주소를 이 기계 사정에 맞게 바꾼다.
+
+    · {host} 자리가 있으면 그것을 쓴다(앞으로의 방식)
+    · 없으면 --host 뒤의 주소를 갈아끼운다(이미 등록돼 있는 설정을 위해)
+    · --host 자체가 없으면 붙인다
+    """
+    if not host:
+        return cmd
+    if "{host}" in cmd:
+        return cmd.replace("{host}", host)
+    if _HOST_FLAG.search(cmd):
+        return _HOST_FLAG.sub(lambda m: f"{m.group(1)}{host}", cmd, count=1)
+    if "--host" in cmd:
+        return cmd            # 주소 없는 --host 는 이미 전체 인터페이스에 묶는다
+    return f"{cmd} --host {host}"
+
+
 # ── 본체 ─────────────────────────────────────────────────────────
 
 @dataclass
@@ -185,6 +240,9 @@ class Config:
     # 0 이면 비어 있는 포트를 그때그때 고른다(개발자 PC).
     preview_port: int = 0
     keep_worktrees: int = 5             # 최근 몇 개까지 남겨둘지
+    # 작업이 없을 때도 기준 브랜치 미리보기를 띄워 둘지.
+    # 끄면 예전처럼 작업을 걸어야만 미리보기가 생긴다(메모리가 빠듯한 기계용).
+    base_preview: bool = True
 
 
 class EditorAgent:
@@ -196,6 +254,47 @@ class EditorAgent:
         self.svc: Optional[dict] = None
         self._stop = threading.Event()
         self._previews: Dict[str, subprocess.Popen] = {}
+
+        # ── 상시 미리보기 ──
+        # 작업이 없을 때 기준 브랜치를 띄워 둔다. 그래야 '무엇을 고칠지' 를
+        # 화면을 보면서 정할 수 있다.
+        self._base: Optional[subprocess.Popen] = None
+        self._base_key: Optional[str] = None      # 지금 띄워둔 서비스
+        self._want: Optional[str] = None          # 화면이 보여달라 한 서비스
+        self._pv_lock = threading.Lock()
+        self._pv: Dict[str, Optional[str]] = {
+            "preview_kind": None, "preview_service": None,
+            "preview_state": "off", "preview_url": None, "preview_msg": None,
+        }
+
+    # ── 미리보기 상태 알림 ──
+    def set_preview(self, *, kind: Optional[str], service: Optional[str],
+                    state: str, url: Optional[str] = None,
+                    msg: Optional[str] = None) -> None:
+        """지금 미리보기 자리에 무엇이 떠 있는지 기록한다.
+
+        heartbeat 가 이 값을 그대로 실어 보낸다. 화면의 안내 문구가 곧 이것이라,
+        '준비 중' 인지 '설치 중' 인지 구분해 둔다 — 처음 한 번은 의존성 설치로
+        5~10분이 걸리는데, 그냥 '준비 중' 만 뜨면 멈춘 줄 안다.
+        """
+        with self._pv_lock:
+            self._pv = {"preview_kind": kind, "preview_service": service,
+                        "preview_state": state, "preview_url": url,
+                        "preview_msg": msg}
+
+    def preview_fields(self) -> Dict[str, Optional[str]]:
+        """heartbeat 에 실을 값.
+
+        빈 값을 None 이 아니라 "" 로 보낸다. None 은 서버가 '이 항목은 그대로
+        둬라' 로 읽기 때문에, 준비가 끝났는데도 '의존성 설치 중' 같은 지난
+        문구가 화면에 남는다. 이 보고는 부분 수정이 아니라 지금 상태 전부다.
+        """
+        with self._pv_lock:
+            pv = dict(self._pv)
+        for k in ("preview_kind", "preview_service", "preview_url", "preview_msg"):
+            if pv.get(k) is None:
+                pv[k] = ""
+        return pv
 
     # ── 보고 ──
     def say(self, msg: str, *, level: str = "info", detail: Optional[str] = None,
@@ -374,7 +473,7 @@ SUMMARY>>>
                     if s.connect_ex(("127.0.0.1", port)) != 0:
                         break
                 time.sleep(1)
-        cmd = dev.replace("{port}", str(port))
+        cmd = apply_host(dev.replace("{port}", str(port)), self.cfg.preview_host)
         self.say(f"미리보기를 띄웁니다 (포트 {port})", step="미리보기 준비", progress=85)
         p = subprocess.Popen(cmd, cwd=wt, shell=True,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -399,13 +498,143 @@ SUMMARY>>>
         p = self._previews.pop(job_id, None)
         if not p:
             return
+        _kill(p)
+
+    # ── 4-2. 상시 미리보기 ──
+    #
+    # 포트는 하나다(앞단이 그 포트만 바라본다). 그래서 작업 미리보기가 뜰 때는
+    # 기본 미리보기가 자리를 비켜주고, 작업이 끝나면 돌아온다. 두 개를 동시에
+    # 띄우면 --strictPort 라 뒤엣것이 그냥 죽는다.
+
+    def base_worktree(self, svc: dict) -> str:
+        """기준 브랜치를 보는 전용 폴더.
+
+        작업용 worktree 와 따로 둔다. 여기는 아무도 고치지 않는 '지금 운영에
+        올라가 있는 모습' 이라, 작업 폴더와 섞이면 무엇을 보고 있는지 헷갈린다.
+        """
+        repo = self.cfg.repo_dir
+        base = svc["base_branch"]
+        wt = os.path.join(self.cfg.work_dir, f"base-{svc['key']}")
+        os.makedirs(self.cfg.work_dir, exist_ok=True)
+
+        run(["git", "fetch", "origin", base], cwd=repo, timeout=GIT_TIMEOUT)
+
+        if not (os.path.isdir(os.path.join(wt, ".git"))
+                or os.path.isfile(os.path.join(wt, ".git"))):
+            code, _, err = run(["git", "worktree", "add", "--detach", wt,
+                                f"origin/{base}"], cwd=repo, timeout=GIT_TIMEOUT)
+            if code != 0:
+                raise AgentError(f"기본 미리보기 폴더를 만들지 못했습니다: {err[:200]}")
+            return wt
+
+        # 이미 있으면 최신으로 옮겨 놓는다.
+        # -f 를 쓰는 건 '우리가 만든 읽기 전용 폴더' 이기 때문이다. 사람이 쓰는
+        # 폴더(repo_dir)나 공유 브랜치에는 절대 쓰지 않는다.
+        code, _, err = run(["git", "checkout", "-f", "--detach", f"origin/{base}"],
+                           cwd=wt, timeout=GIT_TIMEOUT)
+        if code != 0:
+            logger.warning("기본 미리보기 폴더 갱신 실패(그대로 씁니다): %s", err[:200])
+        return wt
+
+    def ensure_deps(self, wt: str, svc: dict, *, on_install=None) -> None:
+        """의존성이 없으면 설치한다. 처음 한 번은 오래 걸린다."""
+        inst = svc.get("install_cmd")
+        if not inst or os.path.isdir(os.path.join(wt, "node_modules")):
+            return
+        if on_install:
+            on_install()
+        code, so, se = run(inst, cwd=wt, timeout=INSTALL_TIMEOUT, shell=True)
+        if code != 0:
+            raise AgentError(f"의존성 설치 실패: {(se or so)[-300:]}")
+
+    def start_base_preview(self, svc: dict) -> None:
+        dev = svc.get("dev_cmd")
+        if not dev:
+            self.set_preview(kind=None, service=svc["key"], state="failed",
+                             msg="이 서비스에는 미리보기 실행 명령이 없습니다.")
+            return
+        key = svc["key"]
+        self.stop_base_preview()
         try:
-            os.killpg(os.getpgid(p.pid), signal.SIGTERM)
-        except Exception:
+            self.set_preview(kind="base", service=key, state="starting",
+                             msg="작업 폴더를 준비하는 중입니다")
+            wt = self.base_worktree(svc)
+            self.ensure_deps(wt, svc, on_install=lambda: self.set_preview(
+                kind="base", service=key, state="installing",
+                msg="의존성을 설치하는 중입니다 — 처음 한 번은 5~10분 걸립니다"))
+
+            port = self.cfg.preview_port or free_port()
+            cmd = apply_host(dev.replace("{port}", str(port)), self.cfg.preview_host)
+            self.set_preview(kind="base", service=key, state="starting",
+                             msg="미리보기 서버를 여는 중입니다")
+            logger.info("기본 미리보기 시작 — %s (포트 %s)", key, port)
+            p = subprocess.Popen(cmd, cwd=wt, shell=True,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                 start_new_session=True)
+            self._base, self._base_key = p, key
+
+            probe = "127.0.0.1" if self.cfg.preview_host in ("0.0.0.0", "") \
+                else self.cfg.preview_host
+            for _ in range(120):
+                if self._stop.is_set():
+                    return
+                time.sleep(1)
+                with socket.socket() as s:
+                    if s.connect_ex((probe, port)) == 0:
+                        url = (self.cfg.preview_base or f"http://{probe}:{port}").rstrip("/")
+                        self.set_preview(kind="base", service=key, state="ready",
+                                         url=url, msg=None)
+                        logger.info("기본 미리보기 준비됨 — %s", url)
+                        return
+                if p.poll() is not None:
+                    raise AgentError("미리보기 서버가 바로 꺼졌습니다")
+            raise AgentError("미리보기가 시간 안에 뜨지 않았습니다")
+        except Exception as ex:                      # noqa: BLE001
+            logger.warning("기본 미리보기 실패: %s", ex)
+            self.stop_base_preview()
+            self.set_preview(kind=None, service=key, state="failed", msg=str(ex)[:280])
+
+    def stop_base_preview(self) -> None:
+        p, self._base, self._base_key = self._base, None, None
+        if p:
+            _kill(p)
+
+    def base_loop(self) -> None:
+        """기본 미리보기를 돌보는 자리.
+
+        본 흐름과 갈라 둔다 — 의존성 설치가 10분씩 걸리는데 그동안 작업을
+        못 받으면 안 된다.
+        """
+        while not self._stop.is_set():
             try:
-                p.terminate()
-            except Exception:
-                pass
+                if self._previews:
+                    # 작업 미리보기가 자리를 쓰고 있다 — 비켜준다
+                    if self._base:
+                        logger.info("작업 미리보기에 자리를 내줍니다")
+                        self.stop_base_preview()
+                else:
+                    want = self._want
+                    dead = self._base is not None and self._base.poll() is not None
+                    if want and (self._base is None or dead or self._base_key != want):
+                        svc = self.find_service(want)
+                        if svc:
+                            self.start_base_preview(svc)
+                        else:
+                            self.set_preview(kind=None, service=want, state="failed",
+                                             msg="등록되지 않은 서비스입니다.")
+                            self._want = None
+            except Exception as ex:                  # noqa: BLE001
+                logger.warning("기본 미리보기 관리 중 오류: %s", ex)
+            self._stop.wait(3)
+
+    def find_service(self, key: str) -> Optional[dict]:
+        try:
+            for s in self.api.services():
+                if s.get("key") == key:
+                    return s
+        except AgentError as e:
+            logger.debug("서비스 목록 실패: %s", e)
+        return None
 
     # ── 5. 커밋 · PR ──
     def commit(self, wt: str, job: dict) -> Optional[str]:
@@ -655,7 +884,11 @@ SUMMARY>>>
                     for d in os.listdir(self.cfg.work_dir)]
         except FileNotFoundError:
             return
-        dirs = [d for d in dirs if os.path.isdir(d)]
+        # base-* 는 상시 미리보기가 쓰는 폴더다. 작업 폴더가 5개를 넘기면
+        # 여기까지 밀려 지워지는데, 그러면 돌고 있는 미리보기를 발밑에서
+        # 걷어내는 꼴이 된다. 개수 세기에서 아예 뺀다.
+        dirs = [d for d in dirs
+                if os.path.isdir(d) and not os.path.basename(d).startswith("base-")]
         dirs.sort(key=lambda d: os.path.getmtime(d), reverse=True)
         for d in dirs[self.cfg.keep_worktrees:]:
             run(["git", "worktree", "remove", "--force", d],
@@ -666,14 +899,39 @@ SUMMARY>>>
     def heartbeat_loop(self) -> None:
         while not self._stop.is_set():
             try:
-                self.api.heartbeat(self.job["id"] if self.job else None, self.tools)
+                r = self.api.heartbeat(self.job["id"] if self.job else None,
+                                       self.tools, self.preview_fields())
+                # 화면이 '이 서비스를 보여줘' 라고 한 값. 실제로 띄우는 일은
+                # base_loop 이 한다 — heartbeat 를 10분씩 붙잡고 있을 수 없다.
+                want = r.get("want_service")
+                if want and want != self._want:
+                    logger.info("미리보기 요청 — %s", want)
+                    self._want = want
             except AgentError as e:
                 logger.debug("heartbeat 실패: %s", e)
             self._stop.wait(self.cfg.heartbeat_sec)
 
+    def first_service_key(self) -> Optional[str]:
+        """아무도 고르기 전에 무엇을 띄울지.
+
+        화면을 열자마자 보이는 편이 낫다. 등록 순서 첫 번째를 쓴다.
+        """
+        try:
+            rows = self.api.services()
+        except AgentError:
+            return None
+        for s in rows:
+            if s.get("dev_cmd"):
+                return s.get("key")
+        return None
+
     def run_forever(self) -> None:
         logger.info("편집 에이전트 시작 — %s", self.cfg.server_url)
         threading.Thread(target=self.heartbeat_loop, daemon=True).start()
+        # 아무도 고르기 전에도 화면이 보이도록 첫 서비스를 미리 띄워 둔다
+        if self.cfg.base_preview:
+            self._want = self.first_service_key()
+            threading.Thread(target=self.base_loop, daemon=True).start()
         idle = 0
         while not self._stop.is_set():
             try:
@@ -696,3 +954,6 @@ SUMMARY>>>
         self._stop.set()
         for jid in list(self._previews):
             self.stop_preview(jid)
+        self.stop_base_preview()
+        self.set_preview(kind=None, service=None, state="off",
+                         msg="편집 에이전트가 꺼졌습니다.")

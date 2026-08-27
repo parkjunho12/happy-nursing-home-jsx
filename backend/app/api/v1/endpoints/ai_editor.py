@@ -110,7 +110,73 @@ def list_services(db: Session = Depends(get_db), _: User = Depends(_admin)):
                     "online": alive(a), "last_seen": _iso(a.last_seen),
                     "now_job_id": a.now_job_id} for a in agents],
         "online_agents": sum(1 for a in agents if alive(a)),
+        # 지금 미리보기 자리에 무엇이 떠 있는지. 화면은 작업을 걸기 전에도
+        # 이 주소로 화면을 보여준다.
+        "preview": _preview_view(next((a for a in agents if alive(a)), None)),
     })
+
+
+def _preview_view(a: Optional[AiEditAgent]) -> dict:
+    """지금 볼 수 있는 미리보기 한 개.
+
+    포트가 하나뿐이라 미리보기도 한 번에 하나다. 여러 대가 붙어 있어도
+    화면에는 살아 있는 첫 대의 것만 보여준다 — 두 개를 보여주면 어느 쪽을
+    보고 있는지 헷갈리고, 헷갈린 채로 고치면 엉뚱한 곳을 고친다.
+    """
+    if not a:
+        return {"state": "off", "url": None, "kind": None,
+                "service_key": None, "msg": "편집 에이전트가 꺼져 있습니다."}
+    return {
+        "state": a.preview_state or "off",
+        "url": a.preview_url,
+        "kind": a.preview_kind,
+        "service_key": a.preview_service,
+        "want_service": a.want_service,
+        "msg": a.preview_msg,
+        "agent_id": a.agent_id,
+    }
+
+
+class PreviewBody(BaseModel):
+    service_key: str
+
+
+@router.post("/preview")
+def request_preview(body: PreviewBody, db: Session = Depends(get_db),
+                    _: User = Depends(_admin)):
+    """'이 서비스를 미리보기에 띄워줘' 라고 부탁한다.
+
+    여기서 서버가 직접 띄우지 않는다. 부탁만 남기고, 에이전트가 heartbeat 로
+    받아 가서 띄운다. 백엔드는 소스도 셸도 만지지 않는다는 선을 지킨다.
+
+    레지스트리에 없는 키는 받지 않는다 — 받으면 화면에서 아무 문자열이나
+    넣어 엉뚱한 것을 띄우게 할 수 있다.
+    """
+    svc = (db.query(AiEditService)
+             .filter(AiEditService.key == body.service_key,
+                     AiEditService.active == True).first())     # noqa: E712
+    if not svc:
+        raise HTTPException(404, "등록되지 않은 서비스입니다.")
+    if not svc.dev_cmd:
+        raise HTTPException(400, "이 서비스에는 미리보기 실행 명령(dev_cmd)이 없습니다.")
+
+    now = now_kst()
+    agents = db.query(AiEditAgent).filter(AiEditAgent.active == True).all()  # noqa: E712
+
+    def alive(a: AiEditAgent) -> bool:
+        if not a.last_seen:
+            return False
+        seen = a.last_seen if a.last_seen.tzinfo else a.last_seen.replace(tzinfo=now.tzinfo)
+        return (now - seen) < timedelta(seconds=120)
+
+    live = [a for a in agents if alive(a)]
+    if not live:
+        raise HTTPException(409, "편집 에이전트가 꺼져 있어 미리보기를 띄울 수 없습니다.")
+    for a in live:
+        a.want_service = svc.key
+    db.commit()
+    return ApiResponse(success=True, data=_preview_view(live[0]),
+                       message="미리보기를 준비합니다.")
 
 
 class ServiceBody(BaseModel):
@@ -353,10 +419,12 @@ DEFAULT_SERVICE = {
     "root_path": "apps/admin",
     "base_branch": "develop",
     "install_cmd": "npx --yes pnpm install --frozen-lockfile",
-    # {port} 는 에이전트가 비어 있는 포트로 바꿔 넣는다.
+    # {port}·{host} 는 에이전트가 제 사정에 맞게 바꿔 넣는다.
+    #   개발자 PC 라면 127.0.0.1, 컨테이너라면 0.0.0.0 이어야 한다 —
+    #   컨테이너에서 loopback 에만 묶으면 앞단(Caddy)이 영영 닿지 못한다.
     # VITE_INSPECTOR=1 이어야 화면 요소에서 소스 위치를 읽을 수 있다.
     "dev_cmd": ("VITE_INSPECTOR=1 npx --yes pnpm --filter ./apps/admin exec "
-                "vite --port {port} --host 127.0.0.1 --strictPort"),
+                "vite --port {port} --host {host} --strictPort"),
     # 배포 워크플로가 돌리는 것과 같은 검사다 — 여기서 통과하면 CI 에서도 통과한다
     "check_cmds": [
         "npx --yes pnpm --filter ./apps/admin exec tsc --noEmit",
