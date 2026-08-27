@@ -960,12 +960,29 @@ SUMMARY>>>
                 self.api.report(
                     job_id=job["id"],
                     status="MERGED" if r["merged"] else "PR_OPEN",
-                    step="병합됨 — 배포는 GitHub Actions 가 이어받습니다" if r["merged"]
-                         else "PR 생성됨 — 검토를 기다립니다",
+                    step="병합됨" if r["merged"] else "PR 생성됨 — 검토를 기다립니다",
                     progress=100, pr_url=r["pr_url"], pr_number=r["pr_number"],
                     log="병합했습니다" if r["merged"] else "PR 을 만들었습니다")
                 if r["merged"]:
                     self.stop_preview(job["id"])
+
+                # 사람이 '운영에 배포' 로 승인했다면 여기서 이어서 올린다.
+                #
+                # 따로 작업을 만들어 큐에 넣지 않는다. 그러면 병합이 끝나기
+                # 전에 배포가 먼저 잡혀 갈 수 있다. 같은 흐름에서 순서대로
+                # 하는 편이 확실하고, 진행 상황도 한 줄기로 보인다.
+                if r["merged"] and t.get("_deploy"):
+                    self.say("이어서 운영에 올립니다", step="운영 반영 중", progress=100)
+                    p = self.do_promote(job, svc)
+                    self.api.report(
+                        job_id=job["id"], status="DEPLOYED", progress=100,
+                        step="이미 최신" if p.get("already") else "배포 진행 중",
+                        summary=("병합했지만 운영에는 올릴 변경이 없었습니다."
+                                 if p.get("already")
+                                 else f"{p['count']}건을 운영에 올렸습니다. "
+                                      f"배포 워크플로가 이어서 반영합니다."),
+                        log="운영 반영까지 마쳤습니다")
+                    self._pending = self.count_pending(svc)
                 return
 
             self.check_cancel()

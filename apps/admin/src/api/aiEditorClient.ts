@@ -193,8 +193,8 @@ export const aiEditorAPI = {
   }) => apiClient.post(`${BASE}/jobs`, b).then(unwrap<AiJob>),
 
   cancel: (id: string) => apiClient.post(`${BASE}/jobs/${id}/cancel`, {}).then(unwrap<AiJob>),
-  approve: (id: string, merge: boolean) =>
-    apiClient.post(`${BASE}/jobs/${id}/approve`, { merge }).then(unwrap<AiJob>),
+  approve: (id: string, merge: boolean, deploy = false) =>
+    apiClient.post(`${BASE}/jobs/${id}/approve`, { merge, deploy }).then(unwrap<AiJob>),
   revise: (id: string, instruction: string) =>
     apiClient.post(`${BASE}/jobs/${id}/revise`, { instruction }).then(unwrap<AiJob>),
   rollback: (id: string) => apiClient.post(`${BASE}/jobs/${id}/rollback`, {}).then(unwrap<AiJob>),
