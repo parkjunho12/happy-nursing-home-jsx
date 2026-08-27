@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Wand2, Server, GitBranch, FileCode2, Loader2, RefreshCw, Circle,
+  Wand2, Server, GitBranch, FileCode2, Loader2, RefreshCw, Circle, Rocket,
 } from 'lucide-react'
 import {
   aiEditorAPI, JOB_STATUS_META, PREVIEW_META,
   type AiService, type AiAgent, type AiJob, type JobEvent, type PickedTarget,
-  type PreviewInfo,
+  type PreviewInfo, type PendingDeploy,
 } from '@/api/aiEditorClient'
 import PreviewPane from '@/components/aiEditor/PreviewPane'
 import CommandPane, { type Body } from '@/components/aiEditor/CommandPane'
@@ -27,6 +27,7 @@ export default function AiEditorPage() {
   const [services, setServices] = useState<AiService[]>([])
   const [agents, setAgents] = useState<AiAgent[]>([])
   const [preview, setPreview] = useState<PreviewInfo | null>(null)
+  const [pending, setPending] = useState<PendingDeploy | null>(null)
   const [svcKey, setSvcKey] = useState<string>('')
   const [pageUrl, setPageUrl] = useState<string>('')
   const [jobs, setJobs] = useState<AiJob[]>([])
@@ -66,6 +67,7 @@ export default function AiEditorPage() {
     try {
       const r = await aiEditorAPI.services()
       setServices(r.services); setAgents(r.agents); setPreview(r.preview ?? null)
+      setPending(r.pending_deploy ?? null)
       setSvcKey(k => k || r.services[0]?.key || '')
     } catch (e: any) { setErr(e?.message ?? '불러오지 못했습니다') }
     finally { setLoading(false) }
@@ -145,6 +147,37 @@ export default function AiEditorPage() {
     finally { setBusy(false) }
   }
 
+  /**
+   * 운영 반영 — 기준 브랜치를 배포 브랜치로 올린다.
+   *
+   * 무엇이 함께 올라가는지 반드시 보여주고 묻는다. 이 버튼 하나로 어르신·직원이
+   * 쓰는 화면이 바뀐다. 내 수정만 올라가는 게 아니라 그 브랜치의 모든 변경이
+   * 함께 간다 — 그걸 모르고 누르면 안 된다.
+   */
+  const deployNow = async () => {
+    if (!svc) return
+    const list = (pending?.commits ?? [])
+      .map(c => `  · ${c.subject}`).join('\n')
+    const n = pending?.count ?? 0
+    const head = pending?.known
+      ? (n === 0
+          ? '운영에 이미 최신입니다. 올릴 변경이 없습니다.'
+          : `${svc.base_branch} 의 변경 ${n}건을 ${svc.deploy_branch} 로 올립니다.`)
+      : `${svc.base_branch} 의 변경을 ${svc.deploy_branch} 로 올립니다.\n(대기 목록을 아직 못 받았습니다)`
+    if (pending?.known && n === 0) { alert(head); return }
+    if (!confirm(
+      `${head}\n${list ? list + '\n' : ''}\n` +
+      `올리면 배포가 시작되고, 어르신·직원이 쓰는 화면에 반영됩니다.\n` +
+      `내 수정만이 아니라 위 변경이 모두 함께 올라갑니다.\n\n계속할까요?`)) return
+    setBusy(true); setErr('')
+    try {
+      const j = await aiEditorAPI.deploy()
+      setJobId(j.id); setJob(j); setEvents([])
+      loadJobs()
+    } catch (e: any) { setErr(e?.response?.data?.detail ?? e?.message ?? '운영 반영 실패') }
+    finally { setBusy(false) }
+  }
+
   const act = async (fn: () => Promise<AiJob>, confirmText?: string) => {
     if (confirmText && !confirm(confirmText)) return
     setBusy(true); setErr('')
@@ -175,6 +208,26 @@ export default function AiEditorPage() {
             <Circle size={7} className={online > 0 ? 'fill-emerald-500 text-emerald-500' : 'fill-rose-500 text-rose-500'} />
             편집 에이전트 {online}대
           </span>
+          {/* 운영 반영 — 기준 브랜치가 배포 브랜치와 다를 때만 의미가 있다.
+              같으면 병합 즉시 배포되므로 이 버튼이 있을 이유가 없다. */}
+          {svc?.deploy_branch && svc.deploy_branch !== svc.base_branch && (
+            <button onClick={deployNow} disabled={busy || online === 0}
+              title={pending?.known
+                ? (pending.count === 0
+                    ? '운영에 이미 최신입니다'
+                    : `${svc.base_branch} → ${svc.deploy_branch} · ${pending.count}건이 올라갑니다`)
+                : '반영 대기 목록을 아직 받지 못했습니다'}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-colors disabled:opacity-40 ${
+                pending?.known && pending.count > 0
+                  ? 'bg-orange-600 border-orange-600 text-white hover:bg-orange-700'
+                  : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+              <Rocket size={12} />
+              운영에 반영
+              {pending?.known && pending.count > 0 && (
+                <span className="bg-white/25 rounded px-1">{pending.count}</span>
+              )}
+            </button>
+          )}
           <button onClick={() => { loadServices(); loadJobs() }}
             className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-50">
             <RefreshCw size={14} />

@@ -103,7 +103,8 @@ def agent_services(a: AiEditAgent = Depends(_agent), db: Session = Depends(get_d
     db.commit()   # _agent 가 찍은 last_seen 을 남긴다
     return ApiResponse(success=True, data={"services": [
         {"key": s.key, "name": s.name, "repo": s.repo, "root_path": s.root_path,
-         "base_branch": s.base_branch, "install_cmd": s.install_cmd,
+         "base_branch": s.base_branch, "deploy_branch": s.deploy_branch,
+         "install_cmd": s.install_cmd,
          "dev_cmd": s.dev_cmd, "check_cmds": s.check_cmds or [],
          "pages": s.pages or [], "prod_url": s.prod_url}
         for s in rows]})
@@ -123,6 +124,8 @@ class HeartbeatBody(BaseModel):
     preview_state: Optional[str] = None
     preview_url: Optional[str] = None
     preview_msg: Optional[str] = None
+    # 아직 운영에 안 올라간 것들 {from,to,count,commits:[{sha,subject}]}
+    pending_deploy: Optional[Dict[str, Any]] = None
 
 
 @router.post("/heartbeat")
@@ -144,6 +147,18 @@ def heartbeat(body: HeartbeatBody, a: AiEditAgent = Depends(_agent),
         v = getattr(body, f)
         if v is not None:
             setattr(a, f, v[:300] or None)
+
+    if body.pending_deploy is not None:
+        d = body.pending_deploy
+        # 화면이 이걸 보고 '무엇이 함께 올라가는지' 를 말한다. 커지면 잘라 담는다.
+        a.pending_deploy = {
+            "from": str(d.get("from") or "")[:100],
+            "to": str(d.get("to") or "")[:100],
+            "count": int(d.get("count") or 0),
+            "commits": [{"sha": str(c.get("sha") or "")[:12],
+                         "subject": str(c.get("subject") or "")[:200]}
+                        for c in (d.get("commits") or [])[:20]],
+        }
 
     want = a.want_service
     db.commit()
@@ -198,7 +213,8 @@ def claim(a: AiEditAgent = Depends(_agent), db: Session = Depends(get_db)):
 
     return ApiResponse(success=True, data={
         "job": {
-            "id": j.id, "service_key": j.service_key, "page_url": j.page_url,
+            "id": j.id, "kind": j.kind or "edit",
+            "service_key": j.service_key, "page_url": j.page_url,
             "title": j.title, "instruction": j.instruction, "scope": j.scope,
             "extra_notes": j.extra_notes, "images": j.images or [],
             "target": j.target or {}, "approve_mode": j.approve_mode,
@@ -206,7 +222,8 @@ def claim(a: AiEditAgent = Depends(_agent), db: Session = Depends(get_db)):
         },
         "service": {
             "key": svc.key, "repo": svc.repo, "root_path": svc.root_path,
-            "base_branch": svc.base_branch, "install_cmd": svc.install_cmd,
+            "base_branch": svc.base_branch, "deploy_branch": svc.deploy_branch,
+            "install_cmd": svc.install_cmd,
             "dev_cmd": svc.dev_cmd, "check_cmds": svc.check_cmds or [],
             "prod_url": svc.prod_url,
         },

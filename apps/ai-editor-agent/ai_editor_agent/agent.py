@@ -266,6 +266,7 @@ class EditorAgent:
         self._base_sha: Optional[str] = None      # 지금 띄운 커밋
         self._base_checked: float = 0.0           # 마지막으로 브랜치를 본 시각
         self._port_for_job = False                # 작업이 미리보기 포트를 쓰기로 했는가
+        self._pending: Optional[dict] = None      # 운영에 아직 안 올라간 것들
         self._fails: int = 0                      # 연달아 실패한 횟수
         self._last_try: float = 0.0               # 마지막으로 띄워본 시각
         self._pv_lock = threading.Lock()
@@ -673,6 +674,12 @@ SUMMARY>>>
                     else:
                         tries = 0
                     want = self._want
+                    # 처음 한 번은 곧바로 센다. 5분을 기다리면 화면이 그동안
+                    # '모름' 으로 남아, 올릴 게 있는지조차 알 수 없다.
+                    if want and self._pending is None:
+                        svc0 = self.find_service(want)
+                        if svc0:
+                            self._pending = self.count_pending(svc0)
                     dead = self._base is not None and self._base.poll() is not None
                     if want and (self._base is None or dead or self._base_key != want):
                         # 연달아 실패하면 간격을 벌린다. 안 그러면 3초마다
@@ -706,6 +713,8 @@ SUMMARY>>>
                             if svc:
                                 run(["git", "fetch", "origin", svc["base_branch"]],
                                     cwd=self.cfg.repo_dir, timeout=GIT_TIMEOUT)
+                                # 이미 fetch 한 김에 반영 대기도 센다
+                                self._pending = self.count_pending(svc)
                                 head = self.base_head(svc)
                                 if head and self._base_sha and head != self._base_sha:
                                     logger.info("기준 브랜치가 움직였습니다 — 미리보기를 새로 띄웁니다 "
@@ -795,6 +804,90 @@ SUMMARY>>>
             return {"pr_url": url, "pr_number": num, "merged": True}
         return {"pr_url": url, "pr_number": num, "merged": False}
 
+    # ── 운영 반영 ──
+    def count_pending(self, svc: dict) -> Optional[dict]:
+        """기준 브랜치에는 있고 배포 브랜치에는 없는 것들.
+
+        무엇이 함께 올라가는지 모르고 누르는 배포가 제일 위험하다.
+        버튼을 누르기 전에 보여주려고 미리 세어 둔다.
+        """
+        base, dep = svc.get("base_branch"), svc.get("deploy_branch")
+        if not base or not dep or base == dep:
+            return None
+        repo = self.cfg.repo_dir
+        run(["git", "fetch", "origin", base, dep], cwd=repo, timeout=GIT_TIMEOUT)
+        code, so, _ = run(["git", "log", "--no-merges", "--format=%h\x1f%s",
+                           f"origin/{dep}..origin/{base}"], cwd=repo, timeout=GIT_TIMEOUT)
+        if code != 0:
+            return None
+        commits = []
+        for line in (so or "").splitlines():
+            sha, _, subject = line.partition("\x1f")
+            if sha.strip():
+                commits.append({"sha": sha.strip(), "subject": subject.strip()})
+        return {"from": base, "to": dep, "count": len(commits), "commits": commits[:20]}
+
+    def do_promote(self, job: dict, svc: dict) -> dict:
+        """기준 브랜치를 배포 브랜치로 올린다.
+
+        직접 밀지 않고 PR 로 간다. 무엇이 언제 올라갔는지 남아야 나중에
+        되짚을 수 있고, 공유 브랜치를 손으로 고치지 않는다는 선도 지킨다.
+
+        squash 하지 않는다. 브랜치를 통째로 올리는 일이라 squash 하면
+        두 브랜치의 역사가 갈라져 다음 반영부터 엉킨다.
+        """
+        base, dep = svc["base_branch"], svc.get("deploy_branch")
+        if not dep:
+            raise AgentError("배포 브랜치가 설정돼 있지 않습니다.")
+        if not self.tools.get("gh_auth"):
+            raise AgentError("gh 로그인이 되어 있지 않아 운영 반영을 할 수 없습니다.")
+
+        repo = self.cfg.repo_dir
+        self.say(f"{base} 와 {dep} 를 최신으로 맞춥니다", step="확인 중", progress=15)
+        code, _, err = run(["git", "fetch", "origin", base, dep], cwd=repo, timeout=GIT_TIMEOUT)
+        if code != 0:
+            raise AgentError(f"fetch 실패: {err[:300]}")
+
+        pending = self.count_pending(svc) or {"count": 0, "commits": []}
+        if pending["count"] == 0:
+            # 올릴 게 없다. 성공으로 끝내되 사실대로 적는다.
+            self.say("운영에 이미 최신입니다 — 올릴 변경이 없습니다.",
+                     step="이미 최신", progress=100)
+            return {"pr_url": None, "already": True, "count": 0}
+
+        lines = "\n".join(f"- `{c['sha']}` {c['subject']}" for c in pending["commits"])
+        self.say(f"{pending['count']}건을 올립니다", detail=lines,
+                 step="PR 준비", progress=40)
+
+        body = (f"AI 페이지 편집기에서 요청한 운영 반영입니다.\n\n"
+                f"`{base}` → `{dep}`  ({pending['count']}건)\n\n{lines}\n\n"
+                f"**요청자** {job.get('requested_by') or '-'}\n"
+                f"**작업 번호** `{job['id']}`\n")
+        code, so, err = run(["gh", "pr", "create", "--base", dep, "--head", base,
+                             "--title", f"[운영 반영] {base} → {dep} ({pending['count']}건)",
+                             "--body", body], cwd=repo, timeout=GIT_TIMEOUT)
+        url = (so or "").strip().splitlines()[-1] if (code == 0 and so.strip()) else ""
+        if code != 0:
+            # 이미 열려 있는 PR 이 있으면 그것을 쓴다
+            code2, so2, _ = run(["gh", "pr", "list", "--base", dep, "--head", base,
+                                 "--state", "open", "--json", "url", "-q", ".[0].url"],
+                                cwd=repo, timeout=GIT_TIMEOUT)
+            url = (so2 or "").strip()
+            if not url:
+                raise AgentError(f"PR 생성 실패: {err[:300]}")
+        self.say(f"PR — {url}", detail=url, step="병합 중", progress=70)
+
+        # merge(squash 아님) — 위 주석 참고. 기준 브랜치는 지우지 않는다.
+        code, _, err = run(["gh", "pr", "merge", url, "--merge"],
+                           cwd=repo, timeout=GIT_TIMEOUT)
+        if code != 0:
+            raise AgentError(f"병합 실패 — PR 은 열려 있습니다: {err[:300]}\n{url}")
+
+        run(["git", "fetch", "origin", dep], cwd=repo, timeout=GIT_TIMEOUT)
+        self.say("병합했습니다 — 배포 워크플로가 이어서 운영에 반영합니다",
+                 step="배포 진행 중", progress=100)
+        return {"pr_url": url, "already": False, "count": pending["count"]}
+
     # ── 되돌리기 ──
     def do_rollback(self, job: dict, svc: dict) -> dict:
         if not job.get("head_sha"):
@@ -829,6 +922,25 @@ SUMMARY>>>
         rollback = bool(t.get("_rollback"))
 
         try:
+            # 운영 반영 — 코드를 고치지 않는다. 브랜치를 올릴 뿐이다.
+            if job.get("kind") == "promote":
+                self.say("운영 반영을 시작합니다", status="RUNNING",
+                         step="확인 중", progress=10)
+                r = self.do_promote(job, svc)
+                if r.get("already"):
+                    self.api.report(job_id=job["id"], status="DEPLOYED",
+                                    step="이미 최신", progress=100,
+                                    summary="올릴 변경이 없었습니다.")
+                else:
+                    self.api.report(job_id=job["id"], status="DEPLOYED",
+                                    step="배포 진행 중", progress=100,
+                                    pr_url=r.get("pr_url"),
+                                    summary=f"{r['count']}건을 운영에 올렸습니다. "
+                                            f"배포 워크플로가 이어서 반영합니다.")
+                # 방금 올렸으니 대기 목록을 다시 센다 — 화면이 곧바로 0 이 되게
+                self._pending = self.count_pending(svc)
+                return
+
             if rollback:
                 self.say("되돌리기를 시작합니다", status="RUNNING", step="되돌리는 중", progress=20)
                 r = self.do_rollback(job, svc)
@@ -992,8 +1104,11 @@ SUMMARY>>>
     def heartbeat_loop(self) -> None:
         while not self._stop.is_set():
             try:
+                pv = self.preview_fields()
+                if self._pending is not None:
+                    pv["pending_deploy"] = self._pending
                 r = self.api.heartbeat(self.job["id"] if self.job else None,
-                                       self.tools, self.preview_fields())
+                                       self.tools, pv)
                 # 화면이 '이 서비스를 보여줘' 라고 한 값. 실제로 띄우는 일은
                 # base_loop 이 한다 — heartbeat 를 10분씩 붙잡고 있을 수 없다.
                 want = r.get("want_service")

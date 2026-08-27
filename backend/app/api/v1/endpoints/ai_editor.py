@@ -47,7 +47,8 @@ def _iso(dt) -> Optional[str]:
 def _svc_view(s: AiEditService) -> dict:
     return {
         "key": s.key, "name": s.name, "repo": s.repo, "root_path": s.root_path,
-        "base_branch": s.base_branch, "pages": s.pages or [],
+        "base_branch": s.base_branch, "deploy_branch": s.deploy_branch,
+        "pages": s.pages or [],
         "prod_url": s.prod_url, "active": bool(s.active),
         "check_cmds": s.check_cmds or [],
     }
@@ -55,7 +56,8 @@ def _svc_view(s: AiEditService) -> dict:
 
 def _job_view(j: AiEditJob, *, full: bool = False) -> dict:
     out = {
-        "id": j.id, "service_key": j.service_key, "page_url": j.page_url,
+        "id": j.id, "kind": j.kind or "edit",
+        "service_key": j.service_key, "page_url": j.page_url,
         "title": j.title, "status": j.status, "step": j.step, "progress": j.progress,
         "scope": j.scope, "priority": j.priority, "approve_mode": j.approve_mode,
         "branch": j.branch, "preview_url": j.preview_url,
@@ -113,6 +115,8 @@ def list_services(db: Session = Depends(get_db), _: User = Depends(_admin)):
         # 지금 미리보기 자리에 무엇이 떠 있는지. 화면은 작업을 걸기 전에도
         # 이 주소로 화면을 보여준다.
         "preview": _preview_view(next((a for a in agents if alive(a)), None)),
+        # 운영에 아직 안 올라간 것들 — '운영 반영' 버튼이 이걸 보고 말한다
+        "pending_deploy": _pending_view(next((a for a in agents if alive(a)), None)),
     })
 
 
@@ -135,6 +139,69 @@ def _preview_view(a: Optional[AiEditAgent]) -> dict:
         "msg": a.preview_msg,
         "agent_id": a.agent_id,
     }
+
+
+def _pending_view(a: Optional[AiEditAgent]) -> dict:
+    """운영에 아직 안 올라간 것들.
+
+    에이전트가 fetch 하면서 세어 알려준 값을 그대로 내려보낸다. 백엔드는
+    저장소를 만지지 않는다 — 이 값도 직접 세지 않고 전달만 한다.
+    """
+    d = (a.pending_deploy if a else None) or {}
+    return {
+        "known": bool(d),
+        "from": d.get("from"), "to": d.get("to"),
+        "count": int(d.get("count") or 0),
+        "commits": (d.get("commits") or [])[:20],
+    }
+
+
+@router.post("/deploy")
+def request_deploy(db: Session = Depends(get_db), current_user: User = Depends(_admin)):
+    """운영 반영 — 기준 브랜치를 배포 브랜치로 올린다.
+
+    여기서 서버가 직접 올리지 않는다. 작업 하나로 접수하고, 편집 에이전트가
+    가져가서 PR 을 만들고 병합한다. 백엔드는 소스도 셸도 만지지 않는다는
+    선을 지킨다. 공유 브랜치를 직접 밀지 않는 것도 같은 이유다 —
+    무엇이 올라갔는지 PR 로 남아야 나중에 되짚을 수 있다.
+
+    코드 수정 작업과 같은 표에 담는다. 큐·진행표시·기록이 그대로 필요하다.
+    """
+    svc = (db.query(AiEditService)
+             .filter(AiEditService.active == True)          # noqa: E712
+             .order_by(AiEditService.sort, AiEditService.key).first())   # noqa: E712
+    if not svc:
+        raise HTTPException(404, "등록된 서비스가 없습니다.")
+    if not svc.deploy_branch:
+        raise HTTPException(400, "이 서비스에는 배포 브랜치가 설정돼 있지 않습니다.")
+    if svc.deploy_branch == svc.base_branch:
+        raise HTTPException(400, "기준 브랜치가 곧 배포 브랜치입니다 — 병합하면 바로 반영됩니다.")
+
+    # 이미 접수돼 도는 중이면 그것을 돌려준다. 두 번 눌러 두 번 올리지 않게.
+    dup = (db.query(AiEditJob)
+             .filter(AiEditJob.kind == "promote",
+                     AiEditJob.status.in_(ACTIVE_STATUSES))
+             .order_by(AiEditJob.created_at.desc()).first())
+    if dup:
+        return ApiResponse(success=True, data=_job_view(dup),
+                           message="이미 반영 중입니다.")
+
+    j = AiEditJob(
+        kind="promote", service_key=svc.key, page_url=None,
+        title=f"운영 반영 ({svc.base_branch} → {svc.deploy_branch})",
+        instruction=(f"{svc.base_branch} 에 있는 변경을 {svc.deploy_branch} 로 올린다. "
+                     f"병합되면 배포 워크플로가 운영에 반영한다."),
+        scope=SCOPE_ELEMENT, priority=1,          # 사람이 기다리고 있다 — 먼저 처리
+        approve_mode=APPROVE_AUTO,                # 이 누름 자체가 승인이다
+        requested_by=getattr(current_user, "name", None),
+        requested_by_id=getattr(current_user, "id", None),
+    )
+    db.add(j)
+    db.commit()
+    db.refresh(j)
+    log_event(db, j.id, f"{current_user.name} 님이 운영 반영을 요청했습니다.")
+    db.commit()
+    return ApiResponse(success=True, data=_job_view(j), message="운영 반영을 접수했습니다.")
 
 
 class PreviewBody(BaseModel):
