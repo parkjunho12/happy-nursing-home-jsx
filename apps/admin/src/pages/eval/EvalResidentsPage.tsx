@@ -6,6 +6,8 @@ import { useAuthStore } from '@/store/auth'
 import { UserPlus, LogOut, Edit2, AlertTriangle, RotateCcw, Trash2, BedDouble, Loader2 } from 'lucide-react'
 import DateField from '@/components/ui/DateField'
 import CertificationEditor from '@/components/eval/CertificationEditor'
+import { genderLabel, genderAvatarClass } from '@/utils/gender'
+import { validateResidentForm } from '@/utils/residentForm'
 import { endFromStart, type Certification } from '@/utils/cert'
 import { autoDocEvents } from '@/utils/docEvents'
 import { useLtcStore } from '@/store/ltc'
@@ -178,7 +180,7 @@ function ResidentCard({ r, onEdit, onDischarge, onDelete, onDetail, checklists, 
   return (
     <div className={`bg-white rounded-xl border shadow-sm overflow-hidden ${r.status==='discharged'?'opacity-60 border-gray-100':r.status==='pending'?'border-amber-200 bg-amber-50/30':hasHigh?'border-red-200':'border-gray-200'}`}>
       <div className="flex items-center gap-3 p-4 cursor-pointer" onClick={onDetail} title="상세 페이지 열기">
-        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-base font-bold flex-shrink-0 ${r.gender==='female'?'bg-pink-100 text-pink-700':'bg-blue-100 text-blue-700'}`}>
+        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-base font-bold flex-shrink-0 ${genderAvatarClass(r.gender)}`}>
           {r.name[0]}
         </div>
         <div className="flex-1 min-w-0">
@@ -189,7 +191,7 @@ function ResidentCard({ r, onEdit, onDischarge, onDelete, onDetail, checklists, 
                 {r.admissionDate ? `${Number(r.admissionDate.slice(5, 7))}/${Number(r.admissionDate.slice(8, 10))} 입소 예정` : '입소 예정'}
               </span>
             )}
-            <span className="text-xs text-gray-500">{r.gender==='female'?'여':'남'} · {age}세</span>
+            <span className="text-xs text-gray-500">{genderLabel(r.gender)} · {age}세</span>
             <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${r.status==='active'?'bg-green-100 text-green-700':r.status==='pending'?'bg-amber-100 text-amber-700':'bg-gray-100 text-gray-500'}`}>
               {r.status==='active'?'입소 중':r.status==='pending'?'입소 예정':'퇴소'}
             </span>
@@ -331,7 +333,10 @@ export function ResidentForm({ existing, onClose }: { existing?: LtcResident; on
   }, [existing])
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); if(!form.name||!form.birthDate) return
+    e.preventDefault()
+    // 조용히 끝내지 않는다 — 왜 안 되는지 말한다. 자세한 사정은 utils/residentForm.ts
+    const problem = validateResidentForm(form, { isEdit: !!existing })
+    if (problem) { alert(problem); return }
     setLoading(true)
     const certifications = certs.filter(c=>c.start||c.end||(c.benefits??[]).length)
     const careGradeStartDate = certs[0]?.start || form.careGradeStartDate || today
@@ -374,13 +379,23 @@ export function ResidentForm({ existing, onClose }: { existing?: LtcResident; on
           {!existing && <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 text-xs text-orange-700">✨ 등록 시 입소 (서류/준비) 체크리스트가 자동 생성됩니다 — 아래 <b>대상자 구분</b>에 따라 항목이 늘어나요.</div>}
           <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">성명 *</label><input required className={ic} value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="홍길동"/></div>
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1.5">생년월일 *</label>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              생년월일 {existing
+                ? <span className="font-normal text-gray-400">(비어 있어도 저장됩니다)</span>
+                : '*'}
+            </label>
             <BirthDateSelect value={form.birthDate} onChange={v=>setForm({...form,birthDate:v})}/>
             {form.birthDate && <p className="text-xs text-gray-400 mt-1">만 {calcAge(form.birthDate)}세</p>}
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">성별</label>
-            <select className={ic} value={form.gender} onChange={e=>setForm({...form,gender:e.target.value})}><option value="female">여</option><option value="male">남</option></select>
+            <select className={ic} value={form.gender} onChange={e=>setForm({...form,gender:e.target.value})}>
+              {/* 빈 값도 실제로 있는 상태다(간단 등록). 항목이 없으면 화면은 '여',
+                  값은 '' 로 어긋난다 — 고른 적 없는 값이 저장된 것처럼 보인다. */}
+              <option value="">미정</option>
+              <option value="female">여</option>
+              <option value="male">남</option>
+            </select>
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">생활 층 · 호실 <span className="font-normal text-gray-400">(선택)</span></label>
@@ -677,6 +692,7 @@ function QuickPendingModal({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState('')
   const [date, setDate] = useState(week)
   const [time, setTime] = useState('')   // 입소 예정 시간 — ''이면 미정
+  const [gender, setGender] = useState('')   // ''이면 미정 — 나중에 수정에서 채운다
   const [floor, setFloor] = useState('')
   const [room, setRoom] = useState('')
   const [memo, setMemo] = useState('')
@@ -692,7 +708,7 @@ function QuickPendingModal({ onClose }: { onClose: () => void }) {
     try {
       await addResident({
         name: name.trim(), admissionDate: date, admissionTime: time, careGradeStartDate: date,
-        birthDate: '', gender: '', floor, room, memo,
+        birthDate: '', gender, floor, room, memo,
         status: 'pending', allowOverCapacity: overCap,
       } as any)
       onClose()
@@ -710,6 +726,26 @@ function QuickPendingModal({ onClose }: { onClose: () => void }) {
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1">성함 *</label>
           <input autoFocus value={name} onChange={e => setName(e.target.value)} className={ic} placeholder="예: 홍길동" />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">
+            성별 <span className="font-normal text-gray-400">(선택 — 나중에 수정에서 채워도 됩니다)</span>
+          </label>
+          {/* 예전에는 이 칸이 아예 없어서 무조건 빈 값으로 저장됐고,
+              목록이 빈 값을 '남' 으로 그려서 전부 남자로 보였다. */}
+          <div className="flex gap-1.5">
+            {([['female', '여'], ['male', '남'], ['', '미정']] as const).map(([v, label]) => (
+              <button key={label} type="button" onClick={() => setGender(v)}
+                className={`flex-1 py-2 rounded-xl text-sm font-bold border transition-colors ${
+                  gender === v
+                    ? (v === 'female' ? 'bg-pink-100 text-pink-700 border-pink-300'
+                      : v === 'male' ? 'bg-blue-100 text-blue-700 border-blue-300'
+                      : 'bg-gray-100 text-gray-600 border-gray-300')
+                    : 'bg-white text-gray-400 border-gray-200 hover:bg-gray-50'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1">입소 예정일 *</label>

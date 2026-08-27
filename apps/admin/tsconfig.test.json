@@ -16,6 +16,8 @@
     "src/utils/dayShiftPlan.ts",
     "src/utils/scheduleAudit.ts",
     "src/utils/inspectorTags.ts",
+    "src/utils/gender.ts",
+    "src/utils/residentForm.ts",
     "tests/**/*.ts"
   ]
 }

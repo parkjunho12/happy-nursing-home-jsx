@@ -9,6 +9,7 @@ import type { LtcStaff } from '@/store/ltc'
 import type { ChecklistItem } from '@/utils/period'
 import { calcAge, isItemDone } from '@/utils/period'
 import { STAFF_POSITIONS } from '@/constants/positions'
+import { genderLabel, genderAvatarClass } from '@/utils/gender'
 
 type Tab = 'active' | 'pending' | 'resigned' | 'all'
 
@@ -167,13 +168,13 @@ function StaffCard({ s, onEdit, onResign, onLeave, onDelete, onDetail, checklist
   return (
     <div className={`bg-white rounded-xl border shadow-sm overflow-hidden ${s.status==='resigned'?'opacity-60 border-gray-100':'border-gray-200'}`}>
       <div className="flex items-center gap-3 p-4 cursor-pointer" onClick={onDetail} title="상세 페이지 열기">
-        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-base font-bold flex-shrink-0 ${s.gender==='female'?'bg-pink-100 text-pink-700':'bg-blue-100 text-blue-700'}`}>
+        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-base font-bold flex-shrink-0 ${genderAvatarClass(s.gender)}`}>
           {s.name[0]}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-bold text-gray-900">{s.name}</span>
-            <span className="text-xs text-gray-500">{s.gender==='female'?'여':'남'} · {age}세</span>
+            <span className="text-xs text-gray-500">{genderLabel(s.gender)} · {age}세</span>
             <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${s.status==='active'?'bg-green-100 text-green-700':s.status==='pending'?'bg-amber-100 text-amber-700':'bg-gray-100 text-gray-500'}`}>{s.status==='active'?'재직 중':s.status==='pending'?'입사 예정':'퇴사'}</span>
             {isOnLeave(s) && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">휴직 중</span>}
             {s.memo && <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{s.memo}</span>}

@@ -9,6 +9,7 @@ import { useAuthStore } from '@/store/auth'
 import { adminAlbumAPI } from '@/api/albumClient'
 import { apiClient } from '@/api/client'
 import { canManageFamilyAccounts } from '@/utils/role'
+import { genderAvatarClass } from '@/utils/gender'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8010'
 const PAGE_SIZE = 12
@@ -430,7 +431,7 @@ export default function EvalAlbumPage() {
                       <button key={r.id}
                         onClick={() => { setFilterRes(r.id); setResDropOpen(false); setResSearch('') }}
                         className={`w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-2 ${filterRes===r.id ? 'text-primary-orange font-semibold bg-orange-50' : 'text-gray-700'}`}>
-                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${r.gender==='female'?'bg-pink-100 text-pink-700':'bg-blue-100 text-blue-700'}`}>
+                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${genderAvatarClass(r.gender)}`}>
                           {r.name[0]}
                         </span>
                         {r.name}
@@ -1319,7 +1320,7 @@ function AlbumCreateModal({ residents, defaultResidentId, onClose, onCreated }: 
                           </div>
                           {/* 아바타 */}
                           <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                            r.gender === 'female' ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'
+                            genderAvatarClass(r.gender)
                           }`}>
                             {r.name[0]}
                           </div>
