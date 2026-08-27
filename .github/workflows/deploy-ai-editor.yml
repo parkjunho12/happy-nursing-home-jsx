@@ -63,6 +63,40 @@ jobs:
             done
             grep -q "^GH_TOKEN=" .env || echo "⚠ GH_TOKEN 이 없습니다 — PR 을 만들 수 없습니다"
 
+            # 미리보기 비밀번호 해시 — 여기서 막지 않으면 사이트 전체가 내려간다.
+            #
+            # bcrypt 해시에는 $ 가 세 개 들어간다($2a$14$...). .env 에 그냥 붙여넣으면
+            # docker compose 가 이걸 변수로 읽어 먹어치운다. 실제로 재봤다:
+            #   그냥 붙여넣기 → '$2a$14' 로 잘림   큰따옴표 → 똑같이 잘림
+            #   작은따옴표   → 온전히 보존        $$ 로 이스케이프 → 온전히 보존
+            # 그리고 그 결과가 Caddy 에서 어떻게 되는지도 재봤다:
+            #   잘린 해시 → Caddy 는 뜨고 전부 401. 잠기기만 하니 그나마 낫다
+            #   빈 해시   → Caddy 컨테이너가 죽는다. 요양원 사이트가 통째로 내려간다
+            # 그래서 빈 값은 배포를 세우고, 잘린 값은 미리 잡는다.
+            if grep -q "^PREVIEW_PASS_HASH=[[:space:]]*$" .env; then
+              echo "❌ infra/.env 의 PREVIEW_PASS_HASH 가 비어 있습니다."
+              echo "   값을 채우거나, 그 줄을 통째로 지우세요(지우면 Caddyfile 기본값을 씁니다)."
+              exit 1
+            fi
+            raw=$(sed -n "s/^PREVIEW_PASS_HASH=//p" .env | tr -d '\r')
+            ph=$(printf '%s' "$raw" | tr -d "\"'")
+            if [ -n "$ph" ]; then
+              if [ "${#ph}" -lt 60 ] || [ "${ph#\$2}" = "$ph" ]; then
+                echo "❌ PREVIEW_PASS_HASH 가 온전하지 않습니다 (${#ph}자, 정상은 60자이고 \$2 로 시작)."
+                echo "   만들기: docker run --rm caddy:2.7-alpine caddy hash-password --plaintext '비밀번호'"
+                exit 1
+              fi
+              # .env 파일 안에서는 60자라도, 작은따옴표가 없으면 컨테이너에 들어갈 때
+              # 잘린다. 파일만 봐서는 멀쩡해 보이므로 여기서 따옴표를 직접 확인한다.
+              case "$raw" in
+                "'"*"'") : ;;
+                *) echo "❌ PREVIEW_PASS_HASH 를 작은따옴표로 감싸주세요."
+                   echo "   bcrypt 해시의 \$ 를 docker compose 가 변수로 읽어 값이 잘립니다."
+                   echo "   PREVIEW_PASS_HASH='\$2a\$14\$...'  ← 이렇게"
+                   exit 1 ;;
+              esac
+            fi
+
             docker compose build ai-editor
             docker compose up -d --force-recreate ai-editor
 
@@ -70,7 +104,14 @@ jobs:
             # compose 로 넘기므로 이미지를 다시 굽지 않고 다시 세우기만 하면 된다.
             docker compose up -d --force-recreate --no-deps backend
 
-            # Caddy 는 미리보기 주소가 새로 생겼을 때만 다시 읽으면 된다
+            # Caddy 는 두 가지가 다 필요하다. 하나만 해서는 안 된다.
+            #
+            #  1) up   — PREVIEW_USER / PREVIEW_PASS_HASH 같은 '환경변수'는 컨테이너를
+            #            만들 때 정해진다. reload 로는 절대 안 들어간다.
+            #            바뀐 게 없으면 compose 가 알아서 아무것도 하지 않는다.
+            #  2) reload — Caddyfile 은 bind mount 라 파일 내용만 바뀌었을 때는
+            #            compose 가 변화를 못 느낀다. 그때는 reload 가 필요하다.
+            docker compose up -d --no-deps caddy
             docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile \
               || docker compose restart caddy
 
@@ -83,7 +124,39 @@ jobs:
             docker compose ps ai-editor
             docker compose logs --tail=40 ai-editor
 
-            # 살아 있는지 확인. 바로 죽었다면 배포를 실패로 남긴다.
+            # Caddy 부터 본다. 이게 죽으면 편집기가 아니라 요양원 사이트가 내려간다.
+            cstate=$(docker inspect -f '{{.State.Status}}' happy_caddy)
+            if [ "$cstate" != "running" ]; then
+              echo "❌ Caddy 가 떠 있지 않습니다 ($cstate) — 사이트가 내려간 상태입니다"
+              docker compose logs --tail=40 caddy
+              exit 1
+            fi
+
+            # 미리보기 자리가 실제로 잠겨 있는지. 개발 서버는 소스(/src/...)도
+            # 그대로 내려주므로, 열려 있으면 그 자체가 사고다.
+            # 자기 IP 로 도로 나갔다 오지 않게 127.0.0.1 로 붙인다.
+            PV=preview.xn--p80bu1t60gba47bg6abm347gsla.com
+            code=""
+            for i in 1 2 3 4 5 6 7 8 9 10; do
+              code=$(curl -sk -o /dev/null -w '%{http_code}' -m 5 \
+                       --resolve "$PV:443:127.0.0.1" "https://$PV/" || echo 000)
+              [ "$code" = "000" ] || break
+              sleep 3
+            done
+            case "$code" in
+              401) echo "✅ 미리보기 잠김 확인 (401)" ;;
+              000) echo "⚠ 미리보기에 닿지 못했습니다 — 인증서 발급 중일 수 있습니다" ;;
+              *)   echo "❌ 미리보기가 인증 없이 $code 를 돌려줍니다. 잠겨 있지 않습니다."
+                   exit 1 ;;
+            esac
+
+            # 편집 에이전트가 살아 있는지. 바로 죽었다면 배포를 실패로 남긴다.
             state=$(docker inspect -f '{{.State.Status}}' happy_ai_editor)
             [ "$state" = "running" ] || { echo "❌ 편집 에이전트가 떠 있지 않습니다 ($state)"; exit 1; }
+
+            # 등록까지 됐는지 — 여기서 걸리면 등록코드가 백엔드와 다르다는 뜻이다
+            if docker compose logs --tail=200 ai-editor | grep -q "등록 실패"; then
+              echo "❌ 서버 등록에 실패했습니다. infra/.env 의 AI_EDITOR_ENROLL_CODE 를 확인하세요."
+              exit 1
+            fi
             echo "✅ 편집 에이전트 배포 완료"

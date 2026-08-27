@@ -136,17 +136,20 @@ sudo systemctl daemon-reload && sudo systemctl enable --now ai-editor-agent
 
 ```bash
 # 필수 — 없으면 배포가 멈춥니다
-AI_EDITOR_REPO_URL=https://<GH_TOKEN>@github.com/parkjunho12/happy-nursing-home-jsx.git
+# 저장소가 공개라 클론에는 토큰이 필요 없습니다. 주소에 토큰을 박지 마세요 —
+# 박으면 /repo 볼륨의 .git/config 에 평문으로 남고, 볼륨은 컨테이너를 지워도 남습니다.
+# 브랜치를 미는 인증은 entrypoint 가 `gh auth setup-git` 으로 붙여줍니다.
+AI_EDITOR_REPO_URL=https://github.com/parkjunho12/happy-nursing-home-jsx.git
 AI_EDITOR_ENROLL_CODE=<아무도 모르는 긴 문자열>
 ANTHROPIC_API_KEY=sk-ant-...
 
-# PR 을 만들려면 필요 (repo 권한)
+# 브랜치 push · PR 생성에 필요 (repo 권한)
 GH_TOKEN=ghp_...
 
 # 미리보기를 밖에서 열려면
 AI_EDITOR_PREVIEW_BASE=https://preview.행복한요양원녹양역.com
 PREVIEW_USER=preview
-PREVIEW_PASS_HASH=<아래 명령으로 만든 값>
+PREVIEW_PASS_HASH='<아래 명령으로 만든 값>'   # ← 작은따옴표 필수
 ```
 
 미리보기 비밀번호 해시:
@@ -154,6 +157,23 @@ PREVIEW_PASS_HASH=<아래 명령으로 만든 값>
 ```bash
 docker run --rm caddy:2.7-alpine caddy hash-password --plaintext '원하는비밀번호'
 ```
+
+> **⚠ 해시는 반드시 작은따옴표로 감싸세요.**
+> bcrypt 해시에는 `$` 가 세 개 들어갑니다(`$2a$14$...`). 그냥 붙여넣으면
+> docker compose 가 이걸 변수로 읽어 값을 잘라먹습니다. 직접 재본 결과:
+>
+> | .env 에 쓴 방식 | 컨테이너에 들어간 값 |
+> |---|---|
+> | 그냥 붙여넣기 | `$2a$14` — **잘림** |
+> | 큰따옴표 `"..."` | `$2a$14` — **잘림** |
+> | **작은따옴표 `'...'`** | **온전함** ✅ |
+>
+> 잘린 해시가 들어가면 Caddy 는 뜨지만 아무도 못 들어갑니다(401).
+> 빈 값(`PREVIEW_PASS_HASH=`)을 넣으면 **Caddy 가 아예 안 떠서 사이트 전체가 내려갑니다.**
+> 배포 워크플로가 이 세 가지를 미리 잡아 세웁니다.
+>
+> 이 줄을 아예 쓰지 않으면 Caddyfile 의 기본 해시가 그대로 삽니다 —
+> 아무도 모르는 값이라 안전하게 잠깁니다.
 
 > `PREVIEW_PASS_HASH` 를 넣지 않으면 **아무도 미리보기에 못 들어갑니다.**
 > 열려 있는 것보다 닫혀 있는 편이 낫기 때문입니다.
@@ -183,8 +203,9 @@ docker compose ps ai-editor
 
 | | |
 |---|---|
-| **메모리** | 컨테이너를 2GB로 묶었습니다. 서버가 4GB라 빌드가 다 먹으면 어르신 화면까지 멈춥니다. 편집이 느려지는 편이 낫습니다 |
-| **디스크** | 저장소 클론 + node_modules + worktree 로 몇 GB 씁니다. 작업 폴더는 최근 5개만 남기고 지웁니다 |
+| **메모리** | 컨테이너를 4GB로 묶었습니다(서버 8GB · gna_2.8_n). 한 작업이 Claude CLI + tsc + vite build + 미리보기 서버를 동시에 띄우면 3GB 근처까지 갑니다 |
+| **CPU** | 1코어로 묶었습니다. 코어가 둘뿐이라 하나는 실서비스 몫으로 남깁니다 — 편집이 느려지는 편이, 어르신 화면이 멈추는 것보다 낫습니다 |
+| **디스크** | 저장소 클론 + node_modules + worktree 로 5GB 안팎 씁니다(50GB 중). 작업 폴더는 최근 5개만 남기고 지웁니다 |
 | **첫 작업** | 의존성 설치로 5~10분 걸립니다. 그 뒤로는 빠릅니다 |
 | **끄기** | `docker compose stop ai-editor` — 다른 서비스는 이것을 필요로 하지 않습니다 |
 

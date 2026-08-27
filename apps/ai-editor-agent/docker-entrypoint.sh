@@ -51,7 +51,19 @@ git -C "$REPO_DIR" config --global --add safe.directory "$REPO_DIR" 2>/dev/null 
 # ── gh 로그인 — 토큰이 있으면 PR 을 만들 수 있다 ──
 if [ -n "$GH_TOKEN" ]; then
   say "gh 인증 확인"
-  gh auth status >/dev/null 2>&1 || say "⚠ gh 인증 실패 — PR 을 만들 수 없습니다"
+  if gh auth status >/dev/null 2>&1; then
+    # git push 도 이 토큰으로 하게 만든다.
+    #
+    # 이렇게 하지 않으면 저장소 주소에 토큰을 박아 넣어야 하는데
+    # (https://<토큰>@github.com/...), 그러면 토큰이 /repo 볼륨의
+    # .git/config 에 평문으로 남는다. 볼륨은 컨테이너를 지워도 남는다.
+    # 여기서는 토큰이 환경변수에만 있고 디스크에 떨어지지 않는다.
+    gh auth setup-git >/dev/null 2>&1 \
+      && say "git push 인증 준비 완료" \
+      || say "⚠ gh auth setup-git 실패 — 브랜치를 밀지 못할 수 있습니다"
+  else
+    say "⚠ gh 인증 실패 — 토큰을 확인해주세요. PR 을 만들 수 없습니다"
+  fi
 else
   say "⚠ GH_TOKEN 이 없습니다. 수정·검증은 되지만 PR 을 만들 수 없습니다."
 fi
