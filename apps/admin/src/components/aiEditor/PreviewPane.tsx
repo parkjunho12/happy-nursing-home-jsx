@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Monitor, Tablet, Smartphone, RotateCcw, MousePointerClick,
-  ExternalLink, ArrowLeftRight, Loader2,
+  ExternalLink, ArrowLeftRight, Loader2, AlertTriangle, FlaskConical,
 } from 'lucide-react'
-import type { PickedTarget } from '@/api/aiEditorClient'
+import { PREVIEW_META, type PickedTarget, type PreviewInfo } from '@/api/aiEditorClient'
 
 /**
  * 미리보기 — 고칠 화면을 보여주고, 요소를 눌러 고른다.
@@ -28,6 +28,7 @@ const CHILD = 'happy-inspector'
 
 export default function PreviewPane({
   url, beforeUrl, pageUrl, onPick, onNavigate, picking, setPicking,
+  preview, isJob, onRetry,
 }: {
   /** 지금 보여줄 주소 — 없으면 안내만 띄운다 */
   url?: string | null
@@ -38,6 +39,11 @@ export default function PreviewPane({
   onNavigate?: (path: string) => void
   picking: boolean
   setPicking: (v: boolean) => void
+  /** 상시 미리보기 상태 — 아직 안 떴을 때 무엇을 기다리는지 알려준다 */
+  preview?: PreviewInfo | null
+  /** 지금 보고 있는 것이 작업 결과인가(아니면 기준 브랜치인가) */
+  isJob?: boolean
+  onRetry?: () => void
 }) {
   const [device, setDevice] = useState<Device>('desktop')
   const [showBefore, setShowBefore] = useState(false)
@@ -65,6 +71,10 @@ export default function PreviewPane({
     frame.current?.contentWindow?.postMessage(
       { source: HOST, type: 'setPicking', on: picking }, '*')
   }, [picking, ready])
+
+  /** 주소칸은 따로 들고 있는다 — 위 input 주석 참고 */
+  const [addr, setAddr] = useState(pageUrl || '/')
+  useEffect(() => { setAddr(pageUrl || '/') }, [pageUrl])
 
   const reload = () => { setReady(false); setNonce(n => n + 1) }
   const width = DEVICES.find(d => d.key === device)!.w
@@ -108,16 +118,31 @@ export default function PreviewPane({
           </button>
         )}
 
-        {/* 주소 — 미리보기 안에서 다른 화면으로 옮겨간다 */}
+        {/* 지금 보고 있는 것이 무엇인지 — 이걸 헷갈리면 엉뚱한 것을 보고 판단한다 */}
+        {src && (
+          <span title={isJob ? '이 작업의 수정 결과입니다' : '아직 아무것도 고치지 않은 기준 브랜치입니다'}
+            className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold border ${
+              isJob ? 'bg-violet-50 border-violet-200 text-violet-700'
+                    : 'bg-gray-50 border-gray-200 text-gray-500'}`}>
+            <FlaskConical size={10} />
+            {isJob ? '수정 결과' : '기준 화면'}
+          </span>
+        )}
+
+        {/* 주소 — 미리보기 안에서 다른 화면으로 옮겨간다.
+            타이핑 중에는 건드리지 않는다. 글자마다 주소가 바뀌면 iframe 이
+            글자마다 다시 뜬다. Enter 를 눌렀을 때만 옮긴다. */}
         <input
-          value={pageUrl || '/'}
-          onChange={e => onNavigate?.(e.target.value)}
+          value={addr}
+          onChange={e => setAddr(e.target.value)}
           onKeyDown={e => {
             if (e.key !== 'Enter') return
-            const path = (e.target as HTMLInputElement).value
-            frame.current?.contentWindow?.postMessage(
-              { source: HOST, type: 'navigate', path }, '*')
+            const path = addr.startsWith('/') ? addr : `/${addr}`
+            setAddr(path)
+            onNavigate?.(path)
           }}
+          onBlur={() => setAddr(pageUrl || '/')}
+          placeholder="/eval/residents"
           title="경로를 고치고 Enter — 미리보기가 그 화면으로 갑니다"
           className="ml-1 flex-1 min-w-[8rem] max-w-[20rem] px-2 py-1 text-[11px] font-mono
                      border border-gray-200 rounded-lg text-gray-600" />
@@ -133,18 +158,7 @@ export default function PreviewPane({
       {/* 화면 */}
       <div className="flex-1 min-h-0 bg-slate-100 overflow-auto p-3">
         {!src ? (
-          <div className="h-full flex items-center justify-center">
-            <div className="text-center max-w-md">
-              <Monitor className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-              <p className="text-sm font-bold text-gray-600">미리보기가 아직 없습니다</p>
-              <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
-                왼쪽에서 서비스와 화면을 고르고 수정을 실행하면,
-                편집 에이전트가 전용 작업 폴더에 미리보기를 띄웁니다.
-                <br />
-                <b className="text-gray-500">운영 화면은 여기서 편집하지 않습니다.</b>
-              </p>
-            </div>
-          </div>
+          <Waiting preview={preview} onRetry={onRetry} />
         ) : (
           <div className="mx-auto bg-white rounded-xl shadow-sm overflow-hidden h-full"
             style={{ width: width ? `${width}px` : '100%', maxWidth: '100%' }}>
@@ -172,6 +186,67 @@ export default function PreviewPane({
           </span>
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * 아직 볼 것이 없을 때.
+ *
+ * '미리보기가 없습니다' 한 줄로 끝내면, 기다리면 되는 것인지 뭔가 잘못된
+ * 것인지 알 수가 없다. 특히 첫 실행은 의존성 설치로 5~10분이 걸리는데
+ * 그동안 아무 말이 없으면 멈춘 줄 알고 새로고침만 누르게 된다.
+ */
+function Waiting({ preview, onRetry }: {
+  preview?: PreviewInfo | null
+  onRetry?: () => void
+}) {
+  const state = preview?.state ?? 'off'
+  const meta = PREVIEW_META[state]
+  const working = state === 'starting' || state === 'installing'
+  const failed = state === 'failed'
+
+  return (
+    <div className="h-full flex items-center justify-center">
+      <div className="text-center max-w-md px-4">
+        {working ? <Loader2 className="w-9 h-9 text-indigo-300 mx-auto mb-3 animate-spin" />
+          : failed ? <AlertTriangle className="w-9 h-9 text-rose-300 mx-auto mb-3" />
+            : <Monitor className="w-10 h-10 text-gray-300 mx-auto mb-3" />}
+
+        <p className={`text-sm font-bold ${failed ? 'text-rose-600' : 'text-gray-600'}`}>
+          {working ? `미리보기를 준비하고 있습니다 — ${meta.label}`
+            : failed ? '미리보기를 띄우지 못했습니다'
+              : '미리보기가 아직 없습니다'}
+        </p>
+
+        <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
+          {failed ? (preview?.msg || meta.hint)
+            : working ? meta.hint
+              : '편집 에이전트가 기준 브랜치로 화면을 띄워 둡니다. 왼쪽에서 화면을 고르면 여기에 나옵니다.'}
+        </p>
+
+        {state === 'installing' && (
+          <p className="text-[11px] text-gray-400 mt-2">
+            처음 한 번만 걸립니다. 다음부터는 바로 뜹니다.
+          </p>
+        )}
+
+        {!working && (
+          <>
+            <p className="text-[11px] text-gray-400 mt-3">
+              <b className="text-gray-500">운영 화면은 여기서 편집하지 않습니다.</b>
+              {' '}보고 있는 것은 언제나 전용 작업 폴더입니다.
+            </p>
+            {onRetry && (
+              <button onClick={onRetry}
+                className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg
+                           border border-gray-200 text-[11px] font-bold text-gray-600 hover:bg-gray-50">
+                <RotateCcw size={12} /> 다시 시도
+              </button>
+            )}
+          </>
+        )}
+      </div>
     </div>
   )
 }

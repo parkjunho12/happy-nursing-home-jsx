@@ -46,6 +46,9 @@ def cfg_of(d: dict) -> Config:
         preview_base=d.get("preview_base") or None,
         preview_port=int(d.get("preview_port") or 0),
         keep_worktrees=int(d.get("keep_worktrees") or 5),
+        # 기본값은 켜 둔다 — 화면을 고르면 바로 보이는 편이 낫다.
+        # 설정에 false 를 적으면 예전처럼 작업을 걸어야만 미리보기가 생긴다.
+        base_preview=bool(d.get("base_preview", True)),
     )
 
 

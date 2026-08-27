@@ -89,9 +89,40 @@ def register(body: RegisterBody, db: Session = Depends(get_db)):
                        message="등록되었습니다.")
 
 
+@router.get("/services")
+def agent_services(a: AiEditAgent = Depends(_agent), db: Session = Depends(get_db)):
+    """편집 대상 목록.
+
+    에이전트가 작업을 받기 전에도 이걸 알아야 한다 — 작업이 없을 때
+    기준 브랜치로 미리보기를 띄워 두려면 dev_cmd 와 root_path 가 필요하다.
+    claim 응답으로만 알 수 있으면, 첫 작업 전에는 아무것도 못 띄운다.
+    """
+    rows = (db.query(AiEditService)
+              .filter(AiEditService.active == True)          # noqa: E712
+              .order_by(AiEditService.sort, AiEditService.key).all())
+    db.commit()   # _agent 가 찍은 last_seen 을 남긴다
+    return ApiResponse(success=True, data={"services": [
+        {"key": s.key, "name": s.name, "repo": s.repo, "root_path": s.root_path,
+         "base_branch": s.base_branch, "install_cmd": s.install_cmd,
+         "dev_cmd": s.dev_cmd, "check_cmds": s.check_cmds or [],
+         "pages": s.pages or [], "prod_url": s.prod_url}
+        for s in rows]})
+
+
+# 에이전트가 아무 상태나 써넣지 못하게 한다
+PREVIEW_STATES = {"off", "starting", "installing", "ready", "failed"}
+PREVIEW_KINDS = {"base", "job"}
+
+
 class HeartbeatBody(BaseModel):
     now_job_id: Optional[str] = None
     tools: Optional[Dict[str, Any]] = None
+    # 지금 미리보기 자리에 무엇이 떠 있는지
+    preview_kind: Optional[str] = None
+    preview_service: Optional[str] = None
+    preview_state: Optional[str] = None
+    preview_url: Optional[str] = None
+    preview_msg: Optional[str] = None
 
 
 @router.post("/heartbeat")
@@ -100,14 +131,31 @@ def heartbeat(body: HeartbeatBody, a: AiEditAgent = Depends(_agent),
     a.now_job_id = body.now_job_id
     if body.tools:
         a.tools = body.tools
+
+    # 미리보기 상태 — 화면의 안내 문구가 곧 이 값이다. 아무 값이나 들어오면
+    # 화면이 거짓말을 하게 되므로 아는 값만 받는다.
+    if body.preview_state is not None:
+        if body.preview_state not in PREVIEW_STATES:
+            raise HTTPException(400, "알 수 없는 미리보기 상태입니다.")
+        a.preview_state = body.preview_state
+    if body.preview_kind is not None:
+        a.preview_kind = body.preview_kind if body.preview_kind in PREVIEW_KINDS else None
+    for f in ("preview_service", "preview_url", "preview_msg"):
+        v = getattr(body, f)
+        if v is not None:
+            setattr(a, f, v[:300] or None)
+
+    want = a.want_service
     db.commit()
+
     # 중지 요청은 heartbeat 로 전한다 — 에이전트가 다음 단계 전에 확인한다
     cancel: List[str] = []
     if body.now_job_id:
         j = db.query(AiEditJob).filter(AiEditJob.id == body.now_job_id).first()
         if j and j.cancel_requested:
             cancel.append(j.id)
-    return ApiResponse(success=True, data={"cancel": cancel})
+    # 화면이 '이 서비스를 보여줘' 라고 한 값을 함께 내려보낸다
+    return ApiResponse(success=True, data={"cancel": cancel, "want_service": want})
 
 
 @router.post("/claim")
