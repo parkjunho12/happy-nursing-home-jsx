@@ -1,0 +1,7 @@
+<resources>
+    <color name="brand_teal">#0F9D75</color>
+    <color name="brand_teal_dark">#0B7D5C</color>
+    <color name="white">#FFFFFF</color>
+    <color name="black">#111111</color>
+    <color name="text_gray">#555555</color>
+</resources>

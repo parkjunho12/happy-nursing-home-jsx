@@ -1,0 +1,66 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'com.google.gms.google-services'   // Firebase (FCM) — google-services.json 필요
+}
+
+android {
+    namespace 'com.happycare.guardianalbum'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "com.happycare.guardianalbum"
+        minSdk 23
+        targetSdk 36
+        versionCode 6
+        versionName "1.0.4"
+
+        // URL은 빌드 타입(debug/release)별로 아래 buildTypes 에서 주입합니다.
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    buildTypes {
+        debug {
+            // ── 로컬 테스트용 (에뮬레이터에서 PC의 localhost:3000 = 10.0.2.2) ──
+            //  실기기로 테스트하면 10.0.2.2 대신 PC의 LAN IP(예: 192.168.0.10)로 바꾸세요.
+            buildConfigField "String", "ALBUM_URL", "\"http://10.0.2.2:3000/family/albums\""
+            buildConfigField "String", "ALLOWED_HOST", "\"10.0.2.2:3000\""
+            manifestPlaceholders = [cleartextTraffic: "true"]   // 디버그: localhost 평문 허용
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // ── 운영 ── (HTTPS 전용)
+            buildConfigField "String", "ALBUM_URL", "\"https://www.xn--p80bu1t60gba47bg6abm347gsla.com/family/albums\""
+            buildConfigField "String", "ALLOWED_HOST", "\"www.xn--p80bu1t60gba47bg6abm347gsla.com\""
+            manifestPlaceholders = [cleartextTraffic: "false"]  // 운영: HTTPS 전용
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'com.google.android.material:material:1.12.0'
+    implementation 'androidx.activity:activity-ktx:1.9.2'   // onBackPressedDispatcher
+    implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'   // 당겨서 새로고침
+
+    // FCM 푸시
+    implementation platform('com.google.firebase:firebase-bom:33.1.2')
+    implementation 'com.google.firebase:firebase-messaging-ktx'
+
+    // Firebase Cloud Messaging (푸시) — app/google-services.json 추가 후 동작
+    implementation platform('com.google.firebase:firebase-bom:33.1.2')
+    implementation 'com.google.firebase:firebase-messaging'
+}

@@ -1,0 +1,14 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.StaffApp" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/brand_teal</item>
+        <item name="colorPrimaryDark">@color/brand_teal_dark</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="android:statusBarColor" tools:targetApi="l">@color/brand_teal_dark</item>
+        <item name="android:windowBackground">@color/white</item>
+    </style>
+
+    <!-- 앱 시작 시 로고 스플래시 -->
+    <style name="Theme.StaffApp.Launch" parent="Theme.StaffApp">
+        <item name="android:windowBackground">@drawable/splash</item>
+    </style>
+</resources>

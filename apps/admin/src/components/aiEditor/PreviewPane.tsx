@@ -118,14 +118,20 @@ export default function PreviewPane({
           </button>
         )}
 
-        {/* 지금 보고 있는 것이 무엇인지 — 이걸 헷갈리면 엉뚱한 것을 보고 판단한다 */}
+        {/* 지금 보고 있는 것이 무엇인지 — 이걸 헷갈리면 엉뚱한 것을 보고 판단한다.
+            어느 커밋인지까지 적는다. 옛 코드를 보고 있는 줄 모르고 헤맨 적이 있다. */}
         {src && (
-          <span title={isJob ? '이 작업의 수정 결과입니다' : '아직 아무것도 고치지 않은 기준 브랜치입니다'}
+          <span title={isJob
+            ? '이 작업의 수정 결과입니다'
+            : `아직 아무것도 고치지 않은 기준 브랜치입니다${preview?.msg ? ` (${preview.msg})` : ''}`}
             className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold border ${
               isJob ? 'bg-violet-50 border-violet-200 text-violet-700'
                     : 'bg-gray-50 border-gray-200 text-gray-500'}`}>
             <FlaskConical size={10} />
             {isJob ? '수정 결과' : '기준 화면'}
+            {!isJob && preview?.msg && (
+              <span className="font-mono font-normal text-gray-400">{preview.msg}</span>
+            )}
           </span>
         )}
 
