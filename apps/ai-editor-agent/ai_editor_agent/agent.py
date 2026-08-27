@@ -51,6 +51,8 @@ CHECK_TIMEOUT = 900
 GIT_TIMEOUT = 180
 # 의존성 설치는 처음 한 번이 특히 길다. 여기서 끊기면 미리보기가 영영 안 뜬다.
 INSTALL_TIMEOUT = 1800
+# 기준 브랜치가 움직였는지 얼마나 자주 볼지. git fetch 한 번이라 부담이 없다.
+BASE_REFRESH_SEC = 300
 
 
 class AgentError(Exception):
@@ -261,6 +263,8 @@ class EditorAgent:
         self._base: Optional[subprocess.Popen] = None
         self._base_key: Optional[str] = None      # 지금 띄워둔 서비스
         self._want: Optional[str] = None          # 화면이 보여달라 한 서비스
+        self._base_sha: Optional[str] = None      # 지금 띄운 커밋
+        self._base_checked: float = 0.0           # 마지막으로 브랜치를 본 시각
         self._pv_lock = threading.Lock()
         self._pv: Dict[str, Optional[str]] = {
             "preview_kind": None, "preview_service": None,
@@ -506,6 +510,12 @@ SUMMARY>>>
     # 기본 미리보기가 자리를 비켜주고, 작업이 끝나면 돌아온다. 두 개를 동시에
     # 띄우면 --strictPort 라 뒤엣것이 그냥 죽는다.
 
+    def base_head(self, svc: dict) -> Optional[str]:
+        """기준 브랜치가 지금 가리키는 커밋. 못 알아내면 None."""
+        code, so, _ = run(["git", "rev-parse", f"origin/{svc['base_branch']}"],
+                          cwd=self.cfg.repo_dir, timeout=GIT_TIMEOUT)
+        return so.strip() if code == 0 and so.strip() else None
+
     def base_worktree(self, svc: dict) -> str:
         """기준 브랜치를 보는 전용 폴더.
 
@@ -559,6 +569,8 @@ SUMMARY>>>
             self.set_preview(kind="base", service=key, state="starting",
                              msg="작업 폴더를 준비하는 중입니다")
             wt = self.base_worktree(svc)
+            self._base_sha = self.base_head(svc)
+            self._base_checked = time.time()
             self.ensure_deps(wt, svc, on_install=lambda: self.set_preview(
                 kind="base", service=key, state="installing",
                 msg="의존성을 설치하는 중입니다 — 처음 한 번은 5~10분 걸립니다"))
@@ -596,6 +608,7 @@ SUMMARY>>>
 
     def stop_base_preview(self) -> None:
         p, self._base, self._base_key = self._base, None, None
+        self._base_sha = None
         if p:
             _kill(p)
 
@@ -636,6 +649,24 @@ SUMMARY>>>
                             self.set_preview(kind=None, service=want, state="failed",
                                              msg="등록되지 않은 서비스입니다.")
                             self._want = None
+                    elif want and self._base is not None:
+                        # 기준 브랜치가 움직였으면 따라간다.
+                        #
+                        # 이게 없으면 컨테이너를 다시 세울 때까지 옛 코드를
+                        # 계속 보여준다. 방금 고친 것을 미리보기에서 확인하려고
+                        # 배포를 한 번 더 돌리는 건 말이 안 된다.
+                        # git fetch 한 번이라 5분마다 봐도 부담이 없다.
+                        if time.time() - self._base_checked >= BASE_REFRESH_SEC:
+                            self._base_checked = time.time()
+                            svc = self.find_service(want)
+                            if svc:
+                                run(["git", "fetch", "origin", svc["base_branch"]],
+                                    cwd=self.cfg.repo_dir, timeout=GIT_TIMEOUT)
+                                head = self.base_head(svc)
+                                if head and self._base_sha and head != self._base_sha:
+                                    logger.info("기준 브랜치가 움직였습니다 — 미리보기를 새로 띄웁니다 "
+                                                "(%s → %s)", self._base_sha[:8], head[:8])
+                                    self.start_base_preview(svc)
             except Exception as ex:                  # noqa: BLE001
                 logger.warning("기본 미리보기 관리 중 오류: %s", ex)
             self._stop.wait(3)
