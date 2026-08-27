@@ -16,6 +16,7 @@ import type {
  * API 베이스 결정:
  * - 로컬/사설 IP(localhost·127.0.0.1·10.0.2.2·192.168.* 등)에서 열렸으면
  *   같은 호스트의 8010 포트 사용 → 에뮬레이터·실기기·PC 브라우저 모두 자동 대응.
+ * - AI 페이지 편집기의 미리보기(preview.도메인)면 같은 도메인의 api. 를 쓴다.
  * - 그 외(운영)는 VITE_API_BASE_URL 또는 운영 기본값.
  */
 function resolveApiBase(): string {
@@ -26,6 +27,13 @@ function resolveApiBase(): string {
       /^192\.168\./.test(h) || /^10\./.test(h) ||
       /^172\.(1[6-9]|2\d|3[01])\./.test(h)
     if (isLocal) return `http://${h}:8010`
+
+    // 미리보기는 개발 서버라 빌드 때 주입되는 VITE_API_BASE_URL 이 없다.
+    // 그대로 두면 브라우저가 localhost:8010 을 찾아가 아무것도 안 나온다.
+    // 주소에서 api 주소를 끌어낸다 — 운영과 같은 서버를 본다.
+    if (h.startsWith('preview.')) {
+      return `${window.location.protocol}//api.${h.slice('preview.'.length)}`
+    }
   }
   return import.meta.env.VITE_API_BASE_URL || 'http://localhost:8010'
 }

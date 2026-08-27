@@ -75,6 +75,9 @@ export function inspectorPlugin(): Plugin {
  */
 const INSPECTOR_SRC = /* js */ `
 const TAG = 'happy-inspector'
+// 부모(Admin)의 출처. 첫 말을 들은 뒤로는 그쪽으로만 답한다.
+// 아직 모를 때만 '*' 로 '나 떴다' 를 알린다 — 그 말에는 알맹이가 없다.
+let host = null
 let picking = false
 let box = null
 let label = null
@@ -177,7 +180,7 @@ function click(e) {
   const el = pick(e.target)
   if (!el) return
   e.preventDefault(); e.stopPropagation()
-  parent.postMessage({ source: TAG, type: 'picked', payload: describe(el) }, '*')
+  reply({ type: 'picked', payload: describe(el) })
   setPicking(false)
 }
 
@@ -186,17 +189,57 @@ function setPicking(on) {
   ensureUi()
   document.documentElement.style.cursor = on ? 'crosshair' : ''
   if (!on) { box.style.display = 'none'; label.style.display = 'none' }
-  parent.postMessage({ source: TAG, type: 'picking', payload: { on } }, '*')
+  reply({ type: 'picking', payload: { on } })
 }
+
+/** 부모에게 답한다 — 출처를 알면 그쪽으로만 */
+function reply(msg) {
+  parent.postMessage({ source: TAG, ...msg }, host || '*')
+}
+
+/**
+ * 이 말을 믿어도 되는 창인가.
+ *
+ * 로그인 토큰이 오가므로 아무 창의 말이나 들으면 안 된다. Admin 화면과
+ * 개발용 로컬만 받아들인다. 앞단(Caddy)도 frame-ancestors 로 Admin 밖에서는
+ * 이 화면을 품지 못하게 막지만, 여기서 한 겹 더 본다.
+ */
+function trusted(origin) {
+  try {
+    const u = new URL(origin)
+    if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') return true
+    return u.protocol === 'https:' && u.hostname.startsWith('admin.')
+  } catch (_) { return false }
+}
+
+const TOKEN_KEY = 'access_token'
 
 window.addEventListener('message', (e) => {
   const m = e.data
   if (!m || m.source !== TAG + '-host') return
+  if (!trusted(e.origin)) return
+  host = e.origin
   if (m.type === 'setPicking') setPicking(!!m.on)
   if (m.type === 'navigate' && m.path) location.href = m.path
   if (m.type === 'ping') {
-    parent.postMessage({ source: TAG, type: 'ready',
-                         payload: { url: location.pathname } }, '*')
+    reply({ type: 'ready', payload: { url: location.pathname } })
+  }
+  /**
+   * Admin 이 건네준 로그인 정보.
+   *
+   * 미리보기는 admin 과 다른 출처라 저장소가 따로 논다. 그대로 두면 여기서
+   * 로그인 화면만 보게 되고, 그러면 고칠 화면을 볼 수가 없다.
+   * 토큰만 심고 한 번 새로 읽는다 — 앱이 그 토큰으로 스스로 복구한다.
+   *
+   * 값이 그대로면 새로 읽지 않는다. 안 그러면 무한히 다시 뜬다.
+   */
+  if (m.type === 'auth') {
+    const now = localStorage.getItem(TOKEN_KEY) || ''
+    const next = m.token || ''
+    if (now === next) return
+    if (next) localStorage.setItem(TOKEN_KEY, next)
+    else localStorage.removeItem(TOKEN_KEY)
+    location.reload()
   }
 })
 
@@ -205,5 +248,5 @@ document.addEventListener('mousemove', move, true)
 document.addEventListener('click', click, true)
 window.addEventListener('keydown', (e) => { if (e.key === 'Escape') setPicking(false) })
 // 부모에게 '나 떴다' 를 알린다 — 부모는 이걸 받고 나서 명령을 보낸다
-parent.postMessage({ source: TAG, type: 'ready', payload: { url: location.pathname } }, '*')
+reply({ type: 'ready', payload: { url: location.pathname } })
 `

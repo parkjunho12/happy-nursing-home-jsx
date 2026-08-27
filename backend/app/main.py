@@ -113,12 +113,40 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# AI 페이지 편집기의 미리보기(preview.도메인)도 같은 API 를 본다.
+#
+# 미리보기는 admin 과 다른 출처라, 허용해 두지 않으면 브라우저가 모든 호출을
+# 막는다. 토큰을 넘겨줘도 화면에는 아무것도 안 나온다.
+#
+# 아무 preview.* 나 열어주지는 않는다. 이미 믿고 있는 출처(admin.·www.)의
+# 형제만 만들어 붙인다 — CORS_ORIGINS 를 손으로 고치고 다시 세우게 하면
+# 빠뜨리기 쉽고, 반대로 preview.아무데나 를 열면 그건 구멍이다.
+import re as _re
+from urllib.parse import urlparse as _up
+
+_preview_origins: list[str] = []
+for _o in settings.CORS_ORIGINS_LIST:
+    _h = (_up(_o).hostname or "")
+    _head, _, _rest = _h.partition(".")
+    if _rest and _head in ("admin", "www"):
+        _preview_origins.append(f"https://preview.{_rest}")
+_preview_origins = list(dict.fromkeys(_preview_origins))
+
+_LOCAL_RE = (r"^http://(localhost|127\.0\.0\.1|10\.0\.2\.2|10\.\d+\.\d+\.\d+"
+             r"|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$")
+_ORIGIN_RE = _LOCAL_RE
+if _preview_origins:
+    _ORIGIN_RE = "(?:%s)|(?:^(?:%s)$)" % (
+        _LOCAL_RE, "|".join(_re.escape(o) for o in _preview_origins))
+    logger.info(f"미리보기 출처 허용: {_preview_origins}")
+
 # CORS 설정 (중요!)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS_LIST,
     # 로컬/사설 IP(localhost·127.0.0.1·10.0.2.2·192.168.* 등)는 포트 무관 허용 (개발 편의)
-    allow_origin_regex=r"^http://(localhost|127\.0\.0\.1|10\.0\.2\.2|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$",
+    # + AI 편집기 미리보기 출처(위에서 만든 것)
+    allow_origin_regex=_ORIGIN_RE,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],

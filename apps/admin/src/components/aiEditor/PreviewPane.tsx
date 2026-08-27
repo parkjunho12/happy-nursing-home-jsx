@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Monitor, Tablet, Smartphone, RotateCcw, MousePointerClick,
   ExternalLink, ArrowLeftRight, Loader2, AlertTriangle, FlaskConical,
@@ -53,6 +53,22 @@ export default function PreviewPane({
 
   const src = showBefore && beforeUrl ? beforeUrl : url
 
+  /**
+   * 미리보기 주소의 출처.
+   *
+   * postMessage 를 보낼 때 '*' 를 쓰지 않기 위해 필요하다. 로그인 토큰을
+   * 실어 보내므로, 받는 곳을 정확히 못 박지 않으면 아무 창에나 흘러간다.
+   */
+  const origin = useMemo(() => {
+    if (!src) return null
+    try { return new URL(src).origin } catch { return null }
+  }, [src])
+
+  const post = useCallback((msg: Record<string, unknown>) => {
+    if (!origin) return
+    frame.current?.contentWindow?.postMessage({ source: HOST, ...msg }, origin)
+  }, [origin])
+
   /** iframe 에서 오는 말 듣기 */
   useEffect(() => {
     const on = (e: MessageEvent) => {
@@ -68,13 +84,32 @@ export default function PreviewPane({
 
   /** 요소 고르기 켜고 끄기 */
   useEffect(() => {
-    frame.current?.contentWindow?.postMessage(
-      { source: HOST, type: 'setPicking', on: picking }, '*')
-  }, [picking, ready])
+    post({ type: 'setPicking', on: picking })
+  }, [picking, ready, post])
 
   /** 주소칸은 따로 들고 있는다 — 위 input 주석 참고 */
   const [addr, setAddr] = useState(pageUrl || '/')
   useEffect(() => { setAddr(pageUrl || '/') }, [pageUrl])
+
+
+  /**
+   * 로그인 정보를 건넨다.
+   *
+   * 미리보기는 admin 과 다른 출처(preview.도메인)라 localStorage 가 따로 논다.
+   * 그대로 두면 미리보기 안에서 로그인 화면만 보게 된다 — 고칠 화면을 볼 수
+   * 없으니 편집기의 의미가 없다.
+   *
+   * 토큰만 넘기면 된다. 미리보기 쪽 앱이 그 토큰으로 /me 를 불러 스스로
+   * 복구한다. 받는 쪽은 admin 출처에서 온 것만 받아들인다.
+   */
+  // 렌더마다 읽는다. 로그아웃했다 다시 로그인하면 토큰이 바뀌는데,
+  // ready 만 보고 있으면 그때 다시 건네주지 못한다.
+  const token = typeof localStorage !== 'undefined'
+    ? (localStorage.getItem('access_token') || '') : ''
+  useEffect(() => {
+    if (!ready) return
+    post({ type: 'auth', token })
+  }, [ready, token, post])
 
   const reload = () => { setReady(false); setNonce(n => n + 1) }
   const width = DEVICES.find(d => d.key === device)!.w
@@ -176,9 +211,7 @@ export default function PreviewPane({
               className="w-full h-full border-0"
               // 미리보기는 우리가 띄운 개발 서버다. 다만 상위 창을 벗어나는 이동은 막는다.
               sandbox="allow-scripts allow-same-origin allow-forms"
-              onLoad={() => {
-                frame.current?.contentWindow?.postMessage({ source: HOST, type: 'ping' }, '*')
-              }}
+              onLoad={() => post({ type: 'ping' })}
             />
           </div>
         )}
