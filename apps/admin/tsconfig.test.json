@@ -15,6 +15,7 @@
     "src/utils/baseHours.ts",
     "src/utils/dayShiftPlan.ts",
     "src/utils/scheduleAudit.ts",
+    "src/utils/inspectorTags.ts",
     "tests/**/*.ts"
   ]
 }

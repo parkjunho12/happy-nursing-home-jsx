@@ -18,10 +18,9 @@ import path from 'node:path'
  * 속성이 운영에 새면 소스 구조가 그대로 노출된다.
  */
 
-const JSX_EXT = /\.[jt]sx$/
+import { injectSources } from './src/utils/inspectorTags'
 
-/** 여는 태그의 시작만 고른다. 닫는 태그(`</`)와 조각(`<>`)은 건너뛴다. */
-const OPEN_TAG = /<([A-Za-z][\w.]*)(?=[\s/>])/g
+const JSX_EXT = /\.[jt]sx$/
 
 export function inspectorPlugin(): Plugin {
   return {
@@ -41,34 +40,9 @@ export function inspectorPlugin(): Plugin {
         /function\s+([A-Z]\w*)\s*\(/.exec(code)?.[1] ??
         path.basename(rel).replace(JSX_EXT, '')
 
-      // 줄·칸을 세려면 오프셋을 좌표로 바꿔야 한다
-      const lineStarts: number[] = [0]
-      for (let i = 0; i < code.length; i++) if (code[i] === '\n') lineStarts.push(i + 1)
-      const posOf = (off: number) => {
-        let lo = 0, hi = lineStarts.length - 1
-        while (lo < hi) {
-          const mid = (lo + hi + 1) >> 1
-          if (lineStarts[mid] <= off) lo = mid; else hi = mid - 1
-        }
-        return { line: lo + 1, column: off - lineStarts[lo] + 1 }
-      }
-
-      let out = '', last = 0, hit = 0
-      for (const m of code.matchAll(OPEN_TAG)) {
-        const tag = m[1]
-        const at = m.index! + m[0].length
-        const { line, column } = posOf(m.index!)
-        // 소문자로 시작하면 HTML 태그, 대문자면 컴포넌트다.
-        // 컴포넌트에 붙이면 그 컴포넌트가 속성을 안 받을 수 있어 DOM 태그에만 붙인다.
-        if (!/^[a-z]/.test(tag)) continue
-        out += code.slice(last, at)
-        out += ` data-src="${rel}:${line}:${column}" data-comp="${comp}"`
-        last = at
-        hit++
-      }
-      if (!hit) return null
-      out += code.slice(last)
-      return { code: out, map: null }
+      const r = injectSources(code, rel, comp)
+      if (!r) return null
+      return { code: r.code, map: null }
     },
 
     /** 미리보기 창에 Inspector 스크립트를 넣는다 */
