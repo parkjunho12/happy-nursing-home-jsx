@@ -15,6 +15,7 @@ export interface ScheduleRow {
   staff_id: string
   position?: string | null    // 직종 (시설장·사회복지사·간호조무사·요양보호사…)
   team?: string | null        // 조 (A조·B조·C조·주간)
+  floor?: string | null       // 담당 층 (2층·3층…) — 요양보호사만 쓴다
   order?: number
   note?: string | null        // 비고
 }
