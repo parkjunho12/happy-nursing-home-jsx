@@ -62,6 +62,7 @@ import StaffDetailPage from './pages/eval/StaffDetailPage'
 import MealCountPage from './pages/admin/MealCountPage'
 import OperationsPage from './pages/admin/OperationsPage'
 import AdminRoutinePage from './pages/admin/AdminRoutinePage'
+import AiEditorPage from './pages/admin/AiEditorPage'
 import BroadcastPage from './pages/admin/BroadcastPage'
 import StaffEducationPage from './pages/StaffEducationPage'
 import WorkGuidePage from './pages/WorkGuidePage'
@@ -335,6 +336,8 @@ function App() {
             <Route path="meals"                    element={<ExtOr menu="/meals" otherwise={MealRoute}><MealPlanPage /></ExtOr>} />
             <Route path="meal-count"               element={<MealRoute><MealCountPage /></MealRoute>} />
             <Route path="operations"               element={<AdminRoute><OperationsPage /></AdminRoute>} />
+            {/* AI 페이지 편집기 — 소스를 고치고 배포까지 가는 화면이라 ADMIN 전용 */}
+            <Route path="ai-editor"                element={<AdminRoute><AiEditorPage /></AdminRoute>} />
             {/* 월간 업무 — 전 직원. 각자 자기 것만 보고 관리한다(서버가 주인으로 거른다) */}
             <Route path="monthly-routines"         element={<AdminRoutinePage />} />
             <Route path="broadcast"                element={<BroadcastRoute><BroadcastPage /></BroadcastRoute>} />

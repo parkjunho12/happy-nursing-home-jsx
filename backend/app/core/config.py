@@ -75,6 +75,10 @@ class Settings(BaseSettings):
     # =============================
     # 안내방송 (소방·비상방송과 무관한 독립 시스템)
     # =============================
+    # AI 페이지 편집기 — 편집 에이전트가 처음 등록할 때 쓰는 코드.
+    # 비어 있으면 아무도 등록할 수 없다(기본은 잠긴 상태).
+    AI_EDITOR_ENROLL_CODE: str = ""
+
     BROADCAST_ENABLED: bool = True
     # TTS 업체 — openai | local | mock. 교체는 이 값만 바꾸면 된다.
     BROADCAST_TTS_PROVIDER: str = "openai"
