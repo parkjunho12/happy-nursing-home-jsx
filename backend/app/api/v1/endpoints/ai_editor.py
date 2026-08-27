@@ -341,3 +341,54 @@ def rollback_job(jid: str, db: Session = Depends(get_db), current_user: User = D
     log_event(db, jid, f"되돌리기 요청 — {getattr(current_user, 'name', '')}")
     db.commit(); db.refresh(j)
     return ApiResponse(success=True, data=_job_view(j))
+
+
+# ──────────────────────────────────────────────────────────────
+# 처음 한 번 — 이 저장소의 관리자 화면을 등록한다
+# ──────────────────────────────────────────────────────────────
+DEFAULT_SERVICE = {
+    "key": "admin",
+    "name": "관리자 화면 (apps/admin)",
+    "repo": "parkjunho12/happy-nursing-home-jsx",
+    "root_path": "apps/admin",
+    "base_branch": "develop",
+    "install_cmd": "npx --yes pnpm install --frozen-lockfile",
+    # {port} 는 에이전트가 비어 있는 포트로 바꿔 넣는다.
+    # VITE_INSPECTOR=1 이어야 화면 요소에서 소스 위치를 읽을 수 있다.
+    "dev_cmd": ("VITE_INSPECTOR=1 npx --yes pnpm --filter ./apps/admin exec "
+                "vite --port {port} --host 127.0.0.1 --strictPort"),
+    # 배포 워크플로가 돌리는 것과 같은 검사다 — 여기서 통과하면 CI 에서도 통과한다
+    "check_cmds": [
+        "npx --yes pnpm --filter ./apps/admin exec tsc --noEmit",
+        "npx --yes pnpm --filter ./apps/admin test",
+        "npx --yes pnpm --filter ./apps/admin exec vite build",
+    ],
+    "prod_url": "https://admin.xn--p80bu1t60gba47bg6abm347gsla.com",
+    "pages": [
+        {"path": "/", "label": "대시보드"},
+        {"path": "/eval/residents", "label": "수급자 관리"},
+        {"path": "/resident-docs", "label": "어르신 서류현황"},
+        {"path": "/work-schedule", "label": "근무 편성표"},
+        {"path": "/programs", "label": "프로그램 관리"},
+        {"path": "/broadcast", "label": "방송 관리"},
+        {"path": "/monthly-routines", "label": "월간 업무"},
+        {"path": "/operations", "label": "운영·계약"},
+        {"path": "/schedule", "label": "일정 캘린더"},
+        {"path": "/assignments", "label": "담당 어르신 명단"},
+    ],
+}
+
+
+@router.post("/services/seed")
+def seed_service(db: Session = Depends(get_db), _: User = Depends(_admin)):
+    """이 저장소의 관리자 화면을 기본값으로 등록한다.
+
+    손으로 JSON 을 적게 하면 오타 하나에 엉뚱한 저장소를 체크아웃하게 된다.
+    이미 있으면 건드리지 않는다 — 고쳐 둔 설정을 덮어쓰지 않는다.
+    """
+    if db.query(AiEditService).filter(AiEditService.key == DEFAULT_SERVICE["key"]).first():
+        raise HTTPException(400, "이미 등록되어 있습니다.")
+    db.add(AiEditService(**DEFAULT_SERVICE))
+    db.commit()
+    return ApiResponse(success=True, data=DEFAULT_SERVICE,
+                       message="관리자 화면을 등록했습니다.")

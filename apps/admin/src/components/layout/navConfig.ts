@@ -3,8 +3,7 @@ import {
   Star, Settings, ClipboardList, ClipboardCheck, CalendarDays,
   UserRound, ShieldCheck, Sparkles, FileSearch,
   Image as ImageIcon, Users, BookOpen, PenLine, Megaphone, Bell, CalendarClock, CalendarCheck, HeartHandshake, Briefcase, Soup, Receipt, GraduationCap,
-  type LucideIcon, AlertTriangle, BarChart3, ChefHat, Landmark, Radio,
-} from 'lucide-react'
+  type LucideIcon, AlertTriangle, BarChart3, ChefHat, Landmark, Radio, Wand2 } from 'lucide-react'
 
 /**
  * 모바일에서 숨기는 메뉴 — 넓은 표 편집·인쇄·대량 서류 작업 등 PC 전용 화면.
@@ -195,6 +194,8 @@ export function getNavConfig(
             { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
             // 매달 반복되는 내 업무 — 사람마다 자기 것만 본다
             { to: '/monthly-routines', icon: CalendarCheck, label: '월간 업무' },
+            // 화면을 보며 말로 고친다 — ADMIN 블록에만 둔다
+            { to: '/ai-editor', icon: Wand2, label: 'AI 페이지 편집기' },
             { to: '/broadcast', icon: Radio, label: '방송 관리' },
             { to: '/notices', icon: Bell, label: '내부 공지 관리' },
             { to: '/facility-news', icon: Megaphone, label: '시설소식' },
