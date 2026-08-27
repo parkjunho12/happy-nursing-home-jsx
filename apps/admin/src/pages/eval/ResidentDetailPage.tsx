@@ -9,6 +9,7 @@ import { currentCert, certState, fmtD, gradeLabel } from '@/utils/cert'
 import ChecklistFormModal from '@/components/eval/ChecklistFormModal'
 import { ResidentForm } from './EvalResidentsPage'
 import type { ChecklistItem } from '@/utils/period'
+import { genderLabel, genderAvatarClass } from '@/utils/gender'
 
 /**
  * 수급자 상세 — 흩어져 있던 정보(기본·그룹·담당자·서류·체크리스트)를 한 화면에.
@@ -131,7 +132,7 @@ export default function ResidentDetailPage() {
       <div className="flex items-center gap-3 flex-wrap">
         <button onClick={() => navigate('/eval/residents')}
           className="w-9 h-9 rounded-xl border border-gray-200 text-gray-500 flex items-center justify-center hover:bg-gray-50"><ArrowLeft size={16} /></button>
-        <div className={`w-11 h-11 rounded-full flex items-center justify-center text-lg font-bold ${r.gender === 'female' ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'}`}>{r.name[0]}</div>
+        <div className={`w-11 h-11 rounded-full flex items-center justify-center text-lg font-bold ${genderAvatarClass(r.gender)}`}>{r.name[0]}</div>
         <div>
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl font-bold text-gray-900">{r.name}</h1>
@@ -144,7 +145,7 @@ export default function ResidentDetailPage() {
               </span>
             )}
           </div>
-          <p className="text-xs text-gray-400 mt-0.5">{r.gender === 'female' ? '여' : '남'} · 만 {calcAge(r.birthDate)}세 · 입소 {r.admissionDate}{r.dischargeDate && ` · 퇴소 ${r.dischargeDate}${(r as any).dischargeTime ? ` ${(r as any).dischargeTime}` : ''}`}</p>
+          <p className="text-xs text-gray-400 mt-0.5">{genderLabel(r.gender)} · 만 {calcAge(r.birthDate)}세 · 입소 {r.admissionDate}{r.dischargeDate && ` · 퇴소 ${r.dischargeDate}${(r as any).dischargeTime ? ` ${(r as any).dischargeTime}` : ''}`}</p>
         </div>
         <button onClick={() => setEditingRes(true)}
           className="ml-auto inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-gray-500 text-sm font-semibold hover:bg-gray-50">
@@ -482,7 +483,7 @@ export default function ResidentDetailPage() {
                 <p style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', margin: '1px 0 0', letterSpacing: '0.02em' }}>
                   {r.name}
                   <span style={{ fontSize: 10, fontWeight: 600, color: '#64748b', marginLeft: 7 }}>
-                    {r.gender === 'female' ? '여' : '남'} · 만 {calcAge(r.birthDate)}세
+                    {genderLabel(r.gender)} · 만 {calcAge(r.birthDate)}세
                     {(r.floor || r.room) && ` · ${r.floor ?? ''}${r.room ? ` ${r.room}호` : ''}`} · 입소 {r.admissionDate}
                   </span>
                 </p>

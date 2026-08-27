@@ -7,6 +7,7 @@ import { calcAge, isItemDone } from '@/utils/period'
 import type { ChecklistItem } from '@/utils/period'
 import { hrAPI, DOC_FIELDS, type HrRecord } from '@/api/hrClient'
 import ChecklistFormModal from '@/components/eval/ChecklistFormModal'
+import { genderLabel, genderAvatarClass } from '@/utils/gender'
 
 /**
  * 직원 상세 — 어르신 상세와 같은 결.
@@ -108,7 +109,7 @@ export default function StaffDetailPage() {
       <div className="flex items-center gap-3 flex-wrap">
         <button onClick={() => navigate('/eval/staff')}
           className="w-9 h-9 rounded-xl border border-gray-200 text-gray-500 flex items-center justify-center hover:bg-gray-50"><ArrowLeft size={16} /></button>
-        <div className={`w-11 h-11 rounded-full flex items-center justify-center text-lg font-bold ${s.gender === 'female' ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'}`}>{s.name[0]}</div>
+        <div className={`w-11 h-11 rounded-full flex items-center justify-center text-lg font-bold ${genderAvatarClass(s.gender)}`}>{s.name[0]}</div>
         <div>
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl font-bold text-gray-900">{s.name}</h1>
@@ -118,7 +119,7 @@ export default function StaffDetailPage() {
             {s.position && <span className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full">{s.position}</span>}
           </div>
           <p className="text-xs text-gray-400 mt-0.5">
-            {s.gender === 'female' ? '여' : '남'} · 만 {calcAge(s.birthDate)}세 · 입사 {s.hireDate} · 근속 {workYears}{s.resignDate && ` · 퇴사 ${s.resignDate}`}
+            {genderLabel(s.gender)} · 만 {calcAge(s.birthDate)}세 · 입사 {s.hireDate} · 근속 {workYears}{s.resignDate && ` · 퇴사 ${s.resignDate}`}
           </p>
         </div>
         <button onClick={() => setEditingStaff(true)}
