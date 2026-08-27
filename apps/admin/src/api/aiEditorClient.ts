@@ -14,6 +14,8 @@ export interface AiService {
   repo: string
   root_path: string
   base_branch: string
+  /** 배포 워크플로가 지켜보는 브랜치 — 없으면 '운영 반영' 을 쓰지 않는 서비스 */
+  deploy_branch?: string | null
   pages: { path: string; label?: string }[]
   prod_url?: string | null
   active: boolean
@@ -59,6 +61,16 @@ export const PREVIEW_META: Record<PreviewState, { label: string; hint: string }>
   failed:     { label: '실패',     hint: '미리보기를 띄우지 못했습니다.' },
 }
 
+/** 운영에 아직 안 올라간 것들 — 편집 에이전트가 세어 알려준다 */
+export interface PendingDeploy {
+  /** 에이전트가 아직 안 알려줬으면 false — '0건' 과 '모름' 은 다르다 */
+  known: boolean
+  from?: string | null
+  to?: string | null
+  count: number
+  commits: { sha: string; subject: string }[]
+}
+
 export type JobStatus =
   | 'QUEUED' | 'RUNNING' | 'ANALYZING' | 'CHECKING'
   | 'PREVIEW' | 'PR_OPEN' | 'MERGED' | 'DEPLOYED' | 'FAILED' | 'CANCELLED'
@@ -81,6 +93,8 @@ export interface PickedTarget {
 
 export interface AiJob {
   id: string
+  /** edit = 코드 수정 · promote = 운영 반영 */
+  kind?: 'edit' | 'promote'
   service_key: string
   page_url?: string | null
   title: string
@@ -148,7 +162,11 @@ export const aiEditorAPI = {
     .then(unwrap<{
       services: AiService[]; agents: AiAgent[]; online_agents: number
       preview: PreviewInfo
+      pending_deploy: PendingDeploy
     }>),
+
+  /** 운영 반영 — 기준 브랜치를 배포 브랜치로 올린다(작업으로 접수된다) */
+  deploy: () => apiClient.post(`${BASE}/deploy`, {}).then(unwrap<AiJob>),
 
   /**
    * '이 서비스를 미리보기에 띄워줘' 라고 부탁한다.

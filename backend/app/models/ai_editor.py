@@ -80,6 +80,10 @@ class AiEditService(Base):
     # 저장소 안에서 이 서비스가 사는 자리. 에이전트는 이 밖을 고치지 않는다.
     root_path    = Column(String(200), nullable=False, default="apps/admin")
     base_branch  = Column(String(100), nullable=False, default="develop")
+    # 배포 워크플로가 지켜보는 브랜치. 기준 브랜치와 다르면, 병합만으로는
+    # 운영에 반영되지 않는다 — 여기로 한 번 더 올려야 한다.
+    # 비워두면 '운영 반영' 을 쓰지 않는 서비스로 본다.
+    deploy_branch = Column(String(100), nullable=True, default="main")
     # 미리보기를 띄우는 방법 — 서비스마다 다르다
     install_cmd  = Column(String(300), nullable=True)
     dev_cmd      = Column(String(300), nullable=True)   # 미리보기 서버
@@ -128,6 +132,11 @@ class AiEditAgent(Base):
     # 받아 가서 그쪽으로 바꾼다.
     want_service    = Column(String(40), nullable=True)
 
+    # 지금 운영에 반영되지 않은 것들. 에이전트가 5분마다 fetch 하면서 같이
+    # 세어 알려준다. 버튼을 누르기 전에 '무엇이 함께 올라가는지' 를 보여주려면
+    # 이게 있어야 한다 — 모르고 누르는 배포가 제일 위험하다.
+    pending_deploy  = Column(JSON, nullable=True)   # {from,to,count,commits:[{sha,subject}]}
+
 
 class AiEditJob(Base):
     """수정 요청 한 건 — 접수부터 배포까지의 한 줄기."""
@@ -138,6 +147,10 @@ class AiEditJob(Base):
     )
 
     id          = Column(String, primary_key=True, default=_uuid)
+    # 무슨 일을 하는 작업인가. 'edit' 은 코드를 고치는 보통 작업,
+    # 'promote' 는 기준 브랜치를 배포 브랜치로 올리는 '운영 반영' 이다.
+    # 큐·진행표시·기록을 그대로 쓰려고 같은 표에 담는다.
+    kind        = Column(String(12), nullable=False, default="edit", index=True)
     service_key = Column(String(40), nullable=False, index=True)
     page_url    = Column(String(300), nullable=True)      # '/eval/residents'
     title       = Column(String(200), nullable=False)     # 목록에 보이는 한 줄
