@@ -130,6 +130,10 @@ sudo systemctl daemon-reload && sudo systemctl enable --now ai-editor-agent
 
 ### 1) `infra/.env` 에 값 넣기
 
+> `AI_EDITOR_ENROLL_CODE` 는 **백엔드와 에이전트가 같은 값을 봐야** 등록이 됩니다.
+> compose 가 양쪽에 넘겨주므로 `infra/.env` 한 곳만 고치면 되고,
+> 백엔드 이미지를 다시 구울 필요는 없습니다(다시 세우기만 하면 됩니다).
+
 ```bash
 # 필수 — 없으면 배포가 멈춥니다
 AI_EDITOR_REPO_URL=https://<GH_TOKEN>@github.com/parkjunho12/happy-nursing-home-jsx.git
