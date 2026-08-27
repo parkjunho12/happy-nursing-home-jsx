@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+from app.api.v1.endpoints import ai_editor, ai_editor_agent
 from app.api.v1.endpoints import auth, public, residents, staff, contacts, reviews, history, dashboard, tracking, eval_checklists, eval_indicators, eval_people
 from app.api.v1.endpoints.eval_ai_review import router as eval_ai_router
 from app.api.v1.endpoints.eval_occurrences import router as eval_occ_router
@@ -167,3 +168,7 @@ api_router.include_router(leave_router, prefix="/admin/leave", tags=["admin-leav
 api_router.include_router(handover_router, prefix="/admin/handover", tags=["admin-handover"])
 api_router.include_router(resident_docs_router, prefix="/admin/resident-docs", tags=["admin-resident-docs"])
 api_router.include_router(staff_education_router, prefix="/admin/educations", tags=["admin-educations"])
+
+# AI 페이지 편집기 — 관리자 화면과 편집 에이전트
+api_router.include_router(ai_editor.router,       prefix="/admin/ai-editor", tags=["ai-editor"])
+api_router.include_router(ai_editor_agent.router, prefix="/ai-editor-agent", tags=["ai-editor-agent"])

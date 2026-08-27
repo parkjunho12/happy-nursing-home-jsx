@@ -108,3 +108,4 @@ from app.models.broadcast import (  # noqa: F401
     BroadcastDevice, BroadcastMedia, BroadcastSchedule,
     BroadcastRun, BroadcastLog, BroadcastCommand,
 )
+from app.models import ai_editor  # noqa: F401
