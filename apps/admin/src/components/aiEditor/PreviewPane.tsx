@@ -102,14 +102,31 @@ export default function PreviewPane({
    * 토큰만 넘기면 된다. 미리보기 쪽 앱이 그 토큰으로 /me 를 불러 스스로
    * 복구한다. 받는 쪽은 admin 출처에서 온 것만 받아들인다.
    */
-  // 렌더마다 읽는다. 로그아웃했다 다시 로그인하면 토큰이 바뀌는데,
-  // ready 만 보고 있으면 그때 다시 건네주지 못한다.
-  const token = typeof localStorage !== 'undefined'
-    ? (localStorage.getItem('access_token') || '') : ''
-  useEffect(() => {
-    if (!ready) return
-    post({ type: 'auth', token })
-  }, [ready, token, post])
+  /**
+   * 로그인 씨앗을 주소에 실어 보낸다.
+   *
+   * 앱이 뜬 뒤에 postMessage 로 넘겨주면 늦다 — 라우트 감시가 첫 렌더에서
+   * 곧바로 /login 으로 replace 해버려서, 뒤늦게 토큰을 심어도 주소는 이미
+   * /login 이다. 그래서 앱이 뜨기 전에 심도록 fragment 로 붙인다.
+   *
+   * fragment(#) 는 서버로 가지 않는다 — 접속 기록에 토큰이 남지 않는다.
+   * 받는 쪽은 심자마자 주소창에서 지운다.
+   *
+   * 토큰만으로는 부족하다. 이 앱은 부팅할 때 토큰을 확인하지 않고 저장된
+   * 로그인 상태(auth-storage)만 보므로, 그것도 함께 보낸다.
+   */
+  const seed = useMemo(() => {
+    if (typeof localStorage === 'undefined') return ''
+    const t = localStorage.getItem('access_token') || ''
+    const a = localStorage.getItem('auth-storage') || ''
+    if (!t) return ''
+    return encodeURIComponent(JSON.stringify({ t, a }))
+  }, [])
+
+  /** iframe 이 실제로 열 주소 — 씨앗이 붙는다 */
+  const framed = useMemo(
+    () => (src && seed ? `${src}#__happy_auth=${seed}` : src),
+    [src, seed])
 
   const reload = () => { setReady(false); setNonce(n => n + 1) }
   const width = DEVICES.find(d => d.key === device)!.w
@@ -204,9 +221,9 @@ export default function PreviewPane({
           <div className="mx-auto bg-white rounded-xl shadow-sm overflow-hidden h-full"
             style={{ width: width ? `${width}px` : '100%', maxWidth: '100%' }}>
             <iframe
-              key={`${src}-${nonce}`}
+              key={`${framed}-${nonce}`}
               ref={frame}
-              src={src}
+              src={framed || undefined}
               title="미리보기"
               className="w-full h-full border-0"
               // 미리보기는 우리가 띄운 개발 서버다. 다만 상위 창을 벗어나는 이동은 막는다.

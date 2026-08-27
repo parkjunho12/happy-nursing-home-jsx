@@ -45,16 +45,18 @@ export function inspectorPlugin(): Plugin {
       return { code: r.code, map: null }
     },
 
-    /** 미리보기 창에 Inspector 스크립트를 넣는다 */
+    /** 미리보기 창에 넣는 것 둘 — 로그인 씨앗(먼저), Inspector(나중) */
     transformIndexHtml(html) {
       if (process.env.VITE_INSPECTOR !== '1') return html
       return {
         html,
-        tags: [{
-          tag: 'script',
-          attrs: { type: 'module', src: '/@happy-inspector' },
-          injectTo: 'body',
-        }],
+        tags: [
+          // 앱보다 먼저 돌아야 한다. type 을 주지 않은 인라인 스크립트는
+          // 파싱 중에 그 자리에서 실행되므로, 모듈인 앱보다 확실히 앞선다.
+          { tag: 'script', children: BOOT_AUTH_SRC, injectTo: 'head-prepend' },
+          { tag: 'script', attrs: { type: 'module', src: '/@happy-inspector' },
+            injectTo: 'body' },
+        ],
       }
     },
 
@@ -68,6 +70,38 @@ export function inspectorPlugin(): Plugin {
     },
   }
 }
+
+/**
+ * 로그인 씨앗 — 앱이 뜨기 전에 심는다.
+ *
+ * 미리보기는 admin 과 다른 출처(preview.도메인)라 저장소가 따로 논다.
+ * 그래서 미리보기 안에서는 늘 로그인 화면만 보였다.
+ *
+ * 앱이 뜬 뒤에 postMessage 로 넘겨주는 것으로는 늦다. 라우트 감시가
+ * 첫 렌더에서 곧바로 /login 으로 replace 해버려서, 뒤늦게 토큰을 심어도
+ * 주소는 이미 /login 이다. 그래서 주소의 fragment 로 미리 실어 보내고,
+ * 앱보다 먼저 도는 이 스크립트가 심는다.
+ *
+ * fragment(#) 를 쓰는 이유 — 서버로 전송되지 않는다. 접속 기록이나
+ * Referer 에 토큰이 남지 않는다. 심은 뒤에는 주소창에서도 지운다.
+ *
+ * access_token 만으로는 부족하다. 이 앱은 부팅할 때 토큰을 확인하지 않고
+ * 저장된 로그인 상태(auth-storage)만 보므로, 그것도 함께 심어야 한다.
+ */
+const BOOT_AUTH_SRC = /* js */ `
+(function () {
+  try {
+    var m = /(?:^|#|&)__happy_auth=([^&]*)/.exec(location.hash || '')
+    if (!m) return
+    var d = JSON.parse(decodeURIComponent(m[1]))
+    if (d.t) localStorage.setItem('access_token', d.t)
+    else localStorage.removeItem('access_token')
+    if (d.a) localStorage.setItem('auth-storage', d.a)
+    // 주소창에 토큰이 남을 이유가 없다
+    history.replaceState(null, '', location.pathname + location.search)
+  } catch (e) { /* 씨앗이 없거나 깨졌으면 그냥 평소대로 — 로그인 화면이 뜬다 */ }
+})()
+`
 
 /**
  * 미리보기 안에서 도는 코드.
@@ -212,8 +246,6 @@ function trusted(origin) {
   } catch (_) { return false }
 }
 
-const TOKEN_KEY = 'access_token'
-
 window.addEventListener('message', (e) => {
   const m = e.data
   if (!m || m.source !== TAG + '-host') return
@@ -223,23 +255,6 @@ window.addEventListener('message', (e) => {
   if (m.type === 'navigate' && m.path) location.href = m.path
   if (m.type === 'ping') {
     reply({ type: 'ready', payload: { url: location.pathname } })
-  }
-  /**
-   * Admin 이 건네준 로그인 정보.
-   *
-   * 미리보기는 admin 과 다른 출처라 저장소가 따로 논다. 그대로 두면 여기서
-   * 로그인 화면만 보게 되고, 그러면 고칠 화면을 볼 수가 없다.
-   * 토큰만 심고 한 번 새로 읽는다 — 앱이 그 토큰으로 스스로 복구한다.
-   *
-   * 값이 그대로면 새로 읽지 않는다. 안 그러면 무한히 다시 뜬다.
-   */
-  if (m.type === 'auth') {
-    const now = localStorage.getItem(TOKEN_KEY) || ''
-    const next = m.token || ''
-    if (now === next) return
-    if (next) localStorage.setItem(TOKEN_KEY, next)
-    else localStorage.removeItem(TOKEN_KEY)
-    location.reload()
   }
 })
 
