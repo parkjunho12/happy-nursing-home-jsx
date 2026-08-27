@@ -123,7 +123,17 @@ jobs:
               'grep -o "PREVIEW_PASS_HASH:[^}]*" /etc/caddy/Caddyfile | head -1 | cut -c1-42' \
               || echo "(Caddyfile 을 읽지 못했습니다)"
             echo "환경변수 PREVIEW_USER=$(docker exec happy_caddy printenv PREVIEW_USER 2>/dev/null || echo '<없음>')"
-            echo "환경변수 PREVIEW_PASS_HASH=$(docker exec happy_caddy printenv PREVIEW_PASS_HASH 2>/dev/null | cut -c1-24 || echo '<없음>')"
+            envh=$(docker exec happy_caddy printenv PREVIEW_PASS_HASH 2>/dev/null || true)
+            if [ -z "$envh" ]; then
+              echo "환경변수 PREVIEW_PASS_HASH=<없음> — Caddyfile 기본값을 씁니다"
+            else
+              echo "환경변수 PREVIEW_PASS_HASH=$(printf '%s' "$envh" | cut -c1-24)... (${#envh}자)"
+              # 60자가 아니면 컨테이너까지 오는 길에 잘렸다는 뜻이다.
+              # 그러면 어떤 비밀번호를 넣어도 안 열린다 - 원인을 여기서 못 박는다.
+              [ "${#envh}" -eq 60 ] \
+                && echo "  → 온전합니다. 직접 정하신 비밀번호가 맞습니다." \
+                || echo "  ⚠ 60자가 아닙니다 — 잘렸습니다. 어떤 비밀번호로도 안 열립니다."
+            fi
 
             # 디스크가 차면 다음 배포가 실패한다 — 매번 쓸어낸다
             docker image prune -f
