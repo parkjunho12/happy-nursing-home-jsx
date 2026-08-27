@@ -72,6 +72,11 @@ services:
       R2_BUCKET_NAME: ${R2_BUCKET_NAME:-happy-nursing-home-albums}
       R2_PUBLIC_URL: ${R2_PUBLIC_URL:-}
 
+      # ✅ AI 페이지 편집기 — 편집 에이전트가 등록할 때 쓰는 코드.
+      #    ai-editor 서비스와 같은 값을 봐야 등록이 된다. infra/.env 한 곳만 고치면
+      #    양쪽에 반영되도록 여기서 넘긴다(백엔드 이미지를 다시 굽지 않아도 된다).
+      AI_EDITOR_ENROLL_CODE: ${AI_EDITOR_ENROLL_CODE:-}
+
       # ✅ FCM(푸시) — 서비스계정 JSON. 이 두 줄이 없으면 모든 푸시가 조용히 비활성화된다.
       #    서버에 파일 배치: /opt/happy/infra/secrets/fcm-service-account.json
       FCM_CREDENTIALS_FILE: ${FCM_CREDENTIALS_FILE:-/app/secrets/fcm-service-account.json}
