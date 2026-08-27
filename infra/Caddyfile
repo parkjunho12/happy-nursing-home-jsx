@@ -75,3 +75,32 @@ admin.xn--p80bu1t60gba47bg6abm347gsla.com {
     Referrer-Policy "strict-origin-when-cross-origin"
   }
 }
+
+# =========================
+# 미리보기: preview.도메인 — AI 페이지 편집기 전용
+# =========================
+# 편집 에이전트가 띄운 개발 서버를 Admin 의 iframe 에서 보기 위한 자리다.
+# 개발 서버는 소스 파일(/src/...)도 그대로 내려준다. 그래서 두 겹으로 막는다.
+#   1) 아이디·비밀번호 — infra/.env 의 PREVIEW_USER / PREVIEW_PASS_HASH
+#      설정하지 않으면 아무도 못 들어간다(아래 기본 해시는 아무도 모르는 값이다).
+#      만들기: docker run --rm caddy:2.7-alpine caddy hash-password --plaintext '비밀번호'
+#   2) Admin 화면 안에서만 열리게 — 다른 사이트가 이 화면을 품지 못한다
+preview.xn--p80bu1t60gba47bg6abm347gsla.com {
+  encode gzip zstd
+
+  # Caddy 2.7 은 basicauth(한 단어)다
+  basicauth {
+    {$PREVIEW_USER:preview} {$PREVIEW_PASS_HASH:$2a$14$A46khnDoqRfhYavLr7hW5u5J0Tq2yLN63WhDebD423y8yhWDq1fJO}
+  }
+
+  # 개발 서버는 새로고침을 위해 웹소켓을 쓴다 — 그대로 흘려보낸다
+  reverse_proxy ai-editor:4310
+
+  header {
+    # Admin 안에서만 iframe 으로 열린다. X-Frame-Options 는 쓰지 않는다 —
+    # DENY 로 두면 정작 Admin 에서도 못 연다.
+    Content-Security-Policy "frame-ancestors https://admin.xn--p80bu1t60gba47bg6abm347gsla.com"
+    X-Robots-Tag "noindex, nofollow"
+    Cache-Control "no-store"
+  }
+}

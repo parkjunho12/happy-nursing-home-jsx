@@ -1,5 +1,8 @@
 # 편집 에이전트 — AI 페이지 편집기
 
+> 서버에 띄우려면 **[운영 서버에 띄우기](#운영-서버에-띄우기-권장)** 로 바로 가세요.
+> 아래 「이 기계에 필요한 것」부터는 개발자 PC에서 직접 돌릴 때의 안내입니다.
+
 Admin 의 **AI 페이지 편집기**에서 접수한 수정 요청을 실제로 수행하는 프로그램입니다.
 저장소를 고치고, 검증하고, 미리보기를 띄우고, PR 을 만듭니다.
 
@@ -118,6 +121,68 @@ WantedBy=multi-user.target
 ```bash
 sudo systemctl daemon-reload && sudo systemctl enable --now ai-editor-agent
 ```
+
+---
+
+## 운영 서버에 띄우기 (권장)
+
+개발자 PC를 켜둘 필요 없이, 서버에서 항상 돌게 합니다.
+
+### 1) `infra/.env` 에 값 넣기
+
+```bash
+# 필수 — 없으면 배포가 멈춥니다
+AI_EDITOR_REPO_URL=https://<GH_TOKEN>@github.com/parkjunho12/happy-nursing-home-jsx.git
+AI_EDITOR_ENROLL_CODE=<아무도 모르는 긴 문자열>
+ANTHROPIC_API_KEY=sk-ant-...
+
+# PR 을 만들려면 필요 (repo 권한)
+GH_TOKEN=ghp_...
+
+# 미리보기를 밖에서 열려면
+AI_EDITOR_PREVIEW_BASE=https://preview.행복한요양원녹양역.com
+PREVIEW_USER=preview
+PREVIEW_PASS_HASH=<아래 명령으로 만든 값>
+```
+
+미리보기 비밀번호 해시:
+
+```bash
+docker run --rm caddy:2.7-alpine caddy hash-password --plaintext '원하는비밀번호'
+```
+
+> `PREVIEW_PASS_HASH` 를 넣지 않으면 **아무도 미리보기에 못 들어갑니다.**
+> 열려 있는 것보다 닫혀 있는 편이 낫기 때문입니다.
+> 개발 서버는 소스 파일(`/src/...`)도 그대로 내려주므로 반드시 막아야 합니다.
+
+### 2) DNS
+
+`preview.행복한요양원녹양역.com` 을 서버 IP로 향하게 합니다(A 레코드).
+Caddy 가 인증서를 알아서 받습니다.
+
+### 3) 배포
+
+`main` 에 올라가면 **Deploy AI Editor Agent to VPS** 가 자동으로 돕니다.
+손으로 돌리려면 GitHub → Actions → 그 워크플로 → Run workflow.
+
+### 4) 확인
+
+Admin → AI 페이지 편집기 → 오른쪽 위 **「편집 에이전트 1대」**가 초록이면 끝입니다.
+
+```bash
+# 서버에서
+docker compose logs -f ai-editor
+docker compose ps ai-editor
+```
+
+### 서버에서 알아둘 것
+
+| | |
+|---|---|
+| **메모리** | 컨테이너를 2GB로 묶었습니다. 서버가 4GB라 빌드가 다 먹으면 어르신 화면까지 멈춥니다. 편집이 느려지는 편이 낫습니다 |
+| **디스크** | 저장소 클론 + node_modules + worktree 로 몇 GB 씁니다. 작업 폴더는 최근 5개만 남기고 지웁니다 |
+| **첫 작업** | 의존성 설치로 5~10분 걸립니다. 그 뒤로는 빠릅니다 |
+| **끄기** | `docker compose stop ai-editor` — 다른 서비스는 이것을 필요로 하지 않습니다 |
 
 ---
 

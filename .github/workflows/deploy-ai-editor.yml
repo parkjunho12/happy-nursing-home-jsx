@@ -1,0 +1,85 @@
+name: Deploy AI Editor Agent to VPS
+
+# AI 페이지 편집기의 편집 에이전트를 운영 서버에 올린다.
+#
+# 백엔드와 따로 배포하는 이유: 이 컨테이너에는 git·node·gh·Claude CLI 가 들어가
+# 이미지가 크고 빌드가 오래 걸린다. 에이전트를 고칠 때마다 백엔드까지 다시
+# 세울 이유가 없고, 반대로 백엔드를 고칠 때 편집 작업이 끊길 이유도 없다.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/ai-editor-agent/**"
+      - "infra/docker-compose.yml"
+      - "infra/Caddyfile"
+      - ".github/workflows/deploy-ai-editor.yml"
+  # 서버에서 손을 좀 본 뒤 다시 세우고 싶을 때
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-ai-editor
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: 문법 검사 (에이전트)
+        # 서버에서 컨테이너가 뜬 뒤에 죽는 것보다, 여기서 걸리는 편이 낫다
+        run: python3 -m compileall -q apps/ai-editor-agent/ai_editor_agent
+
+      - name: Caddyfile 검사
+        # 잘못된 설정을 올리면 Caddy 가 안 뜨고 사이트 전체가 내려간다
+        run: |
+          docker run --rm -v "$PWD/infra/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2.7-alpine caddy validate --config /etc/caddy/Caddyfile
+
+      - name: 서버에 배포
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          # 이미지 빌드가 오래 걸린다(node + Claude CLI)
+          command_timeout: 30m
+          script: |
+            set -e
+            cd /opt/happy
+
+            # 최신 소스 — 배포 워크플로가 쓰는 것과 같은 방식
+            git fetch --all
+            git reset --hard origin/main
+
+            cd /opt/happy/infra
+
+            # 필수값이 없으면 컨테이너가 떠도 아무 일을 못 한다.
+            # 조용히 도는 것보다 여기서 멈추고 알리는 편이 낫다.
+            for k in AI_EDITOR_REPO_URL AI_EDITOR_ENROLL_CODE ANTHROPIC_API_KEY; do
+              grep -q "^$k=" .env || { echo "❌ infra/.env 에 $k 가 없습니다"; exit 1; }
+            done
+            grep -q "^GH_TOKEN=" .env || echo "⚠ GH_TOKEN 이 없습니다 — PR 을 만들 수 없습니다"
+
+            docker compose build ai-editor
+            docker compose up -d --force-recreate ai-editor
+
+            # Caddy 는 미리보기 주소가 새로 생겼을 때만 다시 읽으면 된다
+            docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile \
+              || docker compose restart caddy
+
+            # 디스크가 차면 다음 배포가 실패한다 — 매번 쓸어낸다
+            docker image prune -f
+            df -h / | tail -1
+
+            echo "--- 30초 지켜본다 ---"
+            sleep 30
+            docker compose ps ai-editor
+            docker compose logs --tail=40 ai-editor
+
+            # 살아 있는지 확인. 바로 죽었다면 배포를 실패로 남긴다.
+            state=$(docker inspect -f '{{.State.Status}}' happy_ai_editor)
+            [ "$state" = "running" ] || { echo "❌ 편집 에이전트가 떠 있지 않습니다 ($state)"; exit 1; }
+            echo "✅ 편집 에이전트 배포 완료"
