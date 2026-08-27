@@ -9,6 +9,7 @@ import {
 } from '@/api/aiEditorClient'
 import PreviewPane from '@/components/aiEditor/PreviewPane'
 import CommandPane, { type Body } from '@/components/aiEditor/CommandPane'
+import { mergeConfirmText } from '@/utils/aiEditorDeploy'
 
 /**
  * AI 페이지 편집기 — 화면을 보며 말로 고친다.
@@ -310,6 +311,7 @@ export default function AiEditorPage() {
           {/* ── 오른쪽 ── */}
           <div className="min-h-0">
             <CommandPane
+              baseBranch={svc?.base_branch}
               target={target}
               job={job}
               events={events}
@@ -320,7 +322,7 @@ export default function AiEditorPage() {
               onCancel={() => jobId && act(() => aiEditorAPI.cancel(jobId),
                 '작업을 중지합니다.\n지금 하던 단계를 마치고 멈춥니다.')}
               onApprove={merge => jobId && act(() => aiEditorAPI.approve(jobId, merge),
-                merge ? '승인하고 병합합니다.\n병합되면 GitHub Actions 가 운영에 배포합니다.\n계속할까요?'
+                merge ? mergeConfirmText(svc?.base_branch)
                       : 'PR 을 만듭니다. 병합은 GitHub 에서 직접 하시면 됩니다.')}
               onRevise={t => jobId && act(() => aiEditorAPI.revise(jobId, t))}
               onRollback={() => jobId && act(() => aiEditorAPI.rollback(jobId),

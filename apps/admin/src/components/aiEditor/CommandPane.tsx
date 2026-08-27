@@ -7,6 +7,7 @@ import {
   SCOPE_META, JOB_STATUS_META,
   type AiJob, type PickedTarget, type JobEvent,
 } from '@/api/aiEditorClient'
+import { autoDeployNote, deploysOnMerge } from '@/utils/aiEditorDeploy'
 
 /**
  * 오른쪽 패널 — 고른 요소를 보여주고, 무엇을 고칠지 받는다.
@@ -25,7 +26,7 @@ const EXAMPLES = [
 
 export default function CommandPane({
   target, job, events, busy, canRun, onRun, onAnalyze, onCancel,
-  onApprove, onRevise, onRollback,
+  onApprove, onRevise, onRollback, baseBranch,
 }: {
   target: PickedTarget | null
   job: AiJob | null
@@ -38,6 +39,8 @@ export default function CommandPane({
   onApprove: (merge: boolean) => void
   onRevise: (text: string) => void
   onRollback: () => void
+  /** 이 서비스의 기준 브랜치 — 병합이 배포로 이어지는지 판단한다 */
+  baseBranch?: string | null
 }) {
   const [text, setText] = useState('')
   const [scope, setScope] = useState<string>('element')
@@ -177,7 +180,7 @@ export default function CommandPane({
           {autoDeploy && (
             <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 flex gap-1.5">
               <AlertTriangle size={11} className="shrink-0 mt-px" />
-              검증만 통과하면 사람이 보지 않고 병합됩니다. 배포까지 이어지니 익숙한 수정에만 쓰세요.
+              {autoDeployNote(baseBranch)}
             </p>
           )}
 
@@ -324,7 +327,7 @@ export default function CommandPane({
                       </button>
                       <button onClick={() => onApprove(true)} disabled={!checksOk}
                         className="inline-flex items-center justify-center gap-1.5 py-2 rounded-xl bg-emerald-600 text-white text-[11px] font-bold disabled:opacity-40">
-                        <Check size={11} /> 승인 및 배포
+                        <Check size={11} /> {deploysOnMerge(baseBranch) ? '승인 및 배포' : '승인 및 병합'}
                       </button>
                     </div>
                   </>

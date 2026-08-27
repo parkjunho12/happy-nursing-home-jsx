@@ -265,6 +265,7 @@ class EditorAgent:
         self._want: Optional[str] = None          # 화면이 보여달라 한 서비스
         self._base_sha: Optional[str] = None      # 지금 띄운 커밋
         self._base_checked: float = 0.0           # 마지막으로 브랜치를 본 시각
+        self._port_for_job = False                # 작업이 미리보기 포트를 쓰기로 했는가
         self._fails: int = 0                      # 연달아 실패한 횟수
         self._last_try: float = 0.0               # 마지막으로 띄워본 시각
         self._pv_lock = threading.Lock()
@@ -473,12 +474,30 @@ SUMMARY>>>
             return None
         self.stop_preview(job_id)
         port = self.cfg.preview_port or free_port()
+
+        # 포트는 하나다. 기본 미리보기가 쥐고 있으면 비켜달라고 해야 한다.
+        #
+        # 예전에는 '비기를 기다리기만' 했다. 그런데 기본 미리보기는 작업
+        # 미리보기가 '등록된 뒤에' 비켜주므로, 서로를 기다리다 15초를 버리고
+        # 그대로 진행했다. 그러면 개발 서버가 포트를 못 잡아 바로 죽는데,
+        # 정작 포트는 (기본 미리보기 때문에) 열려 있으니 '떴다' 고 판단했다.
+        # 결과는 최악이다 — 수정 결과라며 아무것도 고치지 않은 화면을 보여준다.
+        self._port_for_job = True
+        freed = not self.cfg.preview_port
         if self.cfg.preview_port:
-            for _ in range(15):
+            for _ in range(30):
+                self.stop_base_preview()      # 여러 번 불러도 안전하다
                 with socket.socket() as s:
                     if s.connect_ex(("127.0.0.1", port)) != 0:
+                        freed = True
                         break
                 time.sleep(1)
+            if not freed:
+                # 여기서 멈춘다. 남의 화면을 내 결과라고 보여주느니 안 보여준다.
+                self.say(f"미리보기 포트 {port} 가 비지 않아 띄우지 못했습니다",
+                         level="warn")
+                self._port_for_job = False
+                return None
         cmd = apply_host(dev.replace("{port}", str(port)), self.cfg.preview_host)
         self.say(f"미리보기를 띄웁니다 (포트 {port})", step="미리보기 준비", progress=85)
         p = subprocess.Popen(cmd, cwd=wt, shell=True,
@@ -502,6 +521,9 @@ SUMMARY>>>
 
     def stop_preview(self, job_id: str) -> None:
         p = self._previews.pop(job_id, None)
+        if not self._previews:
+            # 작업이 포트를 놓았다 — 기본 미리보기가 돌아와도 된다
+            self._port_for_job = False
         if not p:
             return
         _kill(p)
@@ -630,8 +652,10 @@ SUMMARY>>>
         tries = 0
         while not self._stop.is_set():
             try:
-                if self._previews:
-                    # 작업 미리보기가 자리를 쓰고 있다 — 비켜준다
+                if self._previews or self._port_for_job:
+                    # 작업 미리보기가 자리를 쓰고 있거나 쓰려는 참이다 — 비켜준다.
+                    # _port_for_job 까지 보는 이유: 작업 미리보기가 아직
+                    # 등록되기 전(포트를 잡는 중)에도 끼어들지 않아야 한다.
                     if self._base:
                         logger.info("작업 미리보기에 자리를 내줍니다")
                         self.stop_base_preview()
@@ -936,6 +960,11 @@ SUMMARY>>>
             except AgentError:
                 pass
         finally:
+            # 죽은 미리보기가 포트를 붙잡고 있으면 기본 미리보기가 영영 못
+            # 돌아온다. 살아 있는 것(사람이 확인 중)은 그대로 둔다.
+            pv = self._previews.get(job["id"])
+            if pv is not None and pv.poll() is not None:
+                self.stop_preview(job["id"])
             self.job = None
             self.svc = None
 
