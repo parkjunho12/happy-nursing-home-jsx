@@ -1,0 +1,62 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'com.google.gms.google-services'   // Firebase (FCM) — app/google-services.json 필요
+}
+
+android {
+    namespace 'com.happycare.staffapp'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "com.happycare.staffapp"
+        minSdk 23
+        targetSdk 36
+        versionCode 3
+        versionName "1.0.2"
+
+        // URL은 빌드 타입(debug/release)별로 아래 buildTypes 에서 주입합니다.
+        // (권한 분기는 앱이 아니라 기존 웹 로그인·백엔드에서 처리)
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    buildTypes {
+        debug {
+            // ── 로컬 테스트용: 직원 웹(admin)은 포트 3001 ──
+            //  에뮬레이터는 PC localhost = 10.0.2.2. 실기기는 PC의 LAN IP로 바꾸세요.
+            buildConfigField "String", "STAFF_URL", "\"http://10.0.2.2:3001/\""
+            buildConfigField "String", "ALLOWED_HOST", "\"10.0.2.2:3001\""
+            manifestPlaceholders = [cleartextTraffic: "true"]
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // ── 운영 ── (HTTPS 전용)
+            buildConfigField "String", "STAFF_URL", "\"https://admin.xn--p80bu1t60gba47bg6abm347gsla.com/\""
+            buildConfigField "String", "ALLOWED_HOST", "\"admin.xn--p80bu1t60gba47bg6abm347gsla.com\""
+            manifestPlaceholders = [cleartextTraffic: "false"]
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'com.google.android.material:material:1.12.0'
+    implementation 'androidx.activity:activity-ktx:1.9.2'   // onBackPressedDispatcher
+
+    // Firebase Cloud Messaging (푸시) — app/google-services.json 추가 후 동작
+    implementation platform('com.google.firebase:firebase-bom:33.1.2')
+    implementation 'com.google.firebase:firebase-messaging'
+}

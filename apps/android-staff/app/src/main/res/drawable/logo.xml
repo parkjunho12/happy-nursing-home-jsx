@@ -1,0 +1,26 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="512dp"
+    android:height="512dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+
+    <!-- 하트 (돌봄) — 청록 -->
+    <path
+        android:fillColor="#0F9D75"
+        android:pathData="M256,398
+            C256,398 116,312 116,212
+            C116,156 162,120 206,140
+            C228,150 248,168 256,190
+            C264,168 284,150 306,140
+            C350,120 396,156 396,212
+            C396,312 256,398 256,398 Z" />
+
+    <!-- 체크 (기록·확인) — 흰색 -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="30"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M204,250 L242,290 L312,206" />
+</vector>

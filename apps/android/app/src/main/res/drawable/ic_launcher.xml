@@ -1,0 +1,42 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="512dp"
+    android:height="512dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+
+    <!-- 배경 (흰색) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M0,0h512v512h-512z" />
+
+    <!-- 왼손 (갈색) -->
+    <path
+        android:fillColor="#A56A38"
+        android:pathData="M256,468
+            C150,462 84,392 88,288
+            C90,248 96,212 122,200
+            C152,186 178,196 186,216
+            C170,212 158,220 156,240
+            C150,286 176,366 256,404 Z" />
+
+    <!-- 오른손 (초록) -->
+    <path
+        android:fillColor="#9CBE5F"
+        android:pathData="M256,468
+            C362,462 428,392 424,288
+            C422,248 416,212 390,200
+            C360,186 334,196 326,216
+            C342,212 354,220 356,240
+            C362,286 336,366 256,404 Z" />
+
+    <!-- 하트 (주황) -->
+    <path
+        android:fillColor="#F47C20"
+        android:pathData="M256,322
+            C256,322 150,250 150,168
+            C150,120 190,90 226,108
+            C242,116 252,128 256,144
+            C260,128 270,116 286,108
+            C322,90 362,120 362,168
+            C362,250 256,322 256,322 Z" />
+</vector>

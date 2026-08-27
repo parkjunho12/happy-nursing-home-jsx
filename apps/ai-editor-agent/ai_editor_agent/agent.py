@@ -265,6 +265,8 @@ class EditorAgent:
         self._want: Optional[str] = None          # 화면이 보여달라 한 서비스
         self._base_sha: Optional[str] = None      # 지금 띄운 커밋
         self._base_checked: float = 0.0           # 마지막으로 브랜치를 본 시각
+        self._fails: int = 0                      # 연달아 실패한 횟수
+        self._last_try: float = 0.0               # 마지막으로 띄워본 시각
         self._pv_lock = threading.Lock()
         self._pv: Dict[str, Optional[str]] = {
             "preview_kind": None, "preview_service": None,
@@ -543,7 +545,10 @@ SUMMARY>>>
         code, _, err = run(["git", "checkout", "-f", "--detach", f"origin/{base}"],
                            cwd=wt, timeout=GIT_TIMEOUT)
         if code != 0:
-            logger.warning("기본 미리보기 폴더 갱신 실패(그대로 씁니다): %s", err[:200])
+            # 조용히 넘기고 옛 코드를 계속 보여주면 안 된다.
+            # 미리보기는 '무엇을 고칠지' 를 정하는 근거다. 근거가 낡은 줄 모르면
+            # 엉뚱한 것을 고치게 된다. 안 보이는 편이 낫다.
+            raise AgentError(f"기준 브랜치로 옮기지 못했습니다: {err[:200]}")
         return wt
 
     def ensure_deps(self, wt: str, svc: dict, *, on_install=None) -> None:
@@ -594,8 +599,12 @@ SUMMARY>>>
                 with socket.socket() as s:
                     if s.connect_ex((probe, port)) == 0:
                         url = (self.cfg.preview_base or f"http://{probe}:{port}").rstrip("/")
-                        self.set_preview(kind="base", service=key, state="ready",
-                                         url=url, msg=None)
+                        # 어느 코드를 보고 있는지 화면에 남긴다.
+                        # 이게 없어서 옛 코드를 보고 있는 줄 모르고 한참 헤맸다.
+                        sha = (self._base_sha or "")[:8]
+                        self.set_preview(
+                            kind="base", service=key, state="ready", url=url,
+                            msg=f"{svc['base_branch']} · {sha}" if sha else None)
                         logger.info("기본 미리보기 준비됨 — %s", url)
                         return
                 if p.poll() is not None:
@@ -642,9 +651,20 @@ SUMMARY>>>
                     want = self._want
                     dead = self._base is not None and self._base.poll() is not None
                     if want and (self._base is None or dead or self._base_key != want):
+                        # 연달아 실패하면 간격을 벌린다. 안 그러면 3초마다
+                        # git fetch 와 서버 기동을 되풀이하며 CPU 를 먹는다.
+                        # 실서비스와 코어를 나눠 쓰는 기계다.
+                        if self._fails and time.time() - self._last_try < min(60, 5 * self._fails):
+                            self._stop.wait(3)
+                            continue
+                        self._last_try = time.time()
                         svc = self.find_service(want)
                         if svc:
                             self.start_base_preview(svc)
+                            self._fails = 0 if self._base else self._fails + 1
+                            if self._fails:
+                                logger.warning("기본 미리보기 실패 %d회 — 다음 시도까지 %d초",
+                                               self._fails, min(60, 5 * self._fails))
                         else:
                             self.set_preview(kind=None, service=want, state="failed",
                                              msg="등록되지 않은 서비스입니다.")
