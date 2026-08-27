@@ -23,8 +23,9 @@ export default function TeamPanel({ staff, patchRow, offsets, setOffsets, setDir
   return (
           <div className="mb-3 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-3">
             <p className="text-xs font-bold text-indigo-800 mb-2">
-              조 · 층 편성 — <b>요양보호사</b>만 교대조를 지정할 수 있고, 나머지 직종은 주간 근무입니다
-              <span className="font-normal text-indigo-500"> · 층은 근무표에서 「층 표시」를 켜야 보입니다</span>
+              조 · 층 편성 — <b>요양보호사</b>만 교대조를 지정할 수 있고, 나머지 직종은 주간 근무입니다.
+              <b>층은 주간 근무자도 지정</b>할 수 있습니다
+              <span className="font-normal text-indigo-500"> · 근무표에서 「층 표시」를 켜야 보입니다</span>
             </p>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5">
               {staff.map(s => {
@@ -32,22 +33,23 @@ export default function TeamPanel({ staff, patchRow, offsets, setOffsets, setDir
                 return (
                   <div key={s.id} className="flex items-center gap-1.5 bg-white rounded-lg px-2 py-1.5 border border-gray-100">
                     <span className="text-xs font-semibold text-gray-700 flex-1 truncate" title={s.pos ?? ''}>{s.name}</span>
-                    {shiftable ? (<>
+                    {shiftable ? (
                       <select value={s.team ?? ''} onChange={e => patchRow(s.id, { position: s.pos, team: e.target.value, floor: s.floor })}
                         className="text-[11px] border border-gray-200 rounded px-1 py-1">
                         <option value="">-</option>
                         {TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
                         <option value={DAY_TEAM}>{DAY_TEAM}</option>
                       </select>
-                      <select value={s.floor ?? ''} title="담당 층"
-                        onChange={e => patchRow(s.id, { position: s.pos, team: s.team, floor: e.target.value })}
-                        className="text-[11px] border border-gray-200 rounded px-1 py-1 text-gray-600">
-                        <option value="">층 -</option>
-                        {floors.map(f => <option key={f} value={f}>{f}</option>)}
-                      </select>
-                    </>) : (
+                    ) : (
                       <span className="text-[11px] text-gray-400 px-1 py-1" title={`${s.pos || '이 직종'}은 교대를 돌지 않습니다`}>주간</span>
                     )}
+                    {/* 층은 교대조와 상관없다 — 주간 근무자도 맡은 층이 있다 */}
+                    <select value={s.floor ?? ''} title="담당 층"
+                      onChange={e => patchRow(s.id, { position: s.pos, team: s.team, floor: e.target.value })}
+                      className="text-[11px] border border-gray-200 rounded px-1 py-1 text-gray-600">
+                      <option value="">층 -</option>
+                      {floors.map(f => <option key={f} value={f}>{f}</option>)}
+                    </select>
                   </div>
                 )
               })}
