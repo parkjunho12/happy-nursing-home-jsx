@@ -189,7 +189,7 @@ export default function OperationsPage() {
 
           <div className="flex justify-end mb-3">
             <button onClick={() => setEditC('new')}
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-primary-orange text-white text-sm font-bold hover:opacity-90 shadow-sm">
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-600 text-white text-base font-bold hover:opacity-90 shadow-sm">
               <Plus size={14} /> 계약 추가
             </button>
           </div>
