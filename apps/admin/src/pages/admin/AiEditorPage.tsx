@@ -44,6 +44,15 @@ export default function AiEditorPage() {
 
   const svc = useMemo(() => services.find(s => s.key === svcKey) ?? null, [services, svcKey])
   const online = agents.filter(a => a.online).length
+  /**
+   * 밀 수 있는 토큰인가.
+   *
+   * 로그인이 됐다고 밀 수 있는 것이 아니다. 권한이 모자란 토큰은 로그인만
+   * 통과하고 마지막 push 에서 403 으로 막힌다. 작업을 다 돌린 뒤에 알면
+   * 그 시간이 통째로 버려지니, 시작하기 전에 말해준다.
+   * false 일 때만 경고한다 — null 은 '아직 모른다' 이지 '안 된다' 가 아니다.
+   */
+  const cannotPush = agents.some(a => a.online && a.tools?.gh_push === false)
 
   /* ── 미리보기에 무엇을 띄울지 ──
      작업을 고르면 그 결과를, 아니면 기준 브랜치를 본다. 어느 쪽이든 경로는
@@ -246,6 +255,19 @@ export default function AiEditorPage() {
       </div>
 
       {err && <p className="mx-4 mt-2 text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{err}</p>}
+
+      {cannotPush && (
+        <div className="mx-4 mt-2 text-[11px] text-amber-800 bg-amber-50 border border-amber-200
+                        rounded-lg px-3 py-2 leading-relaxed">
+          <b>이 토큰으로는 저장소에 밀 수 없습니다.</b> 수정과 검증은 되지만,
+          PR 을 만드는 마지막 단계에서 막힙니다.
+          <br />
+          GitHub 에서 <b>classic 토큰 + <code className="font-mono">repo</code> 권한</b>
+          {' '}(또는 fine-grained 면 이 저장소에 Contents·Pull requests 를 Read and write)
+          으로 새로 발급해 서버 <code className="font-mono">infra/.env</code> 의
+          {' '}<code className="font-mono">GH_TOKEN</code> 에 넣고 편집 에이전트를 다시 세워주세요.
+        </div>
+      )}
 
       {services.length === 0 ? (
         <Empty onSeed={async () => {

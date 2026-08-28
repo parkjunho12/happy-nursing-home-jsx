@@ -167,6 +167,31 @@ def detect_tools() -> Dict[str, Any]:
     return out
 
 
+def detect_push(repo_dir: str) -> Optional[bool]:
+    """이 저장소에 밀 수 있는가.
+
+    로그인이 됐다고 밀 수 있는 것이 아니다. 권한이 모자란 토큰은 로그인만
+    통과하고 push 에서 403 으로 막힌다. 그걸 작업 끝에서 알면 Claude 를
+    돌리고 검증까지 마친 시간이 통째로 버려진다.
+
+    실제로 미는 길을 그대로 두드린다 — --dry-run 은 서버에 권한까지 물어보되
+    브랜치를 만들지 않는다. 계정 권한을 묻는 API 로는 알 수 없다(저장소
+    주인이면 권한 없는 토큰으로도 '가능' 이라고 나온다).
+
+    알 수 없으면 None — '모른다' 와 '안 된다' 는 다르다.
+    """
+    if not os.path.isdir(os.path.join(repo_dir, ".git")):
+        return None
+    code, _, err = run(["git", "push", "--dry-run", "origin",
+                        "HEAD:refs/heads/ai/__permcheck__"],
+                       cwd=repo_dir, timeout=GIT_TIMEOUT)
+    if code == 0:
+        return True
+    if "403" in err or "denied" in err.lower() or "permission" in err.lower():
+        return False
+    return None          # 네트워크 문제 등 — 단정하지 않는다
+
+
 def free_port() -> int:
     for p in range(PREVIEW_PORT_FROM, PREVIEW_PORT_TO + 1):
         with socket.socket() as s:
@@ -1128,7 +1153,15 @@ SUMMARY>>>
             shutil.rmtree(d, ignore_errors=True)
 
     # ── 돌리기 ──
+    def refresh_push_capability(self) -> None:
+        """밀 수 있는지 다시 확인한다. 토큰을 바꿨으면 여기서 반영된다."""
+        try:
+            self.tools["gh_push"] = detect_push(self.cfg.repo_dir)
+        except Exception:                              # noqa: BLE001
+            pass
+
     def heartbeat_loop(self) -> None:
+        self.refresh_push_capability()
         while not self._stop.is_set():
             try:
                 pv = self.preview_fields()
