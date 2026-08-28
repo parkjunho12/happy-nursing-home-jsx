@@ -82,8 +82,11 @@ admin.xn--p80bu1t60gba47bg6abm347gsla.com {
 # 편집 에이전트가 띄운 개발 서버를 Admin 의 iframe 에서 보기 위한 자리다.
 # 개발 서버는 소스 파일(/src/...)도 그대로 내려준다. 그래서 두 겹으로 막는다.
 #   1) 아이디·비밀번호 — 기본값이 아래에 박혀 있어 .env 없이도 잠긴다.
-#      기본 비밀번호의 평문은 저장소에 두지 않는다(이 저장소는 공개다).
-#      bcrypt cost 14 해시라, 해시만으로는 되돌릴 수 없다.
+#      기본값은 admin / admin 이다 — 사용자가 그렇게 요청했다.
+#      ⚠ 이 저장소는 공개다. 'admin' 은 사전에 있는 단어라 해시만으로도
+#        곧바로 확인된다. 즉 미리보기는 사실상 누구나 열 수 있다.
+#        소스는 어차피 공개 저장소이고 토큰 없이는 로그인 화면만 보이지만,
+#        잠가야 할 이유가 생기면 아래 .env 로 덮어쓰면 된다.
 #      바꾸려면 infra/.env 의 PREVIEW_USER / PREVIEW_PASS_HASH 를 쓴다.
 #      만들기: docker run --rm caddy:2.7-alpine caddy hash-password --plaintext '비밀번호'
 #
@@ -99,7 +102,7 @@ preview.xn--p80bu1t60gba47bg6abm347gsla.com {
 
   # Caddy 2.7 은 basicauth(한 단어)다
   basicauth {
-    {$PREVIEW_USER:preview} {$PREVIEW_PASS_HASH:$2a$14$NpJ0sCwED46euKIRDF.GDeqZTzGhHqoULhAWSLRZNBquLbL./h5jG}
+    {$PREVIEW_USER:admin} {$PREVIEW_PASS_HASH:$2a$14$h9z34bBMQVaoosuj5gjBsOdRYhMGo1B220MrrR3k0YvDDUj/nJFtu}
   }
 
   # 개발 서버는 새로고침을 위해 웹소켓을 쓴다 — 그대로 흘려보낸다

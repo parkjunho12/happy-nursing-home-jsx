@@ -125,8 +125,12 @@ jobs:
             echo "환경변수 PREVIEW_USER=$(docker exec happy_caddy printenv PREVIEW_USER 2>/dev/null || echo '<없음>')"
             envh=$(docker exec happy_caddy printenv PREVIEW_PASS_HASH 2>/dev/null || true)
             if [ -z "$envh" ]; then
-              echo "환경변수 PREVIEW_PASS_HASH=<없음> — Caddyfile 기본값을 씁니다"
+              echo "환경변수 PREVIEW_PASS_HASH=<없음> — Caddyfile 기본값(admin/admin)을 씁니다"
             else
+              echo "⚠ infra/.env 가 기본값을 덮고 있습니다 — 코드에 적힌 비밀번호는 쓰이지 않습니다."
+              echo "  코드 기본값으로 돌리려면 서버에서:"
+              echo "    cd /opt/happy/infra && sed -i '/^PREVIEW_USER=/d;/^PREVIEW_PASS_HASH=/d' .env"
+              echo "    docker compose up -d --force-recreate --no-deps caddy"
               echo "환경변수 PREVIEW_PASS_HASH=$(printf '%s' "$envh" | cut -c1-24)... (${#envh}자)"
               # 60자가 아니면 컨테이너까지 오는 길에 잘렸다는 뜻이다.
               # 그러면 어떤 비밀번호를 넣어도 안 열린다 - 원인을 여기서 못 박는다.
