@@ -109,3 +109,4 @@ from app.models.broadcast import (  # noqa: F401
     BroadcastRun, BroadcastLog, BroadcastCommand,
 )
 from app.models import ai_editor  # noqa: F401
+from app.models import therapy  # noqa: F401,E402  치료 프로그램 조 편성
