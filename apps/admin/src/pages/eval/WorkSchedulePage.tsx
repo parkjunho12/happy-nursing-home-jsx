@@ -19,6 +19,7 @@ import { planMembersMonths, type MonthContext, type MemberMonthPlan } from '@/ut
 import { calcBase as calcBaseFor } from '@/utils/baseHours'
 import { SHIFT_CODES, CODE_MAP, hoursOf, extraHoursOf, countAsOf, meta, isAutoManaged, splitTimeRange, shortOf, TEAMS, DEFAULT_TEAM_OFFSET, rotationFor } from '@/utils/shiftCodes'
 import { auditSchedule, type Issue } from '@/utils/scheduleAudit'
+import { filterByFloor, countHiddenNoFloor } from '@/utils/floorFilter'
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
 const thisMonth = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
@@ -58,6 +59,13 @@ export default function WorkSchedulePage() {
   // 층은 늘 필요한 정보가 아니다 — 볼 사람만 켠다. 이 브라우저에 기억한다.
   const [showFloor, setShowFloor] = useState(() => localStorage.getItem('ws.floor') === '1')
   useEffect(() => { localStorage.setItem('ws.floor', showFloor ? '1' : '0') }, [showFloor])
+
+  // 층으로 걸러 보기 — ''이면 전체. 이것도 이 브라우저에 기억한다.
+  //
+  // 보기 전용이다. 저장·검수·자동생성은 언제나 전체 인원을 그대로 쓴다.
+  // 걸러둔 채로 저장했다가 사람이 빠지면 그건 근무표가 아니라 사고다.
+  const [floorPick, setFloorPick] = useState(() => localStorage.getItem('ws.floorPick') ?? '')
+  useEffect(() => { localStorage.setItem('ws.floorPick', floorPick) }, [floorPick])
   const [auditOpen, setAuditOpen] = useState(true)
   const [histOpen, setHistOpen] = useState(false)
   const [pickOpen, setPickOpen] = useState(false)   // 자동 생성 대상 선택
@@ -297,6 +305,21 @@ export default function WorkSchedulePage() {
     return list.length ? list : ['2층', '3층', '4층']
   }, [residents, rows])
 
+  /** 표에 보여줄 사람.
+   *
+   *  층을 고르면 그 층 요양보호사만 남긴다. 간호사·사회복지사처럼 층이
+   *  없는 직종은 그대로 둔다 — 층은 요양보호사에게 붙는 개념이고, 층별로
+   *  뽑아 붙일 때도 그 사람들은 함께 보여야 한다.
+   */
+  const shownStaff = useMemo(
+    () => filterByFloor(staff, floorPick, canJoinTeam), [staff, floorPick])
+
+  /** 층을 고른 탓에 숨겨진 '층 미지정' 요양보호사 수.
+   *  조용히 사라지면 빠진 줄도 모른다. */
+  const hiddenNoFloor = useMemo(
+    () => countHiddenNoFloor(staff, floorPick, canJoinTeam), [staff, floorPick])
+
+
   const setCell = (sid: string, day: number, code: string) => {
     if (lock.locked) return          // 확정된 달은 칠해지지 않는다
     setData(prev => {
@@ -518,7 +541,7 @@ export default function WorkSchedulePage() {
    *  N까지 섞으면 낮 인력이 실제보다 많아 보인다. */
   const dayCountBy = (day: number, caregiver: boolean) => {
     // 인쇄 대상을 골랐으면 그 인원만 센다 — 표에 없는 사람이 숫자에 섞이면 벽보가 안 맞는다
-    const base = printPick ? staff.filter(s => printPick.has(s.id)) : staff
+    const base = printPick ? shownStaff.filter(s => printPick.has(s.id)) : shownStaff
     const pool = base.filter(s => canJoinTeam(s.pos) === caregiver)
     return pool.reduce((acc, s) => {
       const c = countAsOf(data[s.id]?.[String(day)])
@@ -664,6 +687,24 @@ export default function WorkSchedulePage() {
                 <span className="absolute -top-1.5 -right-1.5 text-[10px] font-extrabold bg-amber-500 text-white rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">{leavePending}</span>
               )}
             </button>
+            {/* 층으로 걸러 보기 — 그 층 요양보호사만 남는다.
+                보기만 바꾼다. 저장·검수·자동생성은 늘 전체 인원 그대로다. */}
+            {floors.length > 0 && (
+              <div className="inline-flex items-center rounded-xl border border-gray-200 overflow-hidden print:hidden"
+                title={floorPick ? `${floorPick} 만 보는 중 — 저장·자동생성은 전체 인원 그대로입니다` : undefined}>
+                <span className="px-2 text-[11px] font-bold text-gray-400 select-none">층</span>
+                {[{ v: '', label: '전체' }, ...floors.map(f => ({ v: f, label: f }))].map(o => (
+                  <button key={o.v || 'all'} onClick={() => setFloorPick(o.v)}
+                    title={o.v ? `${o.v} 요양보호사만 봅니다` : '모든 인원을 봅니다'}
+                    className={`px-2.5 py-2.5 text-sm font-semibold border-l border-gray-200 transition-colors ${
+                      floorPick === o.v
+                        ? 'bg-teal-600 text-white'
+                        : 'text-gray-600 hover:bg-gray-50'}`}>
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            )}
             <button onClick={() => setShowFloor(v => !v)}
               title="요양보호사 담당 층을 표에 보여줍니다 (인쇄에도 나옵니다)"
               className={`inline-flex items-center gap-1.5 px-3 py-2.5 border rounded-xl text-sm font-semibold ${showFloor ? 'bg-teal-50 border-teal-300 text-teal-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
@@ -961,6 +1002,15 @@ export default function WorkSchedulePage() {
         <div className="flex justify-center py-16"><Loader2 className="animate-spin text-gray-300" size={22} /></div>
       ) : (
         <div className={`ws-wrap overflow-x-auto border border-gray-200 rounded-xl bg-white outline-none ${attPick ? 'print:hidden' : ''}`} tabIndex={0} onKeyDown={onKey}>
+          {floorPick && (
+            <div className="mb-2 text-[11.5px] text-teal-800 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2">
+              <b>{floorPick}</b> 요양보호사만 보고 있습니다 — 층이 없는 직종(간호·사회복지 등)은 그대로 나옵니다.
+              {hiddenNoFloor > 0 && (
+                <span className="text-amber-700"> · 층을 지정하지 않은 요양보호사 {hiddenNoFloor}명은 숨겨졌습니다.</span>
+              )}
+              <span className="text-teal-600"> 저장·자동생성은 전체 인원 그대로 됩니다.</span>
+            </div>
+          )}
           <table className="ws-table border-collapse" style={{ minWidth: 1400 }}>
             <colgroup>
               <col className="c-pos" /><col className="c-team" />{showFloor && <col className="c-floor" />}<col className="c-name" />
@@ -1009,7 +1059,7 @@ export default function WorkSchedulePage() {
               </tr>
             </thead>
             <tbody>
-              {staff.map(s => {
+              {shownStaff.map(s => {
                 const c = calc(s.id)
                 const bh = Number(baseHours) || 0
                 const short = bh > 0 && c.total < bh        // 미달 — 급여가 깎이는 쪽이라 빨갛게
