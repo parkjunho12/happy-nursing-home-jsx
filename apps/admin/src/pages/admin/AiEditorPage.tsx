@@ -28,6 +28,7 @@ export default function AiEditorPage() {
   const [agents, setAgents] = useState<AiAgent[]>([])
   const [preview, setPreview] = useState<PreviewInfo | null>(null)
   const [pending, setPending] = useState<PendingDeploy | null>(null)
+  const [pageQ, setPageQ] = useState('')   // 화면이 47개다 — 걸러 찾는다
   const [svcKey, setSvcKey] = useState<string>('')
   const [pageUrl, setPageUrl] = useState<string>('')
   const [jobs, setJobs] = useState<AiJob[]>([])
@@ -61,6 +62,15 @@ export default function AiEditorPage() {
   }, [job?.preview_url, preview?.state, preview?.kind, preview?.url, pageUrl])
 
   const showingJob = !!job?.preview_url
+
+  /** 이름·경로 어느 쪽으로 쳐도 찾히게 한다 */
+  const shownPages = useMemo(() => {
+    const all = svc?.pages ?? []
+    const q = pageQ.trim().toLowerCase()
+    if (!q) return all
+    return all.filter(p =>
+      (p.label ?? '').toLowerCase().includes(q) || p.path.toLowerCase().includes(q))
+  }, [svc?.pages, pageQ])
 
   /* ── 목록 ── */
   const loadServices = useCallback(async () => {
@@ -272,12 +282,17 @@ export default function AiEditorPage() {
             <div>
               <div className="flex items-center gap-1.5 mb-1">
                 <p className="text-[11px] font-bold text-gray-500">화면</p>
+                <span className="text-[10px] text-gray-400">{shownPages.length}</span>
                 <PreviewBadge preview={preview} />
               </div>
+              <input value={pageQ} onChange={e => setPageQ(e.target.value)}
+                placeholder="화면 찾기 (예: 수급자, 근무표)"
+                className="w-full mb-1.5 px-2 py-1.5 text-[11px] border border-gray-200 rounded-lg
+                           focus:outline-none focus:ring-2 focus:ring-indigo-100" />
               {/* 셀렉트가 아니라 목록이다 — 누르면 곧바로 오른쪽 미리보기가
                   그 화면으로 간다. 한 번에 하나씩 눌러보며 고를 것을 정한다. */}
               <div className="space-y-0.5">
-                {(svc?.pages ?? []).map(p => {
+                {shownPages.map(p => {
                   const on = p.path === pageUrl
                   return (
                     <button key={p.path}
@@ -292,8 +307,10 @@ export default function AiEditorPage() {
                     </button>
                   )
                 })}
-                {(svc?.pages ?? []).length === 0 && (
-                  <p className="text-[10.5px] text-gray-400 py-3 text-center">등록된 화면이 없습니다.</p>
+                {shownPages.length === 0 && (
+                  <p className="text-[10.5px] text-gray-400 py-3 text-center">
+                    {pageQ ? '찾는 화면이 없습니다.' : '등록된 화면이 없습니다.'}
+                  </p>
                 )}
               </div>
               <p className="text-[10px] text-gray-400 mt-1.5 leading-relaxed">
