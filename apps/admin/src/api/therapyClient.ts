@@ -59,6 +59,34 @@ export interface TherapyOverview {
 /** 0=월 … 6=일 — 파이썬 weekday 와 같은 순서로 둔다(변환 실수를 줄인다) */
 export const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일']
 
+/** 자동 편성 — 수급자에 이미 있는 인지·여가·신체 그룹(A/B/C)으로 조를 짠다 */
+export type ComposeAxis = 'physical' | 'cognitive' | 'leisure'
+
+export const AXIS_META: Record<ComposeAxis, string> = {
+  physical: '신체', cognitive: '인지', leisure: '여가',
+}
+
+export interface ComposePlanGroup {
+  name: string
+  floor?: string | null
+  group: string
+  exists: boolean
+  count: number
+  members: { resident_id: string; name: string; room?: string | null }[]
+}
+
+export interface ComposePlan {
+  axis: ComposeAxis
+  axis_label: string
+  by_floor: boolean
+  groups: ComposePlanGroup[]
+  skipped: { resident_id: string; name: string; floor?: string | null }[]
+  group_count: number
+  assigned: number
+  moving: number
+  dry_run: boolean
+}
+
 export const therapyAPI = {
   overview: () => apiClient.get(BASE).then(unwrap<TherapyOverview>),
 
@@ -73,6 +101,11 @@ export const therapyAPI = {
   setMembers: (id: string, resident_ids: string[]) =>
     apiClient.put(`${BASE}/groups/${id}/members`, { resident_ids })
       .then(unwrap<{ group_id: string; count: number }>),
+
+  /** 미리보기(dry_run=true)로 먼저 보여주고, 확인받은 뒤 저장한다 */
+  autoCompose: (axis: ComposeAxis, by_floor: boolean, dry_run: boolean) =>
+    apiClient.post(`${BASE}/auto-compose`, { axis, by_floor, dry_run })
+      .then(unwrap<ComposePlan>),
 
   createSlot: (b: Partial<TherapySlot> & { weekday: number; start_time: string; group_id: string }) =>
     apiClient.post(`${BASE}/slots`, b).then(unwrap<TherapySlot>),

@@ -293,3 +293,114 @@ def delete_slot(sid: str, db: Session = Depends(get_db), _: User = Depends(_can_
         raise HTTPException(404, "시간표를 찾을 수 없습니다.")
     db.delete(s); db.commit()
     return ApiResponse(success=True, data={"id": sid}, message="지웠습니다.")
+
+# ── 자동 편성 ──────────────────────────────────────────────
+#
+# 어르신 예순여덟 분을 손으로 조에 넣는 것은 일이 아니라 고역이다. 그런데
+# 수급자 관리에 이미 인지·여가·신체 그룹(A/B/C)이 들어 있다. 층까지 곱하면
+# 조가 그대로 나온다 — 2층 A조, 3층 B조 …
+#
+# 있는 정보를 다시 입력하게 하지 않는다.
+
+AXES = {
+    "physical":  ("group_physical",  "신체"),
+    "cognitive": ("group_cognitive", "인지"),
+    "leisure":   ("group_leisure",   "여가"),
+}
+
+
+class AutoBody(BaseModel):
+    axis: str = "physical"       # physical | cognitive | leisure
+    by_floor: bool = True        # 층까지 나눌지
+    dry_run: bool = True         # 먼저 보여주고 확인받는다
+
+
+def _floor_key(v: Optional[str]) -> str:
+    return (v or "").strip()
+
+
+@router.post("/auto-compose")
+def auto_compose(body: AutoBody, db: Session = Depends(get_db),
+                 _: User = Depends(_can_edit)):
+    """인지·여가·신체 그룹(+층)으로 조를 자동으로 짠다.
+
+    기본은 미리보기(dry_run)다. 이 일은 기존 편성을 통째로 갈아엎으므로,
+    무엇이 만들어지고 누가 어디로 가는지 먼저 보여주고 확인받는다.
+
+    · 이미 있는 같은 이름의 조는 다시 만들지 않고 그대로 쓴다.
+    · 그룹이 비어 있는 어르신은 어디에도 넣지 않는다. 임의로 넣으면
+      엉뚱한 시간에 불린다 — 미편성으로 남겨 눈에 띄게 두는 편이 낫다.
+    · 조의 성격(나오는/찾아가는)은 정하지 않는다. A·B·C 로는 알 수 없다.
+      만든 뒤 사람이 고른다.
+    """
+    if body.axis not in AXES:
+        raise HTTPException(400, "알 수 없는 기준입니다 (신체·인지·여가).")
+    field, axis_label = AXES[body.axis]
+
+    rows = (db.query(LtcResident)
+              .filter(LtcResident.status == "active")
+              .order_by(LtcResident.floor, LtcResident.room, LtcResident.name).all())
+
+    # (층, 그룹) → 어르신들
+    buckets: Dict[tuple, List[LtcResident]] = {}
+    skipped: List[dict] = []
+    for r in rows:
+        g = (getattr(r, field) or "").strip().upper()
+        if not g:
+            skipped.append({"resident_id": r.id, "name": r.name, "floor": r.floor})
+            continue
+        key = (_floor_key(r.floor) if body.by_floor else "", g)
+        buckets.setdefault(key, []).append(r)
+
+    existing = {g.name: g for g in db.query(TherapyGroup).all()}
+
+    plan: List[dict] = []
+    for (floor, g), members in sorted(buckets.items()):
+        name = f"{floor} {g}조".strip() if floor else f"{g}조"
+        cur = existing.get(name)
+        plan.append({
+            "name": name, "floor": floor or None, "group": g,
+            "exists": bool(cur),
+            "count": len(members),
+            "members": [{"resident_id": m.id, "name": m.name, "room": m.room} for m in members],
+        })
+
+    # 지금 편성이 통째로 바뀌는 일이라, 몇 명이 옮겨지는지 미리 알린다
+    now_assigned = {m.resident_id for m in db.query(TherapyGroupMember).all()}
+    will_move = sum(1 for p in plan for m in p["members"]
+                    if m["resident_id"] in now_assigned)
+
+    summary = {
+        "axis": body.axis, "axis_label": axis_label, "by_floor": body.by_floor,
+        "groups": plan, "skipped": skipped,
+        "group_count": len(plan),
+        "assigned": sum(p["count"] for p in plan),
+        "moving": will_move,
+        "dry_run": bool(body.dry_run),
+    }
+    if body.dry_run:
+        return ApiResponse(success=True, data=summary,
+                           message=f"{len(plan)}개 조 · {summary['assigned']}명 — 아직 저장하지 않았습니다.")
+
+    # 실제 반영
+    for p in plan:
+        g = existing.get(p["name"])
+        if not g:
+            g = TherapyGroup(name=p["name"], floor=p["floor"], kind=KIND_GATHER,
+                             note=f"{axis_label} {p['group']}그룹", sort=len(existing))
+            db.add(g); db.flush()
+            existing[p["name"]] = g
+        ids = [m["resident_id"] for m in p["members"]]
+        # 이 조의 기존 명단을 비우고, 다른 조에 있던 분은 그쪽에서 떼어 온다
+        db.query(TherapyGroupMember).filter(TherapyGroupMember.group_id == g.id).delete()
+        if ids:
+            (db.query(TherapyGroupMember)
+               .filter(TherapyGroupMember.resident_id.in_(ids))
+               .delete(synchronize_session=False))
+        db.flush()
+        for i, rid in enumerate(ids):
+            db.add(TherapyGroupMember(group_id=g.id, resident_id=rid, sort=i))
+    db.commit()
+    summary["dry_run"] = False
+    return ApiResponse(success=True, data=summary,
+                       message=f"{len(plan)}개 조에 {summary['assigned']}명을 편성했습니다.")

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Users, Plus, Trash2, Loader2, RefreshCw, CalendarClock, X, Radio, BellRing,
+  Users, Plus, Trash2, Loader2, RefreshCw, CalendarClock, X, Radio, BellRing, Wand2,
 } from 'lucide-react'
 import {
-  therapyAPI, KIND_META, WEEKDAYS,
+  therapyAPI, KIND_META, WEEKDAYS, AXIS_META,
   type TherapyOverview, type TherapyGroup, type TherapySlot, type GroupKind,
+  type ComposeAxis, type ComposePlan,
 } from '@/api/therapyClient'
 
 /**
@@ -27,6 +28,7 @@ export default function TherapyGroupPage() {
   const [err, setErr] = useState('')
   const [editing, setEditing] = useState<TherapyGroup | null>(null)
   const [slotOpen, setSlotOpen] = useState<TherapySlot | 'new' | null>(null)
+  const [autoOpen, setAutoOpen] = useState(false)
 
   const load = useCallback(async () => {
     try { setOv(await therapyAPI.overview()); setErr('') }
@@ -73,6 +75,11 @@ export default function TherapyGroupPage() {
           <button onClick={load} disabled={busy}
             className="flex items-center gap-1.5 text-sm text-gray-500 border border-gray-200 rounded-lg px-3 py-2 hover:bg-gray-50">
             <RefreshCw size={14} />
+          </button>
+          <button onClick={() => setAutoOpen(true)}
+            title="수급자에 이미 적혀 있는 인지·여가·신체 그룹으로 조를 한 번에 짭니다"
+            className="flex items-center gap-1.5 border border-indigo-200 bg-indigo-50 text-indigo-700 px-3 py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-100">
+            <Wand2 size={15} /> 자동 편성
           </button>
           <button onClick={() => setEditing({
             id: '', name: '', floor: '', kind: 'gather', note: '', color: '',
@@ -207,6 +214,10 @@ export default function TherapyGroupPage() {
               : therapyAPI.createGroup(b as any))
             setEditing(null)
           }} />
+      )}
+      {autoOpen && (
+        <AutoComposeModal busy={busy} onClose={() => setAutoOpen(false)}
+          onDone={async () => { setAutoOpen(false); await load() }} />
       )}
       {slotOpen && (
         <SlotModal slot={slotOpen === 'new' ? null : slotOpen} groups={groups} busy={busy}
@@ -454,6 +465,134 @@ function SlotModal({ slot, groups, busy, onClose, onSave, onDelete }: {
           {onDelete && (
             <button onClick={onDelete} className="px-3 border border-rose-200 text-rose-600 rounded-xl text-sm">삭제</button>
           )}
+          <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-xl text-sm">취소</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * 자동 편성 — 수급자에 이미 적혀 있는 인지·여가·신체 그룹(A/B/C)으로 조를 짠다.
+ *
+ * 어르신 예순여덟 분을 손으로 넣는 것은 일이 아니라 고역이다. 이미 있는
+ * 정보를 다시 입력하게 하지 않는다.
+ *
+ * 다만 이 일은 지금 편성을 통째로 갈아엎는다. 그래서 먼저 미리보기로
+ * 무엇이 만들어지고 몇 명이 옮겨지는지 보여주고, 그 다음에 저장한다.
+ */
+function AutoComposeModal({ busy, onClose, onDone }: {
+  busy: boolean; onClose: () => void; onDone: () => void
+}) {
+  const [axis, setAxis] = useState<ComposeAxis>('physical')
+  const [byFloor, setByFloor] = useState(true)
+  const [plan, setPlan] = useState<ComposePlan | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [err, setErr] = useState('')
+
+  const preview = useCallback(async (a: ComposeAxis, f: boolean) => {
+    setLoading(true); setErr('')
+    try { setPlan(await therapyAPI.autoCompose(a, f, true)) }
+    catch (e: any) { setErr(e?.response?.data?.detail ?? e?.message ?? '실패했습니다'); setPlan(null) }
+    finally { setLoading(false) }
+  }, [])
+  useEffect(() => { preview(axis, byFloor) }, [axis, byFloor, preview])
+
+  const apply = async () => {
+    if (!plan) return
+    if (!confirm(
+      `${plan.group_count}개 조에 ${plan.assigned}명을 편성합니다.\n` +
+      (plan.moving > 0 ? `\n※ 지금 다른 조에 있는 ${plan.moving}명이 옮겨집니다.\n` : '') +
+      (plan.skipped.length > 0 ? `※ ${plan.axis_label} 그룹이 비어 있는 ${plan.skipped.length}명은 편성되지 않습니다.\n` : '') +
+      `\n계속할까요?`)) return
+    setLoading(true); setErr('')
+    try { await therapyAPI.autoCompose(axis, byFloor, false); onDone() }
+    catch (e: any) { setErr(e?.response?.data?.detail ?? e?.message ?? '실패했습니다') }
+    finally { setLoading(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-4 space-y-3 max-h-[90vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}>
+        <div>
+          <h3 className="font-bold text-gray-900">자동 편성</h3>
+          <p className="text-[11px] text-gray-400 mt-0.5">
+            수급자 관리에 이미 적어 둔 그룹(A·B·C)으로 조를 짭니다. 다시 입력하실 필요 없습니다.
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1">무엇을 기준으로</label>
+          <div className="grid grid-cols-3 gap-1.5">
+            {(['physical', 'cognitive', 'leisure'] as ComposeAxis[]).map(a => (
+              <button key={a} type="button" onClick={() => setAxis(a)}
+                className={`py-2 rounded-xl text-xs font-bold border ${
+                  axis === a ? 'bg-indigo-600 text-white border-indigo-600' : 'border-gray-200 text-gray-600'}`}>
+                {AXIS_META[a]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <button type="button" onClick={() => setByFloor(v => !v)}
+          className={`w-full py-2 rounded-xl text-xs font-bold border ${
+            byFloor ? 'bg-teal-50 border-teal-300 text-teal-700' : 'border-gray-200 text-gray-500'}`}>
+          {byFloor ? '✓ 층까지 나눔 (2층 A조 · 3층 A조)' : '층 구분 없음 (A조 · B조 · C조)'}
+        </button>
+
+        {err && <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{err}</p>}
+
+        {loading && !plan ? (
+          <div className="py-8 flex justify-center"><Loader2 className="animate-spin text-gray-300" /></div>
+        ) : plan && (
+          <>
+            <div className="rounded-xl border border-gray-200 divide-y divide-gray-100">
+              {plan.groups.map(g => (
+                <div key={g.name} className="flex items-center gap-2 px-3 py-2">
+                  <span className="text-sm font-bold text-gray-800 flex-1">{g.name}</span>
+                  {g.exists && <span className="text-[10px] text-gray-400">이미 있음</span>}
+                  <span className="text-xs text-gray-500">{g.count}명</span>
+                </div>
+              ))}
+              {plan.groups.length === 0 && (
+                <p className="text-xs text-gray-400 py-6 text-center">
+                  {plan.axis_label} 그룹이 적힌 어르신이 없습니다. 수급자 관리에서 먼저 지정해주세요.
+                </p>
+              )}
+            </div>
+
+            {plan.moving > 0 && (
+              <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                지금 다른 조에 있는 <b>{plan.moving}명</b>이 옮겨집니다. 손으로 짜 두신 편성이 있으면 바뀝니다.
+              </p>
+            )}
+            {plan.skipped.length > 0 && (
+              <div className="text-[11px] text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                <b>{plan.axis_label} 그룹이 비어 있는 {plan.skipped.length}명</b>은 편성되지 않습니다 —
+                임의로 넣으면 엉뚱한 시간에 불립니다.
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {plan.skipped.slice(0, 12).map(sk => (
+                    <span key={sk.resident_id} className="bg-white border border-gray-200 rounded px-1.5 py-0.5">
+                      {sk.name}
+                    </span>
+                  ))}
+                  {plan.skipped.length > 12 && <span className="text-gray-400">외 {plan.skipped.length - 12}명</span>}
+                </div>
+              </div>
+            )}
+            <p className="text-[10.5px] text-gray-400">
+              조의 성격(나오는 조 / 찾아가는 조)은 A·B·C 로 알 수 없어 모두 「나오는 조」로 만듭니다.
+              누워 계신 분들의 조는 만든 뒤 바꿔주세요.
+            </p>
+          </>
+        )}
+
+        <div className="flex gap-2 pt-1">
+          <button onClick={apply} disabled={busy || loading || !plan || plan.groups.length === 0}
+            className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50">
+            {loading ? '처리 중…' : `${plan?.group_count ?? 0}개 조로 편성`}
+          </button>
           <button onClick={onClose} className="flex-1 border border-gray-200 text-gray-700 py-2.5 rounded-xl text-sm">취소</button>
         </div>
       </div>
