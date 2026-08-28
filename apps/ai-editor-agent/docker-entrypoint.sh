@@ -61,6 +61,25 @@ if [ -n "$GH_TOKEN" ]; then
     gh auth setup-git >/dev/null 2>&1 \
       && say "git push 인증 준비 완료" \
       || say "⚠ gh auth setup-git 실패 — 브랜치를 밀지 못할 수 있습니다"
+
+    # 밀 수 있는 토큰인지 지금 확인한다.
+    #
+    # 인증이 됐다고 밀 수 있는 것이 아니다. 권한이 모자란 토큰은 로그인은
+    # 되고 push 에서만 403 으로 막힌다. 그걸 작업 끝에서 알면 Claude 를
+    # 돌리고 검증까지 마친 시간이 통째로 버려진다. 여기서 미리 말한다.
+    slug=$(printf '%s' "$AI_EDITOR_REPO_URL" \
+             | sed -E 's#^.*github\.com[:/]+##; s#\.git$##; s#/$##')
+    scopes=$(gh auth status 2>&1 | sed -n 's/.*Token scopes: *//p' | head -1)
+    push_ok=$(gh api "repos/$slug" --jq '.permissions.push' 2>/dev/null || echo "")
+    say "저장소 $slug · 토큰 권한: ${scopes:-(표시 안 됨)}"
+    if [ "$push_ok" = "true" ]; then
+      say "쓰기 권한 확인됨 — 브랜치를 밀 수 있습니다"
+    else
+      say "❌ 이 토큰으로는 $slug 에 밀 수 없습니다 (push 권한 없음)."
+      say "   수정과 검증은 되지만, PR 을 만드는 마지막 단계에서 403 으로 막힙니다."
+      say "   classic 토큰이면 'repo' 를, fine-grained 면 이 저장소에"
+      say "   Contents: Read and write + Pull requests: Read and write 를 주세요."
+    fi
   else
     say "⚠ gh 인증 실패 — 토큰을 확인해주세요. PR 을 만들 수 없습니다"
   fi

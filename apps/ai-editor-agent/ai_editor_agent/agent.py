@@ -769,7 +769,17 @@ SUMMARY>>>
         self.say("변경을 올립니다", step="PR 준비", progress=90)
         code, _, err = run(["git", "push", "-u", "origin", branch], cwd=wt, timeout=GIT_TIMEOUT)
         if code != 0:
-            raise AgentError(f"push 실패: {err[:300]}")
+            # 403 은 '토큰은 맞는데 권한이 없다' 는 뜻이다. 원문만 보여주면
+            # 무엇을 고쳐야 하는지 알 수 없어 한참 헤매게 된다.
+            hint = ""
+            if "403" in err or "denied" in err.lower():
+                hint = ("\n\n토큰에 쓰기 권한이 없습니다. GitHub 에서 새로 발급해주세요.\n"
+                        "  · classic 토큰: 'repo' 권한\n"
+                        "  · fine-grained 토큰: 이 저장소에 "
+                        "Contents(Read and write) + Pull requests(Read and write)\n"
+                        "발급한 값을 서버 infra/.env 의 GH_TOKEN 에 넣고 "
+                        "편집 에이전트를 다시 세우면 됩니다.")
+            raise AgentError(f"push 실패: {err[:300]}{hint}")
         body = (f"AI 페이지 편집기로 만든 변경입니다.\n\n"
                 f"**요청**\n> {job['instruction'][:1500]}\n\n"
                 f"**요청자** {job.get('requested_by') or '-'}\n"
