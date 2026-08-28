@@ -2,7 +2,7 @@ import DateField from '@/components/ui/DateField'
 import StickyToolbar from '../../components/common/StickyToolbar'
 import { useEffect, useState, useCallback } from 'react'
 import {
-  Receipt, Plus, X, Check, Trash2, Paperclip, Loader2,
+  Receipt, Plus, X, Check, Trash2, Paperclip, Loader2, Banknote,
   ChevronLeft, ChevronRight, FileText, AlertCircle, Ban,
 } from 'lucide-react'
 import {
@@ -30,6 +30,18 @@ const STATUS_TABS: ({ v: '' | ExpenseStatus; label: string })[] = [
   { v: 'approved', label: '승인' }, { v: 'rejected', label: '반려' },
 ]
 
+/* 계좌이체 요청은 결제수단으로 구분한다 — 물건구입 요청은 결제수단을 쓰지 않는다 */
+const TRANSFER_METHOD = '계좌이체'
+const isTransfer = (r: ExpenseRequest) => r.payment_method === TRANSFER_METHOD
+/* 이체 출금 통장은 시설에서 쓰는 통장으로 고정 — 이름만 저장하고 뒷번호는 고를 때 헷갈리지 않게 같이 보여준다 */
+const WITHDRAW_ACCOUNTS = [
+  { name: '통합통장', no: '964659' },
+  { name: '기타비용', no: '967210' },
+  { name: '직원통장', no: '967232' },
+  { name: '보조금통장', no: '964728' },
+  { name: '후원금통장', no: '964712' },
+]
+
 export default function ExpensePage() {
   const [meta, setMeta] = useState<ExpenseMeta | null>(null)
   const [rows, setRows] = useState<ExpenseRequest[]>([])
@@ -39,7 +51,7 @@ export default function ExpensePage() {
   const [category, setCategory] = useState('')
   const [mineOnly, setMineOnly] = useState(false)
   const [sumMonth, setSumMonth] = useState(() => new Date())
-  const [addOpen, setAddOpen] = useState(false)
+  const [formKind, setFormKind] = useState<'' | 'purchase' | 'transfer'>('')
   const [editing, setEditing] = useState<ExpenseRequest | null>(null)
   const [detail, setDetail] = useState<ExpenseRequest | null>(null)
 
@@ -86,10 +98,16 @@ export default function ExpensePage() {
             <p className="text-xs text-gray-400">결제 서류를 등록하면 관리자가 승인/반려합니다.</p>
           </div>
         </div>
-        <button onClick={() => { setEditing(null); setAddOpen(true) }}
-          className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold text-sm transition-colors shadow-sm">
-          <Plus className="w-4 h-4" /> 결제 서류 등록
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => { setEditing(null); setFormKind('purchase') }}
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold text-sm transition-colors shadow-sm">
+            <Plus className="w-4 h-4" /> 물건구입 요청
+          </button>
+          <button onClick={() => { setEditing(null); setFormKind('transfer') }}
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-semibold text-sm transition-colors shadow-sm">
+            <Banknote className="w-4 h-4" /> 계좌이체 요청
+          </button>
+        </div>
       </div>
 
       {/* 월별 집계 (승인권자) */}
@@ -199,19 +217,27 @@ export default function ExpensePage() {
         )}
       </div>
 
-      {addOpen && (
-        <ExpenseFormModal
-          meta={meta} editing={editing}
-          onClose={() => { setAddOpen(false); setEditing(null) }}
-          onSaved={() => { setAddOpen(false); setEditing(null); refresh() }}
+      {formKind === 'purchase' && (
+        <PurchaseFormModal
+          editing={editing}
+          onClose={() => { setFormKind(''); setEditing(null) }}
+          onSaved={() => { setFormKind(''); setEditing(null); refresh() }}
+        />
+      )}
+      {formKind === 'transfer' && (
+        <TransferFormModal
+          editing={editing}
+          onClose={() => { setFormKind(''); setEditing(null) }}
+          onSaved={() => { setFormKind(''); setEditing(null); refresh() }}
         />
       )}
       {detail && (
+        /* 수정은 등록할 때 쓴 요청 종류 그대로 열어야 값이 맞는다 */
         <DetailModal
           r={detail}
           onClose={() => setDetail(null)}
           onChanged={() => { setDetail(null); refresh() }}
-          onEdit={(r) => { setDetail(null); setEditing(r); setAddOpen(true) }}
+          onEdit={(r) => { setDetail(null); setEditing(r); setFormKind(isTransfer(r) ? 'transfer' : 'purchase') }}
         />
       )}
     </div>
@@ -232,20 +258,14 @@ function Stat({ label, value, sub, tone }: { label: string; value: string; sub?:
   )
 }
 
-/* ── 등록/수정 모달 ── */
-function ExpenseFormModal({ meta, editing, onClose, onSaved }:
-  { meta: ExpenseMeta | null; editing: ExpenseRequest | null; onClose: () => void; onSaved: () => void }) {
+/* ── 물건구입 요청 등록/수정 모달 ── */
+function PurchaseFormModal({ editing, onClose, onSaved }:
+  { editing: ExpenseRequest | null; onClose: () => void; onSaved: () => void }) {
   const isEdit = !!editing
   const [title, setTitle] = useState(editing?.title ?? '')
   const [amount, setAmount] = useState<string>(editing ? String(editing.amount) : '')
   const [vendor, setVendor] = useState(editing?.vendor ?? '')
-  const [category, setCategory] = useState(editing?.category ?? (meta?.categories[0] ?? '기타'))
-  const [payment, setPayment] = useState(editing?.payment_method ?? (meta?.payment_methods[0] ?? ''))
-  const [depositAcc, setDepositAcc] = useState(editing?.deposit_account ?? '')
-  const [withdrawAcc, setWithdrawAcc] = useState(editing?.withdraw_account ?? '')
-  const [saveDeposit, setSaveDeposit] = useState(false)   // 자주 쓰는 통장에 추가
-  const isCard = payment.includes('카드')
-  const [purchasedAt, setPurchasedAt] = useState(editing?.purchased_at ?? ymd(new Date()))
+  const [neededAt, setNeededAt] = useState(editing?.purchased_at ?? ymd(new Date()))
   const [memo, setMemo] = useState(editing?.memo ?? '')
   const [files, setFiles] = useState<File[]>([])
   const [removeIds, setRemoveIds] = useState<string[]>([])
@@ -264,14 +284,7 @@ function ExpenseFormModal({ meta, editing, onClose, onSaved }:
       fd.append('title', title.trim())
       fd.append('amount', String(amountNum))
       fd.append('vendor', vendor)
-      fd.append('category', category)
-      fd.append('payment_method', payment)
-      fd.append('deposit_account', isCard ? '' : depositAcc)
-      fd.append('withdraw_account', withdrawAcc)
-      if (!isCard && saveDeposit && depositAcc.trim()) {
-        expenseAPI.addDepositAccount(depositAcc.trim()).catch(() => {})
-      }
-      fd.append('purchased_at', purchasedAt)
+      fd.append('purchased_at', neededAt)
       fd.append('memo', memo)
       files.forEach(f => fd.append('files', f))
       if (isEdit) {
@@ -285,7 +298,7 @@ function ExpenseFormModal({ meta, editing, onClose, onSaved }:
   }
 
   return (
-    <Modal title={isEdit ? '결제 서류 수정' : '결제 서류 등록'} onClose={onClose}>
+    <Modal title={isEdit ? '물건구입 요청 수정' : '물건구입 요청'} onClose={onClose}>
       <div className="space-y-3">
         <Field label="품목 / 제목 *"><input value={title} onChange={e => setTitle(e.target.value)} placeholder="예: 어르신 간식 구매" className="einp" autoFocus /></Field>
         <div className="grid grid-cols-2 gap-2">
@@ -293,63 +306,14 @@ function ExpenseFormModal({ meta, editing, onClose, onSaved }:
             <input inputMode="numeric" value={amount ? new Intl.NumberFormat('ko-KR').format(amountNum) : ''}
               onChange={e => setAmount(e.target.value)} placeholder="0" className="einp text-right font-bold" />
           </Field>
-          <Field label="구매일"><DateField value={purchasedAt} onChange={v => setPurchasedAt(v)} className="einp" clearable={false} /></Field>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <Field label="계정과목">
-            <select value={category} onChange={e => setCategory(e.target.value)} className="einp">
-              {meta?.categories.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </Field>
-          <Field label="결제수단">
-            <select value={payment} onChange={e => setPayment(e.target.value)} className="einp">
-              {meta?.payment_methods.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </Field>
-          {isCard ? (
-            /* ── 카드 결제 — 카드만 고르면 끝 (이체·입금계좌 개념 없음) ── */
-            <Field label="사용 카드">
-              <select value={withdrawAcc} onChange={e => setWithdrawAcc(e.target.value)}
-                className="inp w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl">
-                <option value="">선택 안 함</option>
-                {withdrawAcc && !(meta?.cards ?? []).some(c => c.account === withdrawAcc) && <option value={withdrawAcc}>{withdrawAcc}</option>}
-                {(meta?.cards ?? []).map(c => <option key={c.account} value={c.account}>{c.account}{c.memo ? ` — ${c.memo}` : ''}</option>)}
-              </select>
-              {(meta?.cards ?? []).length === 0 && (
-                <p className="text-[10px] text-gray-400 mt-0.5">카드 목록이 비어 있어요 — ADMIN이 설정 → 지출 계좌 관리에서 추가합니다</p>
-              )}
-            </Field>
-          ) : payment === '계좌이체' ? (
-            <>
-              <Field label="출금 통장 (돈 나가는 시설 계좌)">
-                <select value={withdrawAcc} onChange={e => setWithdrawAcc(e.target.value)}
-                  className="inp w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl">
-                  <option value="">선택 안 함</option>
-                  {withdrawAcc && !(meta?.withdraw_accounts ?? []).some(c => c.account === withdrawAcc) && <option value={withdrawAcc}>{withdrawAcc}</option>}
-                  {(meta?.withdraw_accounts ?? []).map(c => <option key={c.account} value={c.account}>{c.account}{c.memo ? ` — ${c.memo}` : ''}</option>)}
-                </select>
-                {(meta?.withdraw_accounts ?? []).length === 0 && (
-                  <p className="text-[10px] text-gray-400 mt-0.5">시설 계좌는 ADMIN이 설정에서 추가합니다</p>
-                )}
-              </Field>
-              <Field label="입금 통장 (거래처가 받을 계좌)">
-                <input value={depositAcc} onChange={e => setDepositAcc(e.target.value)} list="exp-dep"
-                  placeholder="직접 입력 — 예: 국민 123-**-4567 (○○상사)"
-                  className="inp w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl" />
-                <datalist id="exp-dep">{(meta?.deposit_accounts ?? []).map(c => <option key={c.account} value={c.account}>{c.memo ?? ''}</option>)}</datalist>
-                {depositAcc.trim() && !(meta?.deposit_accounts ?? []).some(c => c.account === depositAcc.trim()) && (
-                  <label className="flex items-center gap-1.5 mt-1 text-[11px] text-gray-500 cursor-pointer">
-                    <input type="checkbox" checked={saveDeposit} onChange={e => setSaveDeposit(e.target.checked)} className="w-3.5 h-3.5 accent-teal-600" />
-                    이 계좌를 자주 쓰는 통장에 추가
-                  </label>
-                )}
-              </Field>
-            </>
-          ) : null}
-
+          <Field label="필요일자"><DateField value={neededAt} onChange={v => setNeededAt(v)} className="einp" clearable={false} /></Field>
         </div>
         <Field label="거래처 (선택)"><input value={vendor} onChange={e => setVendor(e.target.value)} placeholder="예: OO마트" className="einp" /></Field>
-        <Field label="메모 (선택)"><textarea value={memo} onChange={e => setMemo(e.target.value)} rows={2} className="einp resize-none" /></Field>
+        {/* 구입처 링크를 붙여넣으면 상세에서 바로 눌러 열 수 있다 */}
+        <Field label="메모 / 링크 (선택)">
+          <textarea value={memo} onChange={e => setMemo(e.target.value)} rows={2} className="einp resize-none"
+            placeholder="구입 링크를 붙여넣으면 상세에서 바로 열립니다 — 예: https://..." />
+        </Field>
 
         {/* 기존 첨부 */}
         {existing.length > 0 && (
@@ -391,11 +355,109 @@ function ExpenseFormModal({ meta, editing, onClose, onSaved }:
       <ModalFooter>
         <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-gray-500 hover:bg-gray-100 rounded-lg">취소</button>
         <button onClick={submit} disabled={saving} className="px-4 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg disabled:opacity-50 inline-flex items-center gap-1.5">
-          {saving && <Loader2 className="w-4 h-4 animate-spin" />}{isEdit ? '수정' : '등록'}
+          {saving && <Loader2 className="w-4 h-4 animate-spin" />}{isEdit ? '수정' : '요청'}
         </button>
       </ModalFooter>
     </Modal>
   )
+}
+
+/* ── 계좌이체 요청 등록/수정 모달 ── */
+function TransferFormModal({ editing, onClose, onSaved }:
+  { editing: ExpenseRequest | null; onClose: () => void; onSaved: () => void }) {
+  const isEdit = !!editing
+  const dep = parseDeposit(editing?.deposit_account)
+  const [title, setTitle] = useState(editing?.title ?? '')
+  const [amount, setAmount] = useState<string>(editing ? String(editing.amount) : '')
+  const [dueAt, setDueAt] = useState(editing?.purchased_at ?? '')
+  // 기한 없는 이체가 흔해서 '없음'을 체크로 남긴다 (수정 시 저장된 기한이 없으면 없음으로 본다)
+  const [noDue, setNoDue] = useState(isEdit && !editing?.purchased_at)
+  const [withdrawAcc, setWithdrawAcc] = useState(editing?.withdraw_account ?? '')
+  const [bank, setBank] = useState(dep.bank)
+  const [accountNo, setAccountNo] = useState(dep.number)
+  const [holder, setHolder] = useState(dep.holder)
+  const [memo, setMemo] = useState(editing?.memo ?? '')
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+
+  const amountNum = Number(amount.replace(/[^0-9]/g, '')) || 0
+
+  const submit = async () => {
+    if (!title.trim()) { setErr('품목/제목을 입력해주세요.'); return }
+    if (amountNum <= 0) { setErr('금액을 입력해주세요.'); return }
+    if (!noDue && !dueAt) { setErr("기한일을 입력하거나 '없음'을 체크해주세요."); return }
+    if (!withdrawAcc) { setErr('출금할 통장을 선택해주세요.'); return }
+    if (!bank.trim() || !accountNo.trim() || !holder.trim()) { setErr('입금 통장(은행·계좌번호·예금주)을 입력해주세요.'); return }
+    setSaving(true); setErr('')
+    try {
+      const fd = new FormData()
+      fd.append('title', title.trim())
+      fd.append('amount', String(amountNum))
+      fd.append('payment_method', TRANSFER_METHOD)
+      fd.append('purchased_at', noDue ? '' : dueAt)
+      fd.append('withdraw_account', withdrawAcc)
+      fd.append('deposit_account', formatDeposit(bank, accountNo, holder))
+      fd.append('memo', memo)
+      if (isEdit) await expenseAPI.update(editing!.id, fd)
+      else await expenseAPI.create(fd)
+      onSaved()
+    } catch (e: any) { setErr(e?.message ?? '저장 실패') } finally { setSaving(false) }
+  }
+
+  return (
+    <Modal title={isEdit ? '계좌이체 요청 수정' : '계좌이체 요청'} onClose={onClose}>
+      <div className="space-y-3">
+        <Field label="품목 / 제목 *"><input value={title} onChange={e => setTitle(e.target.value)} placeholder="예: 12월 세탁용역비" className="einp" autoFocus /></Field>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="금액(원) *">
+            <input inputMode="numeric" value={amount ? new Intl.NumberFormat('ko-KR').format(amountNum) : ''}
+              onChange={e => setAmount(e.target.value)} placeholder="0" className="einp text-right font-bold" />
+          </Field>
+          <Field label="기한일">
+            <DateField value={noDue ? '' : dueAt} onChange={v => setDueAt(v)} className="einp" disabled={noDue} />
+            <label className="flex items-center gap-1.5 mt-1 text-[11px] text-gray-500 cursor-pointer">
+              <input type="checkbox" checked={noDue} onChange={e => setNoDue(e.target.checked)} className="w-3.5 h-3.5 accent-sky-600" />
+              없음
+            </label>
+          </Field>
+        </div>
+        <Field label="출금할 통장 *">
+          <select value={withdrawAcc} onChange={e => setWithdrawAcc(e.target.value)} className="einp">
+            <option value="">선택</option>
+            {/* 예전 요청이 다른 통장으로 저장돼 있으면 그 값도 남겨 둔다 */}
+            {withdrawAcc && !WITHDRAW_ACCOUNTS.some(a => a.name === withdrawAcc) && <option value={withdrawAcc}>{withdrawAcc}</option>}
+            {WITHDRAW_ACCOUNTS.map(a => <option key={a.name} value={a.name}>{a.name}({a.no})</option>)}
+          </select>
+        </Field>
+        <div>
+          <label className="text-xs font-semibold text-gray-500 mb-1 block">입금 통장 *</label>
+          <div className="grid grid-cols-3 gap-2">
+            <input value={bank} onChange={e => setBank(e.target.value)} placeholder="은행" className="einp" />
+            <input value={accountNo} onChange={e => setAccountNo(e.target.value)} placeholder="계좌번호" className="einp col-span-2" />
+          </div>
+          <input value={holder} onChange={e => setHolder(e.target.value)} placeholder="예금주" className="einp mt-2" />
+        </div>
+        <Field label="메모 (선택)">
+          <textarea value={memo} onChange={e => setMemo(e.target.value)} rows={2} className="einp resize-none"
+            placeholder="예: 12월분 정산, 세금계산서 발행 요청" />
+        </Field>
+        {err && <p className="text-xs text-rose-500 flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5" />{err}</p>}
+      </div>
+      <ModalFooter>
+        <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-gray-500 hover:bg-gray-100 rounded-lg">취소</button>
+        <button onClick={submit} disabled={saving} className="px-4 py-2 text-sm font-semibold text-white bg-sky-600 hover:bg-sky-700 rounded-lg disabled:opacity-50 inline-flex items-center gap-1.5">
+          {saving && <Loader2 className="w-4 h-4 animate-spin" />}{isEdit ? '수정' : '요청'}
+        </button>
+      </ModalFooter>
+    </Modal>
+  )
+}
+
+/* 입금 통장은 백엔드에 한 줄로 저장돼 '은행 계좌번호 (예금주)' 서식을 그대로 쓴다 */
+const formatDeposit = (bank: string, no: string, holder: string) => `${bank.trim()} ${no.trim()} (${holder.trim()})`
+const parseDeposit = (s?: string | null) => {
+  const m = /^\s*(\S+)\s+(\S+)\s*(?:\((.*)\))?\s*$/.exec(s ?? '')
+  return { bank: m?.[1] ?? (s ?? ''), number: m?.[2] ?? '', holder: m?.[3] ?? '' }
 }
 
 /* ── 상세 모달 ── */
@@ -426,14 +488,20 @@ function DetailModal({ r, onClose, onChanged, onEdit }:
         </div>
         <p className="text-base font-bold text-gray-900">{r.title}</p>
         <div className="grid grid-cols-2 gap-y-1.5 gap-x-3 text-sm">
-          <Info label="계정과목" value={r.category} />
-          <Info label="결제수단" value={r.payment_method ?? '-'} />
-          <Info label="거래처" value={r.vendor ?? '-'} />
-          <Info label="구매일" value={r.purchased_at ?? '-'} />
+          {isTransfer(r) ? (
+            <Info label="기한일" value={r.purchased_at ?? '없음'} />
+          ) : (
+            <>
+              <Info label="거래처" value={r.vendor ?? '-'} />
+              <Info label="필요일자" value={r.purchased_at ?? '-'} />
+            </>
+          )}
           <Info label="작성자" value={r.requester_name ?? '-'} />
           <Info label="등록" value={fmtDate(r.created_at)} />
         </div>
-        {r.memo && <p className="text-sm text-gray-500 bg-gray-50 rounded-lg p-2.5 whitespace-pre-wrap">{r.memo}</p>}
+        {r.memo && (
+          <p className="text-sm text-gray-500 bg-gray-50 rounded-lg p-2.5 whitespace-pre-wrap"><Linkify text={r.memo} /></p>
+        )}
 
         {(r.withdraw_account || r.deposit_account) && (
           <div className="bg-gray-50 rounded-lg p-2.5 text-xs text-gray-600 space-y-0.5">
@@ -530,6 +598,19 @@ function DetailModal({ r, onClose, onChanged, onEdit }:
         )}
       </ModalFooter>
     </Modal>
+  )
+}
+
+/* 메모에 적힌 구입 링크는 눈에 띄게(파란색) 보여주고 눌러서 바로 열리게 한다 */
+function Linkify({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/(https?:\/\/\S+)/g).map((part, i) => (
+        /^https?:\/\//.test(part)
+          ? <a key={i} href={part} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-700 underline break-all">{part}</a>
+          : <span key={i}>{part}</span>
+      ))}
+    </>
   )
 }
 
