@@ -24,6 +24,7 @@ import SuspiciousIPPage from './pages/analytics/SuspiciousIPPage'
 import EvalChecklistPage    from './pages/eval/EvalChecklistPage'
 import EvalCalendarPage     from './pages/eval/EvalCalendarPage'
 import EvalResidentsPage    from './pages/eval/EvalResidentsPage'
+import TherapyGroupPage     from './pages/eval/TherapyGroupPage'
 import EvalStaffPage        from './pages/eval/EvalStaffPage'
 import StaffingSimulatorPage from './pages/admin/StaffingSimulatorPage'
 import WorkSchedulePage from './pages/eval/WorkSchedulePage'
@@ -374,6 +375,7 @@ function App() {
             {/* 사회복지사 + ADMIN — 수급자/직원 관리 */}
             <Route path="eval/blog-ai-writer" element={<ExtOr menu="/eval/blog-ai-writer" otherwise={BlogWriterRoute}><BlogAiWriterPage /></ExtOr>} />
             <Route path="eval/residents" element={<ResidentCareRoute><EvalResidentsPage /></ResidentCareRoute>} />
+            <Route path="therapy-groups" element={<ResidentCareRoute><TherapyGroupPage /></ResidentCareRoute>} />
             <Route path="eval/residents/:id" element={<ResidentCareRoute><ResidentDetailPage /></ResidentCareRoute>} />
             <Route path="eval/staff"     element={<StaffAdminRoute><EvalStaffPage /></StaffAdminRoute>} />
             <Route path="eval/staff/:id" element={<StaffAdminRoute><StaffDetailPage /></StaffAdminRoute>} />

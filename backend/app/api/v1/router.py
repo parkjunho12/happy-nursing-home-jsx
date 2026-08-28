@@ -17,6 +17,7 @@ from app.api.v1.endpoints.expense import router as expense_router
 from app.api.v1.endpoints.admin_routines import router as admin_routines_router
 from app.api.v1.endpoints.server_health import router as server_health_router
 from app.api.v1.endpoints.broadcast import router as broadcast_router
+from app.api.v1.endpoints.therapy import router as therapy_router
 from app.api.v1.endpoints.broadcast_agent import router as broadcast_agent_router
 from app.api.v1.endpoints.albums import admin_router as album_admin_router, family_router as album_family_router
 from app.api.v1.endpoints.facility_news import admin_router as news_admin_router, family_router as news_family_router
@@ -140,6 +141,7 @@ api_router.include_router(expense_router, prefix="/admin/expense", tags=["admin-
 api_router.include_router(admin_routines_router, prefix="/admin/routines", tags=["admin-routines"])
 api_router.include_router(server_health_router, prefix="/admin/server-health", tags=["admin-server-health"])
 api_router.include_router(broadcast_router, prefix="/admin/broadcast", tags=["admin-broadcast"])
+api_router.include_router(therapy_router, prefix="/admin/therapy", tags=["admin-therapy"])
 api_router.include_router(broadcast_agent_router, prefix="/broadcast-agent", tags=["broadcast-agent"])
 api_router.include_router(news_admin_router,  prefix="/admin",  tags=["admin-news"])
 api_router.include_router(news_family_router, prefix="/family", tags=["family-news"])
