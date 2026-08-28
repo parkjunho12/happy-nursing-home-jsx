@@ -33,8 +33,14 @@ const STATUS_TABS: ({ v: '' | ExpenseStatus; label: string })[] = [
 /* 계좌이체 요청은 결제수단으로 구분한다 — 물건구입 요청은 결제수단을 쓰지 않는다 */
 const TRANSFER_METHOD = '계좌이체'
 const isTransfer = (r: ExpenseRequest) => r.payment_method === TRANSFER_METHOD
-/* 이체 출금 통장은 시설에서 쓰는 세 통장으로 고정 */
-const WITHDRAW_ACCOUNTS = ['통합통장', '기타비용', '직원통장']
+/* 이체 출금 통장은 시설에서 쓰는 통장으로 고정 — 이름만 저장하고 뒷번호는 고를 때 헷갈리지 않게 같이 보여준다 */
+const WITHDRAW_ACCOUNTS = [
+  { name: '통합통장', no: '964659' },
+  { name: '기타비용', no: '967210' },
+  { name: '직원통장', no: '967232' },
+  { name: '보조금통장', no: '964728' },
+  { name: '후원금통장', no: '964712' },
+]
 
 export default function ExpensePage() {
   const [meta, setMeta] = useState<ExpenseMeta | null>(null)
@@ -370,6 +376,7 @@ function TransferFormModal({ editing, onClose, onSaved }:
   const [bank, setBank] = useState(dep.bank)
   const [accountNo, setAccountNo] = useState(dep.number)
   const [holder, setHolder] = useState(dep.holder)
+  const [memo, setMemo] = useState(editing?.memo ?? '')
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
 
@@ -390,6 +397,7 @@ function TransferFormModal({ editing, onClose, onSaved }:
       fd.append('purchased_at', noDue ? '' : dueAt)
       fd.append('withdraw_account', withdrawAcc)
       fd.append('deposit_account', formatDeposit(bank, accountNo, holder))
+      fd.append('memo', memo)
       if (isEdit) await expenseAPI.update(editing!.id, fd)
       else await expenseAPI.create(fd)
       onSaved()
@@ -417,8 +425,8 @@ function TransferFormModal({ editing, onClose, onSaved }:
           <select value={withdrawAcc} onChange={e => setWithdrawAcc(e.target.value)} className="einp">
             <option value="">선택</option>
             {/* 예전 요청이 다른 통장으로 저장돼 있으면 그 값도 남겨 둔다 */}
-            {withdrawAcc && !WITHDRAW_ACCOUNTS.includes(withdrawAcc) && <option value={withdrawAcc}>{withdrawAcc}</option>}
-            {WITHDRAW_ACCOUNTS.map(a => <option key={a} value={a}>{a}</option>)}
+            {withdrawAcc && !WITHDRAW_ACCOUNTS.some(a => a.name === withdrawAcc) && <option value={withdrawAcc}>{withdrawAcc}</option>}
+            {WITHDRAW_ACCOUNTS.map(a => <option key={a.name} value={a.name}>{a.name}({a.no})</option>)}
           </select>
         </Field>
         <div>
@@ -429,6 +437,10 @@ function TransferFormModal({ editing, onClose, onSaved }:
           </div>
           <input value={holder} onChange={e => setHolder(e.target.value)} placeholder="예금주" className="einp mt-2" />
         </div>
+        <Field label="메모 (선택)">
+          <textarea value={memo} onChange={e => setMemo(e.target.value)} rows={2} className="einp resize-none"
+            placeholder="예: 12월분 정산, 세금계산서 발행 요청" />
+        </Field>
         {err && <p className="text-xs text-rose-500 flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5" />{err}</p>}
       </div>
       <ModalFooter>
