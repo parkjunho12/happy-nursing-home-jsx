@@ -851,6 +851,18 @@ SUMMARY>>>
             return None
         repo = self.cfg.repo_dir
         run(["git", "fetch", "origin", base, dep], cwd=repo, timeout=GIT_TIMEOUT)
+
+        # 먼저 '내용' 이 같은지 본다. 커밋 개수로 세면 안 된다.
+        #
+        # GitHub 이 squash 로 병합하면(저장소 설정에 따라 --merge 를 줘도 그렇게
+        # 된다) 같은 내용이 다른 커밋으로 들어간다. 그러면 커밋 기준으로는
+        # 영원히 '1건 대기' 로 남아, 이미 올라간 것을 또 올리라고 조른다.
+        # 실제로 그렇게 갈라진 적이 있다.
+        code, _, _ = run(["git", "diff", "--quiet",
+                          f"origin/{dep}", f"origin/{base}"], cwd=repo, timeout=GIT_TIMEOUT)
+        if code == 0:
+            return {"from": base, "to": dep, "count": 0, "commits": [], "same": True}
+
         code, so, _ = run(["git", "log", "--no-merges", "--format=%h\x1f%s",
                            f"origin/{dep}..origin/{base}"], cwd=repo, timeout=GIT_TIMEOUT)
         if code != 0:
@@ -884,7 +896,8 @@ SUMMARY>>>
             raise AgentError(f"fetch 실패: {err[:300]}")
 
         pending = self.count_pending(svc) or {"count": 0, "commits": []}
-        if pending["count"] == 0:
+        # 내용이 같으면 올릴 것이 없다. 커밋이 갈라져 있어도 마찬가지다.
+        if pending.get("same") or pending["count"] == 0:
             # 올릴 게 없다. 성공으로 끝내되 사실대로 적는다.
             self.say("운영에 이미 최신입니다 — 올릴 변경이 없습니다.",
                      step="이미 최신", progress=100)
@@ -918,7 +931,14 @@ SUMMARY>>>
         if code != 0:
             raise AgentError(f"병합 실패 — PR 은 열려 있습니다: {err[:300]}\n{url}")
 
-        run(["git", "fetch", "origin", dep], cwd=repo, timeout=GIT_TIMEOUT)
+        run(["git", "fetch", "origin", base, dep], cwd=repo, timeout=GIT_TIMEOUT)
+        # squash 로 들어갔으면 두 브랜치의 커밋이 갈라진다. 내용 기준으로 보면
+        # 문제가 없지만, 왜 이력이 다른지 나중에 헷갈리므로 적어 둔다.
+        c2, _, _ = run(["git", "diff", "--quiet", f"origin/{dep}", f"origin/{base}"],
+                       cwd=repo, timeout=GIT_TIMEOUT)
+        if c2 != 0:
+            self.say("병합 뒤에도 두 브랜치 내용이 다릅니다 — 확인이 필요합니다",
+                     level="warn")
         self.say("병합했습니다 — 배포 워크플로가 이어서 운영에 반영합니다",
                  step="배포 진행 중", progress=100)
         return {"pr_url": url, "already": False, "count": pending["count"]}
