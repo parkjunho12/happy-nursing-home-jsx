@@ -22,12 +22,30 @@ if [ -z "$ANTHROPIC_API_KEY" ] && [ ! -d "$HOME/.claude" ]; then
 fi
 
 # ── 저장소 ──
+#
+# 주소에 자격증명이 박혀 있으면(https://토큰@github.com/...) 떼어낸다.
+#
+# git 은 원격 URL 에 박힌 것을 credential.helper 보다 먼저 쓴다. 그래서
+# 예전에 넣어둔 토큰이 주소에 남아 있으면, GH_TOKEN 을 아무리 새로 바꿔도
+# 옛 토큰으로 밀다가 403 으로 막힌다. 무엇을 고쳐도 증상이 그대로다.
+#
+# 인증은 gh(=GH_TOKEN) 한 곳에서만 하게 하고, 주소는 깨끗하게 둔다.
+# 로그에도 깨끗한 주소만 남는다 — 토큰이 배포 기록에 찍히면 그것도 유출이다.
+CLEAN_URL=$(printf '%s' "$AI_EDITOR_REPO_URL" | sed -E 's#^(https?://)[^/@]+@#\1#')
+if [ "$CLEAN_URL" != "$AI_EDITOR_REPO_URL" ]; then
+  say "⚠ 저장소 주소에 자격증명이 박혀 있어 떼어냈습니다."
+  say "  infra/.env 의 AI_EDITOR_REPO_URL 에서도 지워주세요 — 토큰은 GH_TOKEN 한 곳에만."
+fi
+
 if [ ! -d "$REPO_DIR/.git" ]; then
-  say "저장소를 처음 가져옵니다 — $AI_EDITOR_REPO_URL"
-  git clone --no-single-branch "$AI_EDITOR_REPO_URL" "$REPO_DIR"
+  say "저장소를 처음 가져옵니다 — $CLEAN_URL"
+  git clone --no-single-branch "$CLEAN_URL" "$REPO_DIR"
 else
-  say "저장소 최신화"
-  git -C "$REPO_DIR" remote set-url origin "$AI_EDITOR_REPO_URL" || true
+  say "저장소 최신화 — $CLEAN_URL"
+  git -C "$REPO_DIR" remote set-url origin "$CLEAN_URL" || true
+  # 예전 클론이 남긴 자격증명도 걷어낸다. /repo 는 볼륨이라 컨테이너를
+  # 다시 만들어도 그대로 남아 있다.
+  git -C "$REPO_DIR" config --unset-all http.https://github.com/.extraheader 2>/dev/null || true
   git -C "$REPO_DIR" fetch --prune origin || say "⚠ fetch 실패 — 캐시로 진행"
 fi
 # 클론 직후 작업본이 비어 있을 수 있다(원격의 기본 브랜치가 다른 경우).
@@ -67,10 +85,11 @@ if [ -n "$GH_TOKEN" ]; then
     # 인증이 됐다고 밀 수 있는 것이 아니다. 권한이 모자란 토큰은 로그인은
     # 되고 push 에서만 403 으로 막힌다. 그걸 작업 끝에서 알면 Claude 를
     # 돌리고 검증까지 마친 시간이 통째로 버려진다. 여기서 미리 말한다.
-    slug=$(printf '%s' "$AI_EDITOR_REPO_URL" \
+    slug=$(printf '%s' "$CLEAN_URL" \
              | sed -E 's#^.*github\.com[:/]+##; s#\.git$##; s#/$##')
     scopes=$(gh api -i user 2>/dev/null \
                | sed -n 's/^[Xx]-[Oo][Aa]uth-[Ss]copes: *//p' | tr -d '\r' | head -1)
+    say "원격 주소: $(git -C "$REPO_DIR" remote get-url origin 2>/dev/null | sed -E 's#(https?://)[^/@]+@#\1<가림>@#')"
     say "저장소 $slug · 토큰 권한: ${scopes:-(fine-grained 토큰이거나 표시되지 않음)}"
 
     # 실제로 미는 길을 그대로 두드려본다.
