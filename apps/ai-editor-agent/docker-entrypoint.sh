@@ -92,6 +92,14 @@ if [ -n "$GH_TOKEN" ]; then
     say "원격 주소: $(git -C "$REPO_DIR" remote get-url origin 2>/dev/null | sed -E 's#(https?://)[^/@]+@#\1<가림>@#')"
     say "저장소 $slug · 토큰 권한: ${scopes:-(fine-grained 토큰이거나 표시되지 않음)}"
 
+    # 어떤 토큰인지 정확히 밝힌다. 앞부분만 본다 — 종류를 가르는 접두사다.
+    #   ghp_ classic / github_pat_ fine-grained / gho_ OAuth / ghs_ 앱 설치
+    # 누구로 인증되는지, 그 저장소가 그 토큰에 보이는지까지 확인한다.
+    say "토큰 종류: $(printf '%s' "${GH_TOKEN:-}" | cut -c1-11)…  (길이 ${#GH_TOKEN})"
+    say "인증된 사용자: $(gh api user --jq '.login' 2>/dev/null || echo '(못 읽음)')"
+    vis=$(gh api "repos/$slug" --jq '.visibility + " / 아카이브=" + (.archived|tostring)' 2>/dev/null || echo "(못 읽음)")
+    say "저장소 상태: $vis"
+
     # 실제로 미는 길을 그대로 두드려본다.
     #
     # 처음에는 gh api repos/<slug> 의 permissions.push 를 봤는데 그건
