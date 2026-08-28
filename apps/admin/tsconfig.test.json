@@ -19,6 +19,7 @@
     "src/utils/gender.ts",
     "src/utils/residentForm.ts",
     "src/utils/aiEditorDeploy.ts",
+    "src/utils/floorFilter.ts",
     "tests/**/*.ts"
   ]
 }
