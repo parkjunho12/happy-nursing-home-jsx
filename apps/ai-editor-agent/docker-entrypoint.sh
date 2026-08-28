@@ -69,10 +69,21 @@ if [ -n "$GH_TOKEN" ]; then
     # 돌리고 검증까지 마친 시간이 통째로 버려진다. 여기서 미리 말한다.
     slug=$(printf '%s' "$AI_EDITOR_REPO_URL" \
              | sed -E 's#^.*github\.com[:/]+##; s#\.git$##; s#/$##')
-    scopes=$(gh auth status 2>&1 | sed -n 's/.*Token scopes: *//p' | head -1)
-    push_ok=$(gh api "repos/$slug" --jq '.permissions.push' 2>/dev/null || echo "")
-    say "저장소 $slug · 토큰 권한: ${scopes:-(표시 안 됨)}"
-    if [ "$push_ok" = "true" ]; then
+    scopes=$(gh api -i user 2>/dev/null \
+               | sed -n 's/^[Xx]-[Oo][Aa]uth-[Ss]copes: *//p' | tr -d '\r' | head -1)
+    say "저장소 $slug · 토큰 권한: ${scopes:-(fine-grained 토큰이거나 표시되지 않음)}"
+
+    # 실제로 미는 길을 그대로 두드려본다.
+    #
+    # 처음에는 gh api repos/<slug> 의 permissions.push 를 봤는데 그건
+    # '토큰' 이 아니라 '계정' 의 권한이라, 저장소 주인이면 권한이 모자란
+    # 토큰으로도 true 가 나온다. 실제로 그래서 '쓰기 권한 확인됨' 을 찍어놓고
+    # 정작 push 는 403 으로 막혔다.
+    #
+    # --dry-run 은 서버에 receive-pack 을 요청해 권한까지 확인하지만
+    # 브랜치를 만들지는 않는다(확인함).
+    if git -C "$REPO_DIR" push --dry-run origin \
+         "HEAD:refs/heads/ai/__permcheck__" >/dev/null 2>&1; then
       say "쓰기 권한 확인됨 — 브랜치를 밀 수 있습니다"
     else
       say "❌ 이 토큰으로는 $slug 에 밀 수 없습니다 (push 권한 없음)."
