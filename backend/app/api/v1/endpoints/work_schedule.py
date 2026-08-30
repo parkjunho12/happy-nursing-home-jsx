@@ -16,6 +16,7 @@ from app.models.eval import LtcStaffMember
 from app.services.staff_notify import notify_all_staff
 from app.models.staffing import HolidayCalendar
 from app.schemas.response import ApiResponse
+from app.services import shift_hours as _shift_hours_mod
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -126,6 +127,8 @@ class ScheduleBody(BaseModel):
 class ConfigBody(BaseModel):
     settle_start: Optional[str] = None
     rotation_anchor: Optional[str] = None
+    # {'N': 10, …} — 비운 코드는 기본값으로 되돌아간다
+    code_hours: Optional[Dict[str, float]] = None
 
 
 def _config_row(db: Session) -> WorkScheduleConfig:
@@ -187,6 +190,10 @@ def get_config(db: Session = Depends(get_db), _: User = Depends(_manager)):
     return ApiResponse(success=True, data={
         "settle_start": row.settle_start or "2026-07",
         "rotation_anchor": row.rotation_anchor or "2026-08-01",
+        # 코드별 시간 — 비어 있으면 화면이 기본값을 쓴다
+        "code_hours": row.code_hours or {},
+        # 무엇을 고칠 수 있는지 화면이 알아야 목록을 그린다
+        "code_hours_default": dict(_shift_hours_mod.CODE_HOURS),
     })
 
 
@@ -199,9 +206,28 @@ def save_config(body: ConfigBody, db: Session = Depends(get_db), current_user: U
     row = _config_row(db)
     if body.settle_start is not None: row.settle_start = body.settle_start or None
     if body.rotation_anchor is not None: row.rotation_anchor = body.rotation_anchor or None
+    if body.code_hours is not None:
+        # 아는 코드만, 말이 되는 범위만 받는다. 근무표는 급여로 이어지므로
+        # 오타 하나가 한 달치 계산을 바꾼다.
+        clean = {}
+        for k, v in body.code_hours.items():
+            if k not in _shift_hours_mod.CODE_HOURS:
+                raise HTTPException(400, f"알 수 없는 근무 코드입니다: {k}")
+            try:
+                fv = float(v)
+            except (TypeError, ValueError):
+                raise HTTPException(400, f"{k} 시간이 숫자가 아닙니다.")
+            if not (0 <= fv <= 24):
+                raise HTTPException(400, f"{k} 시간은 0~24 사이여야 합니다.")
+            # 기본값과 같으면 담아둘 이유가 없다 — 나중에 기본값을 고치면
+            # 굳어 있던 값이 발목을 잡는다
+            if abs(fv - _shift_hours_mod.CODE_HOURS[k]) > 1e-9:
+                clean[k] = fv
+        row.code_hours = clean or None
     row.updated_by = getattr(current_user, "name", None)
     db.commit(); db.refresh(row)
     return ApiResponse(success=True, data={
+        "code_hours": row.code_hours or {},
         "settle_start": row.settle_start, "rotation_anchor": row.rotation_anchor,
     })
 
@@ -229,6 +255,10 @@ def export_schedule(month: str = Query(...), db: Session = Depends(get_db), _: U
     from openpyxl.utils import get_column_letter
 
     from app.services import shift_hours as _shift_hours
+
+    # 코드별 시간 설정 — 화면과 같은 값으로 계산해야 한다.
+    # 설정을 안 읽으면 야간을 10시간으로 바꿔둬도 엑셀만 9시간으로 센다.
+    _code_hours = (_config_row(db).code_hours or {})
 
     y, m = int(month[:4]), int(month[5:7])
     total = _cal.monthrange(y, m)[1]
@@ -364,7 +394,7 @@ def export_schedule(month: str = Query(...), db: Session = Depends(get_db), _: U
         # 확인한다(backend/tests/test_shift_hours.py).
         tv_raw = row.get("total")
         if not isinstance(tv_raw, (int, float)):
-            tv_raw = _shift_hours.month_total(codes, range(1, total + 1))
+            tv_raw = _shift_hours.month_total(codes, range(1, total + 1), _code_hours)
         tc2 = ws.cell(row=r_i, column=TOTAL_C,
                       value=(float(tv_raw) if isinstance(tv_raw, (int, float)) else None))
         tc2.font = F()

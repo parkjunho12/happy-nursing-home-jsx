@@ -91,9 +91,21 @@ export const workScheduleAPI = {
   mine: (month: string) =>
     apiClient.get(`${BASE}/mine`, { params: { month } }).then(unwrap<MySchedule>),
   /** 전역 설정 — 정산 시작월·회전 기준일 */
-  config: () => apiClient.get(`${BASE}/config`).then(unwrap<{ settle_start: string; rotation_anchor: string }>),
-  saveConfig: (b: { settle_start?: string; rotation_anchor?: string }) =>
-    apiClient.put(`${BASE}/config`, b).then(unwrap<{ settle_start: string; rotation_anchor: string }>),
+  config: () => apiClient.get(`${BASE}/config`).then(unwrap<{
+    settle_start: string; rotation_anchor: string
+    /** 설정에서 고친 코드별 시간 — 비어 있으면 기본값 */
+    code_hours?: Record<string, number>
+    /** 고칠 수 있는 코드와 기본값 */
+    code_hours_default?: Record<string, number>
+  }>),
+  saveConfig: (b: {
+    settle_start?: string; rotation_anchor?: string
+    /** {'N': 10} — 기본값과 같은 값은 서버가 알아서 지운다 */
+    code_hours?: Record<string, number>
+  }) => apiClient.put(`${BASE}/config`, b).then(unwrap<{
+    settle_start: string; rotation_anchor: string
+    code_hours?: Record<string, number>
+  }>),
   versions: (month: string) =>
     apiClient.get(`${BASE}/versions`, { params: { month } }).then(unwrap<ScheduleVersion[]>),
   version: (id: string) =>

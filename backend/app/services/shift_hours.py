@@ -60,10 +60,29 @@ def break_minutes(span_minutes: int) -> int:
     return 0
 
 
-def hours_of(raw: Optional[str]) -> float:
+def resolve_hours(overrides: Optional[Dict[str, float]] = None) -> Dict[str, float]:
+    """설정에서 고친 값을 기본값 위에 얹는다.
+
+    설정에 없는 코드는 기본값 그대로. 모르는 코드가 들어와도 무시한다 —
+    설정이 잘못됐다고 계산이 멈추면 그게 더 나쁘다.
+    """
+    table = dict(CODE_HOURS)
+    for k, v in (overrides or {}).items():
+        if k in table:
+            try:
+                table[k] = float(v)
+            except (TypeError, ValueError):
+                pass
+    return table
+
+
+def hours_of(raw: Optional[str], overrides: Optional[Dict[str, float]] = None) -> float:
     """정규 근무 코드의 시간만. 직접 입력한 시간대는 extra_hours_of 가 센다."""
     v = (raw or "").strip()
-    return float(CODE_HOURS.get(v, 0)) if v else 0.0
+    if not v:
+        return 0.0
+    table = resolve_hours(overrides) if overrides else CODE_HOURS
+    return float(table.get(v, 0))
 
 
 def extra_hours_of(raw: Optional[str]) -> float:
@@ -80,15 +99,17 @@ def extra_hours_of(raw: Optional[str]) -> float:
     return max(0.0, round((mins - break_minutes(mins)) / 60, 1))
 
 
-def month_total(codes: Optional[Dict[str, str]], days: Iterable[int]) -> float:
+def month_total(codes: Optional[Dict[str, str]], days: Iterable[int],
+                overrides: Optional[Dict[str, float]] = None) -> float:
     """한 달 총시간 (정규 + 추가근무). 기준시간과 견줄 때 쓰는 숫자."""
     row = codes or {}
+    table = resolve_hours(overrides)
     hours = 0.0
     extra = 0.0
     for d in days:
-        v = row.get(str(d))
+        v = (row.get(str(d)) or "").strip()
         if not v:
             continue
-        hours += hours_of(v)
+        hours += float(table.get(v, 0))
         extra += extra_hours_of(v)
     return round(round(hours, 1) + round(extra, 1), 1)

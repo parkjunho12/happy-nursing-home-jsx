@@ -5,6 +5,7 @@ import { CODE_MAP, extraHoursOf, splitTimeRange } from '@/utils/shiftCodes'
 import LeaveRequestCard from '@/components/schedule/LeaveRequestCard'
 import PayslipCard from '@/components/schedule/PayslipCard'
 import SwapRequestCard from '@/components/schedule/SwapRequestCard'
+import { useShiftConfig } from '@/store/shiftConfig'
 
 /**
  * 내 근무표 — 선생님들이 휴대폰으로 자기 근무만 확인하는 화면.
@@ -47,6 +48,11 @@ const cellTone = (code?: string): string => {
 }
 
 export default function MySchedulePage() {
+  // 코드별 시간 설정 — 총시간이 이 값으로 계산된다.
+  // loadedHours 를 읽어야 설정이 실린 뒤 화면이 다시 그려진다.
+  const loadShiftCfg = useShiftConfig(st => st.load)
+  const loadedHours = useShiftConfig(st => st.hours)
+  useEffect(() => { loadShiftCfg() }, [loadShiftCfg])
   const [ym, setYm] = useState(thisMonth())
   const [data, setData] = useState<MySchedule | null>(null)
   const [err, setErr] = useState('')
@@ -97,7 +103,7 @@ export default function MySchedulePage() {
       if (c && !CODE_MAP[c]) { next = { day: d, d: describe(c) }; break }
     }
     return { today: t, next }
-  }, [data, isThisMonth, todayDay, y, m])
+  }, [data, isThisMonth, todayDay, y, m, loadedHours])
 
   const Icon = ({ k, size = 22 }: { k: 'day' | 'night' | 'rest'; size?: number }) =>
     k === 'night' ? <Moon size={size} className="text-indigo-500" />

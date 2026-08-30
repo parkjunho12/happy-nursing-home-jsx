@@ -64,5 +64,15 @@ class WorkScheduleConfig(Base):
     id = Column(String, primary_key=True, default=_uuid)
     settle_start = Column(String(7), nullable=True)      # 'YYYY-MM' 정산(이월) 시작월
     rotation_anchor = Column(String(10), nullable=True)  # 'YYYY-MM-DD' 주주야야휴휴 0일차
+    # 근무 코드별 시간 {'N': 10, 'D': 8, …}. 비어 있으면 코드의 기본값을 쓴다.
+    #
+    # 야간을 9시간으로 볼지 10시간으로 볼지는 시설이 정할 일이고, 실제로
+    # 바뀐다. 코드에 박아두면 바꿀 때마다 배포해야 하고, 그동안 급여 계산이
+    # 틀린 채로 돈다.
+    #
+    # 여기 담긴 값은 지난달 총시간까지 함께 바꾼다 — 시점별로 다르게 하려면
+    # 달마다 값을 따로 두어야 하는데, 지금은 그럴 만큼 자주 바뀌지 않는다.
+    # 바꿀 때 화면이 그 사실을 분명히 알린다.
+    code_hours = Column(JSON, nullable=True)
     updated_by = Column(String(100), nullable=True)
     updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)

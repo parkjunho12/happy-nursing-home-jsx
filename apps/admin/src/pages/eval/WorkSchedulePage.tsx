@@ -22,6 +22,7 @@ import { auditSchedule, type Issue } from '@/utils/scheduleAudit'
 import { filterByFloor, countHiddenNoFloor } from '@/utils/floorFilter'
 import { monthTotals } from '@/utils/monthHours'
 import { buildScheduleRows, canSaveRows } from '@/utils/scheduleRows'
+import { useShiftConfig } from '@/store/shiftConfig'
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
 const thisMonth = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
@@ -39,6 +40,11 @@ const todayISO = () => { const d = new Date(); const p = (n: number) => String(n
 
 
 export default function WorkSchedulePage() {
+  // 코드별 시간 설정 — 총시간이 이 값으로 계산된다.
+  // loadedHours 를 읽어야 설정이 실린 뒤 화면이 다시 그려진다.
+  const loadShiftCfg = useShiftConfig(st => st.load)
+  const loadedHours = useShiftConfig(st => st.hours)
+  useEffect(() => { loadShiftCfg() }, [loadShiftCfg])
   const { staffList, residents, loadAll } = useLtcStore()
   const [ym, setYm] = useState(thisMonth())
   const [data, setData] = useState<ScheduleData>({})
@@ -517,7 +523,10 @@ export default function WorkSchedulePage() {
 
   /** 직원별 집계 — 총시간 = Σ 근무시간, 갯수는 D/N 칸 수 */
   // 계산은 utils/monthHours.ts 한곳에 둔다 — 보기 화면·엑셀이 같은 숫자를 써야 한다
-  const calc = (sid: string) => monthTotals(data[sid], days.map(d => d.day))
+  // loadedHours — 코드별 시간 설정이 실리면 총시간을 다시 계산한다
+  const calc = useCallback(
+    (sid: string) => monthTotals(data[sid], days.map(d => d.day)),
+    [data, days, loadedHours])
 
   /** 일별 근무 인원 (특이사항 행) */
   /** 일별 근무 인원 — 요양보호사와 그 외(주간 직종)를 나눠 센다.
