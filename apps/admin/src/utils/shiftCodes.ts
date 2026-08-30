@@ -39,13 +39,52 @@ export const SHIFT_CODES: ShiftCode[] = [
 
 export const CODE_MAP: Record<string, ShiftCode> = Object.fromEntries(SHIFT_CODES.map(c => [c.code, c]))
 
+/**
+ * 설정에서 고친 코드별 시간.
+ *
+ * 야간을 9시간으로 볼지 10시간으로 볼지는 시설이 정할 일이고 실제로 바뀐다.
+ * 코드에 박아두면 바꿀 때마다 배포해야 하고, 그동안 급여 계산이 틀린 채로 돈다.
+ *
+ * hoursOf 를 부르는 곳이 여기저기 흩어져 있어 인자로 넘기지 않는다. 표를
+ * 갈아끼우면 부르는 쪽은 그대로 두어도 된다. 대신 화면이 다시 그려지도록
+ * store/shiftConfig 가 값을 실은 뒤 새로 그리게 한다.
+ *
+ * 백엔드도 같은 설정을 읽는다(app/services/shift_hours.py). 엑셀만 옛 값으로
+ * 세면 화면과 숫자가 갈라진다.
+ */
+let hourOverrides: Record<string, number> = {}
+
+export function setCodeHours(o?: Record<string, number> | null): void {
+  const next: Record<string, number> = {}
+  for (const [k, v] of Object.entries(o ?? {})) {
+    // 아는 코드만, 말이 되는 값만. 설정이 잘못됐다고 계산이 멈추면 그게 더 나쁘다.
+    const n = Number(v)
+    if (CODE_MAP[k] && Number.isFinite(n) && n >= 0 && n <= 24) next[k] = n
+  }
+  hourOverrides = next
+}
+
+/** 지금 쓰이는 코드별 시간 (기본값 + 설정) */
+export function codeHoursNow(): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const c of SHIFT_CODES) out[c.code] = hourOverrides[c.code] ?? c.hours
+  return out
+}
+
+/** 이 코드가 설정으로 바뀌어 있는가 — 화면에서 표시해 준다 */
+export function isCodeHoursOverridden(code: string): boolean {
+  return code in hourOverrides
+}
+
 /** '0850 1600'처럼 직접 적은 시간대인지 */
 const TIME_RE = /^(\d{1,2})[:\s]?(\d{2})\s*[-~\s]\s*(\d{1,2})[:\s]?(\d{2})$/
 
 /** 정규 근무 코드의 시간만 — 직접 입력한 시간대는 별도(extraHoursOf)로 센다 */
 export const hoursOf = (raw?: string | null): number => {
   const v = (raw ?? '').trim()
-  return v ? (CODE_MAP[v]?.hours ?? 0) : 0
+  if (!v) return 0
+  if (v in hourOverrides) return hourOverrides[v]
+  return CODE_MAP[v]?.hours ?? 0
 }
 
 /**

@@ -1,7 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { hoursOf, extraHoursOf, breakMinutes } from '../src/utils/shiftCodes'
+import {
+  hoursOf, extraHoursOf, breakMinutes,
+  setCodeHours, codeHoursNow, isCodeHoursOverridden,
+} from '../src/utils/shiftCodes'
 
 /**
  * 근무시간 규칙이 백엔드와 같은지 확인한다.
@@ -43,5 +46,42 @@ test('직접 적은 시간대 계산이 검증표와 같다', () => {
 test('휴게시간 규칙이 검증표와 같다', () => {
   for (const b of fx.breaks) {
     assert.equal(breakMinutes(b.span), b.brk, `breakMinutes(${b.span})`)
+  }
+})
+
+/**
+ * 설정으로 시간을 바꿨을 때도 양쪽이 같아야 한다.
+ *
+ * 야간을 10시간으로 바꿔두면 화면·엑셀이 모두 10으로 세야 한다. 한쪽만
+ * 옛 값으로 세면 근무표와 급여 대장의 숫자가 다르게 나온다.
+ */
+test('설정으로 바꾼 시간이 계산에 반영된다', () => {
+  setCodeHours({ N: 10 })
+  assert.equal(hoursOf('N'), 10, '바꾼 값이 쓰여야 한다')
+  assert.equal(hoursOf('D'), 8, '안 바꾼 코드는 그대로')
+  assert.equal(codeHoursNow()['N'], 10)
+  assert.equal(isCodeHoursOverridden('N'), true)
+  assert.equal(isCodeHoursOverridden('D'), false)
+
+  setCodeHours({})
+  assert.equal(hoursOf('N'), 9, '되돌리면 기본값')
+  assert.equal(isCodeHoursOverridden('N'), false)
+})
+
+test('말이 안 되는 설정은 무시한다 — 계산이 멈추면 그게 더 나쁘다', () => {
+  for (const bad of [
+    { 없는코드: 8 }, { N: -1 }, { N: 25 }, { N: NaN }, { N: 'abc' as any },
+  ]) {
+    setCodeHours(bad as any)
+    assert.equal(hoursOf('N'), 9, `무시되어야 한다: ${JSON.stringify(bad)}`)
+  }
+  setCodeHours({})
+})
+
+test('설정을 되돌리면 검증표를 다시 통과한다', () => {
+  setCodeHours({ N: 12, D: 3 })
+  setCodeHours({})
+  for (const c of fx.cases) {
+    assert.equal(hoursOf(c.input), c.hours, `hoursOf(${JSON.stringify(c.input)})`)
   }
 })

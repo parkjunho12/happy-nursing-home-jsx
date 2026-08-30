@@ -5,6 +5,7 @@ import { sortScheduleStaff, canJoinTeam } from '@/components/schedule/shared'
 import { filterByFloor, countHiddenNoFloor } from '@/utils/floorFilter'
 import { monthTotals, hourStatus, hourDiff } from '@/utils/monthHours'
 import { useLtcStore } from '@/store/ltc'
+import { useShiftConfig } from '@/store/shiftConfig'
 
 /**
  * 전체 근무표 보기 — 모바일 최적화 읽기 전용 (ADMIN·시설장·대표·이사).
@@ -36,6 +37,11 @@ const NAME_W = 62
 const TOTAL_W = 52
 
 export default function WorkScheduleViewPage() {
+  // 코드별 시간 설정 — 총시간이 이 값으로 계산된다.
+  // loadedHours 를 읽어야 설정이 실린 뒤 화면이 다시 그려진다.
+  const loadShiftCfg = useShiftConfig(st => st.load)
+  const loadedHours = useShiftConfig(st => st.hours)
+  useEffect(() => { loadShiftCfg() }, [loadShiftCfg])
   const now = new Date()
   const [ym, setYm] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
   const [doc, setDoc] = useState<WorkScheduleDoc | null>(null)
@@ -213,7 +219,8 @@ export default function WorkScheduleViewPage() {
     const m = new Map<string, ReturnType<typeof monthTotals>>()
     for (const p of people) m.set(p.id, monthTotals(p.codes, days))
     return m
-  }, [people, days])
+    // loadedHours — 코드별 시간 설정이 실리면 총시간을 다시 계산한다
+  }, [people, days, loadedHours])
 
   const dayColor = (day: number, forText = true) => {
     const iso = `${ym}-${String(day).padStart(2, '0')}`

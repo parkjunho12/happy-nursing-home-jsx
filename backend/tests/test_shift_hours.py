@@ -69,6 +69,18 @@ def check() -> int:
     if abs(sh.month_total({"28": "D", "31": "D"}, feb) - 8) > 1e-9:
         bad.append("2월에 31일을 셌다")
 
+    # 설정으로 바꿨을 때도 화면과 같은 방식으로 동작해야 한다.
+    # (화면 쪽은 apps/admin/tests/shiftHoursMirror.test.ts 가 같은 것을 본다)
+    if abs(sh.hours_of("N", {"N": 10}) - 10) > 1e-9:
+        bad.append("설정으로 바꾼 값이 반영되지 않는다")
+    if abs(sh.hours_of("D", {"N": 10}) - 8) > 1e-9:
+        bad.append("안 바꾼 코드가 함께 바뀐다")
+    for junk in ({"없는코드": 8}, {"N": "abc"}, {"N": None}):
+        if abs(sh.hours_of("N", junk) - 9) > 1e-9:
+            bad.append(f"말이 안 되는 설정을 무시하지 않는다: {junk}")
+    if abs(sh.month_total({"1": "N", "2": "D"}, days, {"N": 10}) - 18) > 1e-9:
+        bad.append("합계에 설정이 반영되지 않는다")
+
     if bad:
         print("❌ 화면과 어긋납니다 — 근무시간 규칙을 한쪽만 고치면 급여 숫자가 갈라집니다.")
         for b in bad:
@@ -77,7 +89,7 @@ def check() -> int:
         print("규칙을 바꿨다면 검증표도 다시 뽑아 양쪽을 맞춰주세요.")
         return 1
 
-    print(f"✅ 화면과 일치 — 입력 {len(fx['cases'])}개 · 휴게 {len(fx['breaks'])}개 · 합계 2건")
+    print(f"✅ 화면과 일치 — 입력 {len(fx['cases'])}개 · 휴게 {len(fx['breaks'])}개 · 합계 2건 · 설정 6건")
     return 0
 
 
