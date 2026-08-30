@@ -25,7 +25,30 @@ export interface StaffRow {
  *  요양보호사(교대조 먼저, 주간 아래). 묶음 안은 입사 빠른 순. */
 export const SCHEDULE_POS_ORDER = ['시설장', '사회복지사', '간호조무사', '간호팀장', '간호사', '물리치료사', '작업치료사', '팀장', '요양팀장', '조리원', '위생원', '사무원', '요양보호사']
 
-export interface SortableStaff { pos: string; team?: string | null; hireDate?: string | null; name: string }
+export interface SortableStaff {
+  pos: string
+  team?: string | null
+  /** 담당 층 — 요양보호사만 쓴다 */
+  floor?: string | null
+  hireDate?: string | null
+  name: string
+}
+
+/**
+ * 층을 줄 세우기 위한 값.
+ *
+ * '2층'·'3층' 은 글자로 비교해도 순서가 맞지만 '10층' 이 '2층' 앞에 온다.
+ * 앞의 숫자를 보고 센다.
+ *
+ * 층이 없는 사람은 맨 뒤로 보낸다. 앞에 두면 배정이 안 된 사람이 2층보다
+ * 위에 올라와, 층으로 나눠 보려는 목적이 흐려진다.
+ */
+function floorKey(f?: string | null): number {
+  const v = (f ?? '').trim()
+  if (!v) return Number.MAX_SAFE_INTEGER
+  const m = /^(\d+)/.exec(v)
+  return m ? Number(m[1]) : Number.MAX_SAFE_INTEGER - 1
+}
 
 /** 근무표 표시 정렬 — 페이지·인쇄·근무상황부가 전부 이 함수를 쓴다 */
 export function sortScheduleStaff<T extends SortableStaff>(list: T[]): T[] {
@@ -46,6 +69,9 @@ export function sortScheduleStaff<T extends SortableStaff>(list: T[]): T[] {
   return [...list].sort((a, b) =>
     rank(a) - rank(b) ||
     hasTeam(a) - hasTeam(b) ||                                        // 랭크 동률이어도 조 있는 사람 위
+    // 층 먼저 — 2층 사람들, 그다음 3층. 층으로 나눠 보려면 층이 조보다
+    // 앞서야 한다. 층이 없는 직종은 모두 같은 값이라 순서가 바뀌지 않는다.
+    floorKey(a.floor) - floorKey(b.floor) ||
     ((a.team ?? '').trim()).localeCompare((b.team ?? '').trim()) ||    // A→B→C
     ((a.hireDate || '9999').slice(0, 10)).localeCompare((b.hireDate || '9999').slice(0, 10)) ||
     a.name.localeCompare(b.name, 'ko'))
