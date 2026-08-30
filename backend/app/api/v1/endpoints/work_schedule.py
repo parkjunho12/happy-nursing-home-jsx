@@ -129,6 +129,8 @@ class ConfigBody(BaseModel):
     rotation_anchor: Optional[str] = None
     # {'N': 10, …} — 비운 코드는 기본값으로 되돌아간다
     code_hours: Optional[Dict[str, float]] = None
+    # [{"from":"2026-09","hours":{"N":10}}] — 그 달부터 적용
+    code_hours_rules: Optional[List[Dict[str, Any]]] = None
 
 
 def _config_row(db: Session) -> WorkScheduleConfig:
@@ -192,6 +194,8 @@ def get_config(db: Session = Depends(get_db), _: User = Depends(_manager)):
         "rotation_anchor": row.rotation_anchor or "2026-08-01",
         # 코드별 시간 — 비어 있으면 화면이 기본값을 쓴다
         "code_hours": row.code_hours or {},
+        # 시점 설정 — [{"from":"2026-09","hours":{"N":10}}]
+        "code_hours_rules": row.code_hours_rules or [],
         # 무엇을 고칠 수 있는지 화면이 알아야 목록을 그린다
         "code_hours_default": dict(_shift_hours_mod.CODE_HOURS),
     })
@@ -224,10 +228,38 @@ def save_config(body: ConfigBody, db: Session = Depends(get_db), current_user: U
             if abs(fv - _shift_hours_mod.CODE_HOURS[k]) > 1e-9:
                 clean[k] = fv
         row.code_hours = clean or None
+
+    if body.code_hours_rules is not None:
+        # 시점 설정 — 오타 하나가 한 달치 계산을 바꾼다. 아는 코드·말이 되는
+        # 범위·형식이 맞는 달만 받는다.
+        rules = []
+        seen_from = set()
+        for r in body.code_hours_rules:
+            frm = str((r or {}).get("from") or "").strip()
+            if not re.match(r"^\d{4}-\d{2}$", frm):
+                raise HTTPException(400, f"적용 시작월 형식이 올바르지 않습니다 (YYYY-MM): {frm or '(빈값)'}")
+            if frm in seen_from:
+                raise HTTPException(400, f"같은 달이 두 번 있습니다: {frm}")
+            seen_from.add(frm)
+            hrs = {}
+            for k, v in ((r or {}).get("hours") or {}).items():
+                if k not in _shift_hours_mod.CODE_HOURS:
+                    raise HTTPException(400, f"알 수 없는 근무 코드입니다: {k}")
+                try:
+                    fv = float(v)
+                except (TypeError, ValueError):
+                    raise HTTPException(400, f"{k} 시간이 숫자가 아닙니다.")
+                if not (0 <= fv <= 24):
+                    raise HTTPException(400, f"{k} 시간은 0~24 사이여야 합니다.")
+                hrs[k] = fv
+            if hrs:      # 바꾸는 게 없는 시점은 담아둘 이유가 없다
+                rules.append({"from": frm, "hours": hrs})
+        row.code_hours_rules = sorted(rules, key=lambda x: x["from"]) or None
     row.updated_by = getattr(current_user, "name", None)
     db.commit(); db.refresh(row)
     return ApiResponse(success=True, data={
         "code_hours": row.code_hours or {},
+        "code_hours_rules": row.code_hours_rules or [],
         "settle_start": row.settle_start, "rotation_anchor": row.rotation_anchor,
     })
 
@@ -258,7 +290,12 @@ def export_schedule(month: str = Query(...), db: Session = Depends(get_db), _: U
 
     # 코드별 시간 설정 — 화면과 같은 값으로 계산해야 한다.
     # 설정을 안 읽으면 야간을 10시간으로 바꿔둬도 엑셀만 9시간으로 센다.
-    _code_hours = (_config_row(db).code_hours or {})
+    #
+    # 뽑는 달의 규칙으로 푼다. 8월 표를 뽑는데 9월부터 바뀐 값을 쓰면
+    # 이미 지급한 급여와 숫자가 달라진다.
+    _cfg_row = _config_row(db)
+    _code_hours = _shift_hours.resolve_for_month(
+        month, _cfg_row.code_hours or {}, _cfg_row.code_hours_rules or [])
 
     y, m = int(month[:4]), int(month[5:7])
     total = _cal.monthrange(y, m)[1]
@@ -274,7 +311,10 @@ def export_schedule(month: str = Query(...), db: Session = Depends(get_db), _: U
             rows_h = [{"date": r.date, "name": r.name, "kind": r.kind}
                       for r in db.query(HolidayCalendar).filter(HolidayCalendar.active == True).all()]  # noqa: E712
         except Exception:
-            pass
+            # 공휴일을 못 읽어도 근무표는 나와야 한다. 다만 조회가 실패하면
+            # 트랜잭션이 죽은 채로 남아, 이 뒤의 모든 질의가 함께 실패한다.
+            # (설정을 읽는 곳에서 터져 엑셀이 통째로 안 나온다)
+            db.rollback()
         kinds = {r["date"]: (r.get("kind") or "public") for r in rows_h}
         for d, n in (S.get_korean_holidays(y, None, rows_h) or {}).items():
             if d.startswith(month) and not (n in ("근로자의 날",) or kinds.get(d) == "paid"):

@@ -81,6 +81,35 @@ def check() -> int:
     if abs(sh.month_total({"1": "N", "2": "D"}, days, {"N": 10}) - 18) > 1e-9:
         bad.append("합계에 설정이 반영되지 않는다")
 
+    # 시점 설정 — apps/admin/tests/shiftHoursMirror.test.ts 와 같은 사례.
+    # 화면과 백엔드가 같은 순서로 풀어야 한다. 한쪽만 다르게 풀면 근무표와
+    # 급여 대장의 숫자가 달라지고, 그건 지난달 급여를 다시 계산하는 일이 된다.
+    RULES = [
+        {"from": "2026-09", "hours": {"N": 10}},
+        {"from": "2027-01", "hours": {"N": 10.5, "D": 8.5}},
+    ]
+    expect = [
+        ("2026-07", "N", 9), ("2026-08", "N", 9),
+        ("2026-09", "N", 10), ("2026-12", "N", 10),
+        ("2027-06", "N", 10.5), ("2027-06", "D", 8.5),
+        (None, "N", 9), ("", "N", 9),
+    ]
+    for mth, code, want in expect:
+        got = sh.resolve_for_month(mth, None, RULES).get(code)
+        if abs(float(got) - want) > 1e-9:
+            bad.append(f"시점 {mth!r} {code}: {want} 여야 하는데 {got}")
+
+    t = sh.resolve_for_month("2026-09", {"N": 9.5, "M": 7}, RULES)
+    if abs(t["N"] - 10) > 1e-9:
+        bad.append("시점이 전체 기간 설정을 이기지 못한다")
+    if abs(t["M"] - 7) > 1e-9:
+        bad.append("시점에 없는 코드가 전체 기간 값을 잃는다")
+
+    junk = sh.resolve_for_month("2026-09", None, [
+        {"from": "2026-09", "hours": {"없는코드": 3, "N": 99}}, "쓰레기", None])
+    if abs(junk["N"] - 9) > 1e-9:
+        bad.append("말이 안 되는 시점 규칙을 무시하지 않는다")
+
     if bad:
         print("❌ 화면과 어긋납니다 — 근무시간 규칙을 한쪽만 고치면 급여 숫자가 갈라집니다.")
         for b in bad:
@@ -89,7 +118,7 @@ def check() -> int:
         print("규칙을 바꿨다면 검증표도 다시 뽑아 양쪽을 맞춰주세요.")
         return 1
 
-    print(f"✅ 화면과 일치 — 입력 {len(fx['cases'])}개 · 휴게 {len(fx['breaks'])}개 · 합계 2건 · 설정 6건")
+    print(f"✅ 화면과 일치 — 입력 {len(fx['cases'])}개 · 휴게 {len(fx['breaks'])}개 · 합계 2건 · 설정 6건 · 시점 12건")
     return 0
 
 

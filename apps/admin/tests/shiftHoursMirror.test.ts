@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
   hoursOf, extraHoursOf, breakMinutes,
-  setCodeHours, codeHoursNow, isCodeHoursOverridden,
+  setCodeHours, codeHoursNow, isCodeHoursOverridden, resolveCodeHours,
+  type CodeHourRule,
 } from '../src/utils/shiftCodes'
 
 /**
@@ -84,4 +85,51 @@ test('설정을 되돌리면 검증표를 다시 통과한다', () => {
   for (const c of fx.cases) {
     assert.equal(hoursOf(c.input), c.hours, `hoursOf(${JSON.stringify(c.input)})`)
   }
+})
+
+/**
+ * 시점 설정 — '2026-09부터 야간 10시간'.
+ *
+ * 화면과 백엔드가 같은 순서로 풀어야 한다. 한쪽만 다르게 풀면 근무표와
+ * 급여 대장의 숫자가 달라지고, 그건 지난달 급여를 다시 계산하는 일이 된다.
+ * backend/tests/test_shift_hours.py 가 같은 사례를 본다.
+ */
+const RULES: CodeHourRule[] = [
+  { from: '2026-09', hours: { N: 10 } },
+  { from: '2027-01', hours: { N: 10.5, D: 8.5 } },
+]
+
+test('시점 이전 달은 그대로', () => {
+  for (const m of ['2026-07', '2026-08']) {
+    assert.equal(resolveCodeHours(m, null, RULES).N, 9, m)
+  }
+})
+
+test('시점 이후 달부터 바뀐다', () => {
+  assert.equal(resolveCodeHours('2026-09', null, RULES).N, 10)
+  assert.equal(resolveCodeHours('2026-12', null, RULES).N, 10)
+})
+
+test('나중 시점이 앞 시점을 덮는다', () => {
+  const t = resolveCodeHours('2027-06', null, RULES)
+  assert.equal(t.N, 10.5)
+  assert.equal(t.D, 8.5)
+})
+
+test('달을 모르면 시점 규칙을 쓰지 않는다', () => {
+  assert.equal(resolveCodeHours(null, null, RULES).N, 9)
+  assert.equal(resolveCodeHours('', null, RULES).N, 9)
+})
+
+test('전체 기간 설정 위에 시점이 덮인다', () => {
+  const t = resolveCodeHours('2026-09', { N: 9.5, M: 7 }, RULES)
+  assert.equal(t.N, 10, '시점이 이긴다')
+  assert.equal(t.M, 7, '시점에 없는 코드는 전체 기간 값')
+})
+
+test('말이 안 되는 시점 규칙은 무시한다', () => {
+  const t = resolveCodeHours('2026-09', null, [
+    { from: '2026-09', hours: { 없는코드: 3, N: 99 } as any },
+  ])
+  assert.equal(t.N, 9, '범위 밖은 무시')
 })

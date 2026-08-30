@@ -54,6 +54,47 @@ export const CODE_MAP: Record<string, ShiftCode> = Object.fromEntries(SHIFT_CODE
  */
 let hourOverrides: Record<string, number> = {}
 
+export interface CodeHourRule {
+  /** 이 달부터 적용 — 'YYYY-MM' */
+  from: string
+  hours: Record<string, number>
+}
+
+/**
+ * 그 달에 쓸 코드별 시간.
+ *
+ * 기본값 → 전체 기간 설정 → 시점 설정 순서로 덮는다. 시점 설정은 'from' 이
+ * 그 달 이하인 것만 오래된 순서로 적용한다.
+ *
+ * 왜 달을 따지는가: 야간이 9시간에서 10시간으로 바뀌면 바뀐 달부터 그렇게
+ * 세야 한다. 하나의 값으로 두면 이미 급여를 지급한 지난달 숫자까지 함께
+ * 달라진다.
+ *
+ * 백엔드도 같은 규칙으로 푼다(shift_hours.resolve_for_month).
+ */
+export function resolveCodeHours(
+  month?: string | null,
+  base?: Record<string, number> | null,
+  rules?: CodeHourRule[] | null,
+): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const c of SHIFT_CODES) out[c.code] = c.hours
+  const put = (o?: Record<string, number> | null) => {
+    for (const [k, v] of Object.entries(o ?? {})) {
+      const n = Number(v)
+      if (out[k] !== undefined && Number.isFinite(n) && n >= 0 && n <= 24) out[k] = n
+    }
+  }
+  put(base)
+  if (month && rules?.length) {
+    for (const r of [...rules].filter(r => r?.from && r.from <= month)
+                              .sort((a, b) => a.from.localeCompare(b.from))) {
+      put(r.hours)
+    }
+  }
+  return out
+}
+
 export function setCodeHours(o?: Record<string, number> | null): void {
   const next: Record<string, number> = {}
   for (const [k, v] of Object.entries(o ?? {})) {
