@@ -19,3 +19,9 @@ declare module 'node:assert/strict' {
   const assert: Assert
   export default assert
 }
+
+/** 검증표를 읽는 데만 쓴다 */
+declare module 'node:fs' {
+  export function readFileSync(path: string, encoding: string): string
+}
+declare const process: { cwd(): string }

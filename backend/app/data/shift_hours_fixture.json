@@ -1,0 +1,221 @@
+{
+  "note": "화면(shiftCodes.ts)에서 뽑은 값. 백엔드 미러가 이 표를 통과해야 한다.",
+  "cases": [
+    {
+      "input": "D",
+      "hours": 8,
+      "extra": 0
+    },
+    {
+      "input": "M",
+      "hours": 8,
+      "extra": 0
+    },
+    {
+      "input": "AD",
+      "hours": 4,
+      "extra": 0
+    },
+    {
+      "input": "PD",
+      "hours": 4,
+      "extra": 0
+    },
+    {
+      "input": "N",
+      "hours": 9,
+      "extra": 0
+    },
+    {
+      "input": "休",
+      "hours": 8,
+      "extra": 0
+    },
+    {
+      "input": "대휴",
+      "hours": 0,
+      "extra": 0
+    },
+    {
+      "input": "초과휴",
+      "hours": 0,
+      "extra": 0
+    },
+    {
+      "input": "◆병",
+      "hours": 0,
+      "extra": 0
+    },
+    {
+      "input": "◆",
+      "hours": 0,
+      "extra": 0
+    },
+    {
+      "input": "",
+      "hours": 0,
+      "extra": 0
+    },
+    {
+      "input": " ",
+      "hours": 0,
+      "extra": 0
+    },
+    {
+      "input": "D",
+      "hours": 8,
+      "extra": 0
+    },
+    {
+      "input": "d",
+      "hours": 0,
+      "extra": 0
+    },
+    {
+      "input": "알수없음",
+      "hours": 0,
+      "extra": 0
+    },
+    {
+      "input": "X",
+      "hours": 0,
+      "extra": 0
+    },
+    {
+      "input": "0850 1600",
+      "hours": 0,
+      "extra": 6
+    },
+    {
+      "input": "0850 1400",
+      "hours": 0,
+      "extra": 4
+    },
+    {
+      "input": "0850 1700",
+      "hours": 0,
+      "extra": 7
+    },
+    {
+      "input": "0900 1330",
+      "hours": 0,
+      "extra": 4
+    },
+    {
+      "input": "1330 1800",
+      "hours": 0,
+      "extra": 4
+    },
+    {
+      "input": "0700 1600",
+      "hours": 0,
+      "extra": 7.8
+    },
+    {
+      "input": "2200 0600",
+      "hours": 0,
+      "extra": 6.8
+    },
+    {
+      "input": "0850~1600",
+      "hours": 0,
+      "extra": 6
+    },
+    {
+      "input": "0850-1600",
+      "hours": 0,
+      "extra": 6
+    },
+    {
+      "input": "08:50 16:00",
+      "hours": 0,
+      "extra": 6
+    },
+    {
+      "input": "9:00 13:30",
+      "hours": 0,
+      "extra": 4
+    },
+    {
+      "input": "1000 1200",
+      "hours": 0,
+      "extra": 2
+    },
+    {
+      "input": "1000 1400",
+      "hours": 0,
+      "extra": 4
+    },
+    {
+      "input": "1000 1401",
+      "hours": 0,
+      "extra": 3.5
+    },
+    {
+      "input": "0000 0000",
+      "hours": 0,
+      "extra": 0
+    },
+    {
+      "input": "2350 0010",
+      "hours": 0,
+      "extra": 0.3
+    },
+    {
+      "input": "D ",
+      "hours": 8,
+      "extra": 0
+    },
+    {
+      "input": " N",
+      "hours": 9,
+      "extra": 0
+    }
+  ],
+  "breaks": [
+    {
+      "span": 0,
+      "brk": 0
+    },
+    {
+      "span": 1,
+      "brk": 0
+    },
+    {
+      "span": 60,
+      "brk": 0
+    },
+    {
+      "span": 120,
+      "brk": 0
+    },
+    {
+      "span": 240,
+      "brk": 0
+    },
+    {
+      "span": 241,
+      "brk": 30
+    },
+    {
+      "span": 299,
+      "brk": 30
+    },
+    {
+      "span": 300,
+      "brk": 70
+    },
+    {
+      "span": 301,
+      "brk": 70
+    },
+    {
+      "span": 600,
+      "brk": 70
+    },
+    {
+      "span": 1439,
+      "brk": 70
+    }
+  ]
+}

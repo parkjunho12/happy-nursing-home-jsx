@@ -20,6 +20,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Python 문법 전수 검사
         run: python3 -m compileall -q backend/app backend/alembic/versions
+
+      - name: 근무시간 계산이 화면과 같은가
+        # 총시간은 화면과 백엔드 두 곳에서 계산된다(엑셀은 옛 달을 직접 계산해야
+        # 한다). 한쪽만 바뀌면 급여로 이어지는 숫자가 갈라지므로 여기서 막는다.
+        # 표준 라이브러리만 쓰므로 설치가 필요 없다.
+        run: python3 backend/tests/test_shift_hours.py
       - name: 마이그레이션 head가 하나인지 검사
         # head가 갈라지면 alembic upgrade가 서버에서 실패한다 — 미리 잡는다
         run: |
