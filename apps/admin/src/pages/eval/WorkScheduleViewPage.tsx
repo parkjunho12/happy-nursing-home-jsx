@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { CalendarRange, Loader2, Maximize2, Minus, Plus, ZoomIn } from 'lucide-react'
 import { workScheduleAPI, type WorkScheduleDoc, type HolidayInfo } from '@/api/workScheduleClient'
-import { sortScheduleStaff } from '@/components/schedule/shared'
+import { sortScheduleStaff, canJoinTeam } from '@/components/schedule/shared'
+import { filterByFloor, countHiddenNoFloor } from '@/utils/floorFilter'
 import { monthTotals, hourStatus, hourDiff } from '@/utils/monthHours'
 import { useLtcStore } from '@/store/ltc'
 
@@ -41,6 +42,10 @@ export default function WorkScheduleViewPage() {
   const [hols, setHols] = useState<Record<string, HolidayInfo>>({})
   const [loading, setLoading] = useState(true)
   const [zoom, setZoom] = useState(1)
+  // 층으로 걸러 보기 — ''이면 전체. 이 브라우저에 기억한다(편성 화면과 같은 열쇠는 쓰지 않는다,
+  // 보는 화면과 짜는 화면에서 보고 싶은 층이 다를 수 있다).
+  const [floorPick, setFloorPick] = useState(() => localStorage.getItem('wsv.floorPick') ?? '')
+  useEffect(() => { localStorage.setItem('wsv.floorPick', floorPick) }, [floorPick])
   const { staffList, loadAll } = useLtcStore()
   const boxRef = useRef<HTMLDivElement>(null)      // 스크롤 컨테이너
   const innerRef = useRef<HTMLDivElement>(null)    // zoom 적용 대상
@@ -173,12 +178,32 @@ export default function WorkScheduleViewPage() {
         name: nameOf.get(r.staff_id) ?? '(퇴사)',
         pos: (r.position ?? posOf.get(r.staff_id) ?? '') || '',
         team: r.team ?? '',
+        floor: r.floor ?? '',
         hireDate: hireOf.get(r.staff_id) ?? '',
         codes: doc.data?.[r.staff_id] ?? {},
       }))
       .filter(r => Object.keys(r.codes).length > 0 || r.name !== '(퇴사)')
     return sortScheduleStaff(rows)
   }, [doc, staffList])
+
+  /** 표에 실제로 쓰인 층 — 아무도 배정 안 한 층은 고를 이유가 없다 */
+  const floors = useMemo(() => {
+    const set = new Set<string>()
+    people.forEach(p => { if (p.floor) set.add(p.floor) })
+    return Array.from(set).sort()
+  }, [people])
+
+  /**
+   * 표에 보여줄 사람.
+   *
+   * 편성 화면과 같은 함수를 쓴다(utils/floorFilter). 두 화면이 다른 규칙으로
+   * 거르면 같은 층을 골라도 사람이 달라 보인다.
+   * 층이 없는 직종(간호·사회복지 등)은 어느 층을 골라도 남는다.
+   */
+  const shown = useMemo(
+    () => filterByFloor(people, floorPick, canJoinTeam), [people, floorPick])
+  const hiddenNoFloor = useMemo(
+    () => countHiddenNoFloor(people, floorPick, canJoinTeam), [people, floorPick])
 
   /** 기준 근로시간 — 저장된 값. 없으면 판단하지 않는다(모르면서 '정상' 이라 하면 안 된다) */
   const baseHours = Number(doc?.base_hours) || 0
@@ -232,6 +257,31 @@ export default function WorkScheduleViewPage() {
         <button onClick={() => move(1)} className="w-10 h-10 rounded-xl border border-gray-200 text-gray-500 text-lg">›</button>
       </div>
 
+      {/* 층으로 걸러 보기 — 그 층 요양보호사만 남는다.
+          층이 없는 직종(간호·사회복지 등)은 어느 층을 골라도 남는다. */}
+      {!loading && floors.length > 0 && (
+        <div className="flex items-center justify-center gap-1 mb-3 flex-wrap">
+          {[{ v: '', label: '전체' }, ...floors.map(f => ({ v: f, label: f }))].map(o => (
+            <button key={o.v || 'all'} onClick={() => setFloorPick(o.v)}
+              className={`px-3 py-1.5 rounded-xl text-sm font-bold border transition-colors ${
+                floorPick === o.v
+                  ? 'bg-teal-600 text-white border-teal-600'
+                  : 'bg-white border-gray-200 text-gray-600'}`}>
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {!loading && floorPick && (
+        <p className="mb-2 text-[11.5px] text-teal-800 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2">
+          <b>{floorPick}</b> 요양보호사만 보고 있습니다 — 층이 없는 직종은 그대로 나옵니다.
+          {hiddenNoFloor > 0 && (
+            <span className="text-amber-700"> · 층을 지정하지 않은 요양보호사 {hiddenNoFloor}명은 숨겨졌습니다.</span>
+          )}
+        </p>
+      )}
+
       {loading ? (
         <div className="flex justify-center py-16"><Loader2 className="animate-spin text-gray-300" /></div>
       ) : empty ? (
@@ -248,7 +298,8 @@ export default function WorkScheduleViewPage() {
                   <tr className="bg-gray-50">
                     <th style={{ width: NAME_W, minWidth: NAME_W, maxWidth: NAME_W }}
                       className="sticky left-0 z-30 bg-gray-50 border-b border-r border-gray-200 px-1.5 py-1.5 text-[11px] font-bold text-gray-500 text-left">성명</th>
-                    <th className="border-b border-r-2 border-gray-200 border-r-gray-300 px-1 py-1.5 text-[10px] font-bold text-gray-400">조</th>
+                    <th className="border-b border-r border-gray-200 px-1 py-1.5 text-[10px] font-bold text-gray-400">조</th>
+                    <th className="border-b border-r-2 border-gray-200 border-r-gray-300 px-1 py-1.5 text-[10px] font-bold text-gray-400">층</th>
                     {days.map(d => {
                       const iso = `${ym}-${String(d).padStart(2, '0')}`
                       return (
@@ -273,8 +324,8 @@ export default function WorkScheduleViewPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {people.map((p, pi) => {
-                    const prevPos = pi > 0 ? people[pi - 1].pos : p.pos
+                  {shown.map((p, pi) => {
+                    const prevPos = pi > 0 ? shown[pi - 1].pos : p.pos
                     const band = p.pos !== prevPos
                     return (
                       <tr key={p.id} className={band ? 'border-t-2 border-gray-200' : ''}>
@@ -283,7 +334,8 @@ export default function WorkScheduleViewPage() {
                           <p className="text-[12px] font-bold text-gray-800 leading-tight truncate">{p.name}</p>
                           <p className="text-[9px] text-gray-400 leading-tight truncate">{p.pos}</p>
                         </td>
-                        <td className="border-b border-gray-100 border-r-2 border-r-gray-300 px-1 py-1 text-center text-[10px] font-bold text-gray-500 whitespace-nowrap">{p.team || ''}</td>
+                        <td className="border-b border-gray-100 border-r border-gray-100 px-1 py-1 text-center text-[10px] font-bold text-gray-500 whitespace-nowrap">{p.team || ''}</td>
+                        <td className="border-b border-gray-100 border-r-2 border-r-gray-300 px-1 py-1 text-center text-[10px] font-bold text-teal-700 whitespace-nowrap">{p.floor || ''}</td>
                         {days.map(d => {
                           const iso = `${ym}-${String(d).padStart(2, '0')}`
                           const c = p.codes[String(d)] ?? ''
