@@ -20,6 +20,7 @@ import { calcBase as calcBaseFor } from '@/utils/baseHours'
 import { SHIFT_CODES, extraHoursOf, countAsOf, meta, isAutoManaged, splitTimeRange, shortOf, TEAMS, DEFAULT_TEAM_OFFSET, rotationFor } from '@/utils/shiftCodes'
 import { auditSchedule, type Issue } from '@/utils/scheduleAudit'
 import { filterByFloor, countHiddenNoFloor } from '@/utils/floorFilter'
+import { withFloorSubtotals } from '@/utils/floorSubtotals'
 import { monthTotals } from '@/utils/monthHours'
 import { buildScheduleRows, canSaveRows } from '@/utils/scheduleRows'
 import { useShiftConfig } from '@/store/shiftConfig'
@@ -565,6 +566,26 @@ export default function WorkSchedulePage() {
     return [...set].sort((a, b) => a.localeCompare(b, 'ko', { numeric: true }))
   }, [staff])
 
+  /** 층별 주간·야간 소계 — 전체 근무표 보기와 같은 함수로 묶는다(utils/floorSubtotals).
+   *  두 화면이 다른 규칙으로 나뉘면 같은 달을 놓고 숫자가 어긋난다. */
+  const bodyRows = useMemo(() => {
+    // 가나다·입사순으로 보면 층이 뒤섞인다. 그 목록에 소계를 끼우면 한 층이
+    // 여러 토막으로 갈라져 같은 층 소계가 몇 번씩 나온다 — 그럴 바엔 내지 않는다.
+    if (sortMode !== 'basic') return shownStaff.map(p => ({ kind: 'person' as const, p }))
+    return withFloorSubtotals(shownStaff, canJoinTeam)
+  }, [shownStaff, sortMode])
+
+  /** 그 날 그 층에서 주간(D)·야간(N)으로 나오는 요양보호사 수.
+   *  인쇄 대상을 골랐으면 그 인원만 센다 — 표에 없는 사람이 숫자에 섞이면 벽보가 안 맞는다. */
+  const countOn = (ids: string[], day: number, shift: 'D' | 'N') => {
+    let n = 0
+    for (const id of ids) {
+      if (printPick && !printPick.has(id)) continue
+      if (countAsOf(data[id]?.[String(day)]) === shift) n++
+    }
+    return n
+  }
+
   /** 대기 중인 휴무 신청을 '전부 승인했다 치고' 남는 주간 요양보호사 수.
    *  승인 여부를 정하려면 결국 이 숫자를 봐야 한다 — 머릿속으로 빼지 않게 표에 둔다. */
   const dayCountAfterLeave = (day: number) => {
@@ -775,7 +796,7 @@ export default function WorkSchedulePage() {
             <div className="inline-flex bg-gray-100 rounded-xl p-0.5">
               {([['basic', '기본'], ['name', '가나다'], ['hire', '입사순']] as const).map(([v, label]) => (
                 <button key={v} onClick={() => setSortMode(v)}
-                  title={v === 'basic' ? '직종 → 교대조(A·B·C) → 주간 → 입사순' : undefined}
+                  title={v === 'basic' ? '직종 → 교대조(A·B·C) → 주간 → 층 → 입사순 (층 소계는 이 정렬에서만 나옵니다)' : '층이 뒤섞이므로 층 소계는 나오지 않습니다'}
                   className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                     sortMode === v ? 'bg-white text-teal-700 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>
                   {label}
@@ -1075,7 +1096,38 @@ export default function WorkSchedulePage() {
               </tr>
             </thead>
             <tbody>
-              {shownStaff.map(s => {
+              {bodyRows.map(row => {
+                // ── 층 소계 두 줄 — 그 층 요양보호사가 끝나는 자리에 낀다 ──
+                if (row.kind === 'subtotal') {
+                  const isDay = row.shift === 'D'
+                  return (
+                    <tr key={`sub-${row.floor}-${row.shift}`}
+                      className={`ws-row-sum ${isDay ? 'bg-sky-50/70' : 'bg-indigo-50/70'}`}>
+                      <td colSpan={showFloor ? 4 : 3}
+                        className={`${td} font-bold sticky left-0 z-10 ${
+                          isDay ? 'bg-sky-50 text-sky-800' : 'bg-indigo-50 text-indigo-800'}`}>
+                        {row.floor || '층 미지정'} {isDay ? '주간 소계' : '야간 소계'}
+                        <span className="font-normal text-gray-400"> (요양보호사)</span>
+                      </td>
+                      {days.map(({ day }) => {
+                        const n = countOn(row.ids, day, row.shift)
+                        return (
+                          <td key={day}
+                            className={`${td} font-bold ${
+                              // 0 은 흐리게 — 그 층에 아무도 없는 날이 눈에 띄어야 한다
+                              n === 0 ? 'text-gray-300'
+                              : isDay ? 'text-sky-800' : 'text-indigo-800'
+                            } ${focus?.day === day ? 'outline outline-2 outline-amber-400' : ''}`}>
+                            {n}
+                          </td>
+                        )
+                      })}
+                      <td className={`${td} ws-agg`} colSpan={8} />
+                    </tr>
+                  )
+                }
+
+                const s = row.p
                 const c = calc(s.id)
                 const bh = Number(baseHours) || 0
                 const short = bh > 0 && c.total < bh        // 미달 — 급여가 깎이는 쪽이라 빨갛게
@@ -1219,11 +1271,12 @@ export default function WorkSchedulePage() {
                 ))}
                 <td className={`${td} ws-agg`} colSpan={8} />
               </tr>
-              {/* 층별 주간 인원 — 층을 켰을 때만. 어느 층이 비는지 바로 보인다 */}
+              {/* 층별 주간 인원 — 층을 켰을 때만. 간호·사회복지까지 포함한 그 층 전체 인원이다.
+                  표 안의 '2층 주간 소계' 는 요양보호사만 세므로 숫자가 다르다 — 라벨로 구분한다. */}
               {showFloor && usedFloors.map(f => (
                 <tr key={f} className="ws-row-sum bg-teal-50/40">
                   <td className={`${td} font-semibold text-teal-800 sticky left-0 z-10 bg-teal-50`} colSpan={4}>
-                    {f} 주간 인원
+                    {f} 주간 인원 <span className="font-normal text-teal-600/70">(전 직종)</span>
                   </td>
                   {days.map(({ day }) => {
                     const n = dayCountFloor(day, f)
