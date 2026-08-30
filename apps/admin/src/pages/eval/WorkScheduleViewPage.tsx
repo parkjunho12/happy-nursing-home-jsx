@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { CalendarRange, Loader2, Maximize2, Minus, Plus, ZoomIn } from 'lucide-react'
 import { workScheduleAPI, type WorkScheduleDoc, type HolidayInfo } from '@/api/workScheduleClient'
 import { sortScheduleStaff } from '@/components/schedule/shared'
@@ -23,14 +23,10 @@ const splitTime = (c: string): string[] | null => {
 }
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
 
-/**
- * 왼쪽에 고정하는 두 열의 폭.
- *
- * 이름 열 폭과 총시간 열의 left 값이 어긋나면 두 열이 겹쳐 보인다.
- * 그래서 min-width 로 두지 않고 정확한 폭을 못 박는다.
- */
+/** 왼쪽에 고정하는 이름 열의 폭 — 고정 열은 폭이 정확해야 겹치지 않는다 */
 const NAME_W = 78
-const TOTAL_W = 46
+/** 맨 오른쪽 총시간 열 */
+const TOTAL_W = 52
 
 export default function WorkScheduleViewPage() {
   const now = new Date()
@@ -42,6 +38,8 @@ export default function WorkScheduleViewPage() {
   const { staffList, loadAll } = useLtcStore()
   const boxRef = useRef<HTMLDivElement>(null)      // 스크롤 컨테이너
   const innerRef = useRef<HTMLDivElement>(null)    // zoom 적용 대상
+  const legendRef = useRef<HTMLParagraphElement>(null)  // 표 아래 안내문구
+  const [boxH, setBoxH] = useState<number | undefined>(undefined)
   const zoomRef = useRef(zoom); zoomRef.current = zoom
   const pinchRef = useRef<{ dist: number; zoom: number } | null>(null)
   const fitted = useRef(false)
@@ -82,6 +80,37 @@ export default function WorkScheduleViewPage() {
       box.removeEventListener('touchcancel', end)
     }
   }, [loading])   // 컨테이너가 생긴 뒤 부착
+
+  /**
+   * 표 높이를 실제로 재서 정한다.
+   *
+   * 폰에는 아래에 탭바가 떠 있다. 높이를 100vh-몇백px 로 짐작해 두면 기기마다
+   * 어긋나 표 아랫줄이 탭바에 가린다. 실제로 남는 자리를 재는 편이 확실하다.
+   *
+   *   표 위(box.top) ~ 화면 아래 - 탭바 - 표 아래 안내문구 - 여백
+   *
+   * 주소창이 접히고 펴질 때 화면 높이가 바뀌므로 그때마다 다시 잰다.
+   */
+  useLayoutEffect(() => {
+    if (loading || !doc) return
+    const measure = () => {
+      const box = boxRef.current
+      if (!box) return
+      const top = box.getBoundingClientRect().top
+      const bar = document.querySelector('nav[aria-label="주요 메뉴"]')
+      const barH = bar ? bar.getBoundingClientRect().height : 0
+      const legH = legendRef.current?.getBoundingClientRect().height ?? 0
+      const avail = window.innerHeight - top - barH - legH - 16
+      setBoxH(Math.max(220, Math.round(avail)))
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    window.addEventListener('orientationchange', measure)
+    return () => {
+      window.removeEventListener('resize', measure)
+      window.removeEventListener('orientationchange', measure)
+    }
+  }, [loading, doc])
 
   useEffect(() => { loadAll() }, [loadAll])
   useEffect(() => {
@@ -205,27 +234,15 @@ export default function WorkScheduleViewPage() {
         </div>
       ) : (
         <>
-          <div ref={boxRef} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-auto max-h-[calc(100vh-190px)] md:max-h-[74vh] overscroll-contain"
-            style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y' }}>
+          <div ref={boxRef} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-auto overscroll-contain"
+            style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y', maxHeight: boxH ?? '74vh' }}>
             <div ref={innerRef} style={{ zoom }}>
               <table className="border-collapse" style={{ minWidth: 'max-content' }}>
                 <thead className="sticky top-0 z-20">
                   <tr className="bg-gray-50">
                     <th style={{ width: NAME_W, minWidth: NAME_W, maxWidth: NAME_W }}
                       className="sticky left-0 z-30 bg-gray-50 border-b border-r border-gray-200 px-2 py-1.5 text-[11px] font-bold text-gray-500 text-left">성명</th>
-                    {/* 총시간은 오른쪽 끝이 아니라 이름 바로 옆에 붙여 함께 고정한다.
-                        날짜가 31칸이라 끝에 두면 핸드폰에서 끝까지 밀어야 보인다 —
-                        제일 자주 보는 숫자를 제일 멀리 두는 셈이다. */}
-                    <th style={{ left: NAME_W, width: TOTAL_W, minWidth: TOTAL_W, maxWidth: TOTAL_W }}
-                      className="sticky z-30 bg-gray-50 border-b border-r-2 border-gray-200 border-r-gray-300 px-1 py-1.5 text-[10px] font-bold text-gray-500">
-                      총시간
-                      {baseHours > 0 && (
-                        <span className="block text-[8px] font-normal text-gray-400 leading-tight">
-                          기준 {baseHours}
-                        </span>
-                      )}
-                    </th>
-                    <th className="border-b border-r border-gray-200 px-1 py-1.5 text-[10px] font-bold text-gray-400">조</th>
+                    <th className="border-b border-r-2 border-gray-200 border-r-gray-300 px-1 py-1.5 text-[10px] font-bold text-gray-400">조</th>
                     {days.map(d => {
                       const iso = `${ym}-${String(d).padStart(2, '0')}`
                       return (
@@ -236,6 +253,17 @@ export default function WorkScheduleViewPage() {
                         </th>
                       )
                     })}
+                    {/* 총시간 — 맨 오른쪽. 날짜를 다 보고 난 끝에 합계가 오는 것이
+                        표를 읽는 순서와 맞는다. */}
+                    <th style={{ width: TOTAL_W, minWidth: TOTAL_W }}
+                      className="border-b border-l-2 border-gray-200 border-l-gray-300 px-1 py-1 text-[10px] font-bold text-gray-500">
+                      총시간
+                      {baseHours > 0 && (
+                        <span className="block text-[8px] font-normal text-gray-400 leading-tight">
+                          기준 {baseHours}
+                        </span>
+                      )}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -249,8 +277,7 @@ export default function WorkScheduleViewPage() {
                           <p className="text-[12px] font-bold text-gray-800 leading-tight truncate">{p.name}</p>
                           <p className="text-[9px] text-gray-400 leading-tight truncate">{p.pos}</p>
                         </td>
-                        <TotalCell t={totals.get(p.id)} baseHours={baseHours} />
-                        <td className="border-b border-gray-100 border-r border-gray-100 px-1 py-1 text-center text-[10px] font-bold text-gray-500 whitespace-nowrap">{p.team || ''}</td>
+                        <td className="border-b border-gray-100 border-r-2 border-r-gray-300 px-1 py-1 text-center text-[10px] font-bold text-gray-500 whitespace-nowrap">{p.team || ''}</td>
                         {days.map(d => {
                           const iso = `${ym}-${String(d).padStart(2, '0')}`
                           const c = p.codes[String(d)] ?? ''
@@ -266,6 +293,7 @@ export default function WorkScheduleViewPage() {
                             </td>
                           )
                         })}
+                        <TotalCell t={totals.get(p.id)} baseHours={baseHours} />
                       </tr>
                     )
                   })}
@@ -273,7 +301,7 @@ export default function WorkScheduleViewPage() {
               </table>
             </div>
           </div>
-          <p className="mt-2 text-[11px] text-gray-400 leading-relaxed">
+          <p ref={legendRef} className="mt-2 text-[11px] text-gray-400 leading-relaxed">
             D 주간 08:50~18:00 · M 06:50~16:00 · N 야간 17:50~익일 09:00 · <span className="text-rose-500 font-bold">休</span> 연차 ·
             숫자 코드는 시간대 근무 — 손가락 두 개로 확대·축소, 「한눈에」로 전체 보기 · 수정은 PC 「근무표」에서
             {doc?.updated_at && ` · 저장 ${new Date(doc.updated_at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`}
@@ -306,8 +334,8 @@ function TotalCell({ t, baseHours }: {
     st === 'over' ? 'text-amber-600' :
     st === 'ok' ? 'text-emerald-600' : 'text-gray-700'
   return (
-    <td style={{ left: NAME_W, width: TOTAL_W, minWidth: TOTAL_W, maxWidth: TOTAL_W }}
-      className="sticky z-10 bg-white border-b border-gray-100 border-r-2 border-r-gray-300
+    <td style={{ width: TOTAL_W, minWidth: TOTAL_W }}
+      className="border-b border-gray-100 border-l-2 border-l-gray-300
                  px-1 py-1 text-center whitespace-nowrap">
       <span className={`block text-[11.5px] font-extrabold leading-tight ${tone}`}>{total}</span>
       {diff !== null && diff !== 0 && (
