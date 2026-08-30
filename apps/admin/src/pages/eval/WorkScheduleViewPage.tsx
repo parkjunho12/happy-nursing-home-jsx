@@ -23,8 +23,14 @@ const splitTime = (c: string): string[] | null => {
 }
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
 
-/** 왼쪽에 고정하는 이름 열의 폭 — 고정 열은 폭이 정확해야 겹치지 않는다 */
-const NAME_W = 78
+/**
+ * 왼쪽에 고정하는 이름 열의 폭.
+ *
+ * 좁은 화면에서는 이 열이 넓을수록 날짜 볼 자리가 줄어든다. 실제로 필요한
+ * 만큼만 준다 — 성명 네 글자(12px×4=48)와 직종 다섯 글자(9px×5=45)가
+ * 들어가면 된다. 좌우 여백 12px 을 빼고 50px 이 남으니 둘 다 들어간다.
+ */
+const NAME_W = 62
 /** 맨 오른쪽 총시간 열 */
 const TOTAL_W = 52
 
@@ -241,7 +247,7 @@ export default function WorkScheduleViewPage() {
                 <thead className="sticky top-0 z-20">
                   <tr className="bg-gray-50">
                     <th style={{ width: NAME_W, minWidth: NAME_W, maxWidth: NAME_W }}
-                      className="sticky left-0 z-30 bg-gray-50 border-b border-r border-gray-200 px-2 py-1.5 text-[11px] font-bold text-gray-500 text-left">성명</th>
+                      className="sticky left-0 z-30 bg-gray-50 border-b border-r border-gray-200 px-1.5 py-1.5 text-[11px] font-bold text-gray-500 text-left">성명</th>
                     <th className="border-b border-r-2 border-gray-200 border-r-gray-300 px-1 py-1.5 text-[10px] font-bold text-gray-400">조</th>
                     {days.map(d => {
                       const iso = `${ym}-${String(d).padStart(2, '0')}`
@@ -273,7 +279,7 @@ export default function WorkScheduleViewPage() {
                     return (
                       <tr key={p.id} className={band ? 'border-t-2 border-gray-200' : ''}>
                         <td style={{ width: NAME_W, minWidth: NAME_W, maxWidth: NAME_W }}
-                          className="sticky left-0 z-10 bg-white border-b border-r border-gray-100 px-2 py-1">
+                          className="sticky left-0 z-10 bg-white border-b border-r border-gray-100 px-1.5 py-1">
                           <p className="text-[12px] font-bold text-gray-800 leading-tight truncate">{p.name}</p>
                           <p className="text-[9px] text-gray-400 leading-tight truncate">{p.pos}</p>
                         </td>
