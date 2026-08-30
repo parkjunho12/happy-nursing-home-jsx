@@ -128,42 +128,70 @@ function CodeHoursPanel() {
   const base = useShiftConfig(st => st.base)
   const rules = useShiftConfig(st => st.rules)
   const defaults = useShiftConfig(st => st.defaults)
+  const effective = useShiftConfig(st => st.hours)   // 지금 보고 있는 달의 적용값
+  const month = useShiftConfig(st => st.month)
   const apply = useShiftConfig(st => st.apply)
   const [busy, setBusy] = useState(false)
-  const [dBase, setDBase] = useState<Record<string, string> | null>(null)
-  const [dRules, setDRules] = useState<CodeHourRule[] | null>(null)
 
   const codes = SHIFT_CODES.filter(c => c.group === '근무' || c.code === '休')
+
+  /**
+   * 편집 중에는 숫자가 아니라 글자로 들고 있는다.
+   *
+   * Number(입력값) 으로 바로 바꾸면, 10 을 지우고 9 를 치려는 순간 빈 값이
+   * 0 으로 튀어 고칠 수가 없다. 다 적은 다음에 숫자로 바꾼다.
+   */
+  const [dBase, setDBase] = useState<Record<string, string> | null>(null)
+  const [dRules, setDRules] = useState<{ from: string; hours: Record<string, string> }[] | null>(null)
+
   const curBase = dBase ?? Object.fromEntries(
     codes.map(c => [c.code, String(base[c.code] ?? defaults[c.code] ?? c.hours)]))
-  const curRules = dRules ?? rules
+  const curRules = dRules ?? rules.map(r => ({
+    from: r.from,
+    hours: Object.fromEntries(Object.entries(r.hours).map(([k, v]) => [k, String(v)])),
+  }))
   const dirty = dBase !== null || dRules !== null
 
-  const setRule = (i: number, patch: Partial<CodeHourRule>) =>
+  const setRule = (i: number, patch: Partial<{ from: string; hours: Record<string, string> }>) =>
     setDRules(curRules.map((r, ri) => ri === i ? { ...r, ...patch } : r))
+
+  const num = (v: string) => {
+    const t = String(v ?? '').trim()
+    // 빈 칸은 0 이 아니라 '안 적었다' 이다. Number('') 는 0 이라, 그대로 두면
+    // 지우고 저장했을 때 0 시간으로 굳는다.
+    if (t === '') return NaN
+    const n = Number(t)
+    return Number.isFinite(n) ? n : NaN
+  }
 
   const save = async () => {
     const nb: Record<string, number> = {}
     for (const c of codes) {
-      const n = Number(curBase[c.code])
+      const n = num(curBase[c.code])
       if (!Number.isFinite(n) || n < 0 || n > 24) {
-        alert(`${c.code}(${c.label}) 시간이 올바르지 않습니다. 0~24 사이로 적어주세요.`); return
+        alert(`${c.code}(${c.label}) 시간을 0~24 사이 숫자로 적어주세요.`); return
       }
       nb[c.code] = n
     }
+    const nr: CodeHourRule[] = []
     for (const r of curRules) {
-      if (!/^\d{4}-\d{2}$/.test(r.from)) {
-        alert('적용 시작월을 골라주세요.'); return
+      if (!/^\d{4}-\d{2}$/.test(r.from)) { alert('적용 시작월을 골라주세요.'); return }
+      const h: Record<string, number> = {}
+      for (const [k, v] of Object.entries(r.hours)) {
+        const n = num(v)
+        if (!Number.isFinite(n) || n < 0 || n > 24) {
+          alert(`${r.from}부터의 ${k} 시간을 0~24 사이 숫자로 적어주세요.`); return
+        }
+        h[k] = n
       }
-      if (Object.keys(r.hours).length === 0) {
-        alert(`${r.from}부터 바꿀 코드를 하나 이상 적어주세요.`); return
-      }
+      if (Object.keys(h).length === 0) { alert(`${r.from}부터 바꿀 코드를 하나 이상 골라주세요.`); return }
+      nr.push({ from: r.from, hours: h })
     }
+
     const baseChanged = codes.filter(c => nb[c.code] !== (base[c.code] ?? defaults[c.code] ?? c.hours))
     const lines = [
       ...baseChanged.map(c => `  [전체 기간] ${c.code} ${c.label}: ${base[c.code] ?? defaults[c.code]}h → ${nb[c.code]}h`),
-      ...curRules.map(r => `  [${r.from}부터] ` +
-        Object.entries(r.hours).map(([k, v]) => `${k} ${v}h`).join(', ')),
+      ...nr.map(r => `  [${r.from}부터] ` + Object.entries(r.hours).map(([k, v]) => `${k} ${v}h`).join(', ')),
     ]
     if (!confirm(
       '근무 코드 시간을 저장합니다.\n\n' + (lines.join('\n') || '  (바뀐 것 없음)') +
@@ -174,8 +202,8 @@ function CodeHoursPanel() {
       '\n\n계속할까요?')) return
     setBusy(true)
     try {
-      await workScheduleAPI.saveConfig({ code_hours: nb, code_hours_rules: curRules })
-      apply(nb, curRules)
+      await workScheduleAPI.saveConfig({ code_hours: nb, code_hours_rules: nr })
+      apply(nb, nr)
       setDBase(null); setDRules(null)
     } catch (e: any) {
       alert(e?.response?.data?.detail ?? '저장에 실패했습니다.')
@@ -191,10 +219,32 @@ function CodeHoursPanel() {
         <span className="text-[10px] text-gray-400">총시간이 이 값으로 계산됩니다</span>
       </div>
 
+      {/* 지금 보고 있는 달에 실제로 쓰이는 값.
+          아래 [전체 기간] 은 시점 설정에 덮이므로, 그것만 보면 '안 바뀌었다' 고
+          오해한다. 실제 적용값을 먼저 보여준다. */}
+      <div className="rounded-lg bg-gray-900 px-2.5 py-1.5 mb-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[10px] font-bold text-gray-400">
+            {month ? `${month.slice(0, 4)}년 ${Number(month.slice(5, 7))}월` : '이번 달'} 적용
+          </span>
+          {codes.map(c => {
+            const v = effective[c.code] ?? c.hours
+            const changed = defaults[c.code] !== undefined && v !== defaults[c.code]
+            return (
+              <span key={c.code}
+                className={`text-[11px] font-mono ${changed ? 'text-amber-300 font-bold' : 'text-gray-300'}`}
+                title={changed ? `기본 ${defaults[c.code]}h 에서 바뀜` : undefined}>
+                {c.code} {v}h
+              </span>
+            )
+          })}
+        </div>
+      </div>
+
       <p className="text-[10px] font-bold text-gray-400 mb-1">전체 기간</p>
       <div className="flex flex-wrap gap-1.5">
         {codes.map(c => {
-          const changed = defaults[c.code] !== undefined && Number(curBase[c.code]) !== defaults[c.code]
+          const changed = defaults[c.code] !== undefined && num(curBase[c.code]) !== defaults[c.code]
           return (
             <label key={c.code}
               className={`inline-flex items-center gap-1 rounded-lg border px-1.5 py-1 ${
@@ -203,6 +253,7 @@ function CodeHoursPanel() {
               <span className="text-[11px] font-bold text-gray-700">{c.code}</span>
               <span className="text-[10px] text-gray-400">{c.label}</span>
               <input type="number" min={0} max={24} step={0.5} value={curBase[c.code]}
+                onFocus={e => e.currentTarget.select()}
                 onChange={e => setDBase({ ...curBase, [c.code]: e.target.value })}
                 className="w-12 px-1 py-0.5 text-[11px] text-right border border-gray-200 rounded" />
               <span className="text-[10px] text-gray-400">h</span>
@@ -231,15 +282,16 @@ function CodeHoursPanel() {
                   <input type="checkbox" checked={on} className="accent-teal-600"
                     onChange={e => {
                       const h = { ...r.hours }
-                      if (e.target.checked) h[c.code] = Number(curBase[c.code]) || c.hours
+                      if (e.target.checked) h[c.code] = curBase[c.code]
                       else delete h[c.code]
                       setRule(i, { hours: h })
                     }} />
                   <span className="text-[10px] font-bold text-gray-700">{c.code}</span>
                   {on && (
                     <input type="number" min={0} max={24} step={0.5} value={r.hours[c.code]}
-                      onChange={e => setRule(i, { hours: { ...r.hours, [c.code]: Number(e.target.value) } })}
-                      className="w-11 px-1 text-[11px] text-right border border-gray-200 rounded" />
+                      onFocus={e => e.currentTarget.select()}
+                      onChange={e => setRule(i, { hours: { ...r.hours, [c.code]: e.target.value } })}
+                      className="w-12 px-1 text-[11px] text-right border border-gray-200 rounded" />
                   )}
                 </label>
               )
@@ -249,7 +301,7 @@ function CodeHoursPanel() {
           </div>
         ))}
         <button type="button"
-          onClick={() => setDRules([...curRules, { from: thisMonth, hours: { N: Number(curBase.N) || 9 } }])}
+          onClick={() => setDRules([...curRules, { from: thisMonth, hours: { N: curBase.N } }])}
           className="text-[11px] font-bold text-teal-700 hover:underline">+ 시점 추가</button>
       </div>
 
