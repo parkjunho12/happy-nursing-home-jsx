@@ -97,14 +97,19 @@ export const workScheduleAPI = {
     code_hours?: Record<string, number>
     /** 고칠 수 있는 코드와 기본값 */
     code_hours_default?: Record<string, number>
+    /** 시점 설정 — [{from:'2026-09', hours:{N:10}}] */
+    code_hours_rules?: { from: string; hours: Record<string, number> }[]
   }>),
   saveConfig: (b: {
     settle_start?: string; rotation_anchor?: string
     /** {'N': 10} — 기본값과 같은 값은 서버가 알아서 지운다 */
     code_hours?: Record<string, number>
+    /** [{from:'2026-09', hours:{N:10}}] — 그 달부터 적용 */
+    code_hours_rules?: { from: string; hours: Record<string, number> }[]
   }) => apiClient.put(`${BASE}/config`, b).then(unwrap<{
     settle_start: string; rotation_anchor: string
     code_hours?: Record<string, number>
+    code_hours_rules?: { from: string; hours: Record<string, number> }[]
   }>),
   versions: (month: string) =>
     apiClient.get(`${BASE}/versions`, { params: { month } }).then(unwrap<ScheduleVersion[]>),

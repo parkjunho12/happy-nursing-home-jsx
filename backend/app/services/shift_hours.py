@@ -67,12 +67,56 @@ def resolve_hours(overrides: Optional[Dict[str, float]] = None) -> Dict[str, flo
     설정이 잘못됐다고 계산이 멈추면 그게 더 나쁘다.
     """
     table = dict(CODE_HOURS)
-    for k, v in (overrides or {}).items():
-        if k in table:
-            try:
-                table[k] = float(v)
-            except (TypeError, ValueError):
-                pass
+    _put(table, overrides)
+    return table
+
+
+def _put(table: Dict[str, float], o) -> None:
+    """아는 코드만, 말이 되는 값만 덮는다.
+
+    화면(shiftCodes.ts 의 resolveCodeHours)과 같은 규칙이어야 한다.
+    한쪽만 범위를 안 보면 99시간짜리 설정을 한쪽만 받아들여, 근무표와
+    급여 대장의 숫자가 갈라진다.
+    """
+    for k, v in (o or {}).items():
+        if k not in table:
+            continue
+        try:
+            n = float(v)
+        except (TypeError, ValueError):
+            continue
+        if 0 <= n <= 24:
+            table[k] = n
+
+
+def resolve_for_month(month: Optional[str],
+                      base: Optional[Dict[str, float]] = None,
+                      rules: Optional[list] = None) -> Dict[str, float]:
+    """그 달에 쓸 코드별 시간.
+
+    기본값 → 전체 기간 설정(base) → 시점 설정(rules) 순서로 덮는다.
+    시점 설정은 [{"from": "2026-09", "hours": {"N": 10}}, …] 모양이고,
+    'from' 이 그 달 이하인 것만 오래된 순서로 적용한다.
+
+    왜 시점이 필요한가: 야간이 9시간에서 10시간으로 바뀌면 바뀐 달부터
+    그렇게 세야 한다. 하나의 값으로 두면 이미 급여를 지급한 지난달 숫자까지
+    함께 달라진다.
+
+    month 가 없으면 시점 설정은 건너뛴다 — 어느 달인지 모르면서 특정 달의
+    규칙을 적용할 수는 없다.
+    """
+    table = resolve_hours(base)
+    if not month or not rules:
+        return table
+    picked = []
+    for r in rules:
+        if not isinstance(r, dict):
+            continue
+        frm = str(r.get("from") or "")
+        if frm and frm <= month:
+            picked.append((frm, r.get("hours") or {}))
+    for _frm, hrs in sorted(picked, key=lambda x: x[0]):
+        _put(table, hrs)
     return table
 
 

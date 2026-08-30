@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { workScheduleAPI } from '@/api/workScheduleClient'
-import { TEAMS, DAY_TEAM, ROTATION, rotationPreview, meta, SHIFT_CODES } from '@/utils/shiftCodes'
+import { TEAMS, DAY_TEAM, ROTATION, rotationPreview, meta, SHIFT_CODES, type CodeHourRule } from '@/utils/shiftCodes'
 import { TEAM_BAND, canJoinTeam, type StaffRow } from './shared'
 import type { ScheduleRow } from '@/api/workScheduleClient'
 import { useShiftConfig } from '@/store/shiftConfig'
@@ -120,45 +120,69 @@ export default function TeamPanel({ staff, patchRow, offsets, setOffsets, setDir
  * 야간을 9시간으로 볼지 10시간으로 볼지는 시설이 정할 일이고 실제로 바뀐다.
  * 코드에 박아두면 바꿀 때마다 배포해야 하고, 그동안 급여 계산이 틀린 채로 돈다.
  *
- * 다만 이 값은 지난달 총시간까지 함께 바꾼다. 이미 급여를 지급한 달의
- * 숫자가 달라진다는 뜻이라, 화면이 그 사실을 분명히 말해야 한다.
+ * 시점을 둘 수 있다. '2026-09부터 야간 10시간' 처럼 적으면 그 달부터만
+ * 그렇게 센다 — 이미 급여를 지급한 지난달 숫자는 그대로 남는다.
+ * 시점 없이 「전체 기간」을 고치면 지난달까지 함께 달라진다.
  */
 function CodeHoursPanel() {
-  const hours = useShiftConfig(st => st.hours)
+  const base = useShiftConfig(st => st.base)
+  const rules = useShiftConfig(st => st.rules)
   const defaults = useShiftConfig(st => st.defaults)
   const apply = useShiftConfig(st => st.apply)
   const [busy, setBusy] = useState(false)
-  const [draft, setDraft] = useState<Record<string, string>>({})
+  const [dBase, setDBase] = useState<Record<string, string> | null>(null)
+  const [dRules, setDRules] = useState<CodeHourRule[] | null>(null)
 
   const codes = SHIFT_CODES.filter(c => c.group === '근무' || c.code === '休')
-  const valOf = (code: string) => draft[code] ?? String(hours[code] ?? 0)
-  const dirty = Object.entries(draft).some(([k, v]) => Number(v) !== (hours[k] ?? 0))
+  const curBase = dBase ?? Object.fromEntries(
+    codes.map(c => [c.code, String(base[c.code] ?? defaults[c.code] ?? c.hours)]))
+  const curRules = dRules ?? rules
+  const dirty = dBase !== null || dRules !== null
+
+  const setRule = (i: number, patch: Partial<CodeHourRule>) =>
+    setDRules(curRules.map((r, ri) => ri === i ? { ...r, ...patch } : r))
 
   const save = async () => {
-    const next: Record<string, number> = {}
+    const nb: Record<string, number> = {}
     for (const c of codes) {
-      const n = Number(valOf(c.code))
+      const n = Number(curBase[c.code])
       if (!Number.isFinite(n) || n < 0 || n > 24) {
-        alert(`${c.code}(${c.label}) 시간이 올바르지 않습니다. 0~24 사이로 적어주세요.`)
-        return
+        alert(`${c.code}(${c.label}) 시간이 올바르지 않습니다. 0~24 사이로 적어주세요.`); return
       }
-      next[c.code] = n
+      nb[c.code] = n
     }
-    const changed = codes.filter(c => next[c.code] !== (hours[c.code] ?? 0))
+    for (const r of curRules) {
+      if (!/^\d{4}-\d{2}$/.test(r.from)) {
+        alert('적용 시작월을 골라주세요.'); return
+      }
+      if (Object.keys(r.hours).length === 0) {
+        alert(`${r.from}부터 바꿀 코드를 하나 이상 적어주세요.`); return
+      }
+    }
+    const baseChanged = codes.filter(c => nb[c.code] !== (base[c.code] ?? defaults[c.code] ?? c.hours))
+    const lines = [
+      ...baseChanged.map(c => `  [전체 기간] ${c.code} ${c.label}: ${base[c.code] ?? defaults[c.code]}h → ${nb[c.code]}h`),
+      ...curRules.map(r => `  [${r.from}부터] ` +
+        Object.entries(r.hours).map(([k, v]) => `${k} ${v}h`).join(', ')),
+    ]
     if (!confirm(
-      '근무 코드 시간을 바꿉니다.\n\n' +
-      changed.map(c => `  ${c.code} ${c.label}: ${hours[c.code]}시간 → ${next[c.code]}시간`).join('\n') +
-      '\n\n※ 이번 달만이 아니라 지난달 총시간도 함께 달라집니다.\n' +
-      '   이미 급여를 지급한 달의 숫자가 바뀔 수 있습니다.\n\n계속할까요?')) return
+      '근무 코드 시간을 저장합니다.\n\n' + (lines.join('\n') || '  (바뀐 것 없음)') +
+      (baseChanged.length
+        ? '\n\n※ [전체 기간] 을 고치면 지난달 총시간도 함께 달라집니다.\n' +
+          '   이미 급여를 지급한 달의 숫자가 바뀔 수 있습니다.'
+        : '\n\n※ 시점 설정만 바꿨습니다 — 그 달부터만 달라지고 지난달은 그대로입니다.') +
+      '\n\n계속할까요?')) return
     setBusy(true)
     try {
-      await workScheduleAPI.saveConfig({ code_hours: next })
-      apply(next)
-      setDraft({})
+      await workScheduleAPI.saveConfig({ code_hours: nb, code_hours_rules: curRules })
+      apply(nb, curRules)
+      setDBase(null); setDRules(null)
     } catch (e: any) {
       alert(e?.response?.data?.detail ?? '저장에 실패했습니다.')
     } finally { setBusy(false) }
   }
+
+  const thisMonth = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7)
 
   return (
     <div className="mt-3 pt-3 border-t border-gray-100">
@@ -166,9 +190,11 @@ function CodeHoursPanel() {
         <p className="text-[11px] font-bold text-gray-500">근무 코드 시간</p>
         <span className="text-[10px] text-gray-400">총시간이 이 값으로 계산됩니다</span>
       </div>
+
+      <p className="text-[10px] font-bold text-gray-400 mb-1">전체 기간</p>
       <div className="flex flex-wrap gap-1.5">
         {codes.map(c => {
-          const changed = defaults[c.code] !== undefined && (hours[c.code] ?? 0) !== defaults[c.code]
+          const changed = defaults[c.code] !== undefined && Number(curBase[c.code]) !== defaults[c.code]
           return (
             <label key={c.code}
               className={`inline-flex items-center gap-1 rounded-lg border px-1.5 py-1 ${
@@ -176,26 +202,68 @@ function CodeHoursPanel() {
               title={changed ? `기본값 ${defaults[c.code]}시간에서 바꿈` : undefined}>
               <span className="text-[11px] font-bold text-gray-700">{c.code}</span>
               <span className="text-[10px] text-gray-400">{c.label}</span>
-              <input type="number" min={0} max={24} step={0.5}
-                value={valOf(c.code)}
-                onChange={e => setDraft(d => ({ ...d, [c.code]: e.target.value }))}
+              <input type="number" min={0} max={24} step={0.5} value={curBase[c.code]}
+                onChange={e => setDBase({ ...curBase, [c.code]: e.target.value })}
                 className="w-12 px-1 py-0.5 text-[11px] text-right border border-gray-200 rounded" />
               <span className="text-[10px] text-gray-400">h</span>
             </label>
           )
         })}
       </div>
-      <div className="flex items-center gap-2 mt-2">
+
+      <div className="flex items-center gap-1.5 mt-2.5 mb-1">
+        <p className="text-[10px] font-bold text-gray-400">시점 설정</p>
+        <span className="text-[10px] text-gray-400">그 달부터 적용 — 지난달은 그대로</span>
+      </div>
+      <div className="space-y-1.5">
+        {curRules.map((r, i) => (
+          <div key={i} className="flex items-center gap-1.5 flex-wrap rounded-lg border border-teal-200 bg-teal-50/50 px-2 py-1.5">
+            <input type="month" value={r.from}
+              onChange={e => setRule(i, { from: e.target.value })}
+              className="px-1.5 py-0.5 text-[11px] border border-gray-200 rounded bg-white" />
+            <span className="text-[10px] text-gray-500">부터</span>
+            {codes.map(c => {
+              const on = c.code in r.hours
+              return (
+                <label key={c.code}
+                  className={`inline-flex items-center gap-1 rounded border px-1 py-0.5 ${
+                    on ? 'border-teal-300 bg-white' : 'border-transparent opacity-50'}`}>
+                  <input type="checkbox" checked={on} className="accent-teal-600"
+                    onChange={e => {
+                      const h = { ...r.hours }
+                      if (e.target.checked) h[c.code] = Number(curBase[c.code]) || c.hours
+                      else delete h[c.code]
+                      setRule(i, { hours: h })
+                    }} />
+                  <span className="text-[10px] font-bold text-gray-700">{c.code}</span>
+                  {on && (
+                    <input type="number" min={0} max={24} step={0.5} value={r.hours[c.code]}
+                      onChange={e => setRule(i, { hours: { ...r.hours, [c.code]: Number(e.target.value) } })}
+                      className="w-11 px-1 text-[11px] text-right border border-gray-200 rounded" />
+                  )}
+                </label>
+              )
+            })}
+            <button type="button" onClick={() => setDRules(curRules.filter((_, ri) => ri !== i))}
+              className="ml-auto text-[11px] text-rose-500 hover:underline">삭제</button>
+          </div>
+        ))}
+        <button type="button"
+          onClick={() => setDRules([...curRules, { from: thisMonth, hours: { N: Number(curBase.N) || 9 } }])}
+          className="text-[11px] font-bold text-teal-700 hover:underline">+ 시점 추가</button>
+      </div>
+
+      <div className="flex items-center gap-2 mt-2.5">
         <button type="button" onClick={save} disabled={busy || !dirty}
           className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-[11px] font-bold disabled:opacity-40">
           {busy ? '저장 중…' : '시간 저장'}
         </button>
         {dirty && (
-          <button type="button" onClick={() => setDraft({})}
+          <button type="button" onClick={() => { setDBase(null); setDRules(null) }}
             className="text-[11px] text-gray-500 hover:underline">되돌리기</button>
         )}
-        <span className="text-[10.5px] text-amber-700">
-          바꾸면 <b>지난달 총시간도 함께 달라집니다</b>
+        <span className="text-[10.5px] text-gray-500">
+          「전체 기간」을 고치면 <b className="text-amber-700">지난달도 함께</b> 달라집니다
         </span>
       </div>
     </div>

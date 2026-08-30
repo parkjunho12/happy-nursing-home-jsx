@@ -40,10 +40,14 @@ export default function WorkScheduleViewPage() {
   // 코드별 시간 설정 — 총시간이 이 값으로 계산된다.
   // loadedHours 를 읽어야 설정이 실린 뒤 화면이 다시 그려진다.
   const loadShiftCfg = useShiftConfig(st => st.load)
+  const useHoursFor = useShiftConfig(st => st.useFor)
   const loadedHours = useShiftConfig(st => st.hours)
   useEffect(() => { loadShiftCfg() }, [loadShiftCfg])
   const now = new Date()
   const [ym, setYm] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
+  // 보고 있는 달의 규칙으로 총시간을 계산한다.
+  // 8월 표를 보는데 9월부터 바뀐 값을 쓰면 숫자가 어긋난다.
+  useEffect(() => { useHoursFor(ym) }, [ym, useHoursFor])
   const [doc, setDoc] = useState<WorkScheduleDoc | null>(null)
   const [hols, setHols] = useState<Record<string, HolidayInfo>>({})
   const [loading, setLoading] = useState(true)

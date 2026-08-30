@@ -74,5 +74,11 @@ class WorkScheduleConfig(Base):
     # 달마다 값을 따로 두어야 하는데, 지금은 그럴 만큼 자주 바뀌지 않는다.
     # 바꿀 때 화면이 그 사실을 분명히 알린다.
     code_hours = Column(JSON, nullable=True)
+    # 시점별 코드 시간 [{"from": "2026-09", "hours": {"N": 10}}, …]
+    #
+    # 야간이 9시간에서 10시간으로 바뀌면 바뀐 달부터 그렇게 세야 한다.
+    # 하나의 값으로 두면 이미 급여를 지급한 지난달 숫자까지 함께 달라진다.
+    # 'from' 이 그 달 이하인 것을 오래된 순서로 덮는다.
+    code_hours_rules = Column(JSON, nullable=True)
     updated_by = Column(String(100), nullable=True)
     updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)
