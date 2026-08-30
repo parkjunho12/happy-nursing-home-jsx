@@ -619,7 +619,7 @@ def delete_schedule_one(sid: str, db: Session = Depends(get_db),
 _SHIFT_INFO = {
     "D":  ("주간", "08:50", "18:00", True),
     "M":  ("모닝", "06:50", "16:00", True),
-    "N":  ("야간", "17:50", "09:00", True),
+    "N":  ("야간", "18:00", "09:00", True),
     "AD": ("오전", "09:00", "13:00", True),
     "PD": ("오후", "13:00", "18:00", True),
     "休": ("연차", None, None, False),

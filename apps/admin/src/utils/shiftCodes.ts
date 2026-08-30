@@ -1,5 +1,6 @@
 // 근무 코드 — 시설에서 쓰는 근무표 범례를 그대로 옮긴 것
-// D 08:50~18:00(휴게 70분) = 8시간 / N 17:50~익일09:00 = 9시간 / M 06:50~16:00 = 8시간
+// D 08:50~18:00(휴게 70분) = 8시간 / N 18:00~익일09:00 / M 06:50~16:00 = 8시간
+// 야간은 2026-09부터 10시간 — 시간은 설정에서 바꾼다(근무표 → 조 편성 → 근무 코드 시간)
 // (10분 일찍 시작 = 앞 근무와의 인수인계 겹침)
 // 실제 편성표 13명의 총시간을 이 값으로 검산해 전부 일치함을 확인했다.
 
@@ -23,7 +24,7 @@ export const SHIFT_CODES: ShiftCode[] = [
   { code: 'M',    label: '모닝',    time: '06:50~16:00',      hours: 8,   group: '근무', countAs: 'D', cls: 'bg-amber-100 text-amber-900' },
   { code: 'AD',   label: '오전',    time: '09:00~13:30',      hours: 4,   group: '근무', countAs: 'D', cls: 'bg-sky-50 text-sky-700' },
   { code: 'PD',   label: '오후',    time: '13:30~18:00',      hours: 4,   group: '근무', countAs: 'D', cls: 'bg-sky-50 text-sky-700' },
-  { code: 'N',    label: '야간',    time: '17:50~익일 09:00', hours: 9,   group: '근무', countAs: 'N', cls: 'bg-indigo-100 text-indigo-900' },
+  { code: 'N',    label: '야간',    time: '18:00~익일 09:00', hours: 9,   group: '근무', countAs: 'N', cls: 'bg-indigo-100 text-indigo-900' },
   // 연차는 유급휴가 — 근무한 것과 같이 하루 8시간으로 총시간에 들어간다.
   // (안 넣으면 연차 쓴 달마다 '기준 미달' 빨간불이 떠서 연차 쓰기가 눈치 보이게 된다)
   { code: '休',   label: '연차',    time: '', hours: 8, group: '휴무', annual: true, cls: 'bg-emerald-100 text-emerald-800' },
