@@ -20,6 +20,7 @@
     "src/utils/residentForm.ts",
     "src/utils/aiEditorDeploy.ts",
     "src/utils/floorFilter.ts",
+    "src/utils/monthHours.ts",
     "tests/**/*.ts"
   ]
 }

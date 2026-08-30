@@ -266,7 +266,13 @@ def export_schedule(month: str = Query(...), db: Session = Depends(get_db), _: U
     DH_FILL = PatternFill("solid", fgColor="FF6D01")     # 대휴 주황
     TITLE_FILL = PatternFill("solid", fgColor="FFFF00")  # 제목 노랑
 
-    DAY0, NAME_C = 4, 3      # D열부터 날짜, C열 성명
+    # C열 성명 · D열 총시간 · E열부터 날짜
+    #
+    # 총시간은 저장할 때 화면이 계산해 담아 보낸 값을 그대로 쓴다.
+    # 여기서 다시 계산하지 않는다 — 근무시간 계산에는 휴게시간 규칙과
+    # 직접 입력한 시간대 처리가 얽혀 있어, 파이썬에 옮겨 적으면 언젠가
+    # 화면과 엑셀의 숫자가 갈라진다. 그러면 어느 쪽이 맞는지 아무도 모른다.
+    NAME_C, TOTAL_C, DAY0 = 3, 4, 5
 
     def day_style(c, day, base_fill=None):
         dow = _date(y, m, day).weekday()
@@ -297,6 +303,16 @@ def export_schedule(month: str = Query(...), db: Session = Depends(get_db), _: U
     ws.cell(row=4, column=2).border = border
     h2 = ws.cell(row=3, column=NAME_C, value="성명"); h2.font = F(); h2.alignment = center; h2.border = border
     ws.cell(row=4, column=NAME_C).border = border
+
+    # 총시간 — 기준 근로시간을 아래 칸에 함께 적어 견줄 수 있게
+    base_h = (w.base_hours or "").strip()
+    ws.cell(row=3, column=TOTAL_C, value="총시간").font = F()
+    ws.cell(row=3, column=TOTAL_C).alignment = center
+    ws.cell(row=3, column=TOTAL_C).border = border
+    bh = ws.cell(row=4, column=TOTAL_C, value=(f"기준 {base_h}" if base_h else ""))
+    bh.font = Font(name="Arial", size=9, bold=False)
+    bh.alignment = center
+    bh.border = border
     DOW_KO = ["월", "화", "수", "목", "금", "토", "일"]
     for day in range(1, total + 1):
         col = DAY0 + day - 1
@@ -337,7 +353,27 @@ def export_schedule(month: str = Query(...), db: Session = Depends(get_db), _: U
             pv.font = F(); pv.alignment = center
         nv = ws.cell(row=r_i, column=NAME_C, value=names.get(sid, "(퇴사)"))
         nv.font = F(); nv.alignment = center
-        for cix in (1, 2, NAME_C):
+
+        # 저장할 때 담긴 총시간. 예전에 저장된 달에는 없을 수 있는데,
+        # 그때는 빈칸으로 둔다. 모르는 값을 0 으로 적으면 '한 시간도 안 나왔다'
+        # 로 읽힌다 — 없는 것보다 나쁘다.
+        tv_raw = row.get("total")
+        tc2 = ws.cell(row=r_i, column=TOTAL_C,
+                      value=(float(tv_raw) if isinstance(tv_raw, (int, float)) else None))
+        tc2.font = F()
+        tc2.alignment = center
+        tc2.number_format = "0.#"
+        try:
+            _b = float(base_h) if base_h else 0.0
+        except ValueError:
+            _b = 0.0
+        if isinstance(tv_raw, (int, float)) and _b > 0:
+            # 미달은 급여가 깎이는 쪽이라 더 급하다. 초과는 수당 문제다.
+            if float(tv_raw) < _b:
+                tc2.font = F(color=RED)
+            elif float(tv_raw) > _b:
+                tc2.font = F(color="E36C09")
+        for cix in (1, 2, NAME_C, TOTAL_C):
             ws.cell(row=r_i, column=cix).border = border
         for day in range(1, total + 1):
             code = codes.get(str(day), "")
@@ -372,11 +408,11 @@ def export_schedule(month: str = Query(...), db: Session = Depends(get_db), _: U
 
     # ── 일별 근무 인원 합계 (요양보호사 기준, 원본의 특이사항 행) ──
     sum_r = r_i
-    ws.merge_cells(start_row=sum_r, start_column=1, end_row=sum_r, end_column=3)
+    ws.merge_cells(start_row=sum_r, start_column=1, end_row=sum_r, end_column=TOTAL_C)
     sv = ws.cell(row=sum_r, column=1, value="일별 근무 인원")
     sv.font = F(); sv.alignment = center; sv.border = border
-    ws.cell(row=sum_r, column=2).border = border
-    ws.cell(row=sum_r, column=NAME_C).border = border
+    for cix in (2, NAME_C, TOTAL_C):
+        ws.cell(row=sum_r, column=cix).border = border
     WORK_CODES = {"D", "M", "N", "AD", "PD", "D-3"}
     for day in range(1, total + 1):
         n_work = 0
@@ -415,6 +451,7 @@ def export_schedule(month: str = Query(...), db: Session = Depends(get_db), _: U
     ws.column_dimensions["A"].width = 5.5
     ws.column_dimensions["B"].width = 6.4
     ws.column_dimensions["C"].width = 8.4
+    ws.column_dimensions["D"].width = 7.2      # 총시간
     for d in range(1, total + 1):
         ws.column_dimensions[get_column_letter(DAY0 + d - 1)].width = 6.5
     ws.freeze_panes = "D5"
