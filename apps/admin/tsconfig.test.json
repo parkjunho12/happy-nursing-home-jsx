@@ -23,6 +23,7 @@
     "src/utils/monthHours.ts",
     "src/utils/scheduleRows.ts",
     "src/components/schedule/shared.ts",
+    "src/utils/floorSubtotals.ts",
     "tests/**/*.ts"
   ]
 }

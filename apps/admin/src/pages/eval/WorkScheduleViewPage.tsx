@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { CalendarRange, Loader2, Maximize2, Minus, Plus, ZoomIn } from 'lucide-react'
 import { workScheduleAPI, type WorkScheduleDoc, type HolidayInfo } from '@/api/workScheduleClient'
 import { sortScheduleStaff, canJoinTeam } from '@/components/schedule/shared'
+import { countAsOf } from '@/utils/shiftCodes'
+import { withFloorSubtotals } from '@/utils/floorSubtotals'
 import { filterByFloor, countHiddenNoFloor } from '@/utils/floorFilter'
 import { monthTotals, hourStatus, hourDiff } from '@/utils/monthHours'
 import { useLtcStore } from '@/store/ltc'
@@ -215,6 +217,31 @@ export default function WorkScheduleViewPage() {
   const hiddenNoFloor = useMemo(
     () => countHiddenNoFloor(people, floorPick, canJoinTeam), [people, floorPick])
 
+  /**
+   * 표에 그릴 줄들 — 사람 줄 사이에 층별 소계를 끼워 넣는다.
+   *
+   * 요양보호사는 이미 층 순으로 정렬돼 있으므로(sortScheduleStaff), 층이
+   * 바뀌는 자리에서 앞 층의 소계를 넣으면 된다. 마지막 층은 끝난 뒤에 넣는다.
+   *
+   * 층이 없는 직종(간호·사회복지 등)은 소계에 넣지 않는다 — 그 층에 몇 명이
+   * 있는지를 보려는 것이지 전체 인원을 보려는 게 아니다.
+   */
+  const bodyRows = useMemo(() => withFloorSubtotals(shown, canJoinTeam), [shown])
+
+  /** id → 사람. 아래 소계가 칸마다 찾아 쓰므로 배열을 훑지 않게 지도로 둔다
+      (31칸 × 층 수 × 사람 수 만큼 불린다) */
+  const byId = useMemo(() => new Map(shown.map(p => [p.id, p])), [shown])
+
+  /** 그 날 그 층에서 주간(D)·야간(N)으로 나오는 사람 수 */
+  const countOn = (ids: string[], day: number, shift: 'D' | 'N') => {
+    let n = 0
+    for (const id of ids) {
+      const p = byId.get(id)
+      if (p && countAsOf(p.codes[String(day)]) === shift) n++
+    }
+    return n
+  }
+
   /** 기준 근로시간 — 저장된 값. 없으면 판단하지 않는다(모르면서 '정상' 이라 하면 안 된다) */
   const baseHours = Number(doc?.base_hours) || 0
 
@@ -335,8 +362,44 @@ export default function WorkScheduleViewPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {shown.map((p, pi) => {
-                    const prevPos = pi > 0 ? shown[pi - 1].pos : p.pos
+                  {bodyRows.map((row, ri) => {
+                    if (row.kind === 'subtotal') {
+                      const day = row.shift === 'D'
+                      return (
+                        <tr key={`sub-${row.floor}-${row.shift}`}
+                          className={`${day ? 'bg-sky-50/70' : 'bg-indigo-50/70'} ${day ? 'border-t-2 border-gray-300' : ''}`}>
+                          <td style={{ width: NAME_W, minWidth: NAME_W, maxWidth: NAME_W }}
+                            className={`sticky left-0 z-10 ${day ? 'bg-sky-50' : 'bg-indigo-50'} border-b border-r border-gray-200 px-1.5 py-1`}>
+                            <p className="text-[10.5px] font-extrabold text-gray-700 leading-tight truncate">
+                              {row.floor || '층 미지정'}
+                            </p>
+                            <p className={`text-[9px] font-bold leading-tight ${day ? 'text-sky-700' : 'text-indigo-700'}`}>
+                              {day ? '주간 소계' : '야간 소계'}
+                            </p>
+                          </td>
+                          <td className="border-b border-gray-200 border-r border-gray-100" />
+                          <td className="border-b border-gray-200 border-r-2 border-r-gray-300" />
+                          {days.map(d => {
+                            const n = countOn(row.ids, d, row.shift)
+                            const iso = `${ym}-${String(d).padStart(2, '0')}`
+                            return (
+                              <td key={d}
+                                className={`border-b border-gray-200 ${vLine(d)} p-0.5 text-center ${iso === todayIso ? 'bg-amber-100' : ''}`}>
+                                {/* 0 은 흐리게 — 아무도 안 나오는 날이 눈에 띄어야 한다 */}
+                                <span className={`text-[11px] font-extrabold ${
+                                  n === 0 ? 'text-gray-300' : day ? 'text-sky-700' : 'text-indigo-700'}`}>{n}</span>
+                              </td>
+                            )
+                          })}
+                          <td style={{ width: TOTAL_W, minWidth: TOTAL_W }}
+                            className="border-b border-gray-200 border-l-2 border-l-gray-300" />
+                        </tr>
+                      )
+                    }
+
+                    const p = row.p
+                    const prev = ri > 0 ? bodyRows[ri - 1] : null
+                    const prevPos = prev && prev.kind === 'person' ? prev.p.pos : p.pos
                     const band = p.pos !== prevPos
                     return (
                       <tr key={p.id} className={band ? 'border-t-2 border-gray-200' : ''}>
