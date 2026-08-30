@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './store/auth'
@@ -7,72 +7,80 @@ import { useLtcStore } from './store/ltc'
 // Layout
 import Layout from './components/layout/Layout'
 
-// 페이지
+/**
+ * 페이지 — 필요할 때 받는다(lazy).
+ *
+ * 예순 몇 개 화면을 한 번에 묶으면 어느 페이지를 열든 그 전부를 먼저
+ * 받아야 한다. 실제로 첫 화면이 뜨기까지 1.6MB 짜리 덩어리 하나를
+ * 기다리고 있었다. 폰에서 특히 오래 걸린다.
+ *
+ * 로그인만 그대로 둔다 — 로그인하지 않은 사람이 처음 보는 화면이다.
+ * 대시보드는 나눈다. 그래프 라이브러리(109KB)를 함께 끌고 오는데,
+ * 로그인 화면을 보려고 그것까지 받을 이유가 없다.
+ */
 import LoginPage from './pages/LoginPage'
-import DashboardPage from './pages/DashboardPage'
-import ResidentsPage from './pages/ResidentsPage'
-import StaffPage from './pages/staff/StaffPage'
-import ContactsPage from './pages/contacts/ContactsPage'
-import ContactDetailPage from './pages/contacts/ContactDetailPage'
-import HistoryPage from './pages/history/HistoryPage'
-import HistoryEditPage from './pages/history/HistoryEditPage'
-import ReviewsPage from './pages/reviews/ReviewsPage'
-import SettingsPage from './pages/settings/SettingsPage'
-import PageViewStats from './pages/analytics/PageViewStats'
-import SuspiciousIPPage from './pages/analytics/SuspiciousIPPage'
-
-import EvalChecklistPage    from './pages/eval/EvalChecklistPage'
-import EvalCalendarPage     from './pages/eval/EvalCalendarPage'
-import EvalResidentsPage    from './pages/eval/EvalResidentsPage'
-import TherapyGroupPage     from './pages/eval/TherapyGroupPage'
-import EvalStaffPage        from './pages/eval/EvalStaffPage'
-import StaffingSimulatorPage from './pages/admin/StaffingSimulatorPage'
-import WorkSchedulePage from './pages/eval/WorkSchedulePage'
-import MySchedulePage from './pages/MySchedulePage'
-import HandoverAiPage from './pages/eval/HandoverAiPage'
-import HandoverDetailPage from './pages/eval/HandoverDetailPage'
-import EvalAIReviewPage     from './pages/eval/EvalAIReviewPage'
-import EvalRecordAuditPage  from './pages/eval/EvalRecordAuditPage'
-import EvalRecordAuditDetailPage from './pages/eval/EvalRecordAuditDetailPage'
-import EvalAlbumPage        from './pages/eval/EvalAlbumPage'
-import EvalRecordGuidePage from './pages/eval/EvalRecordGuidePage'
-import BlogAiWriterPage from './pages/eval/BlogAiWriterPage'
-import EvalUsersPage        from './pages/eval/EvalUsersPage'
-import StaffWorkloadPage    from './pages/eval/StaffWorkloadPage'
-import NaverAdsPage         from './pages/admin/NaverAdsPage'
-import NaverAdsKeywordDetailPage from './pages/admin/NaverAdsKeywordDetailPage'
-import VolunteersPage from './pages/admin/VolunteersPage'
-import RecruitmentPage from './pages/admin/RecruitmentPage'
-import SchedulePage from './pages/admin/SchedulePage'
-import IncidentsPage from './pages/admin/IncidentsPage'
-import MonthlyReportPage from './pages/admin/MonthlyReportPage'
-import ResidentAssignPage from './pages/admin/ResidentAssignPage'
-import ProgramPage from './pages/admin/ProgramPage'
-import ExpensePage from './pages/admin/ExpensePage'
-import FacilityNewsPage from './pages/admin/FacilityNewsPage'
-import StaffHrPage from './pages/admin/StaffHrPage'
-import ResidentDocsPage from './pages/admin/ResidentDocsPage'
-import InternalNoticesPage from './pages/admin/InternalNoticesPage'
-import MealPlanPage from './pages/admin/MealPlanPage'
-import WorkScheduleViewPage from './pages/eval/WorkScheduleViewPage'
-import RequestHistoryPage from './pages/admin/RequestHistoryPage'
-import PensionPage from './pages/admin/PensionPage'
-import AuditCheckPage from './pages/AuditCheckPage'
-import ResidentDetailPage from './pages/eval/ResidentDetailPage'
-import StaffDetailPage from './pages/eval/StaffDetailPage'
-import MealCountPage from './pages/admin/MealCountPage'
-import OperationsPage from './pages/admin/OperationsPage'
-import AdminRoutinePage from './pages/admin/AdminRoutinePage'
-import AiEditorPage from './pages/admin/AiEditorPage'
-import BroadcastPage from './pages/admin/BroadcastPage'
-import StaffEducationPage from './pages/StaffEducationPage'
-import WorkGuidePage from './pages/WorkGuidePage'
-import GuidePage from './pages/GuidePage'
-import EnteralPage from './pages/admin/EnteralPage'
-import FamilyLoginPage      from './pages/family/FamilyLoginPage'
-import FamilyAlbumsPage     from './pages/family/FamilyAlbumsPage'
-import FamilyAlbumDetailPage from './pages/family/FamilyAlbumDetailPage'
-
+const DashboardPage = lazy(() => import('./pages/DashboardPage'))
+const ResidentsPage = lazy(() => import('./pages/ResidentsPage'))
+const StaffPage = lazy(() => import('./pages/staff/StaffPage'))
+const ContactsPage = lazy(() => import('./pages/contacts/ContactsPage'))
+const ContactDetailPage = lazy(() => import('./pages/contacts/ContactDetailPage'))
+const HistoryPage = lazy(() => import('./pages/history/HistoryPage'))
+const HistoryEditPage = lazy(() => import('./pages/history/HistoryEditPage'))
+const ReviewsPage = lazy(() => import('./pages/reviews/ReviewsPage'))
+const SettingsPage = lazy(() => import('./pages/settings/SettingsPage'))
+const PageViewStats = lazy(() => import('./pages/analytics/PageViewStats'))
+const SuspiciousIPPage = lazy(() => import('./pages/analytics/SuspiciousIPPage'))
+const EvalChecklistPage = lazy(() => import('./pages/eval/EvalChecklistPage'))
+const EvalCalendarPage = lazy(() => import('./pages/eval/EvalCalendarPage'))
+const EvalResidentsPage = lazy(() => import('./pages/eval/EvalResidentsPage'))
+const TherapyGroupPage = lazy(() => import('./pages/eval/TherapyGroupPage'))
+const EvalStaffPage = lazy(() => import('./pages/eval/EvalStaffPage'))
+const StaffingSimulatorPage = lazy(() => import('./pages/admin/StaffingSimulatorPage'))
+const WorkSchedulePage = lazy(() => import('./pages/eval/WorkSchedulePage'))
+const MySchedulePage = lazy(() => import('./pages/MySchedulePage'))
+const HandoverAiPage = lazy(() => import('./pages/eval/HandoverAiPage'))
+const HandoverDetailPage = lazy(() => import('./pages/eval/HandoverDetailPage'))
+const EvalAIReviewPage = lazy(() => import('./pages/eval/EvalAIReviewPage'))
+const EvalRecordAuditPage = lazy(() => import('./pages/eval/EvalRecordAuditPage'))
+const EvalRecordAuditDetailPage = lazy(() => import('./pages/eval/EvalRecordAuditDetailPage'))
+const EvalAlbumPage = lazy(() => import('./pages/eval/EvalAlbumPage'))
+const EvalRecordGuidePage = lazy(() => import('./pages/eval/EvalRecordGuidePage'))
+const BlogAiWriterPage = lazy(() => import('./pages/eval/BlogAiWriterPage'))
+const EvalUsersPage = lazy(() => import('./pages/eval/EvalUsersPage'))
+const StaffWorkloadPage = lazy(() => import('./pages/eval/StaffWorkloadPage'))
+const NaverAdsPage = lazy(() => import('./pages/admin/NaverAdsPage'))
+const NaverAdsKeywordDetailPage = lazy(() => import('./pages/admin/NaverAdsKeywordDetailPage'))
+const VolunteersPage = lazy(() => import('./pages/admin/VolunteersPage'))
+const RecruitmentPage = lazy(() => import('./pages/admin/RecruitmentPage'))
+const SchedulePage = lazy(() => import('./pages/admin/SchedulePage'))
+const IncidentsPage = lazy(() => import('./pages/admin/IncidentsPage'))
+const MonthlyReportPage = lazy(() => import('./pages/admin/MonthlyReportPage'))
+const ResidentAssignPage = lazy(() => import('./pages/admin/ResidentAssignPage'))
+const ProgramPage = lazy(() => import('./pages/admin/ProgramPage'))
+const ExpensePage = lazy(() => import('./pages/admin/ExpensePage'))
+const FacilityNewsPage = lazy(() => import('./pages/admin/FacilityNewsPage'))
+const StaffHrPage = lazy(() => import('./pages/admin/StaffHrPage'))
+const ResidentDocsPage = lazy(() => import('./pages/admin/ResidentDocsPage'))
+const InternalNoticesPage = lazy(() => import('./pages/admin/InternalNoticesPage'))
+const MealPlanPage = lazy(() => import('./pages/admin/MealPlanPage'))
+const WorkScheduleViewPage = lazy(() => import('./pages/eval/WorkScheduleViewPage'))
+const RequestHistoryPage = lazy(() => import('./pages/admin/RequestHistoryPage'))
+const PensionPage = lazy(() => import('./pages/admin/PensionPage'))
+const AuditCheckPage = lazy(() => import('./pages/AuditCheckPage'))
+const ResidentDetailPage = lazy(() => import('./pages/eval/ResidentDetailPage'))
+const StaffDetailPage = lazy(() => import('./pages/eval/StaffDetailPage'))
+const MealCountPage = lazy(() => import('./pages/admin/MealCountPage'))
+const OperationsPage = lazy(() => import('./pages/admin/OperationsPage'))
+const AdminRoutinePage = lazy(() => import('./pages/admin/AdminRoutinePage'))
+const AiEditorPage = lazy(() => import('./pages/admin/AiEditorPage'))
+const BroadcastPage = lazy(() => import('./pages/admin/BroadcastPage'))
+const StaffEducationPage = lazy(() => import('./pages/StaffEducationPage'))
+const WorkGuidePage = lazy(() => import('./pages/WorkGuidePage'))
+const GuidePage = lazy(() => import('./pages/GuidePage'))
+const EnteralPage = lazy(() => import('./pages/admin/EnteralPage'))
+const FamilyLoginPage = lazy(() => import('./pages/family/FamilyLoginPage'))
+const FamilyAlbumsPage = lazy(() => import('./pages/family/FamilyAlbumsPage'))
+const FamilyAlbumDetailPage = lazy(() => import('./pages/family/FamilyAlbumDetailPage'))
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
 })
@@ -288,11 +296,23 @@ function LtcLoader() {
   return null
 }
 
+/** 화면이 오는 동안 — 로고 자리만큼의 여백에 조용한 표시 */
+function PageLoading() {
+  return (
+    <div className="min-h-[60vh] flex items-center justify-center">
+      <div className="w-8 h-8 border-4 border-primary-orange border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <LtcLoader />
+        {/* 화면을 나눠 받으므로, 오는 동안 보여줄 것이 필요하다.
+            빈 화면이 잠깐 뜨면 '멈췄나' 싶어 뒤로가기를 누르게 된다. */}
+        <Suspense fallback={<PageLoading />}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/family/login"      element={<FamilyLoginPage />} />
@@ -388,6 +408,7 @@ function App() {
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </Suspense>
       </BrowserRouter>
     </QueryClientProvider>
   )
