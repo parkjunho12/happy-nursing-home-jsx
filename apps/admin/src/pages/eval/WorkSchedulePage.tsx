@@ -17,9 +17,10 @@ import { TEAM_BAND, canJoinTeam, sortScheduleStaff } from '@/components/schedule
 import { planDayShift, interleaveByPosition } from '@/utils/dayShiftPlan'
 import { planMembersMonths, type MonthContext, type MemberMonthPlan } from '@/utils/shiftBalance'
 import { calcBase as calcBaseFor } from '@/utils/baseHours'
-import { SHIFT_CODES, CODE_MAP, hoursOf, extraHoursOf, countAsOf, meta, isAutoManaged, splitTimeRange, shortOf, TEAMS, DEFAULT_TEAM_OFFSET, rotationFor } from '@/utils/shiftCodes'
+import { SHIFT_CODES, extraHoursOf, countAsOf, meta, isAutoManaged, splitTimeRange, shortOf, TEAMS, DEFAULT_TEAM_OFFSET, rotationFor } from '@/utils/shiftCodes'
 import { auditSchedule, type Issue } from '@/utils/scheduleAudit'
 import { filterByFloor, countHiddenNoFloor } from '@/utils/floorFilter'
+import { monthTotals } from '@/utils/monthHours'
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
 const thisMonth = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
@@ -514,25 +515,8 @@ export default function WorkSchedulePage() {
   }
 
   /** 직원별 집계 — 총시간 = Σ 근무시간, 갯수는 D/N 칸 수 */
-  const calc = (sid: string) => {
-    const row = data[sid] ?? {}
-    let hours = 0, extra = 0, d = 0, n = 0, annual = 0, off = 0, comp = 0
-    days.forEach(({ day }) => {
-      const v = row[String(day)]
-      if (!v) return
-      hours += hoursOf(v)          // 정규 코드 시간만 총시간에 넣는다
-      extra += extraHoursOf(v)     // 시간을 직접 적은 칸은 '추가근무'로 분리
-      const c = countAsOf(v); if (c === 'D') d++; else if (c === 'N') n++
-      const mt = CODE_MAP[v]
-      if (mt?.annual) annual++
-      if (mt?.offday) off++
-      if (mt?.comp) comp++
-    })
-    const h = Math.round(hours * 10) / 10
-    const e = Math.round(extra * 10) / 10
-    // 총시간은 추가근무까지 더한 값 — 기준시간과 비교할 때 쓰는 숫자
-    return { hours: h, extra: e, total: Math.round((h + e) * 10) / 10, d, n, annual, off, comp }
-  }
+  // 계산은 utils/monthHours.ts 한곳에 둔다 — 보기 화면·엑셀이 같은 숫자를 써야 한다
+  const calc = (sid: string) => monthTotals(data[sid], days.map(d => d.day))
 
   /** 일별 근무 인원 (특이사항 행) */
   /** 일별 근무 인원 — 요양보호사와 그 외(주간 직종)를 나눠 센다.
@@ -646,7 +630,14 @@ export default function WorkSchedulePage() {
   const save = async () => {
     setSaving(true)
     try {
-      const payload = staff.map((s, i) => ({ staff_id: s.id, position: s.pos, team: s.team, floor: s.floor, order: i, note: s.note }))
+      // 총시간을 함께 담는다. 엑셀은 백엔드가 만드는데, 파이썬에 같은 계산을
+      // 다시 쓰면 언젠가 두 숫자가 갈라진다. 여기서 한 번 계산해 보낸다.
+      const payload = staff.map((s, i) => {
+        const t = calc(s.id)
+        return { staff_id: s.id, position: s.pos, team: s.team, floor: s.floor,
+                 order: i, note: s.note,
+                 hours: t.hours, extra: t.extra, total: t.total }
+      })
       const doc = await workScheduleAPI.save({ year_month: ym, data, rows: payload, base_hours: baseHours, base_days: baseDays, as_of: asOf, team_offsets: offsets })
       setUpdatedBy(doc.updated_by ?? null); setDirty(false)
       setLock({ locked: !!doc.locked, by: doc.locked_by, at: doc.locked_at })

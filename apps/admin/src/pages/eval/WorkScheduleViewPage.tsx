@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { CalendarRange, Loader2, Maximize2, Minus, Plus, ZoomIn } from 'lucide-react'
 import { workScheduleAPI, type WorkScheduleDoc, type HolidayInfo } from '@/api/workScheduleClient'
 import { sortScheduleStaff } from '@/components/schedule/shared'
+import { monthTotals, hourStatus, hourDiff } from '@/utils/monthHours'
 import { useLtcStore } from '@/store/ltc'
 
 /**
@@ -21,6 +22,15 @@ const splitTime = (c: string): string[] | null => {
   return m ? [m[1], m[2]] : null
 }
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
+
+/**
+ * 왼쪽에 고정하는 두 열의 폭.
+ *
+ * 이름 열 폭과 총시간 열의 left 값이 어긋나면 두 열이 겹쳐 보인다.
+ * 그래서 min-width 로 두지 않고 정확한 폭을 못 박는다.
+ */
+const NAME_W = 78
+const TOTAL_W = 46
 
 export default function WorkScheduleViewPage() {
   const now = new Date()
@@ -82,10 +92,26 @@ export default function WorkScheduleViewPage() {
     ]).then(([d, h]) => { setDoc(d); setHols(h) }).finally(() => setLoading(false))
   }, [ym])
 
-  useEffect(() => {   // 모바일 첫 진입 — 한눈에 들어오게 자동 맞춤
+  /**
+   * 첫 진입에 자동으로 축소하지 않는다.
+   *
+   * 예전에는 폭을 화면에 맞춰 줄였는데, 31칸을 폰 화면에 욱여넣으면 글씨가
+   * 너무 작아 읽을 수가 없다. Google 스프레드시트도 그렇게 하지 않는다 —
+   * 100%로 두고 옆으로 미는 편이 낫다. 이름·총시간은 고정돼 따라온다.
+   * 한눈에 보고 싶으면 「한눈에」를 누르면 된다.
+   *
+   * 대신 오늘 날짜가 보이도록 가로 위치를 맞춰 준다. 8월 28일에 표를 열면
+   * 1일부터 보이는 것보다 오늘이 보이는 편이 쓸모 있다.
+   */
+  useEffect(() => {
     if (loading || fitted.current || !doc) return
-    if (window.innerWidth < 768) requestAnimationFrame(fitToScreen)
     fitted.current = true
+    requestAnimationFrame(() => {
+      const box = boxRef.current
+      const cell = box?.querySelector('[data-today="1"]') as HTMLElement | null
+      if (!box || !cell) return
+      box.scrollLeft = Math.max(0, cell.offsetLeft - box.clientWidth / 2)
+    })
   }, [loading, doc])
 
   const move = (d: number) => {
@@ -118,6 +144,16 @@ export default function WorkScheduleViewPage() {
       .filter(r => Object.keys(r.codes).length > 0 || r.name !== '(퇴사)')
     return sortScheduleStaff(rows)
   }, [doc, staffList])
+
+  /** 기준 근로시간 — 저장된 값. 없으면 판단하지 않는다(모르면서 '정상' 이라 하면 안 된다) */
+  const baseHours = Number(doc?.base_hours) || 0
+
+  /** 사람마다 이번 달 총시간. 편성 화면과 같은 계산을 쓴다(utils/monthHours) */
+  const totals = useMemo(() => {
+    const m = new Map<string, ReturnType<typeof monthTotals>>()
+    for (const p of people) m.set(p.id, monthTotals(p.codes, days))
+    return m
+  }, [people, days])
 
   const dayColor = (day: number, forText = true) => {
     const iso = `${ym}-${String(day).padStart(2, '0')}`
@@ -169,18 +205,32 @@ export default function WorkScheduleViewPage() {
         </div>
       ) : (
         <>
-          <div ref={boxRef} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-auto max-h-[74vh]"
+          <div ref={boxRef} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-auto max-h-[calc(100vh-190px)] md:max-h-[74vh] overscroll-contain"
             style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y' }}>
             <div ref={innerRef} style={{ zoom }}>
               <table className="border-collapse" style={{ minWidth: 'max-content' }}>
                 <thead className="sticky top-0 z-20">
                   <tr className="bg-gray-50">
-                    <th className="sticky left-0 z-30 bg-gray-50 border-b border-r border-gray-200 px-2 py-1.5 text-[11px] font-bold text-gray-500 text-left min-w-[72px]">성명</th>
-                    <th className="border-b border-r-2 border-gray-200 border-r-gray-300 px-1 py-1.5 text-[10px] font-bold text-gray-400">조</th>
+                    <th style={{ width: NAME_W, minWidth: NAME_W, maxWidth: NAME_W }}
+                      className="sticky left-0 z-30 bg-gray-50 border-b border-r border-gray-200 px-2 py-1.5 text-[11px] font-bold text-gray-500 text-left">성명</th>
+                    {/* 총시간은 오른쪽 끝이 아니라 이름 바로 옆에 붙여 함께 고정한다.
+                        날짜가 31칸이라 끝에 두면 핸드폰에서 끝까지 밀어야 보인다 —
+                        제일 자주 보는 숫자를 제일 멀리 두는 셈이다. */}
+                    <th style={{ left: NAME_W, width: TOTAL_W, minWidth: TOTAL_W, maxWidth: TOTAL_W }}
+                      className="sticky z-30 bg-gray-50 border-b border-r-2 border-gray-200 border-r-gray-300 px-1 py-1.5 text-[10px] font-bold text-gray-500">
+                      총시간
+                      {baseHours > 0 && (
+                        <span className="block text-[8px] font-normal text-gray-400 leading-tight">
+                          기준 {baseHours}
+                        </span>
+                      )}
+                    </th>
+                    <th className="border-b border-r border-gray-200 px-1 py-1.5 text-[10px] font-bold text-gray-400">조</th>
                     {days.map(d => {
                       const iso = `${ym}-${String(d).padStart(2, '0')}`
                       return (
-                        <th key={d} className={`border-b border-gray-200 ${vLine(d)} px-0.5 py-1 text-center min-w-[30px] ${iso === todayIso ? 'bg-amber-100' : dayColor(d, false)}`}>
+                        <th key={d} data-today={iso === todayIso ? '1' : undefined}
+                          className={`border-b border-gray-200 ${vLine(d)} px-0.5 py-1 text-center min-w-[30px] ${iso === todayIso ? 'bg-amber-100' : dayColor(d, false)}`}>
                           <p className={`text-[11px] font-extrabold leading-none ${dayColor(d)}`}>{d}</p>
                           <p className={`text-[8.5px] leading-tight ${dayColor(d)}`}>{DOW[new Date(y, m - 1, d).getDay()]}</p>
                         </th>
@@ -194,11 +244,13 @@ export default function WorkScheduleViewPage() {
                     const band = p.pos !== prevPos
                     return (
                       <tr key={p.id} className={band ? 'border-t-2 border-gray-200' : ''}>
-                        <td className="sticky left-0 z-10 bg-white border-b border-r border-gray-100 px-2 py-1 whitespace-nowrap">
-                          <p className="text-[12px] font-bold text-gray-800 leading-tight">{p.name}</p>
-                          <p className="text-[9px] text-gray-400 leading-tight">{p.pos}</p>
+                        <td style={{ width: NAME_W, minWidth: NAME_W, maxWidth: NAME_W }}
+                          className="sticky left-0 z-10 bg-white border-b border-r border-gray-100 px-2 py-1">
+                          <p className="text-[12px] font-bold text-gray-800 leading-tight truncate">{p.name}</p>
+                          <p className="text-[9px] text-gray-400 leading-tight truncate">{p.pos}</p>
                         </td>
-                        <td className="border-b border-gray-100 border-r-2 border-r-gray-300 px-1 py-1 text-center text-[10px] font-bold text-gray-500 whitespace-nowrap">{p.team || ''}</td>
+                        <TotalCell t={totals.get(p.id)} baseHours={baseHours} />
+                        <td className="border-b border-gray-100 border-r border-gray-100 px-1 py-1 text-center text-[10px] font-bold text-gray-500 whitespace-nowrap">{p.team || ''}</td>
                         {days.map(d => {
                           const iso = `${ym}-${String(d).padStart(2, '0')}`
                           const c = p.codes[String(d)] ?? ''
@@ -229,5 +281,45 @@ export default function WorkScheduleViewPage() {
         </>
       )}
     </div>
+  )
+}
+
+/**
+ * 총시간 칸.
+ *
+ * 기준에 모자라면 급여가 깎이는 쪽이라 더 급하다 — 빨갛게. 넘으면 수당
+ * 문제라 주황으로. 기준이 저장돼 있지 않으면 판단하지 않고 시간만 적는다.
+ * 모르면서 '정상' 이라고 말하지 않는다.
+ *
+ * 이름 열 바로 옆에 고정된다. 날짜가 31칸이라 오른쪽 끝에 두면 핸드폰에서
+ * 끝까지 밀어야 보인다.
+ */
+function TotalCell({ t, baseHours }: {
+  t?: { total: number; extra: number } | undefined
+  baseHours: number
+}) {
+  const total = t?.total ?? 0
+  const st = hourStatus(total, baseHours)
+  const diff = hourDiff(total, baseHours)
+  const tone =
+    st === 'short' ? 'text-rose-600' :
+    st === 'over' ? 'text-amber-600' :
+    st === 'ok' ? 'text-emerald-600' : 'text-gray-700'
+  return (
+    <td style={{ left: NAME_W, width: TOTAL_W, minWidth: TOTAL_W, maxWidth: TOTAL_W }}
+      className="sticky z-10 bg-white border-b border-gray-100 border-r-2 border-r-gray-300
+                 px-1 py-1 text-center whitespace-nowrap">
+      <span className={`block text-[11.5px] font-extrabold leading-tight ${tone}`}>{total}</span>
+      {diff !== null && diff !== 0 && (
+        <span className={`block text-[8.5px] leading-tight ${tone}`}>
+          {diff > 0 ? `+${diff}` : diff}
+        </span>
+      )}
+      {!!t?.extra && (
+        <span className="block text-[8px] text-purple-500 leading-tight" title="직접 적은 시간대(추가근무)">
+          추 {t.extra}
+        </span>
+      )}
+    </td>
   )
 }
