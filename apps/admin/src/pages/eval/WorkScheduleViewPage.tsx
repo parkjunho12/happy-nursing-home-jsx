@@ -371,7 +371,7 @@ export default function WorkScheduleViewPage() {
             </div>
           </div>
           <p ref={legendRef} className="mt-2 text-[11px] text-gray-400 leading-relaxed">
-            D 주간 08:50~18:00 · M 06:50~16:00 · N 야간 17:50~익일 09:00 · <span className="text-rose-500 font-bold">休</span> 연차 ·
+            D 주간 08:50~18:00 · M 06:50~16:00 · N 야간 18:00~익일 09:00 · <span className="text-rose-500 font-bold">休</span> 연차 ·
             숫자 코드는 시간대 근무 — 손가락 두 개로 확대·축소, 「한눈에」로 전체 보기 · 수정은 PC 「근무표」에서
             {doc?.updated_at && ` · 저장 ${new Date(doc.updated_at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`}
           </p>

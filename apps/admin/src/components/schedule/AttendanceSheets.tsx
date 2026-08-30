@@ -71,7 +71,7 @@ export default function AttendanceSheets({ ym, staff, holidays }: {
 
           {/* 근무 형태 — 한 줄 작게 */}
           <p className="text-[9px] text-gray-500 text-center border border-gray-300 rounded px-1 py-[3px] mb-2">
-            근무형태&nbsp;&nbsp;D 08:50~18:00 · M 06:50~16:00 · N 17:50~익일09:00 · 休 연차
+            근무형태&nbsp;&nbsp;D 08:50~18:00 · M 06:50~16:00 · N 18:00~익일09:00 · 休 연차
           </p>
 
           {/* 1~15 | 16~말일 2단 표 */}
