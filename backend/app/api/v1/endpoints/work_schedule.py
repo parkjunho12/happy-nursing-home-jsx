@@ -228,6 +228,8 @@ def export_schedule(month: str = Query(...), db: Session = Depends(get_db), _: U
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
 
+    from app.services import shift_hours as _shift_hours
+
     y, m = int(month[:4]), int(month[5:7])
     total = _cal.monthrange(y, m)[1]
     names = {s2.id: s2.name for s2 in db.query(LtcStaffMember).all()}
@@ -354,10 +356,15 @@ def export_schedule(month: str = Query(...), db: Session = Depends(get_db), _: U
         nv = ws.cell(row=r_i, column=NAME_C, value=names.get(sid, "(퇴사)"))
         nv.font = F(); nv.alignment = center
 
-        # 저장할 때 담긴 총시간. 예전에 저장된 달에는 없을 수 있는데,
-        # 그때는 빈칸으로 둔다. 모르는 값을 0 으로 적으면 '한 시간도 안 나왔다'
-        # 로 읽힌다 — 없는 것보다 나쁘다.
+        # 총시간 — 저장할 때 화면이 계산해 담아 보낸 값을 먼저 쓴다.
+        #
+        # 이 기능이 생기기 전에 저장된 달에는 그 값이 없다. 급여로 이어지는
+        # 숫자를 '한 번 저장하셔야 나옵니다' 로 둘 수는 없어, 없으면 여기서
+        # 계산한다. 계산 규칙은 화면과 같은 표를 통과하는 것을 테스트가
+        # 확인한다(backend/tests/test_shift_hours.py).
         tv_raw = row.get("total")
+        if not isinstance(tv_raw, (int, float)):
+            tv_raw = _shift_hours.month_total(codes, range(1, total + 1))
         tc2 = ws.cell(row=r_i, column=TOTAL_C,
                       value=(float(tv_raw) if isinstance(tv_raw, (int, float)) else None))
         tc2.font = F()
