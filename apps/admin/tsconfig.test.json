@@ -21,6 +21,7 @@
     "src/utils/aiEditorDeploy.ts",
     "src/utils/floorFilter.ts",
     "src/utils/monthHours.ts",
+    "src/utils/scheduleRows.ts",
     "tests/**/*.ts"
   ]
 }

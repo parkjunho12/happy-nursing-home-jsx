@@ -21,6 +21,7 @@ import { SHIFT_CODES, extraHoursOf, countAsOf, meta, isAutoManaged, splitTimeRan
 import { auditSchedule, type Issue } from '@/utils/scheduleAudit'
 import { filterByFloor, countHiddenNoFloor } from '@/utils/floorFilter'
 import { monthTotals } from '@/utils/monthHours'
+import { buildScheduleRows, canSaveRows } from '@/utils/scheduleRows'
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
 const thisMonth = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
@@ -628,16 +629,27 @@ export default function WorkSchedulePage() {
   }
 
   const save = async () => {
+    /**
+     * 직원 목록이 아직 없으면 저장하지 않는다.
+     *
+     * rows 는 staff 에서 만들어진다. 목록이 비어 있으면 payload 가 빈 배열이
+     * 되고, 서버는 그걸 그대로 받아 모두의 조·층·순서를 지운다.
+     *
+     * 닿을 수 없는 길이 아니다 — 기준시간·기준일수 같은 위쪽 입력은 표를
+     * 건드리지 않고도 '저장 안 됨' 을 켠다. 목록을 불러오기 전에(또는
+     * 불러오기가 실패한 채로) 그 칸만 고치고 저장하면 그대로 날아간다.
+     */
+    if (!canSaveRows(staff.length)) {
+      alert('직원 목록을 아직 불러오지 못했습니다.\n' +
+            '이대로 저장하면 조·층 배정이 지워질 수 있어 멈췄습니다.\n' +
+            '잠시 후 다시 저장해 주세요.')
+      return
+    }
     setSaving(true)
     try {
       // 총시간을 함께 담는다. 엑셀은 백엔드가 만드는데, 파이썬에 같은 계산을
       // 다시 쓰면 언젠가 두 숫자가 갈라진다. 여기서 한 번 계산해 보낸다.
-      const payload = staff.map((s, i) => {
-        const t = calc(s.id)
-        return { staff_id: s.id, position: s.pos, team: s.team, floor: s.floor,
-                 order: i, note: s.note,
-                 hours: t.hours, extra: t.extra, total: t.total }
-      })
+      const payload = buildScheduleRows(staff, calc)
       const doc = await workScheduleAPI.save({ year_month: ym, data, rows: payload, base_hours: baseHours, base_days: baseDays, as_of: asOf, team_offsets: offsets })
       setUpdatedBy(doc.updated_by ?? null); setDirty(false)
       setLock({ locked: !!doc.locked, by: doc.locked_by, at: doc.locked_at })
