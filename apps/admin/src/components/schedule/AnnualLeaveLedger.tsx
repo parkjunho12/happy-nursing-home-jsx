@@ -32,10 +32,13 @@ export default function AnnualLeaveLedger() {
   const [rows, setRows] = useState<LedgerRow[]>([])
   const [monthNow, setMonthNow] = useState(0)
   const [loading, setLoading] = useState(true)
+  // 퇴사자 포함 — 그만둘 때 연차 정산이 맞았는지 확인할 때 쓴다.
+  // 평소에는 꺼둔다. 지금 챙겨야 할 사람이 묻히면 대장을 보는 뜻이 없다.
+  const [withResigned, setWithResigned] = useState(false)
 
   const load = () => {
     setLoading(true)
-    ledgerAPI.get(year)
+    ledgerAPI.get(year, withResigned)
       .then(r => {
         setRows(r.rows); setMonthNow(r.month_now)
         // 편집 중인 칸이 있으면 새 데이터로 갱신
@@ -44,7 +47,7 @@ export default function AnnualLeaveLedger() {
       .catch(() => setRows([]))
       .finally(() => setLoading(false))
   }
-  useEffect(load, [year])
+  useEffect(load, [year, withResigned])
 
   const addManual = async () => {
     if (!cell || !dayInput) return
@@ -83,6 +86,17 @@ export default function AnnualLeaveLedger() {
           <button onClick={() => setYear(y => y + 1)} className="px-2 py-2 hover:bg-gray-50" aria-label="다음 해">
             <ChevronRight className="w-4 h-4 text-gray-500" /></button>
         </div>
+        {/* 직원 상세 표와 같은 자리·같은 모양으로 둔다 — 두 화면이 다르면 매번 찾게 된다 */}
+        <label className="inline-flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer">
+          <input type="checkbox" checked={withResigned}
+            onChange={e => setWithResigned(e.target.checked)} className="accent-gray-500" />
+          퇴사 포함
+        </label>
+        {withResigned && (
+          <span className="text-[11px] text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">
+            {year}년에 하루라도 재직한 퇴사자 {rows.filter(r => r.resigned).length}명 포함
+          </span>
+        )}
         <span className="text-[11px] text-gray-400">
           1년차 최대 11개(만근한 다음 달 근무 시 1개씩 발생) · 2~3년차 15 · 4~5년차 16 · 6~7년차 17 · 8년차~ 18 — 월 1회 사용 권장 · 이월 없음(연말 소멸)
         </span>
@@ -111,11 +125,18 @@ export default function AnnualLeaveLedger() {
             </thead>
             <tbody>
               {rows.map((r, i) => (
-                <tr key={r.staff_id} className="hover:bg-gray-50/50">
+                <tr key={r.staff_id} className={`hover:bg-gray-50/50 ${r.resigned ? 'bg-gray-50/60' : ''}`}>
                   <td className={`${td} text-gray-400`}>{i + 1}</td>
                   <td className={`${td} text-gray-500`}>{r.position || '-'}</td>
-                  <td className={`${td} text-left font-bold text-gray-800`}>
+                  <td className={`${td} text-left font-bold ${r.resigned ? 'text-gray-500' : 'text-gray-800'}`}>
                     {r.name} <span className="text-[10px] font-normal text-gray-400">{r.service_year}년차</span>
+                    {/* 퇴사자는 한눈에 갈라져야 한다. 재직자로 착각하고 연차를 챙기면 헛일이 된다 */}
+                    {r.resigned && (
+                      <span className="ml-1 text-[9px] font-bold text-white bg-gray-400 px-1 py-0.5 rounded"
+                        title={r.resign_date ? `${r.resign_date} 퇴사` : '퇴사'}>
+                        퇴사{r.resign_date ? ` ${Number(r.resign_date.slice(5, 7))}/${Number(r.resign_date.slice(8, 10))}` : ''}
+                      </span>
+                    )}
                   </td>
                   <td className={`${td} text-gray-500`}>{fmtHire(r.hire_date)}</td>
                   <td className={td}>
