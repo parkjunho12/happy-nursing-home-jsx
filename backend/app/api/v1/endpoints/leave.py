@@ -783,14 +783,25 @@ def ledger_manual_remove(staff_id: str, date: str, db: Session = Depends(get_db)
     return ApiResponse(success=True, message="연차 기록을 지웠습니다.")
 
 
+# 직원 상태값. 'pending' 은 퇴사가 아니라 **입사 예정** 이다 —
+# 입사일이 되면 목록을 열 때 자동으로 'active' 로 바뀐다(eval_people.list_ltc_staff).
+# 'active 가 아니면 퇴사' 로 뭉뚱그리면 아직 출근도 안 하신 분이 퇴사자로 찍힌다.
+ST_RESIGNED = "resigned"
+
+
+def is_resigned(st) -> bool:
+    """퇴사자인가. 'active 가 아닌 사람' 과는 다르다."""
+    return getattr(st, "status", "active") == ST_RESIGNED
+
+
 def _worked_in_year(st, year: int) -> bool:
-    """그 해에 하루라도 재직했는가.
+    """그 해에 하루라도 재직했는가. (퇴사자를 대장에 넣을지 고를 때 쓴다)
 
     입사가 그 해 말 이전이고, 퇴사가 없거나 그 해 시작 이후여야 한다.
     날짜가 비었거나 형식이 이상하면 넣는 쪽으로 둔다 — 대장에서 사람이
     조용히 빠지는 것이 잘못 들어가는 것보다 나쁘다.
     """
-    if getattr(st, "status", "active") == "active":
+    if not is_resigned(st):
         return True
     hire = (st.hire_date or "")[:10]
     resign = (getattr(st, "resign_date", None) or "")[:10]
@@ -819,8 +830,10 @@ def annual_leave_ledger(year: int,
     줄만 차지하면, 정작 봐야 할 사람이 묻힌다. 퇴사자를 보는 이유는 대개
     '그만둘 때 연차 정산이 맞았나' 를 확인하려는 것이고, 그건 그 해 줄에만 있다.
     """
-    staff = db.query(LtcStaffMember).all() if include_resigned else (
-        db.query(LtcStaffMember).filter(LtcStaffMember.status == "active").all())
+    # 입사 예정자(pending)는 어느 쪽에서도 끌어오지 않는다. 아직 출근을 안 하셨으니
+    # 연차가 생기지도 않았고, 무엇보다 퇴사자로 보이면 안 된다.
+    wanted = ["active", ST_RESIGNED] if include_resigned else ["active"]
+    staff = db.query(LtcStaffMember).filter(LtcStaffMember.status.in_(wanted)).all()
     if include_resigned:
         staff = [st for st in staff if _worked_in_year(st, year)]
 
@@ -851,7 +864,7 @@ def annual_leave_ledger(year: int,
         # 퇴사자는 퇴사한 달까지만 발생시킨다. 그러지 않으면 3월에 그만둔 사람이
         # 8월치까지 발생한 것처럼 보인다 — 퇴사자를 펴 보는 이유가 대개
         # '나갈 때 정산이 맞았나' 인데, 그 숫자가 틀리면 볼 이유가 없다.
-        resign = (getattr(st, "resign_date", None) or "")[:10]
+        resign = (getattr(st, "resign_date", None) or "")[:10] if is_resigned(st) else ""
         m_end = month_now
         if resign and resign[:4].isdigit():
             if int(resign[:4]) < year:
@@ -874,7 +887,7 @@ def annual_leave_ledger(year: int,
             "staff_id": st.id, "name": st.name, "position": st.position,
             "hire_date": hire or None,
             # 퇴사자를 함께 볼 때 섞이지 않게 — 화면에서 표시하고 아래로 내린다
-            "resigned": getattr(st, "status", "active") != "active",
+            "resigned": is_resigned(st),
             "resign_date": (getattr(st, "resign_date", None) or "")[:10] or None,
             "service_year": service_year,
             "entitle": entitle,               # 연간 발생 (1년차는 최대치)
