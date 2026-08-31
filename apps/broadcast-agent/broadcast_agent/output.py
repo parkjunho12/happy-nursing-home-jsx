@@ -103,7 +103,9 @@ class MockAudioOutput(BroadcastOutput):
     def is_playing(self) -> bool:
         return self._playing
 
-    def play(self, path, *, volume=70, max_seconds=600, zones=None) -> PlayResult:
+    def play(self, path, *, volume=70, max_seconds=600, zones=None,
+             _no_format=False) -> PlayResult:
+        retried = _no_format
         if not os.path.exists(path):
             return PlayResult(ok=False, seconds=0.0, error=f"파일이 없습니다: {path}")
         self.volume = volume
@@ -174,6 +176,11 @@ class NetworkPAAdapter(BroadcastOutput):
         return HealthStatus(ok=False, detail="네트워크 PA 미연결", zones=[])
 
 
+# 확장자 → ffmpeg 디먹서 이름. 형식 추측이 빗나가 소리 없이 끝나는 것을 막는다.
+DEMUXER = {".mp3": "mp3", ".wav": "wav", ".m4a": "mp4",
+           ".mp4": "mp4", ".aac": "aac", ".ogg": "ogg"}
+
+
 class AudioOutputAdapter(BroadcastOutput):
     """PC 오디오 출력 → BKH-180 LINE/AUX → 100V 실링스피커.
 
@@ -231,8 +238,17 @@ class AudioOutputAdapter(BroadcastOutput):
         self.zones = self.select_zones(zones or [ZONE_ALL])
 
         # -nodisp/-vn : mp4 라도 화면 없이 소리만. -autoexit : 끝나면 스스로 종료
-        cmd = [self.player, "-nodisp", "-vn", "-autoexit", "-loglevel", "error",
-               "-af", f"volume={self.volume / 100:.3f}", path]
+        #
+        # -f 로 형식을 못박는다. ffmpeg 은 내용을 보고 형식을 추측하는데, 태그도
+        # 헤더도 없는 mp3 를 VVC 영상으로 잘못 짚은 일이 있었다. 그러면 -vn 이
+        # 그 가짜 영상 트랙을 버리고 남는 오디오가 없어, 소리 한 번 안 내고
+        # 종료코드 0 으로 끝난다 — 방송은 안 나갔는데 기록은 '성공'이 된다.
+        # 추측에 맡기지 않는다.
+        cmd = [self.player, "-nodisp", "-vn", "-autoexit", "-loglevel", "error"]
+        fmt = None if _no_format else DEMUXER.get(os.path.splitext(path)[1].lower())
+        if fmt:
+            cmd += ["-f", fmt]
+        cmd += ["-af", f"volume={self.volume / 100:.3f}", path]
         t0 = time.time()
         truncated = False
         try:
@@ -252,6 +268,12 @@ class AudioOutputAdapter(BroadcastOutput):
                 # 사람이 중지시킨 경우도 0이 아닌 코드로 끝난다
                 if self._stopped_by_user:
                     return PlayResult(ok=True, seconds=time.time() - t0, error="중지됨")
+                # 확장자가 거짓인 파일일 수 있다(m4a 를 .mp3 로 저장한 것 등).
+                # 형식을 못박은 탓에 못 튼 거라면 한 번은 추측으로 되돌려 본다.
+                if fmt and not retried:
+                    logger.warning("%s 로 못 읽었습니다 — 형식 추측으로 다시 시도합니다", fmt)
+                    return self.play(path, volume=volume, max_seconds=max_seconds,
+                                     zones=zones, _no_format=True)
                 return PlayResult(ok=False, seconds=time.time() - t0,
                                   error=msg or f"재생 실패(코드 {rc})")
             return PlayResult(ok=True, seconds=time.time() - t0, truncated=truncated)

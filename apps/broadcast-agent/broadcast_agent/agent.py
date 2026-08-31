@@ -71,6 +71,37 @@ def parse_at(s: str) -> datetime:
 # ──────────────────────────────────────────────────────────────
 # 서버 통신 — 실패해도 죽지 않는다
 # ──────────────────────────────────────────────────────────────
+
+# 실제로 나갔다고 볼 수 있는 최소 비율. 음원 길이의 이만큼도 못 채웠으면
+# 재생이 아니라 '열자마자 끝난' 것이다.
+MIN_PLAY_RATIO = 0.5
+# 짧은 음원(안내 한 마디)은 비율만으로는 판정이 거칠다. 이 시간 미만이면
+# 아예 소리가 안 났다고 본다.
+MIN_PLAY_SECONDS = 1.0
+
+
+def _too_short(seconds: float, duration_sec) -> Optional[str]:
+    """나갔다고 보기에 너무 짧으면 그 이유를, 아니면 None.
+
+    길이를 모르면 판정하지 않는다. 확실하지 않은 근거로 멀쩡한 방송을
+    실패로 뒤집으면, 다음 주기에 같은 방송이 또 나간다 — 어르신들께는
+    같은 안내가 두 번 들린다.
+    """
+    try:
+        want = float(duration_sec or 0)
+    except (TypeError, ValueError):
+        return None
+    if want <= 0:
+        return None
+    if seconds < MIN_PLAY_SECONDS:
+        return (f"{want:.0f}초짜리 음원인데 {seconds:.1f}초 만에 끝났습니다 — "
+                "소리가 나가지 않았습니다. 음원 파일 형식을 확인해주세요.")
+    if seconds < want * MIN_PLAY_RATIO:
+        return (f"{want:.0f}초짜리 음원인데 {seconds:.1f}초만 재생됐습니다 — "
+                "중간에 끊겼습니다.")
+    return None
+
+
 class ServerError(RuntimeError):
     pass
 
@@ -431,6 +462,24 @@ class BroadcastAgent:
         finally:
             self.now_playing = None
         ended = now_kst()
+
+        # ── 정말 나갔는지 확인한다 ──────────────────────────────────────────
+        # ffplay 가 종료코드 0 으로 끝났다고 소리가 난 것은 아니다. 형식을
+        # 잘못 짚으면 아무것도 재생하지 않고 깨끗하게 0 으로 끝난다. 실제로
+        # 5분 16초짜리 음원이 1.2초 만에 '성공' 으로 끝난 일이 있었고, 현장에서는
+        # 여덟 번을 다시 눌러 볼 때까지 아무도 원인을 알 수 없었다.
+        #
+        # 그래서 잰 시간과 음원 길이를 견준다. 턱없이 짧으면 실패다.
+        # 모르면(길이 정보가 없으면) 판정하지 않는다 — 멀쩡한 방송을
+        # 실패로 뒤집는 쪽이 더 나쁘다.
+        if result.ok and not getattr(result, "truncated", False):
+            short = _too_short(getattr(result, "seconds", 0.0), m.get("duration_sec"))
+            if short:
+                logger.error("소리가 나가지 않은 것으로 보입니다: %s — %s",
+                             item.get("title"), short)
+                result = type("R", (), {"ok": False, "error": short,
+                                        "seconds": getattr(result, "seconds", 0.0),
+                                        "truncated": False})()
 
         status = "SUCCESS" if result.ok else "FAILED"
         if status == "SUCCESS":

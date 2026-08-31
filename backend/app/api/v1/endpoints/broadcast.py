@@ -253,7 +253,12 @@ async def upload_media(file: UploadFile = File(...),
         raise HTTPException(400, str(e))
     # TTS 와 같은 음량으로 맞춘다 — 방송마다 소리 크기가 들쭉날쭉하면
     # 앞 방송에 맞춰 앰프를 올려둔 상태에서 다음 방송이 크게 나간다.
-    data, ext, norm = media_svc.normalize_upload(data, ext)
+    # 여기서 '소리를 못 찾겠다'가 나오면 저장하지 않고 되돌려준다. 못 트는
+    # 파일을 받아두면 방송 시각에 조용히 아무 일도 안 일어난다.
+    try:
+        data, ext, norm = media_svc.normalize_upload(data, ext)
+    except media_svc.MediaError as e:
+        raise HTTPException(400, str(e))
     mime, kind = media_svc.ALLOWED.get(ext, (mime, kind))
     saved = media_svc.save_bytes(data, ext=ext, stem=file.filename)
     m = BroadcastMedia(kind=kind, filename=saved["filename"], url=saved["url"], mime=mime,
@@ -266,7 +271,9 @@ async def upload_media(file: UploadFile = File(...),
         "size_bytes": m.size_bytes, "duration_sec": m.duration_sec, "sha256": m.sha256,
         # 음량을 얼마나 키웠는지 — 원본이 너무 작으면 화면에서 미리 알려준다
         "gain_db": norm.get("gain_db"), "still_quiet": norm.get("still_quiet"),
-        "audio_only": norm.get("audio_only")})
+        "audio_only": norm.get("audio_only"),
+        # 형식을 잘못 짚히는 파일이라 다시 인코딩했다는 뜻 — 화면에서 알려준다
+        "reencoded": norm.get("reencoded")})
 
 
 class TTSBody(BaseModel):

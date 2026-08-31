@@ -26,6 +26,12 @@ jobs:
         # 한다). 한쪽만 바뀌면 급여로 이어지는 숫자가 갈라지므로 여기서 막는다.
         # 표준 라이브러리만 쓰므로 설치가 필요 없다.
         run: python3 backend/tests/test_shift_hours.py
+      - name: 방송이 실제로 나갔는지 판정하는 규칙
+        # ffplay 는 형식을 잘못 짚으면 소리 한 번 안 내고 종료코드 0 으로 끝난다.
+        # 5분짜리 방송이 1.2초 만에 '성공' 으로 기록된 적이 있다. 그때 현장에서는
+        # 여덟 번을 다시 눌러 볼 때까지 아무도 원인을 알 수 없었다.
+        # 그 판정 규칙이 조용히 사라지면 같은 일이 되풀이된다.
+        run: python3 apps/broadcast-agent/tests/test_play_verify.py
       - name: 마이그레이션 head가 하나인지 검사
         # head가 갈라지면 alembic upgrade가 서버에서 실패한다 — 미리 잡는다
         run: |
