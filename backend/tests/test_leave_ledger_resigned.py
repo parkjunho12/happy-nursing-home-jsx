@@ -7,7 +7,12 @@
      2년 전에 그만둔 사람이 올해 대장에 0으로 줄만 차지하면, 정작 지금
      챙겨야 할 사람이 묻힌다.
 
-  2. 발생 일수가 퇴사한 달에서 멈춘다.
+  2. 입사 예정자를 퇴사자로 치지 않는다.
+     status 는 active / pending(입사 예정) / resigned 세 가지고, 퇴사는 resigned
+     하나뿐이다. 'active 가 아니면 퇴사' 로 뭉뚱그려서 아직 출근도 안 하신 분이
+     '퇴사' 배지를 달고 나온 적이 있다.
+
+  3. 발생 일수가 퇴사한 달에서 멈춘다.
      3월에 그만둔 사람이 8월치까지 발생한 것처럼 보이면 그 숫자를 볼 이유가
      없다. 정산이 맞았는지 확인하려고 폈는데 틀린 답을 주는 셈이다.
 
@@ -34,7 +39,8 @@ class Staff:
 
 
 def check() -> int:
-    worked = _fn("_worked_in_year", "def _worked_in_year", '@router.get("/ledger")')
+    worked = _fn("_worked_in_year", "ST_RESIGNED = ", '@router.get("/ledger")')
+    resigned = _fn("is_resigned", "ST_RESIGNED = ", '@router.get("/ledger")')
     accrue = _fn("_accrued_first_year", "def _first_accrual_month", "\ndef _hr_viewer")
     bad: list[str] = []
 
@@ -56,6 +62,24 @@ def check() -> int:
         if got is not want:
             bad.append(f"'{label}' {year}년: {want} 여야 하는데 {got}")
 
+    # ── 1-b. 입사 예정자(pending)를 퇴사자로 치면 안 된다 ───────────
+    # 'active 가 아니면 퇴사' 로 뭉뚱그려서 아직 출근도 안 하신 분이 대장에
+    # '퇴사' 배지를 달고 나온 적이 있다. status 는 active / pending(입사 예정)
+    # / resigned 세 가지이고, 퇴사는 resigned 하나뿐이다.
+    for label, st, want in [
+        ("재직자",                 Staff("2020-01-01", None, "active"),   False),
+        ("입사 예정자",            Staff("2026-09-01", None, "pending"),  False),
+        ("퇴사자",                 Staff("2020-01-01", "2026-03-01", "resigned"), True),
+        ("상태값이 비어있음",      Staff("2020-01-01", None, ""),         False),
+    ]:
+        got = resigned(st)
+        if got is not want:
+            bad.append(f"'{label}' 퇴사 판정: {want} 여야 하는데 {got}")
+
+    # 입사 예정자는 그 해 안에 입사하더라도 대장에서 퇴사자로 묶이지 않는다
+    if resigned(Staff("2026-09-01", None, "pending")):
+        bad.append("입사 예정자가 퇴사자로 분류된다")
+
     # ── 2. 발생은 퇴사한 달에서 멈춘다 ──────────────────────────────
     # 1년차(입사 2026-01-01)가 3월에 퇴사 → 8월인 지금 기준으로 세면 안 된다
     hire = "2026-01-01"
@@ -76,7 +100,7 @@ def check() -> int:
             print("   ·", b)
         return 1
 
-    print("✅ 퇴사자 연차 대장 정상 — 재직연도 판정 9건 · 발생 상한 3건")
+    print("✅ 퇴사자 연차 대장 정상 — 재직연도 9건 · 퇴사 판정 5건 · 발생 상한 3건")
     return 0
 
 
