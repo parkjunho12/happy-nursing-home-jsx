@@ -32,6 +32,10 @@ jobs:
         # 여덟 번을 다시 눌러 볼 때까지 아무도 원인을 알 수 없었다.
         # 그 판정 규칙이 조용히 사라지면 같은 일이 되풀이된다.
         run: python3 apps/broadcast-agent/tests/test_play_verify.py
+      - name: 퇴사자 연차 대장 규칙
+        # 퇴사자를 대장에 띄우는 이유는 '나갈 때 정산이 맞았나' 확인이다.
+        # 그 해에 재직한 사람만 나와야 하고, 발생은 퇴사한 달에서 멈춰야 한다.
+        run: python3 backend/tests/test_leave_ledger_resigned.py
       - name: 마이그레이션 head가 하나인지 검사
         # head가 갈라지면 alembic upgrade가 서버에서 실패한다 — 미리 잡는다
         run: |

@@ -137,6 +137,8 @@ export interface LedgerRow {
   name: string
   position?: string | null
   hire_date?: string | null
+  resigned?: boolean         // 퇴사자 — 함께 볼 때 표시하고 뒤로 내린다
+  resign_date?: string | null
   service_year: number
   entitle: number            // 연간 최대 발생 — 1년차 11
   accrued: number            // 현재까지 발생 (1년차만 월할)
@@ -153,8 +155,8 @@ export interface LedgerRow {
 }
 
 export const ledgerAPI = {
-  get: (year: number) =>
-    apiClient.get(`${BASE}/ledger`, { params: { year } })
+  get: (year: number, includeResigned = false) =>
+    apiClient.get(`${BASE}/ledger`, { params: { year, include_resigned: includeResigned } })
       .then(unwrap<{ year: number; month_now: number; rows: LedgerRow[] }>),
   /** 직접 입력 (ADMIN·시설장) — 그 날짜 근무표에 休를 적는 방식 */
   addManual: (staff_id: string, date: string) =>

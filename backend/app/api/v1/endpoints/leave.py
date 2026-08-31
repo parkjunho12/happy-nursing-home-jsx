@@ -2,7 +2,7 @@
 from __future__ import annotations
 import re
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -783,17 +783,46 @@ def ledger_manual_remove(staff_id: str, date: str, db: Session = Depends(get_db)
     return ApiResponse(success=True, message="연차 기록을 지웠습니다.")
 
 
+def _worked_in_year(st, year: int) -> bool:
+    """그 해에 하루라도 재직했는가.
+
+    입사가 그 해 말 이전이고, 퇴사가 없거나 그 해 시작 이후여야 한다.
+    날짜가 비었거나 형식이 이상하면 넣는 쪽으로 둔다 — 대장에서 사람이
+    조용히 빠지는 것이 잘못 들어가는 것보다 나쁘다.
+    """
+    if getattr(st, "status", "active") == "active":
+        return True
+    hire = (st.hire_date or "")[:10]
+    resign = (getattr(st, "resign_date", None) or "")[:10]
+    if hire and hire > f"{year}-12-31":
+        return False
+    if resign and resign < f"{year}-01-01":
+        return False
+    return True
+
+
 @router.get("/ledger")
-def annual_leave_ledger(year: int, db: Session = Depends(get_db), _: User = Depends(_hr_viewer)):
+def annual_leave_ledger(year: int,
+                        include_resigned: bool = Query(False),
+                        db: Session = Depends(get_db),
+                        _: User = Depends(_hr_viewer)):
     """연차휴가 관리대장 — 시트로 관리하던 것을 그대로 화면에 올린 것.
 
     연차 사용촉진제 적용: 이월 없음, 미사용분은 연말 소멸(수당 전환 없음).
     따라서 대장의 목적은 정산이 아니라 '소멸 전에 쓰게 만드는 것'이다.
 
     사용 내역은 두 곳의 합집합: 승인된 연차 신청 + 근무표에 직접 칠한 休.
-    (신청 제도 도입 전 수기 기록도 대장에 빠지지 않게)"""
-    staff = (db.query(LtcStaffMember)
-             .filter(LtcStaffMember.status == "active").all())
+    (신청 제도 도입 전 수기 기록도 대장에 빠지지 않게)
+
+    include_resigned: 퇴사자도 넣는다. 다만 아무나 넣지 않고 그 해에 하루라도
+    재직했던 사람만 넣는다. 2년 전에 그만둔 사람이 올해 대장에 연차 0으로
+    줄만 차지하면, 정작 봐야 할 사람이 묻힌다. 퇴사자를 보는 이유는 대개
+    '그만둘 때 연차 정산이 맞았나' 를 확인하려는 것이고, 그건 그 해 줄에만 있다.
+    """
+    staff = db.query(LtcStaffMember).all() if include_resigned else (
+        db.query(LtcStaffMember).filter(LtcStaffMember.status == "active").all())
+    if include_resigned:
+        staff = [st for st in staff if _worked_in_year(st, year)]
 
     # ① 승인된 연차 신청
     approved = db.query(LeaveRequest).filter(
@@ -819,12 +848,22 @@ def annual_leave_ledger(year: int, db: Session = Depends(get_db), _: User = Depe
     rows = []
     for st in staff:
         hire = (st.hire_date or "")[:10]
+        # 퇴사자는 퇴사한 달까지만 발생시킨다. 그러지 않으면 3월에 그만둔 사람이
+        # 8월치까지 발생한 것처럼 보인다 — 퇴사자를 펴 보는 이유가 대개
+        # '나갈 때 정산이 맞았나' 인데, 그 숫자가 틀리면 볼 이유가 없다.
+        resign = (getattr(st, "resign_date", None) or "")[:10]
+        m_end = month_now
+        if resign and resign[:4].isdigit():
+            if int(resign[:4]) < year:
+                m_end = 0
+            elif int(resign[:4]) == year:
+                m_end = min(m_end, int(resign[5:7]))
         hy = int(hire[:4]) if len(hire) >= 4 and hire[:4].isdigit() else None
         service_year = (year - hy + 1) if hy else 1
         entitle = (ENTITLE_BY_YEAR.get(service_year, ENTITLE_MAX)
                    if service_year >= 1 else 0)          # 1년차는 최대 11
         first_year = service_year == 1
-        accrued = _accrued_first_year(hire, year, month_now) if (first_year and hy) else entitle
+        accrued = _accrued_first_year(hire, year, m_end) if (first_year and hy) else entitle
 
         my = sorted(used.get(st.id, set()))
         by_month: dict = {}
@@ -834,6 +873,9 @@ def annual_leave_ledger(year: int, db: Session = Depends(get_db), _: User = Depe
         rows.append({
             "staff_id": st.id, "name": st.name, "position": st.position,
             "hire_date": hire or None,
+            # 퇴사자를 함께 볼 때 섞이지 않게 — 화면에서 표시하고 아래로 내린다
+            "resigned": getattr(st, "status", "active") != "active",
+            "resign_date": (getattr(st, "resign_date", None) or "")[:10] or None,
             "service_year": service_year,
             "entitle": entitle,               # 연간 발생 (1년차는 최대치)
             "accrued": accrued,               # 현재까지 발생 (1년차만 월할)
@@ -843,5 +885,7 @@ def annual_leave_ledger(year: int, db: Session = Depends(get_db), _: User = Depe
             "used_by_month": {str(m): ds for m, ds in by_month.items()},
             "promotion": _promotion_schedule(hire, year, service_year),
         })
-    rows.sort(key=lambda r: (r["hire_date"] or "9999", r["name"]))
+    # 재직자 먼저, 퇴사자는 뒤로. 대장을 펴는 목적은 대개 지금 있는 사람의
+    # 연차를 챙기는 것이라, 퇴사자가 사이사이 끼면 눈이 자꾸 걸린다.
+    rows.sort(key=lambda r: (r["resigned"], r["hire_date"] or "9999", r["name"]))
     return ApiResponse(success=True, data={"year": year, "month_now": month_now, "rows": rows})
