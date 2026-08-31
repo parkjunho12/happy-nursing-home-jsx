@@ -242,6 +242,63 @@ def has_ffmpeg() -> bool:
     return bool(shutil.which("ffmpeg"))
 
 
+# 확장자 → ffmpeg 디먹서 이름.
+# 왜 필요한가: ffmpeg 은 내용을 보고 형식을 추측하는데, 태그도 헤더도 없는
+# CBR mp3 를 VVC 영상으로 잘못 짚는 일이 실제로 있었다. 그러면 -vn 이 그
+# 가짜 영상 트랙을 버리고 남는 오디오가 없어, 아무 소리 없이 정상 종료한다.
+# 방송이 조용히 안 나가고 기록에는 '성공'으로 남았다.
+_DEMUXER = {".mp3": "mp3", ".wav": "wav", ".m4a": "mp4",
+            ".mp4": "mp4", ".aac": "aac", ".ogg": "ogg"}
+
+
+# 앞부분 몇 초를 실제로 풀어 봐서 소리가 나오는지 본다.
+# '스트림이 잡힌다' 와 '소리가 난다' 는 다르다 — 이번 사고가 바로 그 차이였다.
+_DECODE_TEST_SECONDS = 3
+# 3초를 풀면 수십만 바이트가 나온다. 이보다 적으면 소리라고 볼 수 없다.
+_MIN_DECODED_BYTES = 4000
+
+
+def _audio_ok(path: str, fmt: Optional[str] = None) -> bool:
+    """이 형식으로 읽었을 때 실제로 소리가 나오는가.
+
+    스트림 목록만 보지 않고 앞부분을 직접 디코딩한다. 컨테이너를 잘못
+    짚으면 스트림은 있다고 나오면서 정작 풀리는 소리는 없을 수 있고,
+    그게 곧 '방송은 성공했는데 조용했다' 가 된다.
+    """
+    cmd = ["ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error"]
+    if fmt:
+        cmd += ["-f", fmt]
+    cmd += ["-i", path, "-vn", "-t", str(_DECODE_TEST_SECONDS),
+            "-f", "s16le", "-"]
+    try:
+        out = subprocess.run(cmd, capture_output=True, timeout=120)
+        return len(out.stdout) >= _MIN_DECODED_BYTES
+    except (subprocess.SubprocessError, OSError):
+        return False
+
+
+def input_args(path: str, ext: str) -> list:
+    """ffmpeg 에게 이 파일을 어떻게 읽으라고 할지.
+
+    먼저 그냥 읽어 본다. 오디오가 잡히면 손대지 않는다 — 확장자가 거짓인
+    파일(m4a 를 .mp3 로 저장한 것 등)도 있어서, 무조건 강제하면 그쪽이 깨진다.
+    추측이 빗나갔을 때만 확장자대로 형식을 지정해 다시 본다.
+
+    둘 다 실패하면 MediaError — 못 트는 파일을 받아두면 안 된다.
+    현장에서는 '방송했는데 소리가 안 났다'로 나타나고, 그때는 원인을 찾을
+    단서가 하나도 남지 않는다.
+    """
+    if _audio_ok(path):
+        return []
+    fmt = _DEMUXER.get(ext)
+    if fmt and _audio_ok(path, fmt):
+        logger.warning("형식 자동 인식 실패 — %s 로 지정해 읽습니다", fmt)
+        return ["-f", fmt]
+    raise MediaError(
+        "이 파일에서 소리를 찾지 못했습니다. 다른 파일로 다시 올려주세요. "
+        "(그대로 저장하면 방송은 '성공'으로 남고 소리는 나지 않습니다)")
+
+
 def normalize_upload(data: bytes, ext: str) -> Tuple[bytes, str, dict]:
     """업로드 음원을 TTS 와 같은 음량(-1dBFS)으로 맞춘다.
 
@@ -262,7 +319,7 @@ def normalize_upload(data: bytes, ext: str) -> Tuple[bytes, str, dict]:
     """
     import tempfile
 
-    info = {"gain_db": 0.0, "still_quiet": False, "audio_only": False}
+    info = {"gain_db": 0.0, "still_quiet": False, "audio_only": False, "reencoded": False}
     if not has_ffmpeg():
         return data, ext, info
     out_ext = ".mp3" if ext == ".mp4" else ext      # 영상은 소리만 남긴다
@@ -272,9 +329,12 @@ def normalize_upload(data: bytes, ext: str) -> Tuple[bytes, str, dict]:
             f.write(data); src = f.name
         dst = src + ".out" + out_ext
 
+        # 형식을 어떻게 읽을지 먼저 정한다. 소리가 없으면 여기서 MediaError.
+        ia = input_args(src, ext)
+
         # 1차: 최대 진폭 측정
         probe = subprocess.run(
-            ["ffmpeg", "-hide_banner", "-nostdin", "-i", src,
+            ["ffmpeg", "-hide_banner", "-nostdin"] + ia + ["-i", src,
              "-af", "volumedetect", "-vn", "-f", "null", "-"],
             capture_output=True, text=True, timeout=120)
         gain_db = 0.0
@@ -292,12 +352,17 @@ def normalize_upload(data: bytes, ext: str) -> Tuple[bytes, str, dict]:
         # 상한까지 올려도 목표에 못 미친다 = 원본이 지나치게 작다
         info["still_quiet"] = needed > 30.0
 
-        # 1.5dB 미만은 굳이 다시 인코딩하지 않는다 — 체감 차이는 없고 음질만 잃는다
-        if gain_db < 1.5 and out_ext == ext:
+        # 1.5dB 미만은 굳이 다시 인코딩하지 않는다 — 체감 차이는 없고 음질만 잃는다.
+        # 다만 형식을 지정해야 읽혔던 파일은 예외다. 원본 그대로 저장하면
+        # 방송 PC 도 똑같이 형식을 잘못 짚어, 소리 없이 '성공'으로 끝난다.
+        # 그런 파일은 음량과 무관하게 다시 인코딩해서 정상 파일로 바꿔 둔다.
+        if gain_db < 1.5 and out_ext == ext and not ia:
             return data, ext, info
+        if ia:
+            info["reencoded"] = True
 
         # 2차: 적용 (+ mp4 면 오디오만 추출)
-        cmd = ["ffmpeg", "-hide_banner", "-nostdin", "-y", "-i", src, "-vn"]
+        cmd = ["ffmpeg", "-hide_banner", "-nostdin", "-y"] + ia + ["-i", src, "-vn"]
         if gain_db >= 0.5:
             cmd += ["-af", f"volume={gain_db:.2f}dB"]
         cmd += [dst]
@@ -312,6 +377,8 @@ def normalize_upload(data: bytes, ext: str) -> Tuple[bytes, str, dict]:
                     " (영상에서 오디오만 추출)" if ext == ".mp4" else "",
                     " — 원본이 너무 작아 최대치까지만" if info["still_quiet"] else "")
         return out, out_ext, info
+    except MediaError:
+        raise                       # 못 트는 파일 — 받지 않는다
     except (subprocess.SubprocessError, OSError) as e:
         logger.warning("음량 정규화 건너뜀 (%s)", type(e).__name__)
         return data, ext, {"gain_db": 0.0, "still_quiet": False, "audio_only": False}
