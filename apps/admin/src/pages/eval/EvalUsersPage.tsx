@@ -19,6 +19,7 @@ const ROLES = [
 ] as const
 
 interface UserAccount {
+  login_id?:  string | null
   id:         string
   email:      string
   name:       string
@@ -62,6 +63,7 @@ export default function EvalUsersPage() {
     users.filter(u =>
       !search ||
       u.name.toLowerCase().includes(search.toLowerCase()) ||
+      (u.login_id ?? '').toLowerCase().includes(search.toLowerCase()) ||
       u.email.toLowerCase().includes(search.toLowerCase()) ||
       (u.position ?? '').includes(search)
     ), [users, search])
@@ -147,6 +149,10 @@ export default function EvalUsersPage() {
                     )}
                   </div>
                   <p className="text-xs text-gray-400">
+                    {/* 아이디가 실제 로그인 수단이므로 이메일보다 앞·진하게 */}
+                    {u.login_id
+                      ? <span className="font-bold text-gray-700 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded mr-1.5">{u.login_id}</span>
+                      : <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded mr-1.5">아이디 없음</span>}
                     {u.email}
                     {u.staff_link
                       ? <span className="ml-2 text-[10px] font-bold text-teal-700 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded-full">🔗 {u.staff_link.staff_name}</span>
@@ -199,6 +205,7 @@ function UserFormModal({ existing, onClose, onSaved }: {
   const [form, setForm] = useState({
     name:     existing?.name     ?? '',
     email:    existing?.email    ?? '',
+    login_id: existing?.login_id  ?? '',
     password: '',
     role:     existing?.role     ?? 'STAFF',
     position: existing?.position ?? '',
@@ -215,6 +222,8 @@ function UserFormModal({ existing, onClose, onSaved }: {
     try {
       if (existing) {
         const body: any = {}
+        // 빈 문자열을 보내면 서버가 아이디를 지운다(이메일로만 로그인)
+        if ((form.login_id ?? '') !== (existing.login_id ?? '')) body.login_id = form.login_id.trim()
         if (form.name     !== existing.name)     body.name     = form.name
         if (form.role     !== existing.role)     body.role     = form.role
         if (form.position !== existing.position) body.position = form.position || null
@@ -247,6 +256,18 @@ function UserFormModal({ existing, onClose, onSaved }: {
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">이름 *</label>
             <input className={ic} value={form.name}
               onChange={e => setForm({...form, name: e.target.value})} placeholder="홍길동"/>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              로그인 아이디 <span className="font-normal text-gray-400">(예: H001 · 비우면 이메일로만 로그인)</span>
+            </label>
+            <input className={ic} value={form.login_id}
+              onChange={e => setForm({...form, login_id: e.target.value})}
+              placeholder="H001" autoCapitalize="characters" />
+            <p className="text-[11px] text-gray-400 mt-1">
+              영문으로 시작하는 3~20자. 대소문자는 가리지 않습니다.
+            </p>
           </div>
 
           <div>

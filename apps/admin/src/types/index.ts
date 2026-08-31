@@ -10,7 +10,9 @@ export interface User {
 }
 
 export interface LoginRequest {
-  email: string
+  /** 아이디(H001) 또는 이메일 — 서버가 둘 다 받는다 */
+  login_id?: string
+  email?: string
   password: string
   remember?: boolean
 }

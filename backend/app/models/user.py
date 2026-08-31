@@ -35,6 +35,9 @@ class User(Base):
 
     id              = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     email           = Column(String, unique=True, nullable=False, index=True)
+    # 로그인 아이디 — H001 처럼 짧게. 관리자가 한 명씩 지정한다.
+    # 이메일 로그인도 당분간 함께 살아 있어서 nullable 이다.
+    login_id        = Column(String(20), unique=True, nullable=True, index=True)
     name            = Column(String, nullable=False)
     hashed_password = Column(String, nullable=False)
     role            = Column(Enum(UserRole), nullable=False, default=UserRole.STAFF)

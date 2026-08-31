@@ -6,6 +6,7 @@ import uuid
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, field_validator
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -16,10 +17,32 @@ from app.models.user import User, UserRole, ALLOWED_POSITIONS
 router = APIRouter()
 
 
+# 로그인 아이디 형식. 관리자가 직접 정하되, 사람이 헷갈릴 만한 것은 막는다.
+#  · 영문+숫자만 — 한글이나 공백이 섞이면 휴대폰에서 입력이 어렵다
+#  · 3~20자
+#  · 대문자로 저장한다. 화면에서는 h001 로 쳐도 들어오게 맞춰 준다.
+#  · 이메일처럼 보이는 것은 막는다 — 이메일 로그인과 섞이면 누가 누군지 모른다
+import re as _re
+LOGIN_ID_RE = _re.compile(r"^[A-Za-z][A-Za-z0-9_-]{2,19}$")
+
+
+def normalize_login_id(v):
+    """빈 값이면 None(지정 안 함). 형식이 틀리면 ValueError."""
+    v = (v or "").strip()
+    if not v:
+        return None
+    if "@" in v:
+        raise ValueError("아이디에 @ 는 쓸 수 없습니다. 이메일은 그대로 로그인에 쓰실 수 있습니다.")
+    if not LOGIN_ID_RE.match(v):
+        raise ValueError("아이디는 영문으로 시작하는 3~20자의 영문·숫자여야 합니다. (예: H001)")
+    return v.upper()
+
+
 # ── 스키마 ─────────────────────────────────────────────────────────────────────
 class UserOut(BaseModel):
     id:         str
     email:      str
+    login_id:   Optional[str] = None
     name:       str
     role:       str
     position:   Optional[str] = None
@@ -31,6 +54,7 @@ class UserOut(BaseModel):
 
 class UserCreate(BaseModel):
     email:    EmailStr
+    login_id: Optional[str] = None      # 로그인 아이디 (예: H001) — 비워두면 이메일로만 로그인
     name:     str
     password: str
     role:     str = "STAFF"
@@ -54,6 +78,7 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
+    login_id: Optional[str] = None      # "" 를 보내면 아이디를 지운다
     name:     Optional[str] = None
     role:     Optional[str] = None
     position: Optional[str] = None
@@ -83,6 +108,7 @@ def _to_dict(u: User) -> dict:
     return {
         "id":         u.id,
         "email":      u.email,
+        "login_id":   getattr(u, "login_id", None),
         "name":       u.name,
         "role":       u.role.value if hasattr(u.role, "value") else str(u.role),
         "position":   u.position,
@@ -147,6 +173,27 @@ def list_users(
     return {"success": True, "data": out}
 
 
+def _claim_login_id(db, raw, *, exclude_id=None):
+    """아이디를 검사하고 정규화한다. 이미 쓰는 사람이 있으면 막는다.
+
+    두 사람이 같은 아이디를 쓰면 누가 들어왔는지 알 수 없다. DB 에도 unique 가
+    걸려 있지만, 여기서 막아야 '누구와 겹치는지' 를 알려줄 수 있다.
+    """
+    try:
+        v = normalize_login_id(raw)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if v is None:
+        return None
+    q = db.query(User).filter(func.upper(User.login_id) == v)
+    if exclude_id:
+        q = q.filter(User.id != exclude_id)
+    other = q.first()
+    if other:
+        raise HTTPException(400, f"아이디 {v} 는 이미 {other.name} 님이 쓰고 있습니다.")
+    return v
+
+
 # ── 직원 추가 (ADMIN만) ────────────────────────────────────────────────────────
 @router.post("", status_code=201)
 def create_user(
@@ -163,6 +210,7 @@ def create_user(
         id=str(uuid.uuid4()),
         name=body.name,
         email=body.email,
+        login_id=_claim_login_id(db, body.login_id),
         hashed_password=get_password_hash(body.password),
         role=UserRole(body.role),
         position=body.position,
@@ -190,6 +238,9 @@ def update_user(
         if body.role == "ADMIN":
             raise HTTPException(403, "관리자 권한 부여는 ADMIN만 가능합니다.")
 
+    # "" 를 보내면 지운다(이메일로만 로그인). None 이면 손대지 않는다.
+    if body.login_id is not None:
+        u.login_id = _claim_login_id(db, body.login_id, exclude_id=u.id)
     if body.name     is not None: u.name     = body.name
     if body.position is not None: u.position = body.position
     if body.role     is not None: u.role     = UserRole(body.role)
