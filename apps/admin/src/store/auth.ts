@@ -8,7 +8,8 @@ interface AuthState {
   isAuthenticated: boolean
   isLoading: boolean
   
-  login: (email: string, password: string, remember?: boolean) => Promise<void>
+  /** ident: 아이디(H001) 또는 이메일 */
+  login: (ident: string, password: string, remember?: boolean) => Promise<void>
   logout: () => Promise<void>
   checkAuth: () => Promise<void>
   setUser: (user: User | null) => void
@@ -22,10 +23,12 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoading: false,
 
-      login: async (email: string, password: string, remember = true) => {
+      login: async (ident: string, password: string, remember = true) => {
         try {
           set({ isLoading: true })
-          const response = await authAPI.login({ email, password, remember })
+          // 아이디 칸에 무엇을 넣었든 login_id 로 보낸다. 서버가 아이디로 먼저
+          // 찾고 없으면 이메일로 찾는다 — 화면이 둘을 구분할 필요가 없다.
+          const response = await authAPI.login({ login_id: ident.trim(), password, remember })
           
           // 토큰 저장
           localStorage.setItem(TOKEN_KEY, response.access_token)

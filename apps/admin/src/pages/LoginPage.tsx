@@ -7,7 +7,8 @@ const LoginPage = () => {
   const navigate = useNavigate()
   const { login, isLoading, isAuthenticated, user: authedUser } = useAuthStore()
 
-  const [email, setEmail] = useState('')
+  // 아이디(H001)든 이메일이든 여기 하나로 받는다 — 화면이 둘을 가르지 않는다
+  const [ident, setIdent] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [remember, setRemember] = useState(true)
@@ -36,7 +37,7 @@ const LoginPage = () => {
     e.preventDefault()
     setError('')
     try {
-      await login(email, password, remember)
+      await login(ident, password, remember)
       // 로그인 직후 auth store에서 user 읽기
       const { user } = useAuthStore.getState()
       if (user?.position === '앨범담당' || (user?.role === 'STAFF' && user?.position === '요양보호사')) {
@@ -95,17 +96,20 @@ const LoginPage = () => {
                   htmlFor={ids.email}
                   className="block text-sm font-semibold text-gray-900"
                 >
-                  이메일
+                  아이디
+                  <span className="ml-1 text-xs font-normal text-gray-400">또는 이메일</span>
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                   <input
                     id={ids.email}
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="이메일을 입력하세요"
-                    autoComplete="email"
+                    type="text"
+                    inputMode="text"
+                    autoCapitalize="characters"
+                    value={ident}
+                    onChange={(e) => setIdent(e.target.value)}
+                    placeholder="예) H001"
+                    autoComplete="username"
                     required
                     aria-invalid={hasError ? true : undefined}
                     aria-describedby={hasError ? ids.error : undefined}
