@@ -31,7 +31,7 @@ from app.models.eval import LtcStaffMember
 from app.models.staff_eval import (
     StaffEvaluation, EVAL_ITEMS, MAX_SCORE, FULL_MARKS, now_kst,
 )
-from app.schemas.common import ApiResponse
+from app.schemas.response import ApiResponse
 
 router = APIRouter()
 
