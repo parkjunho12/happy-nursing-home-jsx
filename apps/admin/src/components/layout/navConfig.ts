@@ -3,7 +3,8 @@ import {
   Star, Settings, ClipboardList, ClipboardCheck, CalendarDays,
   UserRound, ShieldCheck, Sparkles, FileSearch,
   Image as ImageIcon, Users, BookOpen, PenLine, Megaphone, Bell, CalendarClock, CalendarCheck, HeartHandshake, Briefcase, Soup, Receipt, GraduationCap,
-  type LucideIcon, AlertTriangle, BarChart3, ChefHat, Landmark, Radio, Wand2 } from 'lucide-react'
+  type LucideIcon, AlertTriangle, BarChart3, ChefHat, Landmark, Radio, Wand2, UserCheck
+} from 'lucide-react'
 
 /**
  * 모바일에서 숨기는 메뉴 — 넓은 표 편집·인쇄·대량 서류 작업 등 PC 전용 화면.
@@ -223,6 +224,8 @@ export function getNavConfig(
             { to: '/eval/record-audit', icon: FileSearch, label: '제공기록지 검수' },
             { to: '/eval/record-guide', icon: BookOpen, label: '검수 기준' },
             { to: '/eval/ai-review', icon: Sparkles, label: 'AI 체크리스트 검토' },
+            // 인사고과 — 이 블록(ADMIN)에만 둔다. 시설장 메뉴에는 넣지 않는다.
+            { to: '/eval/staff-eval', icon: UserCheck, label: '직원 평가' },
           ],
         },
         {

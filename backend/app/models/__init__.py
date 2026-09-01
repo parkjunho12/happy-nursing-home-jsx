@@ -110,3 +110,6 @@ from app.models.broadcast import (  # noqa: F401
 )
 from app.models import ai_editor  # noqa: F401
 from app.models import therapy  # noqa: F401,E402  치료 프로그램 조 편성
+
+# 직원 평가(인사고과) — 반기마다 한 번, 관리자만 본다
+from app.models.staff_eval import StaffEvaluation, EVAL_ITEMS, MAX_SCORE, FULL_MARKS

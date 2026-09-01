@@ -41,6 +41,11 @@ jobs:
         # 특히 '아이디만으로는 잠그지 않는다' — 아이디가 순번이라 그렇게 하면
         # 누구나 전 직원을 못 들어오게 만들 수 있다.
         run: python3 backend/tests/test_login_guard.py
+      - name: 직원 평가 점수·기간 검증
+        # 재계약·급여로 이어질 수 있는 인사 기록이다. 범위를 안 보면 99점짜리
+        # 평가가 저장되고, 기간 형식이 틀리면 그 평가는 어느 화면에도 다시
+        # 나타나지 않는다 — 사라진 줄도 모른다.
+        run: python3 backend/tests/test_staff_eval.py
       - name: 마이그레이션 head가 하나인지 검사
         # head가 갈라지면 alembic upgrade가 서버에서 실패한다 — 미리 잡는다
         run: |
