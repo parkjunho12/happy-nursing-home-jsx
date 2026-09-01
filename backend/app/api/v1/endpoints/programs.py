@@ -446,15 +446,31 @@ def _exif_taken(data: bytes) -> Optional[datetime]:
         return None
 
 
-def _pick_day(month: str, taken: Optional[datetime], fallback: Optional[datetime]) -> tuple:
+def _pick_day(month: str, taken: Optional[datetime], fallback: Optional[datetime],
+              now: Optional[datetime] = None) -> tuple:
     """그 사진이 이 달 며칠 것인지. (day, taken_at)
 
+    ① 사진에 박힌 찍은 시각 → ② 브라우저가 아는 파일 수정시각 순으로 본다.
     찍은 달이 관리 중인 달과 다르면 날짜를 믿지 않는다 — 지난달 사진이
-    이번 달 3일에 끼면 더 헷갈린다. 그런 것은 1일에 모아두고 사람이 옮긴다.
+    이번 달 3일에 끼면 더 헷갈린다.
+
+    ③ 둘 다 없으면 올린 날에 담는다.
+       예전에는 1일로 몰았는데, 1일 폴더가 '날짜를 모르는 사진' 더미가 되어
+       정작 1일에 찍은 사진과 섞였다. 대개는 그날 찍어 그날 올리므로,
+       올린 날이 1일보다 훨씬 자주 맞는다. 틀려도 화면에서 옮길 수 있다.
+
+    다만 지난달을 보면서 올리는 경우가 있다. 그때 '오늘' 은 그 달에 없는
+    날이라 쓸 수 없다 — 그런 것만 예전처럼 1일에 모은다.
+
+    taken_at 은 손대지 않는다. 올린 시각을 찍은 시각인 척 적으면, 나중에
+    '이 사진 언제 찍었지' 를 물었을 때 거짓말이 된다.
     """
     for t in (taken, fallback):
         if t and t.strftime("%Y-%m") == month:
             return t.day, t
+    today = now or datetime.now(_KST_P)
+    if today.strftime("%Y-%m") == month:
+        return today.day, (taken or fallback)
     return 1, (taken or fallback)
 
 
