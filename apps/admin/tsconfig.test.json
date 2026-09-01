@@ -10,6 +10,8 @@
     "skipLibCheck": true
   },
   "include": [
+    "src/utils/koreanTime.ts",
+    "tests/koreanTime.test.ts",
     "src/utils/evalPeriod.ts",
     "tests/staffEvalPeriod.test.ts",
     "src/utils/shiftCodes.ts",
