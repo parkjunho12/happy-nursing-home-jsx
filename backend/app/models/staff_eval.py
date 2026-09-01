@@ -66,8 +66,12 @@ class StaffEvaluation(Base):
 
     # {"attitude": 4, "duty": 5, ...} — 1~5
     scores   = Column(JSON, nullable=False, default=dict)
-    # 평가 당시의 항목 목록. 나중에 항목이 바뀌어도 그때 무엇을 물었는지 남는다.
+    # 평가 당시의 항목 목록과 배점. 나중에 항목이나 배점이 바뀌어도
+    # 그때 무엇을 몇 점 만점으로 물었는지가 남는다.
+    # 이게 없으면 배점을 5→3 으로 바꾼 순간 지난 평가의 '5점'이 만점을 넘는
+    # 이상한 값이 된다.
     items    = Column(JSON, nullable=True)
+    max_score = Column(Integer, nullable=True)
     comment  = Column(Text, nullable=True)                  # 총평
 
     # 누가 매겼는지. 이름을 함께 박아 둔다 — 계정이 지워져도 기록은 남아야 한다.
@@ -76,3 +80,27 @@ class StaffEvaluation(Base):
 
     created_at = Column(DateTime(timezone=True), default=now_kst)
     updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)
+
+
+class StaffEvalConfig(Base):
+    """평가 항목·배점 설정 — 한 줄만 쓴다.
+
+    항목은 시설마다 다르고 해마다 바뀐다. 코드에 박아 두면 바꿀 때마다
+    배포를 해야 하고, 그러면 결국 안 바꾸게 된다.
+
+    여기 값을 바꿔도 지난 평가는 그대로다. 평가마다 그때의 항목과 배점을
+    함께 저장해 두기 때문이다(StaffEvaluation.items / max_score).
+    """
+
+    __tablename__ = "staff_eval_config"
+
+    id        = Column(Integer, primary_key=True, default=1)
+    items     = Column(JSON, nullable=True)      # [{"key","label"}, ...]
+    max_score = Column(Integer, nullable=True)   # 항목당 만점
+    updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)
+    updated_by = Column(String(100), nullable=True)
+
+
+# 설정에서 허용하는 범위. 넘어서면 표가 읽을 수 없게 된다.
+MIN_ITEMS, MAX_ITEMS = 1, 20
+MIN_MAX_SCORE, MAX_MAX_SCORE = 2, 10

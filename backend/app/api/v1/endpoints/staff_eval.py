@@ -29,13 +29,72 @@ from app.core.security import get_current_user
 from app.models.user import User
 from app.models.eval import LtcStaffMember
 from app.models.staff_eval import (
-    StaffEvaluation, EVAL_ITEMS, MAX_SCORE, FULL_MARKS, now_kst,
+    StaffEvaluation, StaffEvalConfig, EVAL_ITEMS, MAX_SCORE, now_kst,
+    MIN_ITEMS, MAX_ITEMS, MIN_MAX_SCORE, MAX_MAX_SCORE,
 )
 from app.schemas.response import ApiResponse
 
 router = APIRouter()
 
 PERIOD_RE = re.compile(r"^\d{4}-H[12]$")
+# 항목 key — 사람이 입력하지 않는다. 화면은 이름만 다루고 key 는 서버가 붙인다.
+# key 가 바뀌면 다른 항목이 되어 지난 점수와 이어지지 않기 때문이다.
+KEY_RE = re.compile(r"^[a-z][a-z0-9_]{1,29}$")
+LABEL_MAX = 60
+
+
+def get_config(db: Session) -> dict:
+    """지금 쓰는 항목과 배점. 설정이 없으면 기본값.
+
+    기본값을 DB 에 미리 넣어두지 않는다 — 넣어두면 나중에 기본 항목을
+    고쳐도 이미 저장된 값이 그대로 남아 아무도 왜 안 바뀌는지 모른다.
+    """
+    row = db.query(StaffEvalConfig).filter(StaffEvalConfig.id == 1).first()
+    items = (row.items if row and row.items else None) or EVAL_ITEMS
+    mx = (row.max_score if row and row.max_score else None) or MAX_SCORE
+    return {"items": items, "max_score": mx,
+            "full_marks": len(items) * mx,
+            "updated_at": row.updated_at.isoformat() if row and row.updated_at else None,
+            "updated_by": row.updated_by if row else None}
+
+
+def _clean_items(raw) -> list:
+    """항목 목록을 다듬는다. 잘못된 값은 400 으로 되돌린다.
+
+    조용히 고쳐서 저장하지 않는다 — 관리자가 적은 것과 다른 항목이 표에
+    나타나면 그때부터 무엇을 평가한 것인지 알 수 없어진다.
+    """
+    if not isinstance(raw, list):
+        raise HTTPException(400, "항목 목록이 올바르지 않습니다.")
+    if not (MIN_ITEMS <= len(raw) <= MAX_ITEMS):
+        raise HTTPException(400, f"항목은 {MIN_ITEMS}~{MAX_ITEMS}개여야 합니다.")
+
+    used, out = set(), []
+    for i, it in enumerate(raw):
+        if not isinstance(it, dict):
+            raise HTTPException(400, f"{i + 1}번째 항목이 올바르지 않습니다.")
+        label = str(it.get("label") or "").strip()
+        if not label:
+            raise HTTPException(400, f"{i + 1}번째 항목의 이름이 비어 있습니다.")
+        if len(label) > LABEL_MAX:
+            raise HTTPException(400, f"항목 이름은 {LABEL_MAX}자를 넘을 수 없습니다.")
+
+        key = str(it.get("key") or "").strip().lower()
+        if key and not KEY_RE.match(key):
+            # 화면이 보낸 적 없는 모양이면 새 항목으로 본다
+            key = ""
+        if not key or key in used:
+            # 새 항목 — key 를 서버가 붙인다. 지난 평가의 key 와 겹치면
+            # 다른 항목의 점수를 이어받은 것처럼 보이므로 겹치지 않게 고른다.
+            n = 1
+            while f"item{n}" in used or any(x["key"] == f"item{n}" for x in out):
+                n += 1
+            key = f"item{n}"
+        used.add(key)
+        out.append({"key": key, "label": label})
+    return out
+
+
 ITEM_KEYS = {i["key"] for i in EVAL_ITEMS}
 
 
@@ -54,15 +113,16 @@ def _check_period(v: str) -> str:
     return v
 
 
-def _clean_scores(raw: Optional[dict]) -> dict:
+def _clean_scores(raw: Optional[dict], items: list, max_score: int) -> dict:
     """아는 항목만, 1~5 만 받는다.
 
     범위를 안 보면 99점짜리 평가가 저장되고, 합계와 평균이 조용히 망가진다.
     모르는 항목은 버린다 — 화면이 옛 항목을 보내도 계산이 어긋나지 않게.
     """
+    keys = {i["key"] for i in items}
     out = {}
     for k, v in (raw or {}).items():
-        if k not in ITEM_KEYS:
+        if k not in keys:
             continue
         # 소수는 받지 않는다. int(4.7) 은 4가 되는데, 그렇게 깎아 저장하면
         # 매긴 사람의 뜻과 다른 점수가 인사 기록에 남는다. 차라리 버린다.
@@ -74,24 +134,34 @@ def _clean_scores(raw: Optional[dict]) -> dict:
             n = int(v)
         except (TypeError, ValueError):
             continue
-        if 1 <= n <= MAX_SCORE:
+        if 1 <= n <= max_score:
             out[k] = n
     return out
 
 
 def _view(e: Optional[StaffEvaluation]) -> Optional[dict]:
+    """평가는 언제나 '그때의 잣대' 로 읽는다.
+
+    항목과 배점은 설정에서 바뀐다. 지금 설정으로 지난 평가를 읽으면 항목
+    수가 달라져 '6개 중 4개만 매김' 같은 거짓말이 나오고, 배점이 낮아졌으면
+    지난 5점이 만점을 넘는 값이 된다. 그래서 저장된 스냅샷을 쓴다.
+    """
     if not e:
         return None
     scores = e.scores or {}
+    items = e.items or EVAL_ITEMS
+    mx = e.max_score or MAX_SCORE
     return {
         "period": e.period,
         "scores": scores,
-        "items": e.items or EVAL_ITEMS,
+        "items": items,
+        "max_score": mx,
+        "full_marks": len(items) * mx,
         "comment": e.comment or "",
         "total": sum(scores.values()),
         # 다 매겼는지. 빈 칸이 있으면 합계를 신뢰할 수 없다.
         "filled": len(scores),
-        "item_count": len(e.items or EVAL_ITEMS),
+        "item_count": len(items),
         "evaluator_name": e.evaluator_name,
         "updated_at": e.updated_at.isoformat() if e.updated_at else None,
     }
@@ -102,12 +172,43 @@ class EvalBody(BaseModel):
     comment: Optional[str] = None
 
 
-@router.get("/meta")
-def meta(_: User = Depends(_admin_only)):
-    """평가 항목과 배점 — 화면이 이걸 보고 표를 그린다."""
-    return ApiResponse(success=True, data={
-        "items": EVAL_ITEMS, "max_score": MAX_SCORE, "full_marks": FULL_MARKS,
-    })
+@router.get("/config")
+def read_config(db: Session = Depends(get_db), _: User = Depends(_admin_only)):
+    """지금 쓰는 평가 항목과 배점."""
+    d = get_config(db)
+    d["limits"] = {"min_items": MIN_ITEMS, "max_items": MAX_ITEMS,
+                   "min_score": MIN_MAX_SCORE, "max_score": MAX_MAX_SCORE,
+                   "label_max": LABEL_MAX}
+    return ApiResponse(success=True, data=d)
+
+
+class ConfigBody(BaseModel):
+    items: list = Field(default_factory=list)
+    max_score: int = MAX_SCORE
+
+
+@router.put("/config")
+def save_config(body: ConfigBody, db: Session = Depends(get_db),
+                current_user: User = Depends(_admin_only)):
+    """항목·배점을 바꾼다.
+
+    지난 평가는 건드리지 않는다. 평가마다 그때의 항목과 배점을 함께 저장해
+    두기 때문에, 여기서 무엇을 바꾸든 지난 기록은 그대로 읽힌다.
+    """
+    if not (MIN_MAX_SCORE <= body.max_score <= MAX_MAX_SCORE):
+        raise HTTPException(400, f"배점은 {MIN_MAX_SCORE}~{MAX_MAX_SCORE} 사이여야 합니다.")
+    items = _clean_items(body.items)
+
+    row = db.query(StaffEvalConfig).filter(StaffEvalConfig.id == 1).first()
+    if not row:
+        row = StaffEvalConfig(id=1)
+        db.add(row)
+    row.items = items
+    row.max_score = body.max_score
+    row.updated_by = current_user.name
+    row.updated_at = now_kst()
+    db.commit()
+    return ApiResponse(success=True, data=get_config(db))
 
 
 @router.get("")
@@ -119,6 +220,7 @@ def list_evaluations(period: str = Query(...), db: Session = Depends(get_db),
     그만두신 분은 이 화면에서 할 일이 없다. (지난 평가는 이력에서 본다)
     """
     p = _check_period(period)
+    cfg = get_config(db)
     staff = (db.query(LtcStaffMember)
              .filter(LtcStaffMember.status == "active")
              .order_by(LtcStaffMember.hire_date).all())
@@ -130,8 +232,8 @@ def list_evaluations(period: str = Query(...), db: Session = Depends(get_db),
         "evaluation": _view(got.get(s.id)),
     } for s in staff]
     return ApiResponse(success=True, data={
-        "period": p, "items": EVAL_ITEMS, "max_score": MAX_SCORE,
-        "full_marks": FULL_MARKS, "rows": rows,
+        "period": p, "items": cfg["items"], "max_score": cfg["max_score"],
+        "full_marks": cfg["full_marks"], "rows": rows,
     })
 
 
@@ -144,17 +246,19 @@ def upsert_evaluation(staff_id: str, period: str, body: EvalBody,
     if not st:
         raise HTTPException(404, "직원을 찾을 수 없습니다.")
 
+    cfg = get_config(db)
     e = (db.query(StaffEvaluation)
          .filter(StaffEvaluation.staff_id == staff_id,
                  StaffEvaluation.period == p).first())
     if not e:
         e = StaffEvaluation(staff_id=staff_id, period=p)
         db.add(e)
-        # 항목은 처음 만들 때의 것으로 박아 둔다. 나중에 항목이 바뀌어도
-        # 그때 무엇을 물었는지가 남아야 한다.
-        e.items = EVAL_ITEMS
+    # 저장할 때마다 지금 설정을 박아 둔다. 매기는 중에 설정이 바뀌면 그
+    # 평가는 새 잣대로 매긴 것이 되고, 저장된 것도 그 잣대로 읽혀야 한다.
+    e.items = cfg["items"]
+    e.max_score = cfg["max_score"]
 
-    e.scores = _clean_scores(body.scores)
+    e.scores = _clean_scores(body.scores, cfg["items"], cfg["max_score"])
     e.comment = (body.comment or "").strip()[:2000] or None
     e.evaluator_id = current_user.id
     e.evaluator_name = current_user.name
