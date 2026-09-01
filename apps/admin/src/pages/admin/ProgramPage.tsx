@@ -1493,7 +1493,8 @@ function ProgramPhotoTab({ ym, onMove, days, draft }: {
       </div>
       <p className="text-[11px] text-gray-400 -mt-2">
         한 번에 20장까지 · 한 장 25MB까지. 사진에 찍힌 시각을 보고 <b>날짜 폴더</b>에 저절로 담깁니다.
-        찍은 달이 다르거나 시각을 알 수 없는 사진은 1일에 모읍니다.
+        시각을 알 수 없으면 <b>올린 날</b>에 담깁니다 (지난달을 정리하는 중이면 1일).
+        날짜가 틀렸으면 폴더를 열어 옮길 수 있어요.
       </p>
 
       {msg && <p className="text-xs text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">{msg}</p>}
