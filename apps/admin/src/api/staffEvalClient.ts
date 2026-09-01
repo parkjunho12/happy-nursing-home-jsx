@@ -12,7 +12,10 @@ export interface EvalItem { key: string; label: string }
 export interface Evaluation {
   period: string
   scores: Record<string, number>
+  /** 그 평가를 매길 때의 항목·배점. 설정이 바뀌어도 지난 평가는 이걸로 읽는다 */
   items: EvalItem[]
+  max_score: number
+  full_marks: number
   comment: string
   total: number
   /** 몇 항목을 매겼는지 — 빈 칸이 있으면 합계를 믿으면 안 된다 */
@@ -38,7 +41,22 @@ export interface EvalPage {
   rows: EvalRow[]
 }
 
+export interface EvalConfig {
+  items: EvalItem[]
+  max_score: number
+  full_marks: number
+  updated_at?: string | null
+  updated_by?: string | null
+  limits: {
+    min_items: number; max_items: number
+    min_score: number; max_score: number; label_max: number
+  }
+}
+
 export const staffEvalAPI = {
+  config: () => apiClient.get(`${BASE}/config`).then(unwrap<EvalConfig>),
+  saveConfig: (b: { items: { key?: string; label: string }[]; max_score: number }) =>
+    apiClient.put(`${BASE}/config`, b).then(unwrap<EvalConfig>),
   list: (period: string) =>
     apiClient.get(BASE, { params: { period } }).then(unwrap<EvalPage>),
   save: (staffId: string, period: string, body: { scores: Record<string, number>; comment: string }) =>

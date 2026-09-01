@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, Loader2, Check, Trash2, ShieldAlert, Search } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Loader2, Check, Trash2, ShieldAlert, Search, Settings2 } from 'lucide-react'
 import { staffEvalAPI, type EvalPage, type EvalRow } from '@/api/staffEvalClient'
 import { currentPeriod, periodLabel, shiftPeriod } from '@/utils/evalPeriod'
+import StaffEvalSettings from '@/components/eval/StaffEvalSettings'
 
 /**
  * 직원 평가(인사고과) — 관리자만.
@@ -20,6 +21,7 @@ export default function StaffEvalPage() {
   const [loading, setLoading] = useState(true)
   const [pick, setPick] = useState<string | null>(null)
   const [q, setQ] = useState('')
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   // 편집 중인 값 — 저장 전까지 화면에만 있다
   const [scores, setScores] = useState<Record<string, number>>({})
@@ -49,9 +51,17 @@ export default function StaffEvalPage() {
     setSavedAt(null)
   }, [pick, period, data])
 
-  const items = data?.items ?? []
-  const max = data?.max_score ?? 5
-  const full = data?.full_marks ?? 30
+  // 이미 매긴 평가가 있으면 그때의 항목·배점으로 그린다. 설정이 바뀌었다고
+  // 지난 평가를 새 항목으로 다시 그리면, 매기지 않은 항목이 생기고 점수가
+  // 사라진 것처럼 보인다. 새로 저장할 때 새 잣대로 넘어간다.
+  const ev = row?.evaluation
+  const items = ev?.items ?? data?.items ?? []
+  const max = ev?.max_score ?? data?.max_score ?? 5
+  const full = ev?.full_marks ?? data?.full_marks ?? 30
+  // 설정이 바뀐 뒤 지난 평가를 열면 알려준다 — 저장하면 새 항목으로 바뀐다
+  const staleForm = !!ev && !!data &&
+    (ev.max_score !== data.max_score ||
+     JSON.stringify(ev.items.map(i => i.key)) !== JSON.stringify(data.items.map(i => i.key)))
   const total = Object.values(scores).reduce((a, b) => a + b, 0)
   const filled = Object.keys(scores).length
   const done = filled === items.length && items.length > 0
@@ -118,7 +128,15 @@ export default function StaffEvalPage() {
             {매긴사람} / {data.rows.length}명 완료
           </span>
         )}
+        <button onClick={() => setSettingsOpen(true)}
+          className="ml-auto inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50">
+          <Settings2 size={14} /> 항목·배점 설정
+        </button>
       </div>
+
+      {settingsOpen && (
+        <StaffEvalSettings onClose={() => setSettingsOpen(false)} onSaved={load} />
+      )}
 
       {loading ? (
         <div className="flex justify-center py-20"><Loader2 className="animate-spin text-gray-300" /></div>
@@ -179,6 +197,13 @@ export default function StaffEvalPage() {
                 <span className="text-[11px] text-gray-400">입사 {row.hire_date || '-'}</span>
                 <span className="text-[11px] text-gray-400 ml-auto">{periodLabel(period)}</span>
               </div>
+
+              {staleForm && (
+                <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-3">
+                  이 평가는 <b>예전 항목·배점</b>으로 매긴 것입니다. 그대로 보여드립니다 —
+                  저장하면 지금 설정({data!.items.length}항목 · {data!.max_score}점 만점)으로 바뀝니다.
+                </p>
+              )}
 
               <div className="space-y-1">
                 {items.map(it => (
