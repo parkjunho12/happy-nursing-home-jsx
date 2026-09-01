@@ -90,10 +90,11 @@ type UEvent = {
 }
 
 const WEEK = ['일', '월', '화', '수', '목', '금', '토']
-// 귀원 시간 선택지 — 30분 단위 (06:00~22:00)
-const RETURN_TIMES = Array.from({ length: 33 }, (_, i) => {
-  const h = 6 + Math.floor(i / 2), m = i % 2 ? '30' : '00'
-  return `${String(h).padStart(2, '0')}:${m}`
+// 귀원 시간 선택지 06:00~22:00, 10분 단위. 시작 시각과 같은 잣대를 쓴다 —
+// 한 화면에서 위는 10분 단위, 아래는 30분 단위면 그때부터 헷갈린다.
+const RETURN_TIMES = Array.from({ length: (22 - 6) * 6 + 1 }, (_, i) => {
+  const t = 6 * 60 + i * 10
+  return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`
 })
 // 로컬에서 열렸으면 공개 웹도 로컬(next dev, 3000)을 본다 — 카드 이미지·공지 링크 테스트용
 const PUBLIC_WEB = (() => {
@@ -622,10 +623,13 @@ export default function SchedulePage() {
 }
 
 /* ── 시간 유틸 ── */
-// 00:00 ~ 23:30, 30분 단위 슬롯
-const TIME_SLOTS: string[] = Array.from({ length: 48 }, (_, k) => {
-  const h = Math.floor(k / 2), mm = k % 2 === 0 ? '00' : '30'
-  return `${pad2(h)}:${mm}`
+// 00:00 ~ 23:50, 10분 단위 슬롯.
+// 병원 예약은 10시 20분, 2시 40분처럼 잡히는데 30분 단위로는 그 시각을
+// 그대로 적을 수 없었다. 어림해서 적으면 귀원 시각과 실제가 어긋난다.
+const TIME_STEP_MIN = 10
+const TIME_SLOTS: string[] = Array.from({ length: (24 * 60) / TIME_STEP_MIN }, (_, k) => {
+  const t = k * TIME_STEP_MIN
+  return `${pad2(Math.floor(t / 60))}:${pad2(t % 60)}`
 })
 const timeLabel = (t: string) => {
   const [h, mm] = t.split(':').map(Number)
@@ -936,7 +940,7 @@ function AddModal({ presetDate, editing, onClose, onSaved }: { presetDate: strin
             </div>
             <select value={returnTime} onChange={e => setReturnTime(e.target.value)}
               disabled={category === '외박' && !returnDate} className="inp disabled:opacity-40">
-              <option value="">다른 시간 선택 (30분 단위)</option>
+              <option value="">다른 시간 선택 (10분 단위)</option>
               {returnTime && !RETURN_TIMES.includes(returnTime) && (
                 <option value={returnTime}>{returnTime} — 실제 귀원 기록</option>
               )}
