@@ -21,6 +21,7 @@ import { SHIFT_CODES, extraHoursOf, countAsOf, meta, isAutoManaged, splitTimeRan
 import { auditSchedule, type Issue } from '@/utils/scheduleAudit'
 import { filterByFloor, countHiddenNoFloor } from '@/utils/floorFilter'
 import { withFloorSubtotals } from '@/utils/floorSubtotals'
+import { printHasCaregiver, printHasAnyOf } from '@/utils/printRows'
 import { monthTotals } from '@/utils/monthHours'
 import { buildScheduleRows, canSaveRows } from '@/utils/scheduleRows'
 import { useShiftConfig } from '@/store/shiftConfig'
@@ -575,6 +576,19 @@ export default function WorkSchedulePage() {
     return withFloorSubtotals(shownStaff, canJoinTeam)
   }, [shownStaff, sortMode])
 
+  /** 뽑는 대상에 요양보호사가 있는가.
+   *  없으면 요양보호사 줄들을 인쇄에서 뺀다 — 벽보에 0만 늘어선 줄이
+   *  붙으면, 읽는 사람은 그날 아무도 안 나온 줄로 읽는다. */
+  const printCG = useMemo(
+    () => printHasCaregiver(shownStaff, printPick, canJoinTeam), [shownStaff, printPick])
+  /** 요양보호사 말고 다른 직종이 뽑혔는가. 반대쪽도 같은 이유로 뺀다 —
+   *  요양보호사만 뽑았는데 '그 외 주간 인원 0 0 0 …' 이 따라가면 안 된다. */
+  const printOther = useMemo(
+    () => printHasCaregiver(shownStaff, printPick, p => !canJoinTeam(p)), [shownStaff, printPick])
+  /** 그 층에 뽑힌 사람이 있는가. 2층만 뽑는데 3층 줄이 0으로 따라가면 안 된다. */
+  const printFloor = (f: string) =>
+    printHasAnyOf(staff.filter(x => (x.floor || '') === f).map(x => x.id), printPick)
+
   /** 그 날 그 층에서 주간(D)·야간(N)으로 나오는 요양보호사 수.
    *  인쇄 대상을 골랐으면 그 인원만 센다 — 표에 없는 사람이 숫자에 섞이면 벽보가 안 맞는다. */
   const countOn = (ids: string[], day: number, shift: 'D' | 'N') => {
@@ -1100,9 +1114,11 @@ export default function WorkSchedulePage() {
                 // ── 층 소계 두 줄 — 그 층 요양보호사가 끝나는 자리에 낀다 ──
                 if (row.kind === 'subtotal') {
                   const isDay = row.shift === 'D'
+                  // 2층만 뽑는데 3층 소계가 0으로 따라 나가면 안 된다 — 층마다 따로 본다
+                  const inPrint = printHasAnyOf(row.ids, printPick)
                   return (
                     <tr key={`sub-${row.floor}-${row.shift}`}
-                      className={`ws-row-sum ${isDay ? 'bg-sky-50/70' : 'bg-indigo-50/70'}`}>
+                      className={`ws-row-sum ${isDay ? 'bg-sky-50/70' : 'bg-indigo-50/70'} ${inPrint ? '' : 'print:hidden'}`}>
                       <td colSpan={showFloor ? 4 : 3}
                         className={`${td} font-bold sticky left-0 z-10 ${
                           isDay ? 'bg-sky-50 text-sky-800' : 'bg-indigo-50 text-indigo-800'}`}>
@@ -1223,7 +1239,8 @@ export default function WorkSchedulePage() {
                   </tr>
                 )
               })}
-              <tr className="ws-row-sum bg-gray-50">
+              {/* 요양보호사를 한 명도 안 뽑았으면 인쇄에서 뺀다 */}
+              <tr className={`ws-row-sum bg-gray-50 ${printCG ? '' : 'print:hidden'}`}>
                 <td className={`${td} font-bold text-gray-600 sticky left-0 z-10 bg-gray-50`} colSpan={showFloor ? 4 : 3}>요양보호사 주간 인원 <span className="font-normal text-gray-400">(야간 제외)</span></td>
                 {days.map(({ day }) => {
                   const n = dayCountBy(day, true)
@@ -1264,7 +1281,7 @@ export default function WorkSchedulePage() {
                   <td className={`${td} ws-agg`} colSpan={8} />
                 </tr>
               )}
-              <tr className="ws-row-sum bg-gray-50/60">
+              <tr className={`ws-row-sum bg-gray-50/60 ${printOther ? '' : 'print:hidden'}`}>
                 <td className={`${td} font-semibold text-gray-500 sticky left-0 z-10 bg-gray-50`} colSpan={showFloor ? 4 : 3}>그 외 주간 인원</td>
                 {days.map(({ day }) => (
                   <td key={day} className={`${td} text-gray-500`}>{dayCountBy(day, false) || '0'}</td>
@@ -1274,7 +1291,7 @@ export default function WorkSchedulePage() {
               {/* 층별 주간 인원 — 층을 켰을 때만. 간호·사회복지까지 포함한 그 층 전체 인원이다.
                   표 안의 '2층 주간 소계' 는 요양보호사만 세므로 숫자가 다르다 — 라벨로 구분한다. */}
               {showFloor && usedFloors.map(f => (
-                <tr key={f} className="ws-row-sum bg-teal-50/40">
+                <tr key={f} className={`ws-row-sum bg-teal-50/40 ${printFloor(f) ? '' : 'print:hidden'}`}>
                   <td className={`${td} font-semibold text-teal-800 sticky left-0 z-10 bg-teal-50`} colSpan={4}>
                     {f} 주간 인원 <span className="font-normal text-teal-600/70">(전 직종)</span>
                   </td>
