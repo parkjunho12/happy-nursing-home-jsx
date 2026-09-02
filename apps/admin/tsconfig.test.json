@@ -10,6 +10,8 @@
     "skipLibCheck": true
   },
   "include": [
+    "src/utils/printRows.ts",
+    "tests/printRows.test.ts",
     "src/utils/koreanTime.ts",
     "tests/koreanTime.test.ts",
     "src/utils/evalPeriod.ts",
