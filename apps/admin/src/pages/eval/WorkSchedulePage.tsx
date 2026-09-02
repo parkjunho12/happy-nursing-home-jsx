@@ -21,7 +21,7 @@ import { SHIFT_CODES, extraHoursOf, countAsOf, meta, isAutoManaged, splitTimeRan
 import { auditSchedule, type Issue } from '@/utils/scheduleAudit'
 import { filterByFloor, countHiddenNoFloor } from '@/utils/floorFilter'
 import { withFloorSubtotals } from '@/utils/floorSubtotals'
-import { printHasCaregiver, printHasAnyOf } from '@/utils/printRows'
+import { printHasCaregiver, printHasAnyOf, printFloorRow } from '@/utils/printRows'
 import { monthTotals } from '@/utils/monthHours'
 import { buildScheduleRows, canSaveRows } from '@/utils/scheduleRows'
 import { useShiftConfig } from '@/store/shiftConfig'
@@ -585,9 +585,10 @@ export default function WorkSchedulePage() {
    *  요양보호사만 뽑았는데 '그 외 주간 인원 0 0 0 …' 이 따라가면 안 된다. */
   const printOther = useMemo(
     () => printHasCaregiver(shownStaff, printPick, p => !canJoinTeam(p)), [shownStaff, printPick])
-  /** 그 층에 뽑힌 사람이 있는가. 2층만 뽑는데 3층 줄이 0으로 따라가면 안 된다. */
-  const printFloor = (f: string) =>
-    printHasAnyOf(staff.filter(x => (x.floor || '') === f).map(x => x.id), printPick)
+  /** 그 층 인원 줄을 인쇄에 낼지.
+   *  그 층 요양보호사가 인쇄물에 없으면 그 줄의 숫자는 실제 인원이 아니다 —
+   *  3층만 뽑았는데 '2층 주간 인원 1' 이 붙으면 2층에 한 명만 있는 것으로 읽힌다. */
+  const printFloor = (f: string) => printFloorRow(staff, f, printPick, canJoinTeam)
 
   /** 그 날 그 층에서 주간(D)·야간(N)으로 나오는 요양보호사 수.
    *  인쇄 대상을 골랐으면 그 인원만 센다 — 표에 없는 사람이 숫자에 섞이면 벽보가 안 맞는다. */

@@ -28,3 +28,25 @@ export function printHasCaregiver<T extends { id: string; pos?: string | null }>
 export function printHasAnyOf(ids: string[], pick: Set<string> | null): boolean {
   return !pick || ids.some(id => pick.has(id))
 }
+
+/** 층별 인원 줄을 인쇄에 낼지.
+ *
+ *  그 층 요양보호사가 인쇄물에 없으면 그 줄의 숫자는 실제 인원이 아니다.
+ *  3층만 뽑았는데 '2층 주간 인원 1 1 2 …' 가 붙으면, 읽는 사람은 2층에
+ *  한두 명만 있는 것으로 읽는다. 실제로는 대여섯 명이 있다. 벽에 붙는
+ *  문서에 그런 숫자가 적히면 안 된다.
+ *
+ *  그 층에 요양보호사가 아예 없는 경우(사무직만 있는 층 등)에는 그 층
+ *  사람이 한 명이라도 뽑혔는지로 본다 — 없는 기준으로 줄을 지울 수는 없다.
+ */
+export function printFloorRow<T extends { id: string; pos?: string | null; floor?: string | null }>(
+  list: T[],
+  floor: string,
+  pick: Set<string> | null,
+  isCaregiver: (pos?: string | null) => boolean,
+): boolean {
+  const onFloor = list.filter(s => (s.floor ?? '') === floor)
+  const caregivers = onFloor.filter(s => isCaregiver(s.pos))
+  const target = caregivers.length ? caregivers : onFloor
+  return printHasAnyOf(target.map(s => s.id), pick)
+}
