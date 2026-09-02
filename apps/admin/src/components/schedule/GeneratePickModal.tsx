@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { X, Sparkles, CheckSquare, Square } from 'lucide-react'
 import { canJoinTeam, TEAM_BAND, type StaffRow } from './shared'
+import { filterByFloor, countHiddenNoFloor } from '@/utils/floorFilter'
 
 /**
  * 자동 생성 대상 선택 — 전원이 기본이지만, 빼야 할 사람이 있다.
@@ -16,6 +17,31 @@ export default function GeneratePickModal({ staff, onClose, onConfirm, title = '
   hint?: string
 }) {
   const [picked, setPicked] = useState<Set<string>>(() => new Set(staff.map(s => s.id)))
+
+  /** 표에 실제로 쓰인 층 — 아무도 없는 층은 버튼을 내지 않는다 */
+  const floors = useMemo(() => {
+    const set = new Set<string>()
+    staff.forEach(s => { if (canJoinTeam(s.pos) && s.floor) set.add(s.floor) })
+    return [...set].sort((a, b) => a.localeCompare(b, 'ko', { numeric: true }))
+  }, [staff])
+
+  /** 층 하나만 고른다.
+   *
+   *  화면 층 필터(utils/floorFilter)와 같은 규칙을 쓴다 — 그 층 요양보호사에
+   *  더해, 층이 없는 직종(간호·사회복지·치료)은 함께 남긴다. 그분들은 층을
+   *  가리지 않고 일하니 어느 층 벽보에도 있어야 한다.
+   *
+   *  두 곳이 다른 규칙을 쓰면, 화면에서 2층을 보고 인쇄했더니 다른 사람이
+   *  나오는 일이 생긴다.
+   */
+  const [floorNote, setFloorNote] = useState<{ floor: string; hidden: number } | null>(null)
+
+  const pickFloor = (f: string) => {
+    setPicked(new Set(filterByFloor(staff, f, canJoinTeam).map(s => s.id)))
+    // 층을 지정 안 한 요양보호사는 어느 층 벽보에도 안 나온다.
+    // 조용히 빠지면 그 선생님만 근무표가 없는 채로 한 달을 보낸다.
+    setFloorNote({ floor: f, hidden: countHiddenNoFloor(staff, f, canJoinTeam) })
+  }
 
   // 조별 → 주간 순으로 묶어서 보여준다 (근무표와 같은 눈높이)
   const groups = useMemo(() => {
@@ -57,12 +83,31 @@ export default function GeneratePickModal({ staff, onClose, onConfirm, title = '
         </div>
 
         <div className="px-5 py-2.5 border-b shrink-0 flex items-center gap-2">
-          <button onClick={() => setPicked(new Set(staff.map(s => s.id)))}
+          <button onClick={() => { setPicked(new Set(staff.map(s => s.id))); setFloorNote(null) }}
             className="text-[11px] font-bold text-indigo-600 hover:bg-indigo-50 px-2 py-1 rounded">전체 선택</button>
-          <button onClick={() => setPicked(new Set())}
+          <button onClick={() => { setPicked(new Set()); setFloorNote(null) }}
             className="text-[11px] font-bold text-gray-400 hover:bg-gray-50 px-2 py-1 rounded">전체 해제</button>
+          {floors.length > 0 && (
+            <>
+              <span className="text-gray-200">|</span>
+              {floors.map(f => (
+                <button key={f} onClick={() => pickFloor(f)}
+                  title={`${f} 요양보호사 + 층 없는 직종(간호·사회복지 등)만 고릅니다`}
+                  className="text-[11px] font-bold text-teal-700 bg-teal-50 border border-teal-200 hover:bg-teal-100 px-2 py-1 rounded">
+                  {f}만
+                </button>
+              ))}
+            </>
+          )}
           <span className="ml-auto text-[11px] text-gray-400">{hint}</span>
         </div>
+
+        {floorNote && floorNote.hidden > 0 && (
+          <p className="px-5 py-2 text-[11px] text-amber-800 bg-amber-50 border-b border-amber-200 shrink-0">
+            층을 지정하지 않은 요양보호사 <b>{floorNote.hidden}명</b>은 빠졌습니다 —
+            어느 층 인쇄물에도 나오지 않으니, 근무표에서 층을 넣어주세요.
+          </p>
+        )}
 
         <div className="overflow-y-auto flex-1 min-h-0 px-5 py-3 space-y-3">
           {groups.map(([label, rows]) => {
