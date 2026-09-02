@@ -1200,6 +1200,10 @@ export default function WorkSchedulePage() {
                             : mt ? `${mt.label}${mt.time ? ` ${mt.time}` : ''}` : v}
                           data-code={v}
                           data-shorten={shortened ? '1' : undefined}
+                          // 시간을 직접 적은 칸(추가근무). 인쇄에서 진하게 칠하려고 표식을 둔다.
+                          // 예전에는 data-code 에 '~' 가 들었는지로 골랐는데, 실제 데이터는
+                          // '0930 1230' 처럼 공백을 쓰는 것이 많아 한 번도 안 걸렸다.
+                          data-extra={!shortened && splitTimeRange(v) ? '1' : undefined}
                           className={`${td} ws-cell relative cursor-pointer select-none ${mt ? mt.cls : shortened ? 'bg-violet-100 text-violet-900 text-[9px] leading-tight' : v ? 'bg-yellow-50 text-gray-700 text-[9px] leading-tight' : dayTone(day, dow) === 'red' ? 'bg-red-50/70' : dayTone(day, dow) === 'blue' ? 'bg-blue-50/70' : dayTone(day, dow) === 'paid' ? 'bg-violet-50/60' : ''} ${day === todayCol ? 'ring-1 ring-inset ring-indigo-200' : ''} ${lit ? 'outline outline-2 outline-amber-400' : ''} ${picked ? 'ring-2 ring-inset ring-gray-800' : ''}`}>
                           {(() => {
                             const tr = splitTimeRange(v)
@@ -1455,7 +1459,14 @@ export default function WorkSchedulePage() {
           /* 줄무늬는 근무 색(D·N·대휴…)을 덮어써서 짝수 행 색이 안 나왔다 → 인쇄에선 제거.
              대신 의미 있는 칸은 진하게 강제해 흑백 복사에도 살아남게 한다. */
           .ws-table td[data-shorten] { background: #ddd6fe !important; }                       /* 단축 근무(갚는 날) */
-          .ws-table td[data-code*="~"]:not([data-shorten]) { background: #fde68a !important; } /* 추가근무(쉬는 날) */
+          .ws-table td[data-extra] { background: #fde68a !important; }                         /* 추가근무(쉬는 날) */
+
+          /* 화면에서만 뜻이 있는 테두리는 인쇄에서 지운다.
+             '오늘 열' 파란 테두리, 고른 칸의 검은 테두리, 눈길 표시 노란 테두리 —
+             벽에 붙는 문서에 오늘이 표시될 이유가 없고, 마우스로 눌러 둔 칸이
+             그대로 인쇄되면 근무를 잘못 적은 것처럼 보인다.
+             (Tailwind 의 ring 은 box-shadow 로 그려진다) */
+          .ws-table th, .ws-table td { box-shadow: none !important; outline: none !important; }
           .ws-table td[data-code="대휴"] { background: #fcd34d !important; }
           .ws-table td[data-code="초과휴"] { background: #c4b5fd !important; }
           .ws-table td[data-code="休"], .ws-table td[data-code="반"] { background: #a7f3d0 !important; }
