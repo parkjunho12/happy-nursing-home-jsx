@@ -435,17 +435,37 @@ def unresign_ltc_staff(sid: str, db: Session = Depends(get_db), _: User = Depend
     return ApiResponse(success=True, data=LtcStaffOut.model_validate(s).model_dump())
 
 
+# 재직 중인 직원을 완전히 지울 수 있는 사람.
+# 시설장은 현장에서 인사를 직접 챙기므로 포함한다. 그 외 직종은 퇴사 처리만
+# 할 수 있다 — 근무표·체크리스트·인사기록이 함께 지워지는 일이라, 되돌릴 수 없다.
+STAFF_DELETE_POSITIONS = ("시설장",)
+
+
+def can_delete_active_staff(role: str, position) -> bool:
+    """재직 중인 직원을 지울 권한이 있는가.
+
+    시설장은 role 이 STAFF 다. role 만 보면 영영 못 지운다 — 직종도 함께 본다.
+    """
+    if role == "ADMIN":
+        return True
+    return (position or "") in STAFF_DELETE_POSITIONS
+
+
 @staff_router.delete("/{sid}", response_model=ApiResponse)
 def delete_ltc_staff(sid: str, db: Session = Depends(get_db),
                      current_user: User = Depends(get_current_user)):
-    """직원 완전 삭제 — 입사 예정 취소 등. 재직 중 직원은 ADMIN만 지울 수 있다."""
+    """직원 완전 삭제 — 입사 예정 취소 등.
+
+    재직 중인 직원은 ADMIN 과 시설장만 지울 수 있다. 근무표·체크리스트·인사기록이
+    함께 지워지고 되돌릴 수 없어서, 보통은 '퇴사 처리' 를 쓴다.
+    """
     s = db.query(LtcStaffMember).filter(LtcStaffMember.id == sid).first()
     if not s:
         raise HTTPException(404, "Not found")
     if s.status == "active":
         role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
-        if role != "ADMIN":
-            raise HTTPException(403, "재직 중인 직원 삭제는 ADMIN만 가능합니다. (퇴사 처리를 이용해주세요)")
+        if not can_delete_active_staff(role, getattr(current_user, "position", None)):
+            raise HTTPException(403, "재직 중인 직원 삭제는 관리자·시설장만 가능합니다. (퇴사 처리를 이용해주세요)")
     try:
         item_ids = [i.id for i in db.query(ChecklistItem.id)
                     .filter(ChecklistItem.person_id == sid).all()]

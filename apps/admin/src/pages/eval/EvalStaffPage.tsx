@@ -155,7 +155,11 @@ function StaffCard({ s, onEdit, onResign, onLeave, onDelete, onDetail, checklist
   s: LtcStaff; onEdit:()=>void; onResign:()=>void; onLeave:()=>void; onDelete:()=>void; onDetail:()=>void;
   checklists: ChecklistItem[];
 }) {
-  const isAdmin = useAuthStore(st => st.user?.role === 'ADMIN')
+  // 재직 중인 직원을 완전히 지울 수 있는 사람 — 관리자와 시설장.
+  // 시설장의 role 은 STAFF 라, role 만 보면 버튼이 영영 안 보인다.
+  // (서버에서도 같은 기준으로 다시 막는다 — eval_people.can_delete_active_staff)
+  const canDelete = useAuthStore(st =>
+    st.user?.role === 'ADMIN' || st.user?.position === '시설장')
   const age = calcAge(s.birthDate)
   const done = checklists.filter(c => isItemDone(c)).length
   const total = checklists.length
@@ -211,9 +215,9 @@ function StaffCard({ s, onEdit, onResign, onLeave, onDelete, onDetail, checklist
             }}
               className="flex items-center gap-1 text-xs font-medium text-emerald-600 border border-emerald-200 px-2.5 py-1.5 rounded-xl hover:bg-emerald-50"><RotateCcw size={12}/>퇴사 취소</button>
           )}
-          {(s.status!=='active' || isAdmin) && (
+          {(s.status!=='active' || canDelete) && (
             <button onClick={e=>{e.stopPropagation();onDelete()}}
-              title={s.status==='pending' ? '입사 취소 — 완전 삭제' : s.status==='active' ? '완전 삭제 (ADMIN 전용)' : '기록 완전 삭제'}
+              title={s.status==='pending' ? '입사 취소 — 완전 삭제' : s.status==='active' ? '완전 삭제 (관리자·시설장 전용)' : '기록 완전 삭제'}
               className="flex items-center gap-1 text-xs font-medium text-red-500 border border-red-200 px-2.5 py-1.5 rounded-xl hover:bg-red-50"><Trash2 size={12}/>삭제</button>
           )}
         </div>
