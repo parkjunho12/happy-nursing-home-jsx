@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Loader2, Printer, Save, BellRing, Info } from 'lucide-react'
+import { Loader2, Printer, Save, BellRing, Info, AlertTriangle } from 'lucide-react'
 import { bellAPI, type BellPage } from '@/api/emergencyBellClient'
 import { buildRoomCards } from '@/utils/bellLayout'
+import { pickOrder, missingInRoom, unknownNames } from '@/utils/bellResidents'
 
 /**
  * 응급벨 명단 — 벨 번호마다 어느 어르신인지 정하고 배치도로 뽑는다.
@@ -50,6 +51,13 @@ export default function EmergencyBellPage() {
     for (let i = 0; i < cards.length; i += ROOMS_PER_PAGE) out.push(cards.slice(i, i + ROOMS_PER_PAGE))
     return out
   }, [cards])
+
+  const residents = data?.residents ?? []
+
+  /** 적어 둔 이름 중 수급자 명단에 없는 것 — 오타이거나 퇴소한 분이다 */
+  const unknown = useMemo(
+    () => unknownNames(residents, bells.filter(b => !b.is_wc).map(b => draft[b.id]?.name ?? '')),
+    [residents, bells, draft])
 
   const dirty = useMemo(() => (data?.rows ?? []).some(b => {
     const d = draft[b.id]; if (!d) return false
@@ -136,11 +144,22 @@ export default function EmergencyBellPage() {
           </button>
         </div>
 
+        {unknown.length > 0 && (
+          <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-3 flex items-start gap-1.5">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+            <span>
+              수급자 명단에 없는 이름이 있습니다 — <b>{unknown.join(', ')}</b>.
+              오타이거나 퇴소하신 분일 수 있습니다. 벨이 울렸을 때 헛사람을 찾게 되니 확인해주세요.
+            </span>
+          </p>
+        )}
+
         <p className="text-[11px] text-gray-500 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 mb-4 flex items-start gap-1.5">
           <Info size={13} className="mt-0.5 shrink-0 text-gray-400" />
           <span>
             벨 번호·호실·화장실 배치는 설비라 여기서 바꾸지 않습니다. 바뀌었다면 알려주세요.
             비워 두면 배치도에 <b>점선 빈칸</b>으로 나가 손으로 적을 수 있습니다.
+            성함 칸을 누르면 <b>수급자 관리에 등록된 어르신</b>이 같은 방부터 뜹니다.
           </span>
         </p>
       </div>
@@ -190,6 +209,7 @@ export default function EmergencyBellPage() {
                             {canEdit ? (
                               <input value={d.name} maxLength={20}
                                 onChange={e => set(b.id, { name: e.target.value })}
+                                list={`res-${b.id}`}
                                 placeholder="성함"
                                 // 인쇄에서는 '성함' 안내글 대신 점선 빈칸으로 나가게 한다 —
                                 // 벽보에 '성함 성함 성함' 이 늘어서면 읽을 수가 없다
@@ -202,6 +222,17 @@ export default function EmergencyBellPage() {
                               </span>
                             )}
                             {canEdit && (
+                              // 같은 방 어르신이 맨 앞에 온다 — 대개 첫 두세 명 안에서 끝난다.
+                              // 직접 칠 수도 있게 둔다(명단에 없는 분을 임시로 적어야 할 때가 있다).
+                              <datalist id={`res-${b.id}`}>
+                                {pickOrder(residents, b.floor, b.room).map(r => (
+                                  <option key={`${r.name}-${r.room}`} value={r.name}>
+                                    {r.room ? `${r.room}호` : ''}{r.floor ? ` · ${r.floor}` : ''}
+                                  </option>
+                                ))}
+                              </datalist>
+                            )}
+                            {canEdit && (
                               <button type="button" title="공실로 표시"
                                 onClick={() => set(b.id, { status: vacant ? '' : '공실' })}
                                 className={`eb-vac shrink-0 text-[9px] font-bold px-1.5 py-1 rounded border ${
@@ -212,6 +243,33 @@ export default function EmergencyBellPage() {
                         )
                       })}
                     </div>
+
+                    {/* 이 방에 계신데 아직 어느 벨에도 안 넣은 분.
+                        빠뜨리면 그분 자리만 배치도에 비어 있게 된다. */}
+                    {canEdit && (() => {
+                      const miss = missingInRoom(residents, floor, card.room,
+                        card.bells.filter(b => !b.is_wc).map(b => draft[b.id]?.name ?? ''))
+                      if (!miss.length) return null
+                      return (
+                        <div className="print:hidden bg-amber-50 border-t border-amber-200 px-2 py-1.5">
+                          <p className="text-[10px] font-bold text-amber-800 mb-1">아직 안 넣은 어르신</p>
+                          <div className="flex flex-wrap gap-1">
+                            {miss.map(r => (
+                              <button key={r.name} type="button"
+                                onClick={() => {
+                                  // 비어 있는 첫 칸에 넣는다 — 어느 칸인지는 사람이 옮기면 된다
+                                  const slot = card.bells.find(b => !b.is_wc && !(draft[b.id]?.name ?? '').trim())
+                                  if (!slot) { alert('이 방에 빈 칸이 없습니다.'); return }
+                                  set(slot.id, { name: r.name })
+                                }}
+                                className="text-[10px] font-bold text-amber-900 bg-white border border-amber-300 px-1.5 py-0.5 rounded hover:bg-amber-100">
+                                + {r.name}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })()}
 
                     {/* 이 방에 달린 화장실 */}
                     {card.bells.filter(b => b.is_wc).map(b => (

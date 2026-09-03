@@ -26,6 +26,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
 from app.models.emergency_bell import EmergencyBell, STATUSES, WC_KINDS
+from app.models.eval import LtcResident
 from app.schemas.response import ApiResponse
 
 router = APIRouter()
@@ -68,6 +69,15 @@ def _view(b: EmergencyBell) -> dict:
     }
 
 
+def room_key(v) -> str:
+    """호실 표기를 맞춘다.
+
+    수급자 관리는 '301', 응급벨은 '301호' 로 적는다. 둘을 그냥 비교하면
+    어느 방 어르신인지 영영 못 찾아서, 골라 넣는 기능이 통째로 안 먹는다.
+    """
+    return str(v or "").strip().replace("호", "").strip()
+
+
 @router.get("")
 def list_bells(floor: Optional[str] = Query(None), db: Session = Depends(get_db),
                current_user: User = Depends(get_current_user)):
@@ -78,9 +88,18 @@ def list_bells(floor: Optional[str] = Query(None), db: Session = Depends(get_db)
     rows = q.order_by(EmergencyBell.floor, EmergencyBell.no).all()
     floors = [f[0] for f in db.query(EmergencyBell.floor).distinct()
               .order_by(EmergencyBell.floor).all()]
+    # 이름을 직접 치지 않고 고르게 한다 — 오타가 나면 응급 상황에 헛사람을 찾는다.
+    # 입소 중인 분만 준다(퇴소한 분이 목록에 있으면 실수로 고르게 된다).
+    residents = [
+        {"name": r.name, "floor": r.floor or "", "room": room_key(r.room)}
+        for r in db.query(LtcResident)
+        .filter(LtcResident.status.in_(["active", "pending"]))
+        .order_by(LtcResident.floor, LtcResident.room, LtcResident.name).all()
+    ]
     return ApiResponse(success=True, data={
         "floors": floors,
         "rows": [_view(b) for b in rows],
+        "residents": residents,
         # 화면이 이걸 보고 수정 칸을 열지 말지 정한다(서버에서도 다시 막는다)
         "can_edit": can_edit(_role(current_user), getattr(current_user, "position", None)),
     })

@@ -10,6 +10,8 @@
     "skipLibCheck": true
   },
   "include": [
+    "src/utils/bellResidents.ts",
+    "tests/bellResidents.test.ts",
     "src/utils/bellLayout.ts",
     "tests/bellLayout.test.ts",
     "src/utils/printRows.ts",
