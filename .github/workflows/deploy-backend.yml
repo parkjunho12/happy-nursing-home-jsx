@@ -57,6 +57,11 @@ jobs:
         # 그 규칙이 조용히 바뀌면 사진이 엉뚱한 날에 쌓이고, 나중에 '그날 뭐
         # 했는지' 를 찾을 때 안 나온다.
         run: python3 backend/tests/test_program_photo_day.py
+      - name: 직원 삭제 권한
+        # 직원을 지우면 근무표·체크리스트·인사기록이 함께 지워지고 되돌릴 수 없다.
+        # 판정을 role 로만 하면 시설장이 영영 못 지우고(시설장의 role 은 STAFF),
+        # 헐거워지면 요양보호사가 동료를 지울 수 있게 된다.
+        run: python3 backend/tests/test_staff_delete_perm.py
       - name: 마이그레이션 head가 하나인지 검사
         # head가 갈라지면 alembic upgrade가 서버에서 실패한다 — 미리 잡는다
         run: |
