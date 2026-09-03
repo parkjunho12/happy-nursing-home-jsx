@@ -21,9 +21,13 @@ export interface Bell {
   updated_by?: string | null
 }
 
+export interface BellResident { name: string; floor: string; room: string }
+
 export interface BellPage {
   floors: string[]
   rows: Bell[]
+  /** 이름을 직접 치지 않고 고르게 하려고 함께 내려받는다 */
+  residents: BellResident[]
   /** 이 사람이 이름을 고칠 수 있는가 — 서버에서도 다시 막는다 */
   can_edit: boolean
 }
