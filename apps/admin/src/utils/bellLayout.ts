@@ -57,3 +57,33 @@ export function buildRoomCards<T extends BellLike>(bells: T[]): RoomCard<T>[] {
     return { room, bells: list, sharedRef: ref, numbers: nums }
   })
 }
+
+/** 한 장에 넣을 방의 최대 개수.
+ *
+ *  원본 배치도가 6개까지 넣고 있었다(306·307·308·309·310·공용). A4 가로에서
+ *  그 폭이 실제로 쓸 만하다는 뜻이라 같은 값을 쓴다.
+ */
+export const MAX_ROOMS_PER_PAGE = 6
+
+/** 방 카드를 쪽으로 나눈다 — 고르게.
+ *
+ *  앞에서부터 6개씩 자르면 11개일 때 6·5 가 아니라 6·5 가 되지만, 10개일 때는
+ *  6·4 가 되어 뒷장이 휑해진다. 벽에 나란히 붙이는 문서라 두 장의 무게가
+ *  비슷해야 보기 좋다. 그래서 장수를 먼저 정하고 고르게 나눈다.
+ *
+ *    11개 → 2장(6·5)   10개 → 2장(5·5)   6개 이하 → 1장
+ */
+export function splitPages<T>(cards: T[], maxPerPage = MAX_ROOMS_PER_PAGE): T[][] {
+  if (cards.length === 0) return []
+  const pages = Math.max(1, Math.ceil(cards.length / maxPerPage))
+  const base = Math.floor(cards.length / pages)
+  const extra = cards.length % pages          // 앞장부터 한 개씩 더 가져간다
+  const out: T[][] = []
+  let i = 0
+  for (let p = 0; p < pages; p++) {
+    const n = base + (p < extra ? 1 : 0)
+    out.push(cards.slice(i, i + n))
+    i += n
+  }
+  return out
+}

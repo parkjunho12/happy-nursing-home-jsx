@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildRoomCards, sharedRooms } from '../src/utils/bellLayout'
+import { buildRoomCards, sharedRooms, splitPages, MAX_ROOMS_PER_PAGE } from '../src/utils/bellLayout'
 
 /* 두 방이 함께 쓰는 화장실이 배치도의 핵심이다.
    벨은 한 방에만 달려 있지만 두 방 어르신이 다 쓴다. 안내가 빠지면
@@ -73,4 +73,34 @@ test('실제 3층 배치 — 방 11개, 화장실 안내는 3곳', () => {
   const drawn = cards.flatMap(c => c.bells.map(b => b.no))
   assert.equal(new Set(drawn).size, drawn.length, '같은 벨이 두 카드에 그려졌다')
   assert.equal(drawn.length, 41, '41개가 빠짐없이 그려져야 한다')
+})
+
+
+/* 벽에 나란히 붙이는 문서다. 장수가 적을수록 좋고, 두 장의 무게가 비슷해야
+   보기 좋다. 원본 배치도도 3층을 2장(5개·6개)에 담고 있었다. */
+
+test('실제 층은 두 장을 넘지 않는다', () => {
+  const rooms = (n: number) => Array.from({ length: n }, (_, i) => i)
+  assert.equal(splitPages(rooms(11)).length, 2, '3층 — 301~310호 + 공용')
+  assert.equal(splitPages(rooms(10)).length, 2, '2층 — 201~210호')
+})
+
+test('고르게 나눈다 — 뒷장만 휑하지 않게', () => {
+  assert.deepEqual(splitPages([1,2,3,4,5,6,7,8,9,10,11]).map(p => p.length), [6, 5])
+  assert.deepEqual(splitPages([1,2,3,4,5,6,7,8,9,10]).map(p => p.length), [5, 5])
+  assert.deepEqual(splitPages([1,2,3,4,5,6,7]).map(p => p.length), [4, 3])
+})
+
+test('한 장에 들어가면 한 장', () => {
+  assert.deepEqual(splitPages([1,2,3,4,5,6]).map(p => p.length), [6])
+  assert.deepEqual(splitPages([1]).map(p => p.length), [1])
+  assert.deepEqual(splitPages([]), [])
+})
+
+test('한 장에 최대 개수를 넘기지 않는다 — 넘기면 글씨가 뭉개진다', () => {
+  for (const n of [1, 5, 6, 7, 10, 11, 12, 13, 25]) {
+    const pages = splitPages(Array.from({ length: n }, (_, i) => i))
+    assert.ok(pages.every(p => p.length <= MAX_ROOMS_PER_PAGE), `${n}개에서 넘쳤다`)
+    assert.equal(pages.flat().length, n, `${n}개에서 방이 새거나 겹쳤다`)
+  }
 })
