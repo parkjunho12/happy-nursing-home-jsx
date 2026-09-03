@@ -111,30 +111,10 @@ class BellBody(BaseModel):
     status: Optional[str] = None
 
 
-@router.put("/{bell_id}")
-def update_bell(bell_id: str, body: BellBody, db: Session = Depends(get_db),
-                current_user: User = Depends(_editor)):
-    b = db.query(EmergencyBell).filter(EmergencyBell.id == bell_id).first()
-    if not b:
-        raise HTTPException(404, "그 벨을 찾을 수 없습니다.")
-    if b.kind in WC_KINDS:
-        # 화장실 칸에 사람 이름이 들어가면 배치도가 거짓말이 된다
-        raise HTTPException(400, "화장실 벨에는 이름을 넣지 않습니다.")
-
-    name = (body.resident_name or "").strip()[:NAME_MAX]
-    st = (body.status or "").strip()
-    if st and st not in STATUSES:
-        raise HTTPException(400, f"상태는 {' 또는 '.join(STATUSES)} 만 쓸 수 있습니다.")
-    # 이름이 없는데 '재실' 은 말이 안 된다 — 배치도에 빈칸이 재실로 찍힌다
-    if st == STATUSES[0] and not name:
-        raise HTTPException(400, "이름 없이 '재실'로 둘 수 없습니다.")
-
-    b.resident_name = name or None
-    b.status = st or None
-    b.updated_by = current_user.name
-    db.commit(); db.refresh(b)
-    return ApiResponse(success=True, data=_view(b))
-
+# ── 라우트 순서 주의 ─────────────────────────────────────────────
+# /layout 은 반드시 /{bell_id} 보다 위에 있어야 한다. 아래에 두면 FastAPI 가
+# /layout 을 bell_id="layout" 으로 읽어 '그 벨을 찾을 수 없습니다' 를 돌려준다.
+# 실제로 그렇게 배포됐다가 벨 번호 수정이 통째로 안 먹었다.
 
 # 벨 번호를 바꿀 수 있는 사람 — 설비가 바뀌었을 때만 손대는 일이라 좁게 둔다
 LAYOUT_POSITIONS = ("시설장",)
@@ -205,6 +185,31 @@ def update_layout(body: LayoutBody, db: Session = Depends(get_db),
         rows[str(i.get("id"))].updated_by = current_user.name
     db.commit()
     return ApiResponse(success=True, data={"changed": len(items), "floor": floor})
+
+
+@router.put("/{bell_id}")
+def update_bell(bell_id: str, body: BellBody, db: Session = Depends(get_db),
+                current_user: User = Depends(_editor)):
+    b = db.query(EmergencyBell).filter(EmergencyBell.id == bell_id).first()
+    if not b:
+        raise HTTPException(404, "그 벨을 찾을 수 없습니다.")
+    if b.kind in WC_KINDS:
+        # 화장실 칸에 사람 이름이 들어가면 배치도가 거짓말이 된다
+        raise HTTPException(400, "화장실 벨에는 이름을 넣지 않습니다.")
+
+    name = (body.resident_name or "").strip()[:NAME_MAX]
+    st = (body.status or "").strip()
+    if st and st not in STATUSES:
+        raise HTTPException(400, f"상태는 {' 또는 '.join(STATUSES)} 만 쓸 수 있습니다.")
+    # 이름이 없는데 '재실' 은 말이 안 된다 — 배치도에 빈칸이 재실로 찍힌다
+    if st == STATUSES[0] and not name:
+        raise HTTPException(400, "이름 없이 '재실'로 둘 수 없습니다.")
+
+    b.resident_name = name or None
+    b.status = st or None
+    b.updated_by = current_user.name
+    db.commit(); db.refresh(b)
+    return ApiResponse(success=True, data=_view(b))
 
 
 class BulkBody(BaseModel):
