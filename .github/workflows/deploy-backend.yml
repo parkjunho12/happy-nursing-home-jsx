@@ -27,6 +27,11 @@ jobs:
         # 게 아니라 로그인부터 막혔다. 문법 검사로는 안 잡힌다.
         # 표준 라이브러리만 쓰므로 설치가 필요 없다.
         run: python3 backend/tests/test_imports_resolve.py
+      - name: 가려지는 API 경로가 없는지 검사
+        # FastAPI 는 적힌 순서대로 길을 찾는다. /{id} 를 먼저 적으면 그 뒤의
+        # /layout 이 id="layout" 으로 잡혀 그 기능만 조용히 안 먹는다.
+        # 문법도 멀쩡하고 서버도 잘 뜨기 때문에 눌러 보기 전에는 모른다.
+        run: python3 backend/tests/test_route_order.py
       - name: 근무시간 계산이 화면과 같은가
         # 총시간은 화면과 백엔드 두 곳에서 계산된다(엑셀은 옛 달을 직접 계산해야
         # 한다). 한쪽만 바뀌면 급여로 이어지는 숫자가 갈라지므로 여기서 막는다.
