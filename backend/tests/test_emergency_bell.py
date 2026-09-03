@@ -89,6 +89,15 @@ def check() -> int:
         if canL("STAFF", pos) and not can("STAFF", pos):
             bad.append(f"'{pos}' 가 이름은 못 고치는데 벨 번호는 고칠 수 있다")
 
+    # 맞바꾸기를 위해 두 단계로 쓰는가.
+    # 유니크 제약은 UPDATE 한 줄마다 검사된다. 그래서 1번↔2번을 맞바꾸면
+    # 1번을 2로 바꾸는 순간 아직 2번인 줄과 겹쳐 거절당한다. 한 트랜잭션에
+    # 묶어도 마찬가지다 — 실제로 그렇게 만들었다가 맞바꾸기가 통째로 안 됐다.
+    if "b.no = -k" not in API and "no = -k" not in API:
+        bad.append("번호를 잠깐 음수로 옮기는 단계가 사라졌다 — 맞바꾸기가 안 된다")
+    if "db.flush()" not in API:
+        bad.append("중간 단계를 밀어 넣는 flush 가 사라졌다 — 맞바꾸기가 안 된다")
+
     # 번호 겹침을 막는 검사가 남아 있는가 — 겹치면 갈 방을 못 찾는다
     if "번호는 겹칠 수 없습니다" not in API:
         bad.append("벨 번호 겹침을 막는 검사가 사라졌다")
@@ -111,7 +120,7 @@ def check() -> int:
             print("   ·", b)
         return 1
 
-    print("✅ 응급벨 명단 정상 — 이름 권한 17건 · 배치 권한 10건 · 화장실 4건 · 상태·검사 6건")
+    print("✅ 응급벨 명단 정상 — 이름 권한 17건 · 배치 권한 10건 · 화장실 4건 · 상태·검사 8건")
     return 0
 
 

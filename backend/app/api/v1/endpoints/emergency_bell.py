@@ -180,10 +180,27 @@ def update_layout(body: LayoutBody, db: Session = Depends(get_db),
             raise HTTPException(400, f"{floor}에 {n}번이 두 개입니다. 번호는 겹칠 수 없습니다.")
         seen[n] = bid
 
-    for i in items:
-        rows[str(i.get("id"))].no = int(i.get("no"))
-        rows[str(i.get("id"))].updated_by = current_user.name
-    db.commit()
+    # 두 번에 나눠 쓴다.
+    #
+    # 유니크 제약은 트랜잭션이 끝날 때가 아니라 UPDATE 한 줄마다 검사된다.
+    # 그래서 1번↔2번을 맞바꾸면, 1번을 2로 바꾸는 순간 아직 2번인 줄과
+    # 겹쳐서 거절당한다. 한 트랜잭션에 묶어도 마찬가지다(실제로 그렇게
+    # 만들었다가 맞바꾸기가 통째로 안 됐다).
+    #
+    # 그래서 먼저 음수로 옮겨 두고(그 층에 음수는 없다), 그다음 제 번호를
+    # 준다. 중간 상태는 트랜잭션 밖에서 보이지 않는다.
+    try:
+        for k, i in enumerate(items, start=1):
+            rows[str(i.get("id"))].no = -k
+        db.flush()
+        for i in items:
+            b = rows[str(i.get("id"))]
+            b.no = int(i.get("no"))
+            b.updated_by = current_user.name
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(400, "벨 번호를 바꾸지 못했습니다. 번호가 겹치지 않는지 확인해주세요.")
     return ApiResponse(success=True, data={"changed": len(items), "floor": floor})
 
 
