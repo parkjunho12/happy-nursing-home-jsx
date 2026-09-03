@@ -10,6 +10,8 @@
     "skipLibCheck": true
   },
   "include": [
+    "src/utils/bellLayout.ts",
+    "tests/bellLayout.test.ts",
     "src/utils/printRows.ts",
     "tests/printRows.test.ts",
     "src/utils/koreanTime.ts",

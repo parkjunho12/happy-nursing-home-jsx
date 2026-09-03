@@ -1,0 +1,273 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Loader2, Printer, Save, BellRing, Info } from 'lucide-react'
+import { bellAPI, type BellPage } from '@/api/emergencyBellClient'
+import { buildRoomCards } from '@/utils/bellLayout'
+
+/**
+ * 응급벨 명단 — 벨 번호마다 어느 어르신인지 정하고 배치도로 뽑는다.
+ *
+ * 벨이 울리면 번호만 뜬다. 그 번호가 몇 호실 누구인지 알아야 바로 달려간다.
+ * 그래서 층마다 배치도를 뽑아 벽에 붙인다.
+ *
+ * 화면에서 이름을 고치고, 그대로 인쇄한다. 화면과 인쇄물이 같은 그림이라
+ * '인쇄하면 어떻게 나오지' 를 따로 상상하지 않아도 된다.
+ *
+ * 벨 번호·호실·구분은 설비라서 여기서 바꾸지 않는다.
+ */
+
+/** 한 장에 방 다섯 개 — 원래 쓰던 배치도와 같은 쪽 나눔 */
+const ROOMS_PER_PAGE = 5
+
+export default function EmergencyBellPage() {
+  const [data, setData] = useState<BellPage | null>(null)
+  const [floor, setFloor] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [draft, setDraft] = useState<Record<string, { name: string; status: string }>>({})
+  const [saving, setSaving] = useState(false)
+  const [savedAt, setSavedAt] = useState<string | null>(null)
+  const printedAt = useRef(new Date())
+
+  const load = () => {
+    setLoading(true)
+    bellAPI.list()
+      .then(d => {
+        setData(d)
+        setFloor(f => f || d.floors[0] || '')
+        const m: Record<string, { name: string; status: string }> = {}
+        d.rows.forEach(b => { m[b.id] = { name: b.resident_name ?? '', status: b.status ?? '' } })
+        setDraft(m)
+      })
+      .catch(() => setData(null))
+      .finally(() => setLoading(false))
+  }
+  useEffect(load, [])
+
+  const bells = useMemo(
+    () => (data?.rows ?? []).filter(b => b.floor === floor), [data, floor])
+  const cards = useMemo(() => buildRoomCards(bells), [bells])
+  const pages = useMemo(() => {
+    const out: (typeof cards)[] = []
+    for (let i = 0; i < cards.length; i += ROOMS_PER_PAGE) out.push(cards.slice(i, i + ROOMS_PER_PAGE))
+    return out
+  }, [cards])
+
+  const dirty = useMemo(() => (data?.rows ?? []).some(b => {
+    const d = draft[b.id]; if (!d) return false
+    return d.name !== (b.resident_name ?? '') || d.status !== (b.status ?? '')
+  }), [data, draft])
+
+  const set = (id: string, p: Partial<{ name: string; status: string }>) =>
+    setDraft(s => {
+      const cur = s[id] ?? { name: '', status: '' }
+      const next = { ...cur, ...p }
+      // 이름을 지우면 '재실'도 함께 지운다 — 빈칸이 재실로 남으면 배치도가 거짓말이 된다
+      if (next.name.trim() === '' && next.status === '재실') next.status = ''
+      return { ...s, [id]: next }
+    })
+
+  const save = async () => {
+    if (!data) return
+    setSaving(true)
+    try {
+      const items = data.rows.filter(b => !b.is_wc).map(b => ({
+        id: b.id,
+        resident_name: draft[b.id]?.name ?? '',
+        status: draft[b.id]?.status ?? '',
+      }))
+      const r = await bellAPI.saveMany(items)
+      if (r.failed.length) alert(`${r.failed.length}칸을 저장하지 못했습니다.`)
+      setSavedAt(new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }))
+      load()
+    } catch (e: any) {
+      alert(e?.response?.data?.detail ?? '저장하지 못했습니다')
+    } finally { setSaving(false) }
+  }
+
+  const canEdit = !!data?.can_edit
+  const today = printedAt.current
+  const dateStr = `${today.getFullYear()}. ${String(today.getMonth() + 1).padStart(2, '0')}. ${String(today.getDate()).padStart(2, '0')}.`
+
+  const filled = bells.filter(b => !b.is_wc && (draft[b.id]?.name ?? '').trim()).length
+  const roomBells = bells.filter(b => !b.is_wc).length
+
+  return (
+    <div className="p-4 sm:p-6 max-w-[1400px] mx-auto eb-root">
+      {/* ── 조작부 (인쇄에서는 빠진다) ── */}
+      <div className="print:hidden">
+        <div className="flex items-center gap-2 mb-1 flex-wrap">
+          <BellRing className="text-rose-600" size={20} />
+          <h1 className="text-xl font-bold text-gray-900">응급벨 명단</h1>
+          {!canEdit && (
+            <span className="text-[11px] font-bold text-gray-500 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-full">
+              보기 전용
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-gray-400 mb-4">
+          벨이 울리면 번호만 뜹니다. 번호 → 방 → 성함을 보고 바로 달려갈 수 있게 층마다 붙여 두세요.
+        </p>
+
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <div className="inline-flex rounded-xl border border-gray-200 overflow-hidden bg-white">
+            {(data?.floors ?? []).map(f => (
+              <button key={f} onClick={() => setFloor(f)}
+                className={`px-4 py-2 text-sm font-bold transition-colors ${
+                  floor === f ? 'bg-rose-600 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>{f}</button>
+            ))}
+          </div>
+          {!loading && (
+            <span className="text-[11px] text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">
+              {filled} / {roomBells}자리 지정
+            </span>
+          )}
+          {canEdit && (
+            <button onClick={save} disabled={saving || !dirty}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 text-white text-sm font-bold disabled:opacity-40">
+              {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} 저장
+            </button>
+          )}
+          {dirty && <span className="text-[11px] text-amber-600 font-semibold">저장하지 않은 변경이 있습니다</span>}
+          {!dirty && savedAt && <span className="text-[11px] text-emerald-600 font-semibold">{savedAt} 저장됨</span>}
+          <button onClick={() => { printedAt.current = new Date(); setTimeout(() => window.print(), 50) }}
+            disabled={dirty}
+            title={dirty ? '먼저 저장해주세요 — 저장 안 한 내용이 인쇄될 수 있습니다' : `${floor} 배치도 인쇄`}
+            className="ml-auto inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40">
+            <Printer size={15} /> 배치도 인쇄
+          </button>
+        </div>
+
+        <p className="text-[11px] text-gray-500 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 mb-4 flex items-start gap-1.5">
+          <Info size={13} className="mt-0.5 shrink-0 text-gray-400" />
+          <span>
+            벨 번호·호실·화장실 배치는 설비라 여기서 바꾸지 않습니다. 바뀌었다면 알려주세요.
+            비워 두면 배치도에 <b>점선 빈칸</b>으로 나가 손으로 적을 수 있습니다.
+          </span>
+        </p>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-20"><Loader2 className="animate-spin text-gray-300" /></div>
+      ) : !data ? (
+        <p className="text-sm text-gray-400 py-20 text-center">불러오지 못했습니다.</p>
+      ) : (
+        <>
+          {pages.map((pageCards, pi) => (
+            <section key={pi} className="eb-page mb-6">
+              {/* 머리 */}
+              <div className="flex items-center gap-2 flex-wrap border-b-2 border-rose-700 pb-2 mb-2">
+                <h2 className="text-xl font-extrabold text-rose-700">{floor} 응급벨 배치도</h2>
+                <span className="text-[11px] font-bold text-white bg-rose-700 px-2 py-1 rounded-lg">
+                  {pageCards[0]?.room} ~ {pageCards[pageCards.length - 1]?.room}
+                </span>
+                <span className="ml-auto text-[11px] font-bold text-rose-700">{pi + 1} / {pages.length}</span>
+              </div>
+
+              {/* 범례 */}
+              <div className="flex items-center gap-3 flex-wrap text-[10px] text-gray-600 mb-2">
+                <span className="inline-flex items-center gap-1"><i className="w-4 h-3 rounded border-2 border-rose-600 inline-block" /> 생활실 (어르신)</span>
+                <span className="inline-flex items-center gap-1"><i className="w-4 h-3 rounded bg-sky-100 border border-sky-400 inline-block" /> 화장실</span>
+                <span className="inline-flex items-center gap-1"><i className="w-4 h-3 rounded border border-dashed border-rose-300 inline-block" /> 빈자리 (직접 기재)</span>
+                <span className="inline-flex items-center gap-1"><i className="w-4 h-3 rounded bg-gray-200 inline-block" /> 공실 (사용 안 함)</span>
+                <span className="inline-flex items-center gap-1"><i className="w-4 h-3 rounded border-2 border-dashed border-sky-500 inline-block" /> 두 방이 함께 쓰는 화장실</span>
+              </div>
+
+              <div className="eb-grid grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.max(pageCards.length, 1)}, minmax(0,1fr))` }}>
+                {pageCards.map(card => (
+                  <div key={card.room} className="eb-card border-2 border-rose-700 rounded-xl overflow-hidden flex flex-col bg-white">
+                    <div className="bg-rose-700 text-white text-center py-1.5">
+                      <p className="text-base font-extrabold leading-tight">{card.room}</p>
+                      <p className="text-[9px] opacity-90">{card.numbers.join(' · ')}번</p>
+                    </div>
+
+                    <div className="flex-1 divide-y divide-rose-100">
+                      {card.bells.filter(b => !b.is_wc).map(b => {
+                        const d = draft[b.id] ?? { name: '', status: '' }
+                        const empty = !d.name.trim()
+                        const vacant = d.status === '공실'
+                        return (
+                          <div key={b.id} className={`flex items-center gap-2 px-2 py-2 ${vacant ? 'bg-gray-100' : ''}`}>
+                            <span className="w-7 h-7 shrink-0 rounded-full bg-rose-700 text-white text-xs font-extrabold flex items-center justify-center">{b.no}</span>
+                            {canEdit ? (
+                              <input value={d.name} maxLength={20}
+                                onChange={e => set(b.id, { name: e.target.value })}
+                                placeholder="성함"
+                                className={`eb-input flex-1 min-w-0 px-1 py-0.5 text-sm font-bold rounded border ${
+                                  empty ? 'border-dashed border-rose-300 text-gray-400' : 'border-transparent text-gray-900'} focus:outline-none focus:border-rose-400`} />
+                            ) : (
+                              <span className={`flex-1 text-sm font-bold ${empty ? 'text-gray-300' : 'text-gray-900'}`}>
+                                {d.name || '⋯⋯⋯'}
+                              </span>
+                            )}
+                            {canEdit && (
+                              <button type="button" title="공실로 표시"
+                                onClick={() => set(b.id, { status: vacant ? '' : '공실' })}
+                                className={`eb-vac shrink-0 text-[9px] font-bold px-1.5 py-1 rounded border ${
+                                  vacant ? 'bg-gray-500 text-white border-gray-500' : 'text-gray-300 border-gray-200'}`}>공실</button>
+                            )}
+                            {!canEdit && vacant && <span className="text-[9px] font-bold text-gray-500">공실</span>}
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {/* 이 방에 달린 화장실 */}
+                    {card.bells.filter(b => b.is_wc).map(b => (
+                      <div key={b.id} className="bg-sky-50 border-t-2 border-sky-500 px-2 py-2 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <span className="w-6 h-6 rounded-full bg-sky-600 text-white text-[11px] font-extrabold flex items-center justify-center">{b.no}</span>
+                          <span className="text-sm font-extrabold text-sky-900">화장실</span>
+                          <span className="text-[9px] font-bold text-white bg-sky-600 px-1.5 py-0.5 rounded">
+                            {b.kind.includes('전용') ? '전용' : b.kind.includes('층') ? '층 공용' : '공용'}
+                          </span>
+                        </div>
+                        <p className="text-[10px] font-bold text-sky-800 mt-0.5">{b.note}</p>
+                      </div>
+                    ))}
+
+                    {/* 옆방에 달린, 함께 쓰는 화장실 — 안내만 */}
+                    {card.sharedRef && (
+                      <div className="bg-sky-50/60 border-t-2 border-dashed border-sky-500 px-2 py-2 flex items-center gap-1.5">
+                        <span className="w-6 h-6 shrink-0 rounded-full bg-sky-600 text-white text-[11px] font-extrabold flex items-center justify-center">{card.sharedRef.no}</span>
+                        <p className="text-[10px] font-bold text-sky-800 leading-tight">
+                          {card.sharedRef.no}번 화장실<br />{card.sharedRef.withRoom}와 함께 사용 ▶
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* 꼬리 */}
+              <div className="mt-2 pt-1.5 border-t-2 border-rose-700 flex items-start gap-3 text-[10px] text-gray-600">
+                <div className="flex-1">
+                  <p>※ 벨이 울리면 <b className="text-rose-700">번호 → 방 → 성함</b> 순서로 확인하고 즉시 해당 생활실로 이동합니다.</p>
+                  <p>※ <b className="text-rose-700">점선 빈칸</b>은 아직 정해지지 않은 자리입니다. 성함을 적어 주세요. / 파란 점선 띠는 <b className="text-sky-700">두 방이 함께 쓰는 화장실</b>입니다.</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p>※ 입·퇴소 시 반드시 수정 후 재출력</p>
+                  <p>작성일 : {dateStr} &nbsp; 확인 : &nbsp;&nbsp;&nbsp; (인)</p>
+                </div>
+              </div>
+            </section>
+          ))}
+        </>
+      )}
+
+      <style>{`
+        @media print {
+          @page { size: A4 landscape; margin: 7mm; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print\\:hidden { display: none !important; }
+          /* 한 층이 여러 장이면 장마다 새 쪽 — 방 카드가 쪽 경계에서 잘리면
+             벽에 붙였을 때 그 방만 반쪽이 된다 */
+          .eb-page { page-break-after: always; break-after: page; margin: 0 !important; }
+          .eb-page:last-child { page-break-after: auto; break-after: auto; }
+          .eb-card { break-inside: avoid; page-break-inside: avoid; }
+          /* 입력칸을 종이에서는 글자처럼 보이게 — 네모 상자가 줄줄이 찍히면 읽기 나쁘다 */
+          .eb-input { border-color: transparent !important; background: transparent !important; }
+          .eb-vac { display: none !important; }
+        }
+      `}</style>
+    </div>
+  )
+}
