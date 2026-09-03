@@ -191,6 +191,9 @@ export default function EmergencyBellPage() {
                               <input value={d.name} maxLength={20}
                                 onChange={e => set(b.id, { name: e.target.value })}
                                 placeholder="성함"
+                                // 인쇄에서는 '성함' 안내글 대신 점선 빈칸으로 나가게 한다 —
+                                // 벽보에 '성함 성함 성함' 이 늘어서면 읽을 수가 없다
+                                data-empty={empty ? '1' : undefined}
                                 className={`eb-input flex-1 min-w-0 px-1 py-0.5 text-sm font-bold rounded border ${
                                   empty ? 'border-dashed border-rose-300 text-gray-400' : 'border-transparent text-gray-900'} focus:outline-none focus:border-rose-400`} />
                             ) : (
@@ -265,6 +268,12 @@ export default function EmergencyBellPage() {
           .eb-card { break-inside: avoid; page-break-inside: avoid; }
           /* 입력칸을 종이에서는 글자처럼 보이게 — 네모 상자가 줄줄이 찍히면 읽기 나쁘다 */
           .eb-input { border-color: transparent !important; background: transparent !important; }
+          /* 안내글('성함')은 화면에서만 쓴다. 종이에는 손으로 적을 점선만 남긴다 */
+          .eb-input::placeholder { color: transparent !important; }
+          .eb-input[data-empty] {
+            border-bottom: 1.2px dotted #e5a3a3 !important;
+            border-radius: 0 !important;
+          }
           .eb-vac { display: none !important; }
         }
       `}</style>
