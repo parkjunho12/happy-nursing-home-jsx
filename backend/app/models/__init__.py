@@ -115,3 +115,6 @@ from app.models import therapy  # noqa: F401,E402  치료 프로그램 조 편�
 from app.models.staff_eval import (
     StaffEvaluation, StaffEvalConfig, EVAL_ITEMS, MAX_SCORE, FULL_MARKS,
 )
+
+# 응급벨 명단 — 벨 번호마다 어느 어르신인지
+from app.models.emergency_bell import EmergencyBell

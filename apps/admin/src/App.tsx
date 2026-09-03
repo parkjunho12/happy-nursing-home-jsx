@@ -65,6 +65,7 @@ const InternalNoticesPage = lazy(() => import('./pages/admin/InternalNoticesPage
 const MealPlanPage = lazy(() => import('./pages/admin/MealPlanPage'))
 const WorkScheduleViewPage = lazy(() => import('./pages/eval/WorkScheduleViewPage'))
 const StaffEvalPage = lazy(() => import('./pages/eval/StaffEvalPage'))
+const EmergencyBellPage = lazy(() => import('./pages/admin/EmergencyBellPage'))
 const RequestHistoryPage = lazy(() => import('./pages/admin/RequestHistoryPage'))
 const PensionPage = lazy(() => import('./pages/admin/PensionPage'))
 const AuditCheckPage = lazy(() => import('./pages/AuditCheckPage'))
@@ -370,6 +371,9 @@ function App() {
             {/* 직원 평가(인사고과) — ADMIN 만. 서버에서도 다시 막는다(staff_eval.py):
                 이 가드는 메뉴를 감출 뿐이고, 주소를 직접 치면 그만이다. */}
             <Route path="eval/staff-eval"         element={<AdminRoute><StaffEvalPage /></AdminRoute>} />
+            {/* 응급벨 명단 — 벨을 받고 달려가는 요양보호사도 봐야 한다.
+                보기는 직원 누구나, 이름 수정은 서버에서 직군을 확인한다. */}
+            <Route path="emergency-bell"          element={<ProtectedRoute><EmergencyBellPage /></ProtectedRoute>} />
             <Route path="leave-history"           element={<ManagerRoute><RequestHistoryPage /></ManagerRoute>} />
             <Route path="pension"                 element={<StaffAdminRoute><PensionPage /></StaffAdminRoute>} />
             <Route path="audit-check"             element={<AuditCheckRoute><AuditCheckPage /></AuditCheckRoute>} />

@@ -3,7 +3,7 @@ import {
   Star, Settings, ClipboardList, ClipboardCheck, CalendarDays,
   UserRound, ShieldCheck, Sparkles, FileSearch,
   Image as ImageIcon, Users, BookOpen, PenLine, Megaphone, Bell, CalendarClock, CalendarCheck, HeartHandshake, Briefcase, Soup, Receipt, GraduationCap,
-  type LucideIcon, AlertTriangle, BarChart3, ChefHat, Landmark, Radio, Wand2, UserCheck
+  type LucideIcon, AlertTriangle, BarChart3, ChefHat, Landmark, Radio, Wand2, UserCheck, BellRing
 } from 'lucide-react'
 
 /**
@@ -210,6 +210,7 @@ export function getNavConfig(
           items: [
             { to: '/handover', icon: ClipboardCheck, label: '인수인계 AI' },
             { to: '/incidents', icon: AlertTriangle, label: '낙상·사고 보고서' },
+            { to: '/emergency-bell', icon: BellRing, label: '응급벨 명단' },
             { to: '/monthly-report', icon: BarChart3, label: '월간 운영 리포트' },
           ],
         },
@@ -309,6 +310,7 @@ export function getNavConfig(
           items: [
             { to: '/handover', icon: ClipboardCheck, label: '인수인계 AI' },
             { to: '/incidents', icon: AlertTriangle, label: '낙상·사고 보고서' },
+            { to: '/emergency-bell', icon: BellRing, label: '응급벨 명단' },
             { to: '/monthly-report', icon: BarChart3, label: '월간 운영 리포트' },
           ],
         },
@@ -402,6 +404,9 @@ export function getNavConfig(
   // 기록 · 안전
   const safetyItems: NavItem[] = []
   if (canHandover) safetyItems.push({ to: '/handover', icon: ClipboardCheck, label: '인수인계 AI' })
+  // 응급벨 명단은 직군을 가리지 않는다 — 벨을 받고 달려가는 분들이 못 보면
+  // 이 명단은 있으나 마나다. 이름 수정 권한은 서버가 따로 본다.
+  safetyItems.push({ to: '/emergency-bell', icon: BellRing, label: '응급벨 명단' })
   if (isNurse || isManager) safetyItems.push({ to: '/incidents', icon: AlertTriangle, label: '낙상·사고 보고서' })
   if (isManager) safetyItems.push({ to: '/monthly-report', icon: BarChart3, label: '월간 운영 리포트' })
 

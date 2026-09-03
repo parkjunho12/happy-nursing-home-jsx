@@ -19,6 +19,7 @@ from app.api.v1.endpoints.server_health import router as server_health_router
 from app.api.v1.endpoints.broadcast import router as broadcast_router
 from app.api.v1.endpoints.therapy import router as therapy_router
 from app.api.v1.endpoints.staff_eval import router as staff_eval_router
+from app.api.v1.endpoints.emergency_bell import router as emergency_bell_router
 from app.api.v1.endpoints.broadcast_agent import router as broadcast_agent_router
 from app.api.v1.endpoints.albums import admin_router as album_admin_router, family_router as album_family_router
 from app.api.v1.endpoints.facility_news import admin_router as news_admin_router, family_router as news_family_router
@@ -146,6 +147,8 @@ api_router.include_router(therapy_router, prefix="/admin/therapy", tags=["admin-
 # 직원 평가(인사고과) — 라우터 안에서 ADMIN 을 다시 확인한다.
 # 화면 가드는 메뉴를 감출 뿐이고, 주소를 직접 치면 그만이다.
 api_router.include_router(staff_eval_router, prefix="/admin/staff-eval", tags=["admin-staff-eval"])
+# 응급벨 명단 — 보기는 직원 누구나, 수정은 라우터 안에서 직군을 확인한다
+api_router.include_router(emergency_bell_router, prefix="/admin/emergency-bell", tags=["admin-emergency-bell"])
 api_router.include_router(broadcast_agent_router, prefix="/broadcast-agent", tags=["broadcast-agent"])
 api_router.include_router(news_admin_router,  prefix="/admin",  tags=["admin-news"])
 api_router.include_router(news_family_router, prefix="/family", tags=["family-news"])

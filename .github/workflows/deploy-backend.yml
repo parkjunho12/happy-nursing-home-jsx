@@ -62,6 +62,11 @@ jobs:
         # 판정을 role 로만 하면 시설장이 영영 못 지우고(시설장의 role 은 STAFF),
         # 헐거워지면 요양보호사가 동료를 지울 수 있게 된다.
         run: python3 backend/tests/test_staff_delete_perm.py
+      - name: 응급벨 명단 규칙
+        # 벨이 울리면 번호만 뜬다. 명단이 틀리면 엉뚱한 방으로 달려간다.
+        # 요양보호사는 보기만, 화장실 칸에는 이름을 넣지 않는다,
+        # 이름 없이 '재실' 로 둘 수 없다 — 이 세 가지를 지킨다.
+        run: python3 backend/tests/test_emergency_bell.py
       - name: 마이그레이션 head가 하나인지 검사
         # head가 갈라지면 alembic upgrade가 서버에서 실패한다 — 미리 잡는다
         run: |
