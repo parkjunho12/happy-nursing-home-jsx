@@ -102,6 +102,7 @@ def list_bells(floor: Optional[str] = Query(None), db: Session = Depends(get_db)
         "residents": residents,
         # 화면이 이걸 보고 수정 칸을 열지 말지 정한다(서버에서도 다시 막는다)
         "can_edit": can_edit(_role(current_user), getattr(current_user, "position", None)),
+        "can_edit_layout": can_edit_layout(_role(current_user), getattr(current_user, "position", None)),
     })
 
 
@@ -133,6 +134,77 @@ def update_bell(bell_id: str, body: BellBody, db: Session = Depends(get_db),
     b.updated_by = current_user.name
     db.commit(); db.refresh(b)
     return ApiResponse(success=True, data=_view(b))
+
+
+# 벨 번호를 바꿀 수 있는 사람 — 설비가 바뀌었을 때만 손대는 일이라 좁게 둔다
+LAYOUT_POSITIONS = ("시설장",)
+
+
+def can_edit_layout(role: str, position) -> bool:
+    if role == "ADMIN":
+        return True
+    return (position or "") in LAYOUT_POSITIONS
+
+
+def _layout_editor(current_user: User = Depends(get_current_user)) -> User:
+    if not can_edit_layout(_role(current_user), getattr(current_user, "position", None)):
+        raise HTTPException(403, "벨 번호 수정은 관리자·시설장만 가능합니다.")
+    return current_user
+
+
+class LayoutBody(BaseModel):
+    items: list = []
+
+
+@router.put("/layout")
+def update_layout(body: LayoutBody, db: Session = Depends(get_db),
+                  current_user: User = Depends(_layout_editor)):
+    """벨 번호 바꾸기 — 설비가 바뀌었을 때.
+
+    한 층을 통째로 받아 한꺼번에 검사하고 한꺼번에 쓴다. 한 칸씩 고치면
+    9번과 10번을 맞바꾸는 순간 잠깐 번호가 겹치는데, 그때 저장이 막혀서
+    맞바꾸기를 아예 못 하게 된다.
+
+    번호가 겹치면 전부 되돌린다. 이건 벨이 울렸을 때 갈 방을 찾는 번호라,
+    절반만 바뀐 상태로 남으면 그 층 배치도 전체를 믿을 수 없게 된다.
+    """
+    items = [i for i in (body.items or []) if isinstance(i, dict)]
+    if not items:
+        raise HTTPException(400, "바꿀 내용이 없습니다.")
+
+    rows = {b.id: b for b in db.query(EmergencyBell)
+            .filter(EmergencyBell.id.in_([str(i.get("id")) for i in items])).all()}
+    if len(rows) != len(items):
+        raise HTTPException(400, "없는 벨이 섞여 있습니다.")
+
+    floors = {b.floor for b in rows.values()}
+    if len(floors) != 1:
+        raise HTTPException(400, "한 번에 한 층만 바꿀 수 있습니다.")
+    floor = floors.pop()
+
+    # 그 층 전체를 놓고 겹치는지 본다 — 손대지 않은 벨과도 겹치면 안 된다
+    final = {b.id: b.no for b in db.query(EmergencyBell)
+             .filter(EmergencyBell.floor == floor).all()}
+    for i in items:
+        try:
+            n = int(i.get("no"))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "벨 번호는 숫자여야 합니다.")
+        if not (1 <= n <= 99):
+            raise HTTPException(400, "벨 번호는 1~99 사이여야 합니다.")
+        final[str(i.get("id"))] = n
+
+    seen: dict = {}
+    for bid, n in final.items():
+        if n in seen:
+            raise HTTPException(400, f"{floor}에 {n}번이 두 개입니다. 번호는 겹칠 수 없습니다.")
+        seen[n] = bid
+
+    for i in items:
+        rows[str(i.get("id"))].no = int(i.get("no"))
+        rows[str(i.get("id"))].updated_by = current_user.name
+    db.commit()
+    return ApiResponse(success=True, data={"changed": len(items), "floor": floor})
 
 
 class BulkBody(BaseModel):

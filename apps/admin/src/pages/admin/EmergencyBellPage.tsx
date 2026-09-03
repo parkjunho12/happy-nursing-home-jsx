@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Loader2, Printer, Save, BellRing, Info, AlertTriangle } from 'lucide-react'
+import { Loader2, Printer, Save, BellRing, Info, AlertTriangle, Settings2 } from 'lucide-react'
 import { bellAPI, type BellPage } from '@/api/emergencyBellClient'
 import { buildRoomCards, splitPages } from '@/utils/bellLayout'
 import { pickOrder, missingInRoom, unknownNames } from '@/utils/bellResidents'
@@ -23,6 +23,9 @@ export default function EmergencyBellPage() {
   const [draft, setDraft] = useState<Record<string, { name: string; status: string }>>({})
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<string | null>(null)
+  // 벨 번호 고치기 — 설비가 바뀌었을 때만 쓴다. 평소에는 잠가 둔다.
+  const [layoutMode, setLayoutMode] = useState(false)
+  const [noDraft, setNoDraft] = useState<Record<string, string>>({})
   const printedAt = useRef(new Date())
 
   const load = () => {
@@ -34,6 +37,9 @@ export default function EmergencyBellPage() {
         const m: Record<string, { name: string; status: string }> = {}
         d.rows.forEach(b => { m[b.id] = { name: b.resident_name ?? '', status: b.status ?? '' } })
         setDraft(m)
+        const n: Record<string, string> = {}
+        d.rows.forEach(b => { n[b.id] = String(b.no) })
+        setNoDraft(n)
       })
       .catch(() => setData(null))
       .finally(() => setLoading(false))
@@ -86,7 +92,30 @@ export default function EmergencyBellPage() {
     } finally { setSaving(false) }
   }
 
+  const saveLayout = async () => {
+    if (!data) return
+    const items = bells
+      .filter(b => (noDraft[b.id] ?? '') !== String(b.no))
+      .map(b => ({ id: b.id, no: Number(noDraft[b.id]) }))
+    if (!items.length) { setLayoutMode(false); return }
+    if (items.some(i => !Number.isInteger(i.no) || i.no < 1 || i.no > 99)) {
+      alert('벨 번호는 1~99 사이의 숫자여야 합니다.'); return
+    }
+    if (!confirm(`${floor}의 벨 번호 ${items.length}개를 바꿉니다.\n`
+      + '실제 설비와 다르면 벨이 울렸을 때 엉뚱한 방으로 가게 됩니다. 계속할까요?')) return
+    setSaving(true)
+    try {
+      await bellAPI.saveLayout(items)
+      setLayoutMode(false)
+      load()
+    } catch (e: any) {
+      alert(e?.response?.data?.detail ?? '벨 번호를 바꾸지 못했습니다')
+    } finally { setSaving(false) }
+  }
+
   const canEdit = !!data?.can_edit
+  const canLayout = !!data?.can_edit_layout
+  const noDirty = bells.some(b => (noDraft[b.id] ?? '') !== String(b.no))
   const today = printedAt.current
   const dateStr = `${today.getFullYear()}. ${String(today.getMonth() + 1).padStart(2, '0')}. ${String(today.getDate()).padStart(2, '0')}.`
 
@@ -131,6 +160,24 @@ export default function EmergencyBellPage() {
           )}
           {dirty && <span className="text-[11px] text-amber-600 font-semibold">저장하지 않은 변경이 있습니다</span>}
           {!dirty && savedAt && <span className="text-[11px] text-emerald-600 font-semibold">{savedAt} 저장됨</span>}
+          {canLayout && !layoutMode && (
+            <button onClick={() => setLayoutMode(true)} disabled={dirty}
+              title={dirty ? '이름 변경을 먼저 저장해주세요' : '설비가 바뀌었을 때만 쓰세요'}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-500 hover:bg-gray-50 disabled:opacity-40">
+              <Settings2 size={14} /> 벨 번호 수정
+            </button>
+          )}
+          {layoutMode && (
+            <>
+              <button onClick={saveLayout} disabled={saving}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gray-800 text-white text-sm font-bold disabled:opacity-40">
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} 번호 저장
+              </button>
+              <button onClick={() => { setLayoutMode(false); load() }}
+                className="px-3 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-500">취소</button>
+              {noDirty && <span className="text-[11px] text-amber-600 font-semibold">번호가 바뀌었습니다</span>}
+            </>
+          )}
           <button onClick={() => { printedAt.current = new Date(); setTimeout(() => window.print(), 50) }}
             disabled={dirty}
             title={dirty ? '먼저 저장해주세요 — 저장 안 한 내용이 인쇄될 수 있습니다' : `${floor} 배치도 인쇄`}
@@ -138,6 +185,17 @@ export default function EmergencyBellPage() {
             <Printer size={15} /> 배치도 인쇄
           </button>
         </div>
+
+        {layoutMode && (
+          <p className="text-xs text-gray-800 bg-gray-100 border border-gray-300 rounded-xl px-3 py-2 mb-3 flex items-start gap-1.5">
+            <Settings2 size={14} className="mt-0.5 shrink-0" />
+            <span>
+              <b>벨 번호 수정 중</b> — 실제 설비의 번호와 같아야 합니다. 다르면 벨이 울렸을 때
+              엉뚱한 방으로 가게 됩니다. 번호가 겹치면 저장되지 않습니다.
+              두 번호를 맞바꾸는 것도 됩니다(한꺼번에 검사합니다).
+            </span>
+          </p>
+        )}
 
         {unknown.length > 0 && (
           <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-3 flex items-start gap-1.5">
@@ -193,6 +251,18 @@ export default function EmergencyBellPage() {
                       <p className="text-[9px] opacity-90">{card.numbers.join(' · ')}번</p>
                     </div>
 
+                    {/* 후보 목록은 방마다 하나면 된다 — 같은 방 벨은 순서가 같다.
+                        벨마다 만들었더니 한 층에 1,258개가 생겨 화면이 무거워졌다. */}
+                    {canEdit && (
+                      <datalist id={`res-${floor}-${card.room}`}>
+                        {pickOrder(residents, floor, card.room).map(r => (
+                          <option key={`${r.name}-${r.room}`} value={r.name}>
+                            {r.room ? `${r.room}호` : ''}{r.floor ? ` · ${r.floor}` : ''}
+                          </option>
+                        ))}
+                      </datalist>
+                    )}
+
                     <div className="flex-1 divide-y divide-rose-100">
                       {card.bells.filter(b => !b.is_wc).map(b => {
                         const d = draft[b.id] ?? { name: '', status: '' }
@@ -200,11 +270,18 @@ export default function EmergencyBellPage() {
                         const vacant = d.status === '공실'
                         return (
                           <div key={b.id} className={`flex items-center gap-2 px-2 py-2 ${vacant ? 'bg-gray-100' : ''}`}>
-                            <span className="w-7 h-7 shrink-0 rounded-full bg-rose-700 text-white text-xs font-extrabold flex items-center justify-center">{b.no}</span>
+                            {layoutMode ? (
+                              <input type="number" min={1} max={99} value={noDraft[b.id] ?? ''}
+                                onChange={e => setNoDraft(s2 => ({ ...s2, [b.id]: e.target.value }))}
+                                onFocus={e => e.currentTarget.select()}
+                                className="w-11 h-7 shrink-0 rounded-lg border-2 border-gray-800 text-center text-xs font-extrabold text-gray-900 focus:outline-none" />
+                            ) : (
+                              <span className="w-7 h-7 shrink-0 rounded-full bg-rose-700 text-white text-xs font-extrabold flex items-center justify-center">{b.no}</span>
+                            )}
                             {canEdit ? (
                               <input value={d.name} maxLength={20}
                                 onChange={e => set(b.id, { name: e.target.value })}
-                                list={`res-${b.id}`}
+                                list={`res-${floor}-${card.room}`}
                                 placeholder="성함"
                                 // 인쇄에서는 '성함' 안내글 대신 점선 빈칸으로 나가게 한다 —
                                 // 벽보에 '성함 성함 성함' 이 늘어서면 읽을 수가 없다
@@ -215,17 +292,6 @@ export default function EmergencyBellPage() {
                               <span className={`flex-1 text-sm font-bold ${empty ? 'text-gray-300' : 'text-gray-900'}`}>
                                 {d.name || '⋯⋯⋯'}
                               </span>
-                            )}
-                            {canEdit && (
-                              // 같은 방 어르신이 맨 앞에 온다 — 대개 첫 두세 명 안에서 끝난다.
-                              // 직접 칠 수도 있게 둔다(명단에 없는 분을 임시로 적어야 할 때가 있다).
-                              <datalist id={`res-${b.id}`}>
-                                {pickOrder(residents, b.floor, b.room).map(r => (
-                                  <option key={`${r.name}-${r.room}`} value={r.name}>
-                                    {r.room ? `${r.room}호` : ''}{r.floor ? ` · ${r.floor}` : ''}
-                                  </option>
-                                ))}
-                              </datalist>
                             )}
                             {canEdit && (
                               <button type="button" title="공실로 표시"
@@ -270,7 +336,14 @@ export default function EmergencyBellPage() {
                     {card.bells.filter(b => b.is_wc).map(b => (
                       <div key={b.id} className="bg-sky-50 border-t-2 border-sky-500 px-2 py-2 text-center">
                         <div className="flex items-center justify-center gap-1.5">
-                          <span className="w-6 h-6 rounded-full bg-sky-600 text-white text-[11px] font-extrabold flex items-center justify-center">{b.no}</span>
+                          {layoutMode ? (
+                            <input type="number" min={1} max={99} value={noDraft[b.id] ?? ''}
+                              onChange={e => setNoDraft(s2 => ({ ...s2, [b.id]: e.target.value }))}
+                              onFocus={e => e.currentTarget.select()}
+                              className="w-11 h-6 rounded-lg border-2 border-sky-700 text-center text-[11px] font-extrabold text-sky-900 focus:outline-none" />
+                          ) : (
+                            <span className="w-6 h-6 rounded-full bg-sky-600 text-white text-[11px] font-extrabold flex items-center justify-center">{b.no}</span>
+                          )}
                           <span className="text-sm font-extrabold text-sky-900">화장실</span>
                           <span className="text-[9px] font-bold text-white bg-sky-600 px-1.5 py-0.5 rounded">
                             {b.kind.includes('전용') ? '전용' : b.kind.includes('층') ? '층 공용' : '공용'}

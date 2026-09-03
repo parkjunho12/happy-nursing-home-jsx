@@ -26,6 +26,7 @@ def _env():
     exec(MODEL[MODEL.index("KIND_ROOM ="):MODEL.index("class EmergencyBell")], ns)
     exec(API[API.index("EDIT_POSITIONS ="):API.index("def _role")], ns)
     exec(API[API.index("def can_edit"):API.index("def _editor")], ns)
+    exec(API[API.index("LAYOUT_POSITIONS ="):API.index("def _layout_editor")], ns)
     return ns
 
 
@@ -67,6 +68,33 @@ def check() -> int:
     if ns["KIND_ROOM"] in ns["WC_KINDS"]:
         bad.append("생활실이 화장실로 분류된다 — 이름을 못 넣게 된다")
 
+    # ── 벨 번호를 바꿀 수 있는 사람 ──────────────────────────────
+    # 설비가 바뀌었을 때만 손대는 일이다. 잘못 바꾸면 벨이 울렸을 때
+    # 엉뚱한 방으로 간다. 이름을 고칠 수 있는 사람보다 더 좁게 둔다.
+    canL = ns["can_edit_layout"]
+    for role, pos, want, why in [
+        ("ADMIN", None, True, "관리자"),
+        ("STAFF", "시설장", True, "시설장"),
+        ("STAFF", "간호팀장", False, "간호팀장은 이름만 고친다"),
+        ("STAFF", "사회복지사", False, "사회복지사는 이름만 고친다"),
+        ("STAFF", "요양보호사", False, "요양보호사"),
+        ("STAFF", None, False, "직종 없음"),
+    ]:
+        got = canL(role, pos)
+        if got is not want:
+            bad.append(f"[배치] {why}: {want} 여야 하는데 {got}")
+
+    # 배치 수정 권한이 이름 수정 권한보다 넓어지면 안 된다
+    for pos in ("간호팀장", "사회복지사", "요양팀장", "간호사"):
+        if canL("STAFF", pos) and not can("STAFF", pos):
+            bad.append(f"'{pos}' 가 이름은 못 고치는데 벨 번호는 고칠 수 있다")
+
+    # 번호 겹침을 막는 검사가 남아 있는가 — 겹치면 갈 방을 못 찾는다
+    if "번호는 겹칠 수 없습니다" not in API:
+        bad.append("벨 번호 겹침을 막는 검사가 사라졌다")
+    if "한 번에 한 층만" not in API:
+        bad.append("여러 층을 섞어 바꾸는 것을 막는 검사가 사라졌다")
+
     # ── 상태 값 ─────────────────────────────────────────────────
     if ns["STATUSES"] != ("재실", "공실"):
         bad.append(f"상태 값이 바뀌었다: {ns['STATUSES']} — 화면·배치도와 어긋난다")
@@ -83,7 +111,7 @@ def check() -> int:
             print("   ·", b)
         return 1
 
-    print("✅ 응급벨 명단 정상 — 권한 17건 · 화장실 구분 4건 · 상태·검사 4건")
+    print("✅ 응급벨 명단 정상 — 이름 권한 17건 · 배치 권한 10건 · 화장실 4건 · 상태·검사 6건")
     return 0
 
 
