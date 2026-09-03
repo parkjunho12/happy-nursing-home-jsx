@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2, Printer, Save, BellRing, Info, AlertTriangle } from 'lucide-react'
 import { bellAPI, type BellPage } from '@/api/emergencyBellClient'
-import { buildRoomCards } from '@/utils/bellLayout'
+import { buildRoomCards, splitPages } from '@/utils/bellLayout'
 import { pickOrder, missingInRoom, unknownNames } from '@/utils/bellResidents'
 
 /**
@@ -15,9 +15,6 @@ import { pickOrder, missingInRoom, unknownNames } from '@/utils/bellResidents'
  *
  * 벨 번호·호실·구분은 설비라서 여기서 바꾸지 않는다.
  */
-
-/** 한 장에 방 다섯 개 — 원래 쓰던 배치도와 같은 쪽 나눔 */
-const ROOMS_PER_PAGE = 5
 
 export default function EmergencyBellPage() {
   const [data, setData] = useState<BellPage | null>(null)
@@ -46,11 +43,9 @@ export default function EmergencyBellPage() {
   const bells = useMemo(
     () => (data?.rows ?? []).filter(b => b.floor === floor), [data, floor])
   const cards = useMemo(() => buildRoomCards(bells), [bells])
-  const pages = useMemo(() => {
-    const out: (typeof cards)[] = []
-    for (let i = 0; i < cards.length; i += ROOMS_PER_PAGE) out.push(cards.slice(i, i + ROOMS_PER_PAGE))
-    return out
-  }, [cards])
+  // 벽에 나란히 붙이는 문서라 장수가 적을수록 좋다. 한 층이 두 장을 넘지
+  // 않게, 두 장의 무게가 비슷하게 나눈다(utils/bellLayout.splitPages).
+  const pages = useMemo(() => splitPages(cards), [cards])
 
   const residents = data?.residents ?? []
 
@@ -324,6 +319,9 @@ export default function EmergencyBellPage() {
           .eb-page { page-break-after: always; break-after: page; margin: 0 !important; }
           .eb-page:last-child { page-break-after: auto; break-after: auto; }
           .eb-card { break-inside: avoid; page-break-inside: avoid; }
+          /* 한 장에 방이 여섯이면 칸이 좁아진다 — 이름이 잘리지 않게 줄인다.
+             (이름은 대개 세 글자라 이 크기로 충분하다) */
+          .eb-grid { gap: 1.5mm !important; }
           /* 입력칸을 종이에서는 글자처럼 보이게 — 네모 상자가 줄줄이 찍히면 읽기 나쁘다 */
           .eb-input { border-color: transparent !important; background: transparent !important; }
           /* 안내글('성함')은 화면에서만 쓴다. 종이에는 손으로 적을 점선만 남긴다 */
