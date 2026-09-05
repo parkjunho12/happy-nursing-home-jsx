@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
+import MyDayCard from '@/components/dashboard/MyDayCard'
 import { useNavigate } from 'react-router-dom'
 import {
   Users, UserCog, MessageSquare, TrendingUp, Calendar,
@@ -145,6 +146,10 @@ export default function DashboardPage() {
   }
 
   const isAdmin = authUser?.role === 'ADMIN'
+  // 요양보호사는 앱을 열자마자 '오늘 무슨 근무 · 무슨 일과 · 누구를 맡는가' 를
+  // 봐야 한다. 그 아래에 있는 것들은 오늘 손이 가는 일이 아니다.
+  const isCaregiver = authUser?.role !== 'ADMIN'
+    && ['요양보호사', '요양팀장'].includes(authUser?.position ?? '')
   const canApproveLeave = authUser?.role === 'ADMIN' || authUser?.position === '시설장'
   const canVisit = authUser?.role === 'ADMIN' || ['시설장', '사회복지사'].includes(authUser?.position ?? '')
   const loadPending = async () => {
@@ -464,6 +469,9 @@ export default function DashboardPage() {
   /* ══════════════════ 섹션 정의 (모바일/데스크톱 공통, 순서만 분기) ══════════════════ */
 
   // 인사말 — 모바일은 압축
+  // 내 하루 — 요양보호사에게만. 다른 직종에게는 담당 어르신이 없어 빈 칸이 된다.
+  const secMyDay = isCaregiver ? <MyDayCard /> : null
+
   const secGreeting = (
     <div className="flex items-start justify-between flex-wrap gap-2 md:gap-3">
       <div className="min-w-0">
@@ -946,6 +954,7 @@ export default function DashboardPage() {
     return (
       <div className="flex flex-col gap-4">
         {secGreeting}
+        {secMyDay}
         {secBadges}
         {secHandover}
         {secSchedule}
@@ -969,6 +978,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       {secGreeting}
+      {secMyDay}
       {secBadges}
       {secHandover}
 
