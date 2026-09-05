@@ -32,7 +32,7 @@ export default function ResidentAssignPage() {
   const [snapMemo, setSnapMemo] = useState('')
   const [snapBusy, setSnapBusy] = useState(false)
   // 한 층이 한 화면에 들어와야 한다. 늘 보지 않아도 되는 것은 접어 둔다.
-  const [countOpen, setCountOpen] = useState(false)
+  const [countFloor, setCountFloor] = useState('')   // '' = 전체
   const [noteOpen, setNoteOpen] = useState(false)
 
   const load = () => {
@@ -49,24 +49,17 @@ export default function ResidentAssignPage() {
   const base = snapRows ?? rows
   const floors = useMemo(() => Array.from(new Set(base.map(r => r.floor))).sort(), [base])
   const shown = base.filter(r => r.floor === floor)
-  /** 방별로 묶는다 — 화면은 방 카드 격자로 그린다.
-   *  호실이 없는 분은 맨 뒤에 '미배정' 으로 모은다. 빠뜨리면 그분만 안 보인다. */
-  const roomCards = useMemo(() => {
-    const m = new Map<string, typeof shown>()
-    for (const r of shown) {
-      const k = r.room || '미배정'
-      if (!m.has(k)) m.set(k, [])
-      m.get(k)!.push(r)
-    }
-    return [...m.entries()].sort((a, b) =>
-      a[0] === '미배정' ? 1 : b[0] === '미배정' ? -1 : a[0].localeCompare(b[0], 'ko', { numeric: true }))
-  }, [shown])
   const today = todayISO()
+  // 한 층이 스크롤 없이 들어오도록 줄 높이를 줄였다(원래 py-2 · text-sm)
+  const th = 'border-b border-gray-200 px-2 py-1.5 text-[11px] font-bold text-gray-500 text-left'
+  const td = 'border-b border-gray-100 px-2 py-1 text-[13px]'
 
-  // 담당별 집계 — 균등한지 한눈에
-  const counts = (key: 'care_staff_name' | 'rehab_staff_name', staff: StaffOpt[]) => {
+  // 담당별 집계 — 균등한지 한눈에. 층을 고르면 그 층만 센다.
+  // (2층은 넉넉한데 3층만 몰려 있는 경우가 전체 합계로는 안 보인다)
+  const counts = (key: 'care_staff_name' | 'rehab_staff_name', staff: StaffOpt[], fl: string) => {
     const m = new Map<string, number>(staff.map(s => [s.name, 0]))
-    rows.forEach(r => { const n = r[key]; if (n) m.set(n, (m.get(n) ?? 0) + 1) })
+    const src = fl ? base.filter(r => r.floor === fl) : base
+    src.forEach(r => { const n = r[key]; if (n) m.set(n, (m.get(n) ?? 0) + 1) })
     return [...m.entries()].sort((a, b) => b[1] - a[1])
   }
 
@@ -167,6 +160,9 @@ export default function ResidentAssignPage() {
 
   // 호실 경계 — 같은 방 첫 행에만 호실 표시 (엑셀 명단과 같은 눈높이)
 
+  // 호실 경계 — 같은 방 첫 줄에만 호실을 진하게 (엑셀 명단과 같은 눈높이)
+  let prevRoom = '__'
+
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto">
       <div className="print:hidden">
@@ -203,26 +199,6 @@ export default function ResidentAssignPage() {
         </div>
       </div>
       <p className="text-[11px] text-gray-400 mb-2">바꾸면 바로 저장되고 이력이 남습니다 · 호실을 누르면 침대에서 고르거나 배정을 해제할 수 있어요</p>
-
-      {/* 담당별 집계 — 늘 보는 것이 아니라 접어 둔다. 그 자리를 명단에 쓴다. */}
-      <button onClick={() => setCountOpen(o => !o)}
-        className="mb-2 inline-flex items-center gap-1 text-[11px] font-semibold text-gray-500 hover:text-gray-700">
-        담당별 인원 {countOpen ? '접기 ▴' : '보기 ▾'}
-      </button>
-      <div className={`${countOpen ? 'flex' : 'hidden'} flex-wrap gap-3 mb-2`}>
-        <div className="flex flex-wrap items-center gap-1 text-[11px]">
-          <span className="font-bold text-teal-700 mr-0.5">요양팀</span>
-          {counts('care_staff_name', care).map(([n, c]) => (
-            <span key={n} className={`px-1.5 py-0.5 rounded border ${c === 0 ? 'bg-gray-50 text-gray-300 border-gray-100' : 'bg-teal-50 text-teal-700 border-teal-100 font-semibold'}`}>{n} {c}</span>
-          ))}
-        </div>
-        <div className="flex flex-wrap items-center gap-1 text-[11px]">
-          <span className="font-bold text-indigo-700 mr-0.5">재활팀</span>
-          {counts('rehab_staff_name', rehab).map(([n, c]) => (
-            <span key={n} className={`px-1.5 py-0.5 rounded border ${c === 0 ? 'bg-gray-50 text-gray-300 border-gray-100' : 'bg-indigo-50 text-indigo-700 border-indigo-100 font-semibold'}`}>{n} {c}</span>
-          ))}
-        </div>
-      </div>
 
       {/* ── 날짜 탭 ──
           명단이 바뀐 날마다 한 장씩 남는다. 눌러서 그날 모습을 본다.
@@ -275,74 +251,107 @@ export default function ResidentAssignPage() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-20"><Loader2 className="animate-spin text-gray-300" /></div>
+        <div className="flex justify-center py-16"><Loader2 className="animate-spin text-gray-300" /></div>
       ) : (
-        /* ── 방별 카드 ──
-           한 층이 열 개 방·서른 몇 명이라, 한 줄짜리 표로 늘어놓으면 화면을
-           벗어나 스크롤을 해야 한다. 방마다 카드로 묶어 격자로 놓으면
-           한 층이 한눈에 들어온다 — 실제 층 구조와도 같은 모양이다.
-           (인쇄물은 예전 표 그대로다. A4 에 맞춰 실측해 둔 것이라 안 건드린다) */
-        <div className="grid gap-2 grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
-          {roomCards.map(([room, list]) => (
-            <div key={room} className="border border-gray-200 rounded-xl bg-white overflow-hidden">
-              <div className="flex items-center gap-1.5 px-2 py-1.5 bg-gray-50 border-b border-gray-200">
-                <button onClick={() => !past && list[0] && setBed(list[0])} disabled={past}
-                  title={past ? '지난 날 기록은 고칠 수 없습니다' : '눌러서 호실 변경 · 배정 해제'}
-                  className={`px-1.5 py-0.5 rounded-md text-xs font-extrabold ${
-                    room === '미배정' ? 'text-gray-400 border border-dashed border-gray-300'
-                    : 'bg-gray-800 text-white'} ${past ? '' : 'hover:bg-teal-600'}`}>
-                  {list.some(x => bedBusy === x.resident_id)
-                    ? <Loader2 size={11} className="animate-spin mx-auto" />
-                    : (room === '미배정' ? '호실 없음' : room)}
-                </button>
-                <span className="text-[10px] text-gray-400">{list.length}명</span>
-              </div>
-
-              <div className="divide-y divide-gray-50">
-                {list.map(r => {
+        /* 표는 왼쪽, 담당별 인원은 오른쪽.
+           한 층(열 개 방·열일곱 명)이 스크롤 없이 들어오게 줄 높이를 줄였다.
+           집계를 위에 두면 그만큼 표가 아래로 밀려 화면을 벗어난다. */
+        <div className="flex gap-3 items-start">
+          <div className="flex-1 min-w-0 bg-white border border-gray-200 rounded-xl overflow-x-auto">
+            <table className="w-full border-collapse min-w-[560px]">
+              <thead>
+                <tr className="bg-gray-50">
+                  <th className={`${th} w-14`}>호실</th>
+                  <th className={`${th} w-24`}>성함</th>
+                  <th className={`${th} w-32 text-teal-700`}>담당 요양팀</th>
+                  <th className={`${th} w-32 text-indigo-700`}>담당 재활팀</th>
+                  <th className={`${th} text-gray-500`}>기타</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map(r => {
+                  const first = r.room !== prevRoom
+                  prevRoom = r.room
                   const incoming = (r.admission_date ?? '') > today
                   return (
-                    <div key={r.resident_id} className={`px-2 py-1 ${incoming ? 'bg-amber-50/50' : ''}`}>
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => !past && setBed(r)} disabled={past}
-                          className="text-[13px] font-bold text-gray-800 truncate hover:text-teal-700 disabled:hover:text-gray-800">
-                          {r.name}
+                    <tr key={r.resident_id} className={`${first ? 'border-t-2 border-t-gray-300' : ''} ${incoming ? 'bg-amber-50/40' : ''}`}>
+                      <td className={`${td} text-center`}>
+                        <button onClick={() => !past && setBed(r)} disabled={past || bedBusy === r.resident_id}
+                          title={past ? '지난 날 기록은 고칠 수 없습니다' : '눌러서 호실 변경 · 배정 해제'}
+                          className={`w-11 text-center text-xs font-extrabold rounded py-0.5 transition-colors ${
+                            !r.room ? 'text-gray-300 border border-dashed border-gray-300 hover:border-teal-400'
+                            : first ? 'bg-gray-800 text-white hover:bg-teal-600'
+                            : 'text-gray-300 bg-transparent hover:bg-gray-100'}`}>
+                          {bedBusy === r.resident_id
+                            ? <Loader2 size={11} className="animate-spin mx-auto" />
+                            : (r.room || '-')}
                         </button>
-                        {incoming && (
-                          <span className="text-[9px] font-bold text-amber-600 shrink-0">
-                            {Number(r.admission_date!.slice(5, 7))}/{Number(r.admission_date!.slice(8, 10))} 입소
-                          </span>
-                        )}
+                      </td>
+                      <td className={`${td} font-bold text-gray-800 whitespace-nowrap`}>
+                        {r.name}
+                        {incoming && <span className="ml-1 text-[9px] font-bold text-amber-600">{Number(r.admission_date!.slice(5, 7))}/{Number(r.admission_date!.slice(8, 10))} 입소</span>}
+                      </td>
+                      <td className={td}>
+                        <button onClick={() => !past && openPick(r.resident_id, 'care', r.name)} disabled={past}
+                          className={`w-full px-1.5 py-0.5 text-[11px] rounded border text-left font-semibold truncate transition-colors ${
+                            r.care_staff_name ? 'border-teal-100 bg-teal-50/60 text-teal-800 hover:bg-teal-50' : 'border-dashed border-gray-300 text-gray-400 hover:border-teal-300'}`}>
+                          {r.care_staff_name ?? '+ 배정'}
+                        </button>
+                      </td>
+                      <td className={td}>
+                        <button onClick={() => !past && openPick(r.resident_id, 'rehab', r.name)} disabled={past}
+                          className={`w-full px-1.5 py-0.5 text-[11px] rounded border text-left font-semibold truncate transition-colors ${
+                            r.rehab_staff_name ? 'border-indigo-100 bg-indigo-50/60 text-indigo-800 hover:bg-indigo-50' : 'border-dashed border-gray-300 text-gray-400 hover:border-indigo-300'}`}>
+                          {r.rehab_staff_name ?? '+ 배정'}
+                        </button>
+                      </td>
+                      <td className={td}>
                         <input key={`${viewDate ?? 'now'}-${r.resident_id}`}
                           defaultValue={r.note ?? ''} placeholder={past ? '' : '메모'} readOnly={past}
                           onBlur={async e => { if (past) return; const v = e.target.value; if (v !== (r.note ?? '')) { await assignmentAPI.setNote(r.resident_id, v); patch(r.resident_id, { note: v }) } }}
-                          className="ml-auto w-16 shrink-0 text-[10px] text-right bg-transparent text-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-200 rounded px-1" />
-                      </div>
-                      <div className="flex gap-1 mt-0.5">
-                        <button onClick={() => !past && openPick(r.resident_id, 'care', r.name)} disabled={past}
-                          title="담당 요양팀"
-                          className={`flex-1 min-w-0 truncate px-1.5 py-0.5 text-[11px] rounded-md border font-semibold transition-colors ${
-                            r.care_staff_name ? 'border-teal-100 bg-teal-50/60 text-teal-800 hover:bg-teal-50'
-                            : 'border-dashed border-gray-300 text-gray-400 hover:border-teal-300'}`}>
-                          {r.care_staff_name ?? '+ 요양'}
-                        </button>
-                        <button onClick={() => !past && openPick(r.resident_id, 'rehab', r.name)} disabled={past}
-                          title="담당 재활팀"
-                          className={`flex-1 min-w-0 truncate px-1.5 py-0.5 text-[11px] rounded-md border font-semibold transition-colors ${
-                            r.rehab_staff_name ? 'border-indigo-100 bg-indigo-50/60 text-indigo-800 hover:bg-indigo-50'
-                            : 'border-dashed border-gray-300 text-gray-400 hover:border-indigo-300'}`}>
-                          {r.rehab_staff_name ?? '+ 재활'}
-                        </button>
-                      </div>
-                    </div>
+                          className="w-full text-[11px] bg-transparent focus:outline-none focus:ring-1 focus:ring-gray-200 rounded px-1" />
+                      </td>
+                    </tr>
                   )
                 })}
+                {shown.length === 0 && (
+                  <tr><td colSpan={5} className="text-center py-12 text-sm text-gray-400">이 층에 재원 어르신이 없습니다</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* 담당별 인원 — 오른쪽. 층을 고르면 그 층만 센다.
+              2층은 넉넉한데 3층만 몰려 있는 경우가 전체 합계로는 안 보인다. */}
+          <aside className="w-48 shrink-0 sticky top-4">
+            <div className="flex gap-1 mb-1.5">
+              {[{ v: '', label: '전체' }, ...floors.map(f => ({ v: f, label: f }))].map(o => (
+                <button key={o.v} onClick={() => setCountFloor(o.v)}
+                  className={`flex-1 px-1 py-1 rounded-lg text-[11px] font-bold border transition-colors ${
+                    countFloor === o.v ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}>
+                  {o.label}
+                </button>
+              ))}
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-white p-2 space-y-2">
+              <div>
+                <p className="text-[10px] font-bold text-teal-700 mb-1">담당 요양팀</p>
+                <div className="flex flex-wrap gap-1">
+                  {counts('care_staff_name', care, countFloor).map(([n, c]) => (
+                    <span key={n} className={`px-1.5 py-0.5 rounded text-[10px] border ${c === 0 ? 'bg-gray-50 text-gray-300 border-gray-100' : 'bg-teal-50 text-teal-700 border-teal-100 font-semibold'}`}>{n} {c}</span>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-indigo-700 mb-1">담당 재활팀</p>
+                <div className="flex flex-wrap gap-1">
+                  {counts('rehab_staff_name', rehab, countFloor).map(([n, c]) => (
+                    <span key={n} className={`px-1.5 py-0.5 rounded text-[10px] border ${c === 0 ? 'bg-gray-50 text-gray-300 border-gray-100' : 'bg-indigo-50 text-indigo-700 border-indigo-100 font-semibold'}`}>{n} {c}</span>
+                  ))}
+                </div>
               </div>
             </div>
-          ))}
-          {roomCards.length === 0 && (
-            <p className="col-span-full text-center py-12 text-sm text-gray-400">이 층에 재원 어르신이 없습니다</p>
-          )}
+          </aside>
         </div>
       )}
 
