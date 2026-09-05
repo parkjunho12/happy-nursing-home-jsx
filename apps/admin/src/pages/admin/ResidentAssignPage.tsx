@@ -173,14 +173,15 @@ export default function ResidentAssignPage() {
               <tr key={`p-${r.resident_id}-${k}`} className={first ? 'asg-room-top' : ''}>
                 <td style={{ ...cell, textAlign: 'center',
                   ...(compact ? { fontWeight: 800, color: '#0f766e' } : null) }}>
-                  {first && (compact ? `${r.room}호` : <span style={{
+                  {first && r.room && (compact ? `${r.room}호` : <span style={{
                     display: 'inline-block', minWidth: 46, borderRadius: 8,
                     background: '#f0fdfa', border: '1px solid #99f6e4', color: '#0f766e',
                     padding: '2px 8px',
                     fontSize: `${room}px`, fontWeight: 900,
                   }}>{r.room}호</span>)}
                 </td>
-                <td style={{ ...cell, fontWeight: 800, color: '#111827', fontSize: `${sz.f + 1}px` }}>
+                <td style={{ ...cell, fontWeight: 800, color: '#111827', fontSize: `${sz.f + 1}px`,
+                  ...(compact ? { whiteSpace: 'nowrap' } as const : null) }}>
                   {r.name}
                   {incoming && (compact
                     ? <span style={{ marginLeft: 4, fontSize: `${Math.max(8, sz.f - 3)}px`, fontWeight: 800, color: '#b45309' }}>예정</span>
@@ -235,13 +236,13 @@ export default function ResidentAssignPage() {
   const compactSize = useMemo(() => {
     const n = Math.max(1, ...printCols.map(c =>
       c.reduce((s, x) => s + x.list.length + 2, 0)))   // +2 = 층 이름 줄과 표 머리글
-    return n <= 24 ? { f: 15, p: 2 }
-         : n <= 30 ? { f: 13, p: 1.5 }
-         : n <= 36 ? { f: 12, p: 1 }
-         : n <= 42 ? { f: 11, p: 0.5 }
-         : n <= 48 ? { f: 9,  p: 0.5 }
-         : n <= 54 ? { f: 8,  p: 0.5 }
-         :           { f: 7,  p: 0.5 }   // 여기까지 오면 두 장이 된다 — 층이 더 생겼을 때
+    return n <= 24 ? { f: 14, p: 1.5 }
+         : n <= 30 ? { f: 13, p: 1 }
+         : n <= 34 ? { f: 12, p: 1 }
+         : n <= 40 ? { f: 11, p: 0.5 }   // 2층·3층(각 34줄) 이 여기 — 실측 189mm
+         : n <= 46 ? { f: 10, p: 0.5 }
+         : n <= 54 ? { f: 9,  p: 0.5 }
+         :           { f: 8,  p: 0.5 }   // 여기까지 오면 두 장이 된다 — 층이 더 생겼을 때
   }, [printCols])
 
   /** 빈자리에 넣을 수 있는 분 — 이름·호실로 찾는다.
@@ -614,12 +615,11 @@ export default function ResidentAssignPage() {
       <div className="hidden print:block">
         {printAll ? (
           <div className="asg-print-page">
-            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', borderBottom: '3px solid #0d9488', paddingBottom: '5px', marginBottom: '7px' }}>
-              <div>
-                <p style={{ fontSize: '9px', fontWeight: 800, color: '#0d9488', letterSpacing: '0.2em', margin: 0 }}>행복한요양원 · 정성으로 모시겠습니다</p>
-                <h1 style={{ fontSize: '21px', fontWeight: 900, color: '#111827', margin: '2px 0 0', letterSpacing: '0.08em' }}>담당 어르신 명단 <span style={{ fontSize: '13px', color: '#0d9488' }}>전체 층</span></h1>
-              </div>
-              <p style={{ fontSize: '10px', color: '#6b7280', margin: 0 }}>
+            {/* 머리글은 낮게 — 여기서 쓴 높이는 그대로 명단 글자에서 빠진다.
+                한 장에 담는 것이 이 인쇄의 목적이라 문패는 넣지 않는다. */}
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', borderBottom: '2px solid #0d9488', paddingBottom: '3px', marginBottom: '4px' }}>
+              <h1 style={{ fontSize: '15px', fontWeight: 900, color: '#111827', margin: 0, letterSpacing: '0.06em' }}>담당 어르신 명단 <span style={{ fontSize: '10px', color: '#0d9488' }}>전체 층</span></h1>
+              <p style={{ fontSize: '9px', color: '#6b7280', margin: 0 }}>
                 현원 <b style={{ color: '#111827' }}>{rows.filter(r => (r.admission_date ?? '') <= today).length}명</b> · 출력 {new Date().toLocaleDateString('ko-KR')}
               </p>
             </div>
@@ -627,7 +627,7 @@ export default function ResidentAssignPage() {
               {printCols.map((col, i) => (
                 <div key={i} style={{ flex: 1, minWidth: 0 }}>
                   {col.map(({ floor: f, list, cur, incom }) => (
-                    <div key={f} style={{ marginBottom: '3mm' }}>
+                    <div key={f} style={{ marginBottom: '2mm' }}>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 2 }}>
                         <span style={{ display: 'inline-block', padding: '1px 8px', borderRadius: 6, background: '#0d9488', color: 'white', fontSize: `${compactSize.f + 2}px`, fontWeight: 900 }}>{f}</span>
                         <span style={{ fontSize: `${compactSize.f - 1}px`, color: '#6b7280' }}>
