@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Calendar as CalendarIcon } from 'lucide-react'
+import { maskDate, digitsToISO } from '@/utils/dateInput'
 
 /**
  * 한국형 날짜 입력기 — 직접 타이핑(YYYY.MM.DD 자동 서식) + 한글 달력 팝업.
@@ -19,22 +20,9 @@ const fmtText = (s?: string | null) => {
   const d = parseISO(s)
   return d ? `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())}` : ''
 }
-// 입력 숫자를 'YYYY.MM.DD' 로 자동 서식
-const maskDigits = (raw: string) => {
-  const dg = raw.replace(/\D/g, '').slice(0, 8)
-  if (dg.length > 6) return `${dg.slice(0, 4)}.${dg.slice(4, 6)}.${dg.slice(6)}`
-  if (dg.length > 4) return `${dg.slice(0, 4)}.${dg.slice(4)}`
-  return dg
-}
-// 8자리면 유효성 검사 후 ISO 반환, 아니면 null
-const digitsToISO = (raw: string): string | null => {
-  const dg = raw.replace(/\D/g, '')
-  if (dg.length !== 8) return null
-  const y = +dg.slice(0, 4), mo = +dg.slice(4, 6), da = +dg.slice(6)
-  const dt = new Date(y, mo - 1, da)
-  if (y < 1900 || dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== da) return null
-  return `${pad(y).length === 2 ? '20' + pad(y) : y}-${pad(mo)}-${pad(da)}`
-}
+// 타이핑 규칙은 utils/dateInput 에 있다 — 생년월일이 조용히 틀리면
+// 나이 계산과 급여·평가가 모두 어긋나서, 따로 떼어 테스트를 붙였다.
+const maskDigits = maskDate
 
 interface Props {
   value?: string | null
@@ -80,7 +68,9 @@ export default function DateField({
   const cells: (number | null)[] = []
   for (let i = 0; i < first; i++) cells.push(null)
   for (let d = 1; d <= days; d++) cells.push(d)
-  const years = Array.from({ length: 121 }, (_, i) => 1920 + i)
+  // 1915년부터 — 백 세를 넘기신 어르신 생년월일도 달력에서 고를 수 있어야 한다.
+  // (직접 치면 1900년부터 되지만, 고를 수 없으면 못 넣는 줄 안다)
+  const years = Array.from({ length: 126 }, (_, i) => 1915 + i)
 
   const handleType = (raw: string) => {
     const masked = maskDigits(raw)

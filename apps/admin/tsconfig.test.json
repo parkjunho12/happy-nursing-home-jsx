@@ -10,6 +10,8 @@
     "skipLibCheck": true
   },
   "include": [
+    "src/utils/dateInput.ts",
+    "tests/dateInput.test.ts",
     "src/utils/bellResidents.ts",
     "tests/bellResidents.test.ts",
     "src/utils/bellLayout.ts",

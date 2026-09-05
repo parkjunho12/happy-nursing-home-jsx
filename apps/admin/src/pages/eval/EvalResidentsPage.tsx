@@ -257,35 +257,6 @@ function ResidentCard({ r, onEdit, onDischarge, onDelete, onDetail, checklists, 
 const ic = "w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-orange/40"
 
 // 한국식 생년월일 선택 — 년/월/일 드롭다운 (고령 수급자 대응, 1930년 기본)
-function BirthDateSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const nowY = new Date().getFullYear()
-  const valid = /^\d{4}-\d{2}-\d{2}$/.test(value)
-  const [yy, mm, dd] = valid ? value.split('-').map(Number) : [1930, 1, 1]
-  const years: number[] = []
-  for (let y = nowY; y >= 1915; y--) years.push(y)
-  const months = Array.from({ length: 12 }, (_, i) => i + 1)
-  const daysInMonth = new Date(yy, mm, 0).getDate()
-  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1)
-  const emit = (y: number, m: number, d: number) => {
-    const dim = new Date(y, m, 0).getDate()
-    const d2 = Math.min(d, dim)
-    onChange(`${y}-${String(m).padStart(2, '0')}-${String(d2).padStart(2, '0')}`)
-  }
-  return (
-    <div className="grid grid-cols-3 gap-2">
-      <select className={ic} value={yy} onChange={e => emit(Number(e.target.value), mm, dd)}>
-        {years.map(y => <option key={y} value={y}>{y}년</option>)}
-      </select>
-      <select className={ic} value={mm} onChange={e => emit(yy, Number(e.target.value), dd)}>
-        {months.map(m => <option key={m} value={m}>{m}월</option>)}
-      </select>
-      <select className={ic} value={dd} onChange={e => emit(yy, mm, Number(e.target.value))}>
-        {days.map(d => <option key={d} value={d}>{d}일</option>)}
-      </select>
-    </div>
-  )
-}
-
 export function ResidentForm({ existing, onClose }: { existing?: LtcResident; onClose:()=>void }) {
   const { addResident, updateResident } = useLtcStore()
   const today = new Date().toISOString().split('T')[0]
@@ -384,7 +355,12 @@ export function ResidentForm({ existing, onClose }: { existing?: LtcResident; on
                 ? <span className="font-normal text-gray-400">(비어 있어도 저장됩니다)</span>
                 : '*'}
             </label>
-            <BirthDateSelect value={form.birthDate} onChange={v=>setForm({...form,birthDate:v})}/>
+            {/* 입소일·퇴소일과 같은 입력기를 쓴다 — 한 화면 안에서 날짜 넣는 방법이
+                두 가지면 매번 어느 쪽인지 헷갈린다.
+                숫자만 치면 된다(19350412 → 1935.04.12). 달력도 그대로 쓸 수 있다. */}
+            <DateField className={ic} value={form.birthDate}
+              onChange={v=>setForm({...form,birthDate:v})}
+              defaultView="1935-01-01" placeholder="19350412 처럼 숫자만 쳐도 됩니다"/>
             {form.birthDate && <p className="text-xs text-gray-400 mt-1">만 {calcAge(form.birthDate)}세</p>}
           </div>
           <div>
