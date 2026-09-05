@@ -42,6 +42,9 @@ export default function ResidentAssignPage() {
   // 빈자리를 줄로 다 보이면 한 층이 서른 몇 줄이 되어 화면을 넘는다.
   // 둘 다 필요한 요구라 스위치로 둔다 — 기본은 보이는 쪽.
   const [showEmpty, setShowEmpty] = useState(() => localStorage.getItem('asg.empty') !== '0')
+  // 인쇄 범위 — 층마다 따로 붙일 때가 많지만, 한 번에 다 뽑을 때도 있다
+  const [printAll, setPrintAll] = useState(() => localStorage.getItem('asg.printAll') !== '0')
+  useEffect(() => { localStorage.setItem('asg.printAll', printAll ? '1' : '0') }, [printAll])
   useEffect(() => { localStorage.setItem('asg.empty', showEmpty ? '1' : '0') }, [showEmpty])
   const [noteOpen, setNoteOpen] = useState(false)
 
@@ -71,37 +74,41 @@ export default function ResidentAssignPage() {
    *  지난 날을 보는 중이면 빈자리를 넣지 않는다 — 그날 방이 몇 인실이었는지는
    *  지금 정원으로 알 수 없고, 어차피 그날 기록은 고칠 수도 없다.
    */
-  const tableRows = useMemo(() => {
-    type Row = { kind: 'person'; r: AssignRow } | { kind: 'empty'; room: string; idx: number }
-    const out: Row[] = []
+  type PrintRow = { kind: 'person'; r: AssignRow } | { kind: 'empty'; room: string; idx: number }
 
+  /** 한 층의 줄 만들기 — 화면과 인쇄가 같은 함수를 쓴다.
+   *  따로 만들면 나중에 한쪽만 고쳐져서 종이와 화면이 달라진다.
+   *
+   *  호실 번호 순서대로 낸다(201 … 210). 아무도 안 계신 방을 뒤로 몰면
+   *  208호를 찾으려고 끝까지 내려가야 하고, 벽에 붙은 호실 순서와도 달라진다.
+   */
+  const buildRows = (fl: string, list: AssignRow[], withEmpty: boolean): PrintRow[] => {
+    const out: PrintRow[] = []
     const capOf = new Map<string, number>()
-    roomInfo.find(f => f.floor === floor)?.rooms.forEach(r => capOf.set(r.room, r.capacity))
+    roomInfo.find(f => f.floor === fl)?.rooms.forEach(r => capOf.set(r.room, r.capacity))
 
-    /* 호실 번호 순서대로 낸다 — 201, 202 … 210.
-       아무도 안 계신 방을 뒤로 몰면 208호를 찾으려고 표 끝까지 내려가야 하고,
-       방 번호로 훑는 눈이 한 번 끊긴다. 벽에 붙은 호실 순서와 같아야 한다.
-       (사람이 있든 없든, 설정에 있는 방이든 사람만 있는 방이든 한 줄에 세운다) */
     const rooms = [...new Set([
-      ...(roomInfo.find(f => f.floor === floor)?.rooms.map(r => r.room) ?? []),
-      ...shown.map(r => r.room).filter(Boolean) as string[],
+      ...(roomInfo.find(f => f.floor === fl)?.rooms.map(r => r.room) ?? []),
+      ...list.map(r => r.room).filter(Boolean) as string[],
     ])].sort((a, b) => a.localeCompare(b, 'ko', { numeric: true }))
 
     for (const room of rooms) {
-      const group = shown.filter(r => r.room === room)
+      const group = list.filter(r => r.room === room)
       group.forEach(r => out.push({ kind: 'person', r }))
-      // 빈 침대 하나에 빈 줄 하나 — 사람 줄과 같은 모양으로 통일한다.
-      // 4인실에 두 분이면 두 줄이 비어 보이는 게 곧 '두 자리 남았다' 이다.
-      if (!past && showEmpty) {
+      // 빈 침대 하나에 빈 줄 하나 — 4인실에 두 분이면 두 줄이 비어 보인다
+      if (withEmpty) {
         const free = (capOf.get(room) ?? 0) - group.length
         for (let k = 0; k < free; k++) out.push({ kind: 'empty', room, idx: k })
       }
     }
-
     // 호실이 아직 없는 분은 맨 뒤에. 조용히 빠지면 그분만 명단에서 사라진다.
-    shown.filter(r => !r.room).forEach(r => out.push({ kind: 'person', r }))
+    list.filter(r => !r.room).forEach(r => out.push({ kind: 'person', r }))
     return out
-  }, [shown, roomInfo, floor, past, showEmpty])
+  }
+
+  const tableRows = useMemo(
+    () => buildRows(floor, shown, !past && showEmpty),
+    [shown, roomInfo, floor, past, showEmpty])
 
   /** 빈자리에 넣을 수 있는 분 — 이름·호실로 찾는다.
    *  이미 그 방에 계신 분은 뺀다(같은 방으로 옮길 일이 없다). */
@@ -254,8 +261,19 @@ export default function ResidentAssignPage() {
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-sm font-bold hover:bg-indigo-100 disabled:opacity-50">
             {autoBusy === 'rehab' ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />} 재활팀 자동 배정
           </button>
+          {/* 인쇄 범위 — 층마다 따로 붙일 때가 많지만 한 번에 다 뽑을 때도 있다 */}
+          <div className="inline-flex rounded-xl border border-gray-200 overflow-hidden text-[11px] font-bold">
+            <button onClick={() => setPrintAll(false)}
+              className={`px-2 py-2 transition-colors ${!printAll ? 'bg-gray-700 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>
+              이 층만
+            </button>
+            <button onClick={() => setPrintAll(true)}
+              className={`px-2 py-2 transition-colors ${printAll ? 'bg-gray-700 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>
+              전체 층
+            </button>
+          </div>
           <button onClick={() => window.print()}
-            title="층마다 한 장씩 — 담당·호실이 채워진 명단이 인쇄됩니다"
+            title={printAll ? '층마다 한 장씩 — 전체 층이 인쇄됩니다' : `${floor} 한 장만 인쇄됩니다`}
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gray-800 hover:bg-gray-900 text-white text-sm font-bold">
             <Printer size={13} /> 인쇄
           </button>
@@ -458,15 +476,18 @@ export default function ResidentAssignPage() {
 
       {/* ── 인쇄 전용 — 층마다 한 장, 셀렉트 대신 글자로 ── */}
       <div className="hidden print:block">
-        {floors.map(f => {
-          const list = rows.filter(r => r.floor === f)
-          const cur = list.filter(r => (r.admission_date ?? '') <= today).length
-          const incom = list.length - cur
+        {(printAll ? floors : [floor]).map(f => {
+          const people = rows.filter(r => r.floor === f)
+          const cur = people.filter(r => (r.admission_date ?? '') <= today).length
+          const incom = people.length - cur
+          // 종이에도 빈자리를 낸다 — 201~210 이 다 보여야 어느 방에 자리가
+          // 있는지 벽보만 보고 안다. 화면과 같은 함수로 만든다.
+          const list = buildRows(f, people, true)
 
           // 37명이 넘으면 한 장에 욱여넣지 않고 장을 나눈다.
           // 억지로 한 장에 담으면 글자가 11px까지 떨어져 벽에 붙여도 안 보인다.
           // 나눌 때는 균등하게 — 마지막 장에 두세 명만 남으면 보기 안 좋다.
-          const PER_PAGE_MAX = 36
+          const PER_PAGE_MAX = 40
           const pageCount = Math.max(1, Math.ceil(list.length / PER_PAGE_MAX))
           const perPage = Math.ceil(list.length / pageCount)
           const chunks = Array.from({ length: pageCount },
@@ -483,7 +504,8 @@ export default function ResidentAssignPage() {
                    : n <= 24 ? { f: 15,   p: 5.5 }
                    : n <= 28 ? { f: 14,   p: 4 }
                    : n <= 32 ? { f: 13,   p: 3 }
-                   :           { f: 12,   p: 2 }
+                   : n <= 36 ? { f: 12,   p: 2 }
+                   :           { f: 11,   p: 1.5 }   // 빈자리까지 넣으면 한 층이 마흔 줄 가까이 된다
           const room = sz.f + 2, head = sz.f - 3   // 호실은 크게, 머리글은 조금 작게
           return (
             <div key={`${f}-${ci}`} className="asg-print-page">
@@ -519,7 +541,29 @@ export default function ResidentAssignPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {chunk.map(r => {
+                  {chunk.map((row, k) => {
+                    if (row.kind === 'empty') {
+                      const first = row.room !== pv
+                      if (first) { pv = row.room; band += 1 }
+                      const cell: React.CSSProperties = {
+                        border: '1px solid #e2e8f0', background: band % 2 === 0 ? '#f8fafc' : 'white',
+                        lineHeight: 1.3, padding: `${sz.p}px 7px`, fontSize: `${sz.f}px`,
+                      }
+                      return (
+                        <tr key={`e-${row.room}-${row.idx}`} className={first ? 'asg-room-top' : ''}>
+                          <td style={{ ...cell, textAlign: 'center', fontWeight: 800,
+                            fontSize: `${room}px`, color: first ? '#0f766e' : '#cbd5e1' }}>
+                            {first ? row.room : ''}
+                          </td>
+                          {/* 빈자리 — 손으로 적을 수 있게 비워 둔다 */}
+                          <td style={{ ...cell, color: '#cbd5e1' }}>빈자리</td>
+                          <td style={{ ...cell }} />
+                          <td style={{ ...cell }} />
+                          <td style={{ ...cell }} />
+                        </tr>
+                      )
+                    }
+                    const r = row.r
                     const first = r.room !== pv
                     if (first) { pv = r.room; band += 1 }
                     const incoming = (r.admission_date ?? '') > today
@@ -529,7 +573,7 @@ export default function ResidentAssignPage() {
                       padding: `${sz.p}px 7px`, fontSize: `${sz.f}px`,
                     }
                     return (
-                      <tr key={r.resident_id} className={first ? 'asg-room-top' : ''}>
+                      <tr key={`p-${r.resident_id}-${k}`} className={first ? 'asg-room-top' : ''}>
                         <td style={{ ...cell, textAlign: 'center' }}>
                           {first && <span style={{
                             display: 'inline-block', minWidth: 46, borderRadius: 8,
