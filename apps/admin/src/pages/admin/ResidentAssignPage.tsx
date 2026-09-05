@@ -52,7 +52,7 @@ export default function ResidentAssignPage() {
   const today = todayISO()
   // 한 층이 스크롤 없이 들어오도록 줄 높이를 줄였다(원래 py-2 · text-sm)
   const th = 'border-b border-gray-200 px-2 py-1.5 text-[11px] font-bold text-gray-500 text-left'
-  const td = 'border-b border-gray-100 px-2 py-1 text-[13px]'
+  const td = 'border-b border-gray-100 px-2 py-0.5 text-[13px]'
 
   // 담당별 집계 — 균등한지 한눈에. 층을 고르면 그 층만 센다.
   // (2층은 넉넉한데 3층만 몰려 있는 경우가 전체 합계로는 안 보인다)
@@ -198,8 +198,6 @@ export default function ResidentAssignPage() {
           </button>
         </div>
       </div>
-      <p className="text-[11px] text-gray-400 mb-2">바꾸면 바로 저장되고 이력이 남습니다 · 호실을 누르면 침대에서 고르거나 배정을 해제할 수 있어요</p>
-
       {/* ── 날짜 탭 ──
           명단이 바뀐 날마다 한 장씩 남는다. 눌러서 그날 모습을 본다.
           '지금' 은 고칠 수 있고, 지난 날은 볼 수만 있다 — 지난 기록을
@@ -210,6 +208,10 @@ export default function ResidentAssignPage() {
             <CalendarClock size={13} className="text-gray-400" />
             <span className="text-[11px] text-gray-400 mr-0.5" title="명단이 바뀐 날 — 눌러서 그날 명단을 봅니다">바뀐 날</span>
             {snapBusy && <Loader2 size={12} className="animate-spin text-gray-300" />}
+            {/* 안내를 따로 한 줄 두면 그만큼 표가 아래로 밀린다 — 빈자리에 붙인다 */}
+            <span className="ml-auto text-[10px] text-gray-300 hidden md:inline">
+              바꾸면 바로 저장·이력이 남습니다 · 호실을 누르면 침대에서 고릅니다
+            </span>
             <button onClick={() => openDay(null)}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
                 !past ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}>
@@ -244,7 +246,7 @@ export default function ResidentAssignPage() {
       <div className="flex gap-1.5 mb-3">
         {floors.map(f => (
           <button key={f} onClick={() => setFloor(f)}
-            className={`px-4 py-2 rounded-xl text-sm font-bold border transition-all ${floor === f ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-gray-500 border-gray-200'}`}>
+            className={`px-4 py-1.5 rounded-xl text-sm font-bold border transition-all ${floor === f ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-gray-500 border-gray-200'}`}>
             {f} <span className="text-[11px] font-semibold opacity-70">{rows.filter(r => r.floor === f).length}</span>
           </button>
         ))}
@@ -293,14 +295,14 @@ export default function ResidentAssignPage() {
                       </td>
                       <td className={td}>
                         <button onClick={() => !past && openPick(r.resident_id, 'care', r.name)} disabled={past}
-                          className={`w-full px-1.5 py-0.5 text-[11px] rounded border text-left font-semibold truncate transition-colors ${
+                          className={`w-full px-1.5 py-px leading-tight text-[11px] rounded border text-left font-semibold truncate transition-colors ${
                             r.care_staff_name ? 'border-teal-100 bg-teal-50/60 text-teal-800 hover:bg-teal-50' : 'border-dashed border-gray-300 text-gray-400 hover:border-teal-300'}`}>
                           {r.care_staff_name ?? '+ 배정'}
                         </button>
                       </td>
                       <td className={td}>
                         <button onClick={() => !past && openPick(r.resident_id, 'rehab', r.name)} disabled={past}
-                          className={`w-full px-1.5 py-0.5 text-[11px] rounded border text-left font-semibold truncate transition-colors ${
+                          className={`w-full px-1.5 py-px leading-tight text-[11px] rounded border text-left font-semibold truncate transition-colors ${
                             r.rehab_staff_name ? 'border-indigo-100 bg-indigo-50/60 text-indigo-800 hover:bg-indigo-50' : 'border-dashed border-gray-300 text-gray-400 hover:border-indigo-300'}`}>
                           {r.rehab_staff_name ?? '+ 배정'}
                         </button>
