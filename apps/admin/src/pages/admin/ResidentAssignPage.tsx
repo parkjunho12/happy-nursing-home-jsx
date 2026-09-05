@@ -276,6 +276,15 @@ export default function ResidentAssignPage() {
       {days.length > 0 && (
         <div className="mb-2">
           <div className="flex gap-1.5 flex-wrap items-center">
+            {/* 층 탭을 여기 함께 둔다 — 한 줄을 아끼면 그만큼 표가 위로 올라와
+                한 층이 한 화면에 들어온다 */}
+        {floors.map(f => (
+          <button key={f} onClick={() => setFloor(f)}
+            className={`px-4 py-1.5 rounded-xl text-sm font-bold border transition-all ${floor === f ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-gray-500 border-gray-200'}`}>
+            {f} <span className="text-[11px] font-semibold opacity-70">{rows.filter(r => r.floor === f).length}</span>
+          </button>
+        ))}
+            <span className="w-px h-5 bg-gray-200 mx-1" />
             <CalendarClock size={13} className="text-gray-400" />
             <span className="text-[11px] text-gray-400 mr-0.5" title="명단이 바뀐 날 — 눌러서 그날 명단을 봅니다">바뀐 날</span>
             {snapBusy && <Loader2 size={12} className="animate-spin text-gray-300" />}
@@ -313,15 +322,6 @@ export default function ResidentAssignPage() {
         </p>
       )}
 
-      {/* 층 탭 */}
-      <div className="flex gap-1.5 mb-3">
-        {floors.map(f => (
-          <button key={f} onClick={() => setFloor(f)}
-            className={`px-4 py-1.5 rounded-xl text-sm font-bold border transition-all ${floor === f ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-gray-500 border-gray-200'}`}>
-            {f} <span className="text-[11px] font-semibold opacity-70">{rows.filter(r => r.floor === f).length}</span>
-          </button>
-        ))}
-      </div>
 
       {loading ? (
         <div className="flex justify-center py-16"><Loader2 className="animate-spin text-gray-300" /></div>
@@ -347,12 +347,12 @@ export default function ResidentAssignPage() {
                     // 아무도 안 계신 방 — 한 줄로만
                     return (
                       <tr key={`vac-${row.room}`} className="bg-emerald-50/30 border-t-2 border-t-gray-300">
-                        <td className="border-b border-gray-100 px-2 py-0 text-center">
-                          <span className="inline-block w-11 text-center text-[11px] font-bold text-gray-400">{row.room}</span>
+                        <td className="border-b border-gray-100 px-2 py-0 text-center leading-none">
+                          <span className="inline-block w-11 text-center text-[10px] font-bold text-gray-400">{row.room}</span>
                         </td>
-                        <td className="border-b border-gray-100 px-2 py-0" colSpan={4}>
+                        <td className="border-b border-gray-100 px-2 py-0 leading-none" colSpan={4}>
                           <button onClick={() => { setFill({ floor, room: row.room }); setFillQ('') }}
-                            className="px-1.5 py-px text-[10px] leading-tight rounded border border-dashed border-emerald-300 text-emerald-700 hover:bg-emerald-50">
+                            className="px-1.5 py-0 text-[10px] leading-none rounded border border-dashed border-emerald-300 text-emerald-700 hover:bg-emerald-50">
                             빈방 {row.free}자리 — 눌러서 어르신 고르기
                           </button>
                         </td>
