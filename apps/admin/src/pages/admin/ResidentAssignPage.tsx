@@ -3,6 +3,7 @@ import { History, Loader2, Printer, Search, Users, Wand2, X, StickyNote, Check, 
 import { assignmentAPI, type AssignRow, type StaffOpt, type AssignLog, type AssignNote, type SnapDay } from '@/api/assignmentClient'
 import RoomPicker from '@/components/eval/RoomPicker'
 import { useLtcStore } from '@/store/ltc'
+import { roomAPI, type FloorInfo } from '@/api/roomClient'
 
 /**
  * 담당 어르신 명단 — 엑셀 명단을 그대로 화면으로.
@@ -33,6 +34,11 @@ export default function ResidentAssignPage() {
   const [snapBusy, setSnapBusy] = useState(false)
   // 한 층이 한 화면에 들어와야 한다. 늘 보지 않아도 되는 것은 접어 둔다.
   const [countFloor, setCountFloor] = useState('')   // '' = 전체
+  // 방 정원 — 4인실이면 빈 침대도 줄로 보여준다. 몇 자리 남았는지 표에서 바로 보이게.
+  const [roomInfo, setRoomInfo] = useState<FloorInfo[]>([])
+  // 빈자리를 눌렀을 때 열리는 '어르신 고르기'
+  const [fill, setFill] = useState<{ floor: string; room: string } | null>(null)
+  const [fillQ, setFillQ] = useState('')
   const [noteOpen, setNoteOpen] = useState(false)
 
   const load = () => {
@@ -50,6 +56,47 @@ export default function ResidentAssignPage() {
   const floors = useMemo(() => Array.from(new Set(base.map(r => r.floor))).sort(), [base])
   const shown = base.filter(r => r.floor === floor)
   const today = todayISO()
+  const past = viewDate !== null
+
+  /** 표에 그릴 줄 — 사람 줄 뒤에 그 방의 빈 침대를 이어 붙인다.
+   *
+   *  4인실에 두 분만 계시면 두 자리가 비어 있다는 것이 표에서 바로 보여야
+   *  한다. 숫자로만 '2/4' 라고 적으면 어느 방에 자리가 있는지 찾으려고
+   *  다시 훑어야 한다.
+   *
+   *  지난 날을 보는 중이면 빈자리를 넣지 않는다 — 그날 방이 몇 인실이었는지는
+   *  지금 정원으로 알 수 없고, 어차피 그날 기록은 고칠 수도 없다.
+   */
+  const tableRows = useMemo(() => {
+    type Row = { kind: 'person'; r: AssignRow } | { kind: 'empty'; room: string; idx: number }
+    const out: Row[] = []
+    const capOf = new Map<string, number>()
+    roomInfo.find(f => f.floor === floor)?.rooms.forEach(r => capOf.set(r.room, r.capacity))
+
+    let i = 0
+    while (i < shown.length) {
+      const room = shown[i].room
+      const group: AssignRow[] = []
+      while (i < shown.length && shown[i].room === room) { group.push(shown[i]); i++ }
+      group.forEach(r => out.push({ kind: 'person', r }))
+      if (!past && room) {
+        const free = (capOf.get(room) ?? 0) - group.length
+        for (let k = 0; k < free; k++) out.push({ kind: 'empty', room, idx: k })
+      }
+    }
+    return out
+  }, [shown, roomInfo, floor, past])
+
+  /** 빈자리에 넣을 수 있는 분 — 이름·호실로 찾는다.
+   *  이미 그 방에 계신 분은 뺀다(같은 방으로 옮길 일이 없다). */
+  const fillCandidates = useMemo(() => {
+    if (!fill) return []
+    const q = fillQ.trim()
+    return rows
+      .filter(r => !(r.floor === fill.floor && r.room === fill.room))
+      .filter(r => !q || r.name.includes(q) || (r.room ?? '').includes(q) || r.floor.includes(q))
+      .sort((a, b) => (a.room ? 1 : 0) - (b.room ? 1 : 0) || a.name.localeCompare(b.name, 'ko'))
+  }, [fill, fillQ, rows])
   // 한 층이 스크롤 없이 들어오도록 줄 높이를 줄였다(원래 py-2 · text-sm)
   const th = 'border-b border-gray-200 px-2 py-1.5 text-[11px] font-bold text-gray-500 text-left'
   const td = 'border-b border-gray-100 px-2 py-0.5 text-[13px]'
@@ -94,6 +141,10 @@ export default function ResidentAssignPage() {
     .then(d => setDays(d.days)).catch(() => setDays([]))
   useEffect(() => { loadDays() }, [])
 
+  const loadRooms = () => roomAPI.occupancy()
+    .then(r => setRoomInfo(r.floors)).catch(() => setRoomInfo([]))
+  useEffect(() => { loadRooms() }, [])
+
   /** 그날 탭을 누르면 그날 명단으로 바꿔 보여준다. 고칠 수는 없다 —
    *  지난 날 기록을 고치면 그건 더 이상 그날 모습이 아니다. */
   const openDay = async (d: string | null) => {
@@ -105,7 +156,6 @@ export default function ResidentAssignPage() {
     } catch { alert('그날 기록을 불러오지 못했습니다.') }
     finally { setSnapBusy(false) }
   }
-  const past = viewDate !== null
 
   const saveNote = async () => {
     setNoteBusy(true)
@@ -144,6 +194,7 @@ export default function ResidentAssignPage() {
     try {
       await assignmentAPI.setBed(row.resident_id, f, room, force)
       load()   // 호실 순 정렬·방 구분선·층 탭까지 다시 맞춘다
+      loadRooms()   // 빈자리 표시도 함께 (안 하면 방금 채운 자리가 비어 보인다)
       // 여기서 바꾼 호실은 수급자 스토어를 거치지 않는다 — 수급자 관리·서류현황이 옛 호실을 들고 있지 않게
       useLtcStore.getState().invalidate()
     } catch (e: any) {
@@ -271,7 +322,24 @@ export default function ResidentAssignPage() {
                 </tr>
               </thead>
               <tbody>
-                {shown.map(r => {
+                {tableRows.map(row => {
+                  if (row.kind === 'empty') {
+                    // 빈 침대 — 성함 자리를 누르면 어르신을 골라 넣는다
+                    return (
+                      <tr key={`empty-${row.room}-${row.idx}`} className="bg-gray-50/40">
+                        <td className={`${td} text-center`}>
+                          <span className="inline-block w-11 text-center text-[10px] text-gray-300">{row.room}</span>
+                        </td>
+                        <td className={td} colSpan={4}>
+                          <button onClick={() => { setFill({ floor, room: row.room }); setFillQ('') }}
+                            className="w-full text-left px-1.5 py-px text-[11px] rounded border border-dashed border-gray-300 text-gray-400 hover:border-teal-400 hover:text-teal-600 transition-colors">
+                            빈자리 — 눌러서 어르신 고르기
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  }
+                  const r = row.r
                   const first = r.room !== prevRoom
                   prevRoom = r.room
                   const incoming = (r.admission_date ?? '') > today
@@ -316,7 +384,7 @@ export default function ResidentAssignPage() {
                     </tr>
                   )
                 })}
-                {shown.length === 0 && (
+                {tableRows.length === 0 && (
                   <tr><td colSpan={5} className="text-center py-12 text-sm text-gray-400">이 층에 재원 어르신이 없습니다</td></tr>
                 )}
               </tbody>
@@ -478,6 +546,44 @@ export default function ResidentAssignPage() {
       `}</style>
 
       {/* 호실 변경 — 침대 그림에서 고르면 바로 저장 ('배정 해제'도 이 안에) */}
+      {/* 빈자리에 어르신 넣기 — 이름·호실로 찾는다 */}
+      {fill && (
+        <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4" onClick={() => setFill(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="px-4 py-3 border-b flex items-center justify-between shrink-0">
+              <h3 className="font-bold text-gray-900 text-sm">
+                {fill.floor} {fill.room}호 빈자리에 넣을 어르신
+              </h3>
+              <button onClick={() => setFill(null)} className="p-1 rounded-lg text-gray-400 hover:bg-gray-100"><X size={18} /></button>
+            </div>
+            <div className="p-3 border-b shrink-0">
+              <div className="relative">
+                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-300" />
+                <input autoFocus value={fillQ} onChange={e => setFillQ(e.target.value)}
+                  placeholder="성함 · 호실로 찾기"
+                  className="w-full pl-8 pr-2 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-200" />
+              </div>
+            </div>
+            <div className="overflow-y-auto flex-1 min-h-0 p-2">
+              {fillCandidates.map(c => (
+                <button key={c.resident_id}
+                  onClick={() => { const t = c; setFill(null); changeBed(t, fill.floor, fill.room) }}
+                  className="w-full flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-teal-50 text-left">
+                  <span className="text-sm font-bold text-gray-800">{c.name}</span>
+                  {/* 지금 어디 계신지 함께 보여준다 — 다른 방에서 옮겨오는 것인지 알아야 한다 */}
+                  <span className="ml-auto text-[11px] text-gray-400">
+                    {c.room ? `${c.floor} ${c.room}호` : '호실 없음'}
+                  </span>
+                </button>
+              ))}
+              {fillCandidates.length === 0 && (
+                <p className="text-center py-8 text-xs text-gray-400">찾는 어르신이 없습니다.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {bed && (
         <RoomPicker
           current={{ floor: bed.floor === '미지정' ? '' : bed.floor, room: bed.room }}
