@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CalendarRange, Clock3, Download, Eye, EyeOff, History, Loader2, MessageCircle, Plus, Printer, Radio, Save, Trash2, Upload, Users, X } from 'lucide-react'
+import { CalendarRange, Clock3, Download, Eye, EyeOff, History, Loader2, MessageCircle, Pencil, Plus, Printer, Radio, Save, Trash2, Upload, Users, X } from 'lucide-react'
 import { programAPI, type ProgramMonthData, type ProgramEntry, type ProgramTime,
   type ProgramPhoto } from '@/api/programClient'
 import { broadcastAPI, mediaUrl,
   type ProgramCastConfig, type ProgramCastItem } from '@/api/broadcastClient'
 import { useAuthStore } from '@/store/auth'
 import { evalResidentsAPI } from '@/api/evalClient'
+import GroupEditor from '@/components/program/GroupEditor'
 import { isKakaoShareEnabled, shareText } from '@/lib/kakaoShare'
 
 /**
@@ -44,6 +45,13 @@ export default function ProgramPage() {
   // 진행 시간 목록('10:00~10:40') — 일자 수정 드롭다운에 쓰인다
   const [times, setTimes] = useState<ProgramTime[]>([])
   const [residents, setResidents] = useState<any[]>([])   // 수급자 등록 기준 분류의 원천
+  // 그룹·종교를 이 화면에서 바로 고칠 수 있게 — 기본은 접어 둔다.
+  // 늘 펼쳐 두면 보러 온 사람이 잘못 누를 수 있고, 이 탭은 보는 일이 더 많다.
+  const [grpEdit, setGrpEdit] = useState(false)
+  // 이 화면은 '외부담당'도 메뉴 권한이 있으면 볼 수 있다. 보는 것과 고치는 것은
+  // 다르다 — 어르신 기록을 고치는 것은 수급자 관리를 쓰는 안쪽 직원까지만.
+  const canEditGroups = castUser?.role === 'ADMIN'
+    || ['사회복지사', '시설장', '대표', '이사'].includes(castUser?.position ?? '')
   const [timesOpen, setTimesOpen] = useState(false)
   const [timesDraft, setTimesDraft] = useState<ProgramTime[]>([])
   const [newStart, setNewStart] = useState('')
@@ -244,6 +252,11 @@ export default function ProgramPage() {
     setGrpLogsOpen(true); setGrpLogs(null)
     try { setGrpLogs(await programAPI.groupLogs()) } catch { setGrpLogs([]) }
   }
+
+  /** 편집 표에서 한 칸 바뀌었을 때 — 목록을 다시 부르지 않고 그 분만 고친다.
+   *  다시 부르면 표가 잠깐 비었다가 다시 그려져, 연달아 누르던 손을 놓치게 된다. */
+  const patchResident = (id: string, patch: Record<string, string>) =>
+    setResidents(rs => rs.map(r => r.id === id ? { ...r, ...patch } : r))
 
   const load = () => {
     setLoading(true)
@@ -970,18 +983,25 @@ export default function ProgramPage() {
           <div className="flex items-center gap-2 mb-3 flex-wrap">
             <Users size={15} className="text-teal-600" />
             <h2 className="text-sm font-bold text-gray-800">수급자 등록 기준 <span className="font-normal text-gray-400">— 수급자 관리에서 입력한 그룹·종교 (실시간)</span></h2>
-            <div className="ml-auto flex gap-1.5 flex-wrap">
+            <div className="ml-auto flex items-center gap-1.5 flex-wrap">
               {CATS.map(([c, key, cls]) => (
                 <span key={c} className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${cls}`}>
                   {c} {act.filter(r0 => r0[key]).length}명
                   <span className="font-semibold opacity-60"> / 미지정 {act.filter(r0 => !r0[key]).length}</span>
                 </span>
               ))}
+              {canEditGroups && <button onClick={() => setGrpEdit(o => !o)}
+                className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${grpEdit ? 'bg-teal-600 border-teal-600 text-white' : 'bg-white border-teal-200 text-teal-700 hover:bg-teal-50'}`}>
+                <Pencil size={12} /> {grpEdit ? '바꾸기 닫기' : '그룹 · 종교 바꾸기'}
+              </button>}
             </div>
           </div>
+          {grpEdit && canEditGroups && <GroupEditor residents={residents} onSaved={patchResident} />}
           {!anyData ? (
             <p className="text-xs text-gray-400 text-center py-6">
-              아직 입력된 데이터가 없습니다 — 수급자 관리에서 어르신 수정을 열어 종교·그룹을 선택해주세요.
+              아직 입력된 데이터가 없습니다 — {canEditGroups
+                ? '위 「그룹 · 종교 바꾸기」를 눌러 이 화면에서 바로 채우실 수 있습니다.'
+                : '수급자 관리에서 어르신 수정을 열어 종교·그룹을 선택해주세요.'}
             </p>
           ) : (
             <>
