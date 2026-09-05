@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Loader2, Printer, Save, BellRing, Info, AlertTriangle, Settings2 } from 'lucide-react'
-import { bellAPI, type BellPage } from '@/api/emergencyBellClient'
+import { Loader2, Printer, Save, BellRing, Info, AlertTriangle, Settings2, Search, X, Eraser, Pencil } from 'lucide-react'
+import { bellAPI, type Bell, type BellPage } from '@/api/emergencyBellClient'
 import { buildRoomCards, splitPages } from '@/utils/bellLayout'
-import { pickOrder, missingInRoom, unknownNames } from '@/utils/bellResidents'
+import { pickOrder, missingInRoom, unknownNames, roomKey } from '@/utils/bellResidents'
 
 /**
  * 응급벨 명단 — 벨 번호마다 어느 어르신인지 정하고 배치도로 뽑는다.
@@ -26,6 +26,10 @@ export default function EmergencyBellPage() {
   // 벨 번호 고치기 — 설비가 바뀌었을 때만 쓴다. 평소에는 잠가 둔다.
   const [layoutMode, setLayoutMode] = useState(false)
   const [noDraft, setNoDraft] = useState<Record<string, string>>({})
+  // 성함 고르기 — 자유 입력 대신 수급자 명단에서 찾아 넣는다
+  const [pick, setPick] = useState<{ bell: Bell; room: string } | null>(null)
+  const [pickQ, setPickQ] = useState('')
+  const [manual, setManual] = useState('')
   const printedAt = useRef(new Date())
 
   const load = () => {
@@ -73,6 +77,59 @@ export default function EmergencyBellPage() {
       if (next.name.trim() === '' && next.status === '재실') next.status = ''
       return { ...s, [id]: next }
     })
+
+  /** 지금 어느 벨에 누가 들어 있는가 — 이름으로 찾는다.
+   *  고르기 창에서 '이분은 지금 205호 3번' 이라고 미리 알려주기 위한 것. */
+  const assignedAt = useMemo(() => {
+    const m = new Map<string, { id: string; floor: string; room: string; no: number }>()
+    ;(data?.rows ?? []).forEach(b => {
+      if (b.is_wc) return
+      const nm = (draft[b.id]?.name ?? '').trim()
+      if (nm) m.set(nm, { id: b.id, floor: b.floor, room: b.room, no: b.no })
+    })
+    return m
+  }, [data, draft])
+
+  /** 벨 한 칸에 어르신을 넣는다.
+   *
+   *  한 분이 두 벨에 들어 있으면 안 된다 — 그 방에서 벨이 울렸는데 그분은
+   *  다른 방에 계시면, 달려간 곳에 아무도 없다. 그래서 다른 자리에 같은
+   *  분이 있으면 그 자리를 비운다. 층이 달라도 마찬가지다.
+   *
+   *  '공실' 표시도 함께 지운다. 사람이 계신 방이 공실일 수는 없다.
+   */
+  const putName = (bellId: string, name: string) => {
+    const nm = name.trim()
+    setDraft(s => {
+      const next = { ...s }
+      if (nm) {
+        (data?.rows ?? []).forEach(b => {
+          if (b.id === bellId || b.is_wc) return
+          if ((next[b.id]?.name ?? '').trim() !== nm) return
+          const cur = next[b.id] ?? { name: '', status: '' }
+          next[b.id] = { ...cur, name: '', status: cur.status === '재실' ? '' : cur.status }
+        })
+      }
+      const cur = next[bellId] ?? { name: '', status: '' }
+      const upd = { ...cur, name: nm }
+      if (!nm && upd.status === '재실') upd.status = ''
+      if (nm && upd.status === '공실') upd.status = ''
+      next[bellId] = upd
+      return next
+    })
+  }
+
+  const openPick = (bell: Bell, room: string) => {
+    setPick({ bell, room }); setPickQ(''); setManual('')
+  }
+
+  /** 고르기 창에 늘어놓을 어르신 — 같은 방 → 같은 층 → 나머지, 검색으로 좁힌다 */
+  const pickList = useMemo(() => {
+    if (!pick) return []
+    const q = pickQ.trim()
+    return pickOrder(residents, pick.bell.floor, pick.room)
+      .filter(r => !q || r.name.includes(q) || roomKey(r.room).includes(roomKey(q)) || (r.floor ?? '').includes(q))
+  }, [pick, pickQ, residents])
 
   const save = async () => {
     if (!data) return
@@ -251,18 +308,6 @@ export default function EmergencyBellPage() {
                       <p className="text-[9px] opacity-90">{card.numbers.join(' · ')}번</p>
                     </div>
 
-                    {/* 후보 목록은 방마다 하나면 된다 — 같은 방 벨은 순서가 같다.
-                        벨마다 만들었더니 한 층에 1,258개가 생겨 화면이 무거워졌다. */}
-                    {canEdit && (
-                      <datalist id={`res-${floor}-${card.room}`}>
-                        {pickOrder(residents, floor, card.room).map(r => (
-                          <option key={`${r.name}-${r.room}`} value={r.name}>
-                            {r.room ? `${r.room}호` : ''}{r.floor ? ` · ${r.floor}` : ''}
-                          </option>
-                        ))}
-                      </datalist>
-                    )}
-
                     <div className="flex-1 divide-y divide-rose-100">
                       {card.bells.filter(b => !b.is_wc).map(b => {
                         const d = draft[b.id] ?? { name: '', status: '' }
@@ -279,15 +324,17 @@ export default function EmergencyBellPage() {
                               <span className="w-7 h-7 shrink-0 rounded-full bg-rose-700 text-white text-xs font-extrabold flex items-center justify-center">{b.no}</span>
                             )}
                             {canEdit ? (
-                              <input value={d.name} maxLength={20}
-                                onChange={e => set(b.id, { name: e.target.value })}
-                                list={`res-${floor}-${card.room}`}
-                                placeholder="성함"
+                              // 이름을 손으로 치면 오타가 나고, 응급 상황에 헛사람을 찾는다.
+                              // 눌러서 명단에서 고른다 — 이미 적힌 자리도 눌러 바꾼다.
+                              <button type="button" onClick={() => openPick(b, card.room)}
+                                title={d.name ? `${d.name} — 눌러서 바꾸기` : '눌러서 어르신 고르기'}
                                 // 인쇄에서는 '성함' 안내글 대신 점선 빈칸으로 나가게 한다 —
                                 // 벽보에 '성함 성함 성함' 이 늘어서면 읽을 수가 없다
                                 data-empty={empty ? '1' : undefined}
-                                className={`eb-input flex-1 min-w-0 px-1 py-0.5 text-sm font-bold rounded border ${
-                                  empty ? 'border-dashed border-rose-300 text-gray-400' : 'border-transparent text-gray-900'} focus:outline-none focus:border-rose-400`} />
+                                className={`eb-input flex-1 min-w-0 text-left px-1 py-0.5 text-sm font-bold rounded border truncate ${
+                                  empty ? 'border-dashed border-rose-300' : 'border-transparent text-gray-900'} hover:border-rose-400`}>
+                                {empty ? <span className="eb-ph text-gray-400 font-medium">성함</span> : d.name}
+                              </button>
                             ) : (
                               <span className={`flex-1 text-sm font-bold ${empty ? 'text-gray-300' : 'text-gray-900'}`}>
                                 {d.name || '⋯⋯⋯'}
@@ -321,7 +368,7 @@ export default function EmergencyBellPage() {
                                   // 비어 있는 첫 칸에 넣는다 — 어느 칸인지는 사람이 옮기면 된다
                                   const slot = card.bells.find(b => !b.is_wc && !(draft[b.id]?.name ?? '').trim())
                                   if (!slot) { alert('이 방에 빈 칸이 없습니다.'); return }
-                                  set(slot.id, { name: r.name })
+                                  putName(slot.id, r.name)
                                 }}
                                 className="text-[10px] font-bold text-amber-900 bg-white border border-amber-300 px-1.5 py-0.5 rounded hover:bg-amber-100">
                                 + {r.name}
@@ -382,6 +429,96 @@ export default function EmergencyBellPage() {
         </>
       )}
 
+      {/* ── 어르신 고르기 ──
+          같은 방 어르신이 맨 위에 온다 — 대개 거기서 끝난다.
+          다른 방에 계신 분을 고르면 그 자리는 비워진다. 한 분이 두 벨에
+          들어 있으면, 벨이 울려 달려간 방에 그분이 안 계실 수 있다. */}
+      {pick && (
+        <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4 print:hidden"
+          onClick={() => setPick(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm max-h-[82vh] flex flex-col"
+            onClick={e => e.stopPropagation()}>
+            <div className="px-4 py-3 border-b flex items-center gap-2 shrink-0">
+              <span className="w-7 h-7 shrink-0 rounded-full bg-rose-700 text-white text-xs font-extrabold flex items-center justify-center">
+                {pick.bell.no}
+              </span>
+              <div className="min-w-0">
+                <h3 className="font-bold text-gray-900 text-sm truncate">{pick.room} · {pick.bell.no}번 벨</h3>
+                <p className="text-[11px] text-gray-400">
+                  {(draft[pick.bell.id]?.name ?? '').trim() || '아직 비어 있습니다'}
+                </p>
+              </div>
+              <button onClick={() => setPick(null)} className="ml-auto text-gray-300 hover:text-gray-500"><X size={16} /></button>
+            </div>
+
+            <div className="px-3 py-2 border-b shrink-0">
+              <div className="relative">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-300" />
+                <input autoFocus value={pickQ} onChange={e => setPickQ(e.target.value)}
+                  placeholder="성함 · 호실로 찾기"
+                  className="w-full pl-7 pr-2 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-rose-400" />
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {pickList.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-8">찾는 어르신이 없습니다.</p>
+              ) : (
+                <ul className="divide-y divide-gray-50">
+                  {pickList.map(r => {
+                    const here = roomKey(r.room) === roomKey(pick.room) && (r.floor ?? '') === pick.bell.floor
+                    const at = assignedAt.get(r.name.trim())
+                    const isThis = at?.id === pick.bell.id
+                    return (
+                      <li key={`${r.name}-${r.floor}-${r.room}`}>
+                        <button onClick={() => { putName(pick.bell.id, r.name); setPick(null) }}
+                          className={`w-full text-left px-4 py-2.5 hover:bg-rose-50 flex items-center gap-2 ${here ? 'bg-rose-50/50' : ''}`}>
+                          <span className="text-[11px] font-bold text-gray-400 w-14 shrink-0">
+                            {r.room ? `${roomKey(r.room)}호` : (r.floor ?? '')}
+                          </span>
+                          <span className="text-sm font-bold text-gray-900">{r.name}</span>
+                          {here && <span className="text-[10px] font-bold text-rose-600">이 방</span>}
+                          {/* 지금 다른 벨에 들어 있으면 미리 알려준다 — 고르고 나서
+                              '어? 저쪽이 비었네' 하고 놀라지 않게 */}
+                          {at && !isThis && (
+                            <span className="ml-auto text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 shrink-0">
+                              지금 {roomKey(at.room)}호 {at.no}번 → 옮김
+                            </span>
+                          )}
+                          {isThis && <span className="ml-auto text-[10px] font-bold text-gray-400 shrink-0">이 자리</span>}
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+
+            <div className="px-3 py-2.5 border-t shrink-0 space-y-2">
+              {/* 명단에 아직 없는 분 — 오늘 입소하셨는데 수급자 관리에 안 올라간 경우가 있다.
+                  막아 두면 그 자리를 영영 못 채운다. */}
+              <div className="flex gap-1.5">
+                <div className="relative flex-1">
+                  <Pencil size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-300" />
+                  <input value={manual} onChange={e => setManual(e.target.value)} maxLength={20}
+                    onKeyDown={e => { if (e.key === 'Enter' && manual.trim()) { putName(pick.bell.id, manual); setPick(null) } }}
+                    placeholder="명단에 없는 분은 직접 입력"
+                    className="w-full pl-7 pr-2 py-2 rounded-lg border border-gray-200 text-[13px] focus:outline-none focus:border-gray-400" />
+                </div>
+                <button onClick={() => { if (manual.trim()) { putName(pick.bell.id, manual); setPick(null) } }}
+                  disabled={!manual.trim()}
+                  className="px-3 py-2 rounded-lg bg-gray-800 text-white text-xs font-bold disabled:opacity-30">넣기</button>
+              </div>
+              <button onClick={() => { putName(pick.bell.id, ''); setPick(null) }}
+                className="w-full inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border border-gray-200 text-xs font-bold text-gray-500 hover:bg-gray-50">
+                <Eraser size={13} /> 이 자리 비우기
+              </button>
+              <p className="text-[10px] text-gray-400 text-center">고른 뒤 위쪽 「저장」을 눌러야 반영됩니다</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         @media print {
           @page { size: A4 landscape; margin: 7mm; }
@@ -397,8 +534,9 @@ export default function EmergencyBellPage() {
           .eb-grid { gap: 1.5mm !important; }
           /* 입력칸을 종이에서는 글자처럼 보이게 — 네모 상자가 줄줄이 찍히면 읽기 나쁘다 */
           .eb-input { border-color: transparent !important; background: transparent !important; }
-          /* 안내글('성함')은 화면에서만 쓴다. 종이에는 손으로 적을 점선만 남긴다 */
-          .eb-input::placeholder { color: transparent !important; }
+          /* 안내글('성함')은 화면에서만 쓴다. 종이에는 손으로 적을 점선만 남긴다.
+             (자리는 남겨 둔다 — 지우면 그 줄만 납작해져 칸이 어긋난다) */
+          .eb-input .eb-ph { visibility: hidden !important; }
           .eb-input[data-empty] {
             border-bottom: 1.2px dotted #e5a3a3 !important;
             border-radius: 0 !important;
