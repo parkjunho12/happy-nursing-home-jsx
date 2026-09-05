@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { History, Loader2, Printer, Search, Users, Wand2, X } from 'lucide-react'
-import { assignmentAPI, type AssignRow, type StaffOpt, type AssignLog } from '@/api/assignmentClient'
+import { History, Loader2, Printer, Search, Users, Wand2, X, StickyNote, Check } from 'lucide-react'
+import { assignmentAPI, type AssignRow, type StaffOpt, type AssignLog, type AssignNote } from '@/api/assignmentClient'
 import RoomPicker from '@/components/eval/RoomPicker'
 import { useLtcStore } from '@/store/ltc'
 
@@ -21,6 +21,10 @@ export default function ResidentAssignPage() {
   const [histOpen, setHistOpen] = useState(false)
   const [logs, setLogs] = useState<AssignLog[] | null>(null)
   const [autoBusy, setAutoBusy] = useState<'care' | 'rehab' | null>(null)
+  // 명단에 함께 붙는 메모 — 어르신 한 분이 아니라 다 같이 알아야 하는 것
+  const [note, setNote] = useState<AssignNote | null>(null)
+  const [noteDraft, setNoteDraft] = useState('')
+  const [noteBusy, setNoteBusy] = useState(false)
 
   const load = () => {
     assignmentAPI.roster()
@@ -66,6 +70,18 @@ export default function ResidentAssignPage() {
   const td = 'border-b border-gray-100 px-2.5 py-2 text-sm'
 
   // ── 담당 선택 피커 — 드롭다운 대신 검색 + 담당 수가 보이는 목록 ──
+  const loadNote = () => assignmentAPI.note()
+    .then(n => { setNote(n); setNoteDraft(n.content) })
+    .catch(() => setNote(null))
+  useEffect(() => { loadNote() }, [])
+
+  const saveNote = async () => {
+    setNoteBusy(true)
+    try { const n = await assignmentAPI.saveNote(noteDraft); setNote(n); setNoteDraft(n.content) }
+    catch (e: any) { alert(e?.response?.data?.detail ?? '메모를 저장하지 못했습니다') }
+    finally { setNoteBusy(false) }
+  }
+
   const [pick, setPick] = useState<{ rid: string; kind: 'care' | 'rehab'; name: string } | null>(null)
   const [pickQ, setPickQ] = useState('')
   const openPick = (rid: string, kind: 'care' | 'rehab', name: string) => { setPick({ rid, kind, name }); setPickQ('') }
@@ -425,6 +441,50 @@ export default function ResidentAssignPage() {
       })()}
 
       {/* 변경 이력 */}
+      {/* ── 명단 아래 메모 ──
+          어르신 한 분에 대한 이야기가 아니라, 이 명단을 보는 사람들이 다 같이
+          알아야 하는 것을 적는 자리다 — '이번 주 독감 예방접종' 같은.
+          인쇄에도 함께 나간다. 벽에 붙는 종이에 지침이 같이 있어야 한다. */}
+      <section className="mt-4">
+        <div className="flex items-center gap-1.5 mb-1.5 print:hidden">
+          <StickyNote size={14} className="text-amber-600" />
+          <h2 className="text-sm font-bold text-gray-800">전체 어르신 메모</h2>
+          <span className="text-[11px] text-gray-400">
+            한 분이 아니라 다 같이 알아야 할 내용 — 명단과 함께 인쇄됩니다
+          </span>
+          {note?.updated_by && (
+            <span className="ml-auto text-[11px] text-gray-400">
+              마지막 수정 {note.updated_by}
+              {note.updated_at && ` · ${new Date(note.updated_at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`}
+            </span>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 print:border-gray-400 print:bg-white">
+          <p className="hidden print:block text-xs font-bold text-gray-700 mb-1">전체 어르신 메모</p>
+          <textarea
+            value={noteDraft}
+            onChange={e => setNoteDraft(e.target.value)}
+            maxLength={note?.max_length ?? 1000}
+            rows={3}
+            placeholder="예) 이번 주 독감 예방접종 — 목요일 오전, 해당 어르신은 개별 안내드립니다."
+            className="eb-note w-full bg-transparent text-sm text-gray-800 resize-none focus:outline-none placeholder:text-gray-400" />
+          <div className="flex items-center gap-2 mt-1 print:hidden">
+            <button onClick={saveNote}
+              disabled={noteBusy || noteDraft === (note?.content ?? '')}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-bold disabled:opacity-40">
+              {noteBusy ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} 저장
+            </button>
+            {noteDraft !== (note?.content ?? '') && (
+              <span className="text-[11px] text-amber-700 font-semibold">저장하지 않은 변경이 있습니다</span>
+            )}
+            <span className="ml-auto text-[11px] text-gray-400">
+              {noteDraft.length} / {note?.max_length ?? 1000}자
+            </span>
+          </div>
+        </div>
+      </section>
+
       {histOpen && (
         <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" onClick={() => setHistOpen(false)}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[80vh] overflow-y-auto p-4" onClick={e => e.stopPropagation()}>
@@ -453,6 +513,14 @@ export default function ResidentAssignPage() {
           </div>
         </div>
       )}
+
+      <style>{`
+        @media print {
+          /* 입력칸이 종이에 네모 상자로 찍히면 읽기 나쁘다 — 글자만 남긴다 */
+          .eb-note { border: 0 !important; background: transparent !important; }
+          .eb-note::placeholder { color: transparent !important; }
+        }
+      `}</style>
     </div>
   )
 }

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
+from app.models.assign_note import AssignNote, NOTE_MAX, now_kst as _note_now
 from app.models.assignment import ResidentAssignment, ResidentAssignmentLog
 from app.models.eval import LtcResident, LtcStaffMember
 from app.schemas.response import ApiResponse
@@ -91,6 +92,64 @@ def _staff_name(db: Session, sid: Optional[str]) -> Optional[str]:
         return None
     st = db.query(LtcStaffMember).filter(LtcStaffMember.id == sid).first()
     return st.name if st else None
+
+
+# ── 라우트 순서 주의 ─────────────────────────────────────────────
+# /note 는 반드시 /{resident_id} 보다 위에 있어야 한다. 아래에 두면 FastAPI 가
+# resident_id="note" 로 읽어 엉뚱한 답을 준다. 배포 전 검사(test_route_order)가
+# 잡아 주지만, 왜 여기 있는지 알아야 나중에 다시 내려놓지 않는다.
+
+# ── 명단에 함께 붙는 메모 ────────────────────────────────────────
+# 어르신 한 분에 대한 이야기가 아니라, 그 명단을 보는 사람들이 다 같이
+# 알아야 하는 것을 적는 자리다.
+
+
+def _note_row(db: Session) -> AssignNote:
+    row = db.query(AssignNote).filter(AssignNote.id == 1).first()
+    if not row:
+        row = AssignNote(id=1, content=None)
+        db.add(row); db.commit(); db.refresh(row)
+    return row
+
+
+def _note_view(n: AssignNote) -> dict:
+    return {
+        "content": n.content or "",
+        "updated_at": n.updated_at.isoformat() if n.updated_at else None,
+        "updated_by": n.updated_by,
+        "max_length": NOTE_MAX,
+    }
+
+
+@router.get("/note")
+def read_note(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """메모 읽기 — 명단을 볼 수 있으면 메모도 볼 수 있어야 한다.
+    벽에 붙는 종이에 같이 적히는 내용이라, 보는 사람을 더 좁힐 이유가 없다."""
+    return ApiResponse(success=True, data=_note_view(_note_row(db)))
+
+
+class NoteBody(BaseModel):
+    content: str = ""
+
+
+@router.put("/note")
+def save_note(body: NoteBody, db: Session = Depends(get_db),
+              current_user: User = Depends(_editor)):
+    """메모 쓰기 — 담당 배정을 고칠 수 있는 사람과 같은 권한.
+
+    한 줄만 둔다. 여럿이 각자 적어 두면 어느 것이 지금 유효한지 알 수 없고,
+    명단은 벽에 붙는 문서라 붙어 있는 것이 곧 지침이어야 한다.
+    """
+    row = _note_row(db)
+    text = (body.content or "").strip()
+    if len(text) > NOTE_MAX:
+        raise HTTPException(400, f"메모는 {NOTE_MAX}자를 넘을 수 없습니다. "
+                                 "명단을 밀어내면 아무도 안 읽습니다.")
+    row.content = text or None
+    row.updated_by = current_user.name
+    row.updated_at = _note_now()
+    db.commit(); db.refresh(row)
+    return ApiResponse(success=True, data=_note_view(row))
 
 
 @router.put("/{resident_id}")

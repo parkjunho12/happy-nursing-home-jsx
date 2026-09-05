@@ -118,3 +118,6 @@ from app.models.staff_eval import (
 
 # 응급벨 명단 — 벨 번호마다 어느 어르신인지
 from app.models.emergency_bell import EmergencyBell
+
+# 담당 어르신 명단에 함께 붙는 메모
+from app.models.assign_note import AssignNote
