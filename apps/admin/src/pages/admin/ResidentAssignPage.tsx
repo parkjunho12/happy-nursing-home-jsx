@@ -68,7 +68,7 @@ export default function ResidentAssignPage() {
    *  지금 정원으로 알 수 없고, 어차피 그날 기록은 고칠 수도 없다.
    */
   const tableRows = useMemo(() => {
-    type Row = { kind: 'person'; r: AssignRow } | { kind: 'empty'; room: string; free: number }
+    type Row = { kind: 'person'; r: AssignRow } | { kind: 'vacant'; room: string; free: number }
     const out: Row[] = []
     const capOf = new Map<string, number>()
     roomInfo.find(f => f.floor === floor)?.rooms.forEach(r => capOf.set(r.room, r.capacity))
@@ -79,15 +79,32 @@ export default function ResidentAssignPage() {
       const group: AssignRow[] = []
       while (i < shown.length && shown[i].room === room) { group.push(shown[i]); i++ }
       group.forEach(r => out.push({ kind: 'person', r }))
-      if (!past && room) {
-        // 빈 침대를 한 줄씩 늘어놓으면 표가 화면을 벗어난다. 방마다 한 줄로
-        // 묶고 몇 자리인지 숫자로 적는다 — 어느 방에 몇 자리 남았는지가
-        // 알고 싶은 것이지, 침대 하나하나를 보려는 게 아니다.
-        const free = (capOf.get(room) ?? 0) - group.length
-        if (free > 0) out.push({ kind: 'empty', room, free })
-      }
+    }
+    // 아무도 안 계신 방은 붙일 줄이 없어 표에서 통째로 사라진다.
+    // 정작 자리가 가장 많이 남은 방인데 안 보이면 안 된다 — 한 줄로 넣는다.
+    if (!past) {
+      const has = new Set(shown.map(r => r.room).filter(Boolean))
+      roomInfo.find(f => f.floor === floor)?.rooms
+        .filter(r => !has.has(r.room) && r.capacity > 0)
+        .sort((a, b) => a.room.localeCompare(b.room, 'ko', { numeric: true }))
+        .forEach(r => out.push({ kind: 'vacant', room: r.room, free: r.capacity }))
     }
     return out
+  }, [shown, roomInfo, floor, past])
+
+  /** 방마다 남은 자리 수. 줄을 따로 만들지 않고 호실 칸에 배지로 붙인다 —
+   *  빈 침대를 한 줄씩 늘어놓으면 그것만으로 표가 화면을 벗어난다.
+   *  알고 싶은 것은 '어느 방에 몇 자리 남았나' 이지 침대 하나하나가 아니다. */
+  const freeByRoom = useMemo(() => {
+    const m = new Map<string, number>()
+    if (past) return m
+    const cnt = new Map<string, number>()
+    shown.forEach(r => { if (r.room) cnt.set(r.room, (cnt.get(r.room) ?? 0) + 1) })
+    roomInfo.find(f => f.floor === floor)?.rooms.forEach(r => {
+      const free = r.capacity - (cnt.get(r.room) ?? 0)
+      if (free > 0) m.set(r.room, free)
+    })
+    return m
   }, [shown, roomInfo, floor, past])
 
   /** 빈자리에 넣을 수 있는 분 — 이름·호실로 찾는다.
@@ -326,17 +343,17 @@ export default function ResidentAssignPage() {
               </thead>
               <tbody>
                 {tableRows.map(row => {
-                  if (row.kind === 'empty') {
-                    // 빈 침대 — 성함 자리를 누르면 어르신을 골라 넣는다
+                  if (row.kind === 'vacant') {
+                    // 아무도 안 계신 방 — 한 줄로만
                     return (
-                      <tr key={`empty-${row.room}`} className="bg-gray-50/40">
+                      <tr key={`vac-${row.room}`} className="bg-emerald-50/30 border-t-2 border-t-gray-300">
                         <td className="border-b border-gray-100 px-2 py-0 text-center">
-                          <span className="inline-block w-11 text-center text-[10px] text-gray-300">{row.room}</span>
+                          <span className="inline-block w-11 text-center text-[11px] font-bold text-gray-400">{row.room}</span>
                         </td>
                         <td className="border-b border-gray-100 px-2 py-0" colSpan={4}>
                           <button onClick={() => { setFill({ floor, room: row.room }); setFillQ('') }}
-                            className="w-full text-left px-1.5 py-px text-[10px] leading-tight rounded border border-dashed border-gray-300 text-gray-400 hover:border-teal-400 hover:text-teal-600 transition-colors">
-                            빈자리 {row.free} — 눌러서 어르신 고르기
+                            className="px-1.5 py-px text-[10px] leading-tight rounded border border-dashed border-emerald-300 text-emerald-700 hover:bg-emerald-50">
+                            빈방 {row.free}자리 — 눌러서 어르신 고르기
                           </button>
                         </td>
                       </tr>
@@ -359,6 +376,14 @@ export default function ResidentAssignPage() {
                             ? <Loader2 size={11} className="animate-spin mx-auto" />
                             : (r.room || '-')}
                         </button>
+                        {/* 남은 자리 — 그 방 첫 줄에만. 눌러서 어르신을 골라 넣는다 */}
+                        {first && r.room && freeByRoom.get(r.room) && (
+                          <button onClick={() => { setFill({ floor, room: r.room! }); setFillQ('') }}
+                            title={`${r.room}호에 ${freeByRoom.get(r.room)}자리 비어 있습니다 — 눌러서 어르신 고르기`}
+                            className="ml-0.5 px-1 rounded text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 align-middle">
+                            빈{freeByRoom.get(r.room)}
+                          </button>
+                        )}
                       </td>
                       <td className={`${td} font-bold text-gray-800 whitespace-nowrap`}>
                         {r.name}
