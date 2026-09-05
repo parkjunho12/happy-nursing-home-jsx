@@ -553,7 +553,7 @@ export default function ResidentAssignPage() {
                         <tr key={`e-${row.room}-${row.idx}`} className={first ? 'asg-room-top' : ''}>
                           <td style={{ ...cell, textAlign: 'center', fontWeight: 800,
                             fontSize: `${room}px`, color: first ? '#0f766e' : '#cbd5e1' }}>
-                            {first ? row.room : ''}
+                            {first ? `${row.room}호` : ''}
                           </td>
                           {/* 빈자리 — 손으로 적을 수 있게 비워 둔다 */}
                           <td style={{ ...cell, color: '#cbd5e1' }}>빈자리</td>
