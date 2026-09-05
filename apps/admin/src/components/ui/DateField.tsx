@@ -97,7 +97,13 @@ export default function DateField({
           value={text}
           placeholder={placeholder}
           disabled={disabled}
-          onFocus={() => setFocused(true)}
+          onFocus={e => {
+            setFocused(true)
+            // 이미 값이 있으면 통째로 고른다. 그러지 않으면 커서가 끝에 놓여
+            // 친 숫자가 뒤에 붙고, 앞 여덟 자리만 남아 값이 그대로다 —
+            // 화면상 '키보드로는 입력이 안 되는' 것처럼 보인다.
+            e.currentTarget.select()
+          }}
           onChange={e => handleType(e.target.value)}
           onBlur={handleBlur}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleBlur() } }}
