@@ -24,7 +24,19 @@ export interface AssignLog {
   before?: string | null; after?: string | null; changed_by?: string | null; at?: string | null
 }
 
+export interface AssignNote {
+  content: string
+  updated_at?: string | null
+  updated_by?: string | null
+  max_length: number
+}
+
 export const assignmentAPI = {
+  /** 명단에 함께 붙는 메모 — 어르신 한 분이 아니라 다 같이 알아야 하는 것 */
+  note: () => apiClient.get(`${BASE}/note`).then(unwrap<AssignNote>),
+  saveNote: (content: string) =>
+    apiClient.put(`${BASE}/note`, { content }).then(unwrap<AssignNote>),
+
   roster: () => apiClient.get(BASE).then(unwrap<{ rows: AssignRow[]; care_staff: StaffOpt[]; rehab_staff: StaffOpt[] }>),
   setCare: (rid: string, staffId: string | null) =>
     apiClient.put(`${BASE}/${rid}`, { care_staff_id: staffId, set_care: true }).then(r => r.data),
