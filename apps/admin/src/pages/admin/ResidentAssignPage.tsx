@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { History, Loader2, Printer, Search, Users, Wand2, X, StickyNote, Check } from 'lucide-react'
-import { assignmentAPI, type AssignRow, type StaffOpt, type AssignLog, type AssignNote } from '@/api/assignmentClient'
+import { History, Loader2, Printer, Search, Users, Wand2, X, StickyNote, Check, CalendarClock } from 'lucide-react'
+import { assignmentAPI, type AssignRow, type StaffOpt, type AssignLog, type AssignNote, type SnapDay } from '@/api/assignmentClient'
 import RoomPicker from '@/components/eval/RoomPicker'
 import { useLtcStore } from '@/store/ltc'
 
@@ -25,6 +25,12 @@ export default function ResidentAssignPage() {
   const [note, setNote] = useState<AssignNote | null>(null)
   const [noteDraft, setNoteDraft] = useState('')
   const [noteBusy, setNoteBusy] = useState(false)
+  // 그날 명단 보기 — null 이면 지금 명단(고칠 수 있는 상태)
+  const [days, setDays] = useState<SnapDay[]>([])
+  const [viewDate, setViewDate] = useState<string | null>(null)
+  const [snapRows, setSnapRows] = useState<AssignRow[] | null>(null)
+  const [snapMemo, setSnapMemo] = useState('')
+  const [snapBusy, setSnapBusy] = useState(false)
 
   const load = () => {
     assignmentAPI.roster()
@@ -36,8 +42,10 @@ export default function ResidentAssignPage() {
   }
   useEffect(load, [])
 
-  const floors = useMemo(() => Array.from(new Set(rows.map(r => r.floor))).sort(), [rows])
-  const shown = rows.filter(r => r.floor === floor)
+  // 지난 날을 보는 중이면 그날 명단을, 아니면 지금 명단을 그린다
+  const base = snapRows ?? rows
+  const floors = useMemo(() => Array.from(new Set(base.map(r => r.floor))).sort(), [base])
+  const shown = base.filter(r => r.floor === floor)
   const today = todayISO()
 
   // 담당별 집계 — 균등한지 한눈에
@@ -74,6 +82,23 @@ export default function ResidentAssignPage() {
     .then(n => { setNote(n); setNoteDraft(n.content) })
     .catch(() => setNote(null))
   useEffect(() => { loadNote() }, [])
+
+  const loadDays = () => assignmentAPI.snapshots()
+    .then(d => setDays(d.days)).catch(() => setDays([]))
+  useEffect(() => { loadDays() }, [])
+
+  /** 그날 탭을 누르면 그날 명단으로 바꿔 보여준다. 고칠 수는 없다 —
+   *  지난 날 기록을 고치면 그건 더 이상 그날 모습이 아니다. */
+  const openDay = async (d: string | null) => {
+    if (d === null) { setViewDate(null); setSnapRows(null); return }
+    setSnapBusy(true)
+    try {
+      const s2 = await assignmentAPI.snapshot(d)
+      setSnapRows(s2.rows); setSnapMemo(s2.memo); setViewDate(d)
+    } catch { alert('그날 기록을 불러오지 못했습니다.') }
+    finally { setSnapBusy(false) }
+  }
+  const past = viewDate !== null
 
   const saveNote = async () => {
     setNoteBusy(true)
@@ -182,6 +207,50 @@ export default function ResidentAssignPage() {
         </div>
       </div>
 
+      {/* ── 날짜 탭 ──
+          명단이 바뀐 날마다 한 장씩 남는다. 눌러서 그날 모습을 본다.
+          '지금' 은 고칠 수 있고, 지난 날은 볼 수만 있다 — 지난 기록을
+          고치면 그건 더 이상 그날 모습이 아니다. */}
+      {days.length > 0 && (
+        <div className="mb-3">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <CalendarClock size={13} className="text-gray-400" />
+            <span className="text-[11px] text-gray-400">
+              명단이 바뀐 날 — 눌러서 그날 명단을 봅니다
+            </span>
+            {snapBusy && <Loader2 size={12} className="animate-spin text-gray-300" />}
+          </div>
+          <div className="flex gap-1.5 flex-wrap">
+            <button onClick={() => openDay(null)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                !past ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}>
+              지금
+            </button>
+            {days.map(d => {
+              const [, mo, da] = d.date.split('-')
+              return (
+                <button key={d.date} onClick={() => openDay(d.date)}
+                  title={`${d.date} · ${d.count}명${d.changed_by ? ` · ${d.changed_by}` : ''}`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                    viewDate === d.date ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-gray-500 border-gray-200 hover:border-teal-400'}`}>
+                  {Number(mo)}/{Number(da)}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {past && (
+        <p className="mb-3 text-xs text-teal-900 bg-teal-50 border border-teal-200 rounded-xl px-3 py-2 flex items-center gap-1.5">
+          <CalendarClock size={14} className="shrink-0" />
+          <span>
+            <b>{viewDate}</b>의 명단을 보고 있습니다 — 지난 기록이라 고칠 수 없습니다.
+            고치시려면 <b>지금</b>을 눌러주세요.
+          </span>
+        </p>
+      )}
+
       {/* 층 탭 */}
       <div className="flex gap-1.5 mb-3">
         {floors.map(f => (
@@ -214,8 +283,8 @@ export default function ResidentAssignPage() {
                 return (
                   <tr key={r.resident_id} className={`${first ? 'border-t-2 border-t-gray-300' : ''} ${incoming ? 'bg-amber-50/40' : ''}`}>
                     <td className={`${td} text-center`}>
-                      <button onClick={() => setBed(r)} disabled={bedBusy === r.resident_id}
-                        title="눌러서 호실 변경 · 배정 해제"
+                      <button onClick={() => !past && setBed(r)} disabled={past || bedBusy === r.resident_id}
+                        title={past ? '지난 날 기록은 고칠 수 없습니다' : '눌러서 호실 변경 · 배정 해제'}
                         className={`w-12 text-center font-extrabold rounded-lg py-0.5 transition-colors ${
                           !r.room ? 'text-gray-300 border border-dashed border-gray-300 hover:border-teal-400 hover:text-teal-500'
                           : first ? 'bg-gray-800 text-white hover:bg-teal-600'
@@ -230,22 +299,23 @@ export default function ResidentAssignPage() {
                       {incoming && <span className="ml-1 text-[10px] font-bold text-amber-600">{Number(r.admission_date!.slice(5, 7))}/{Number(r.admission_date!.slice(8, 10))} 입소</span>}
                     </td>
                     <td className={td}>
-                      <button onClick={() => openPick(r.resident_id, 'care', r.name)}
+                      <button onClick={() => !past && openPick(r.resident_id, 'care', r.name)} disabled={past}
                         className={`w-full px-2 py-1.5 text-xs rounded-lg border text-left font-semibold transition-colors ${
                           r.care_staff_name ? 'border-teal-100 bg-teal-50/60 text-teal-800 hover:bg-teal-50' : 'border-dashed border-gray-300 text-gray-400 hover:border-teal-300'}`}>
                         {r.care_staff_name ?? '+ 배정'}
                       </button>
                     </td>
                     <td className={td}>
-                      <button onClick={() => openPick(r.resident_id, 'rehab', r.name)}
+                      <button onClick={() => !past && openPick(r.resident_id, 'rehab', r.name)} disabled={past}
                         className={`w-full px-2 py-1.5 text-xs rounded-lg border text-left font-semibold transition-colors ${
                           r.rehab_staff_name ? 'border-indigo-100 bg-indigo-50/60 text-indigo-800 hover:bg-indigo-50' : 'border-dashed border-gray-300 text-gray-400 hover:border-indigo-300'}`}>
                         {r.rehab_staff_name ?? '+ 배정'}
                       </button>
                     </td>
                     <td className={td}>
-                      <input defaultValue={r.note ?? ''} placeholder="메모"
-                        onBlur={async e => { const v = e.target.value; if (v !== (r.note ?? '')) { await assignmentAPI.setNote(r.resident_id, v); patch(r.resident_id, { note: v }) } }}
+                      <input key={`${viewDate ?? 'now'}-${r.resident_id}`}
+                        defaultValue={r.note ?? ''} placeholder={past ? '' : '메모'} readOnly={past}
+                        onBlur={async e => { if (past) return; const v = e.target.value; if (v !== (r.note ?? '')) { await assignmentAPI.setNote(r.resident_id, v); patch(r.resident_id, { note: v }) } }}
                         className="w-full text-xs bg-transparent focus:outline-none focus:ring-2 focus:ring-gray-200 rounded px-1 py-0.5" />
                     </td>
                   </tr>
@@ -462,14 +532,16 @@ export default function ResidentAssignPage() {
 
         <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 print:border-gray-400 print:bg-white">
           <p className="hidden print:block text-xs font-bold text-gray-700 mb-1">전체 어르신 메모</p>
+          {past && <p className="text-[11px] text-teal-700 font-semibold mb-1 print:hidden">{viewDate} 당시 메모</p>}
           <textarea
-            value={noteDraft}
+            value={past ? snapMemo : noteDraft}
+            readOnly={past}
             onChange={e => setNoteDraft(e.target.value)}
             maxLength={note?.max_length ?? 1000}
             rows={3}
             placeholder="예) 이번 주 독감 예방접종 — 목요일 오전, 해당 어르신은 개별 안내드립니다."
             className="eb-note w-full bg-transparent text-sm text-gray-800 resize-none focus:outline-none placeholder:text-gray-400" />
-          <div className="flex items-center gap-2 mt-1 print:hidden">
+          <div className={`items-center gap-2 mt-1 print:hidden ${past ? 'hidden' : 'flex'}`}>
             <button onClick={saveNote}
               disabled={noteBusy || noteDraft === (note?.content ?? '')}
               className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-bold disabled:opacity-40">

@@ -121,3 +121,6 @@ from app.models.emergency_bell import EmergencyBell
 
 # 담당 어르신 명단에 함께 붙는 메모
 from app.models.assign_note import AssignNote
+
+# 담당 어르신 명단의 그날 모습
+from app.models.assign_snapshot import AssignSnapshot

@@ -7,6 +7,8 @@
 """
 from __future__ import annotations
 from typing import List, Optional
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -15,11 +17,13 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
 from app.models.assign_note import AssignNote, NOTE_MAX, now_kst as _note_now
+from app.models.assign_snapshot import AssignSnapshot, today_kst, now_kst as _snap_now
 from app.models.assignment import ResidentAssignment, ResidentAssignmentLog
 from app.models.eval import LtcResident, LtcStaffMember
 from app.schemas.response import ApiResponse
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 CARE_POSITIONS = ("요양보호사",)                 # 담당 요양팀 후보
 # 담당 재활팀 — 물리치료사·작업치료사. 하는 일이 같아 권한도 같이 간다.
@@ -42,9 +46,9 @@ def _log(db: Session, r: LtcResident, field: str, before: Optional[str],
                                  field=field, before=before, after=after, changed_by=who))
 
 
-@router.get("")
-def roster(db: Session = Depends(get_db), _: User = Depends(_editor)):
-    """층·호실별 명단 + 배정 + 담당별 집계."""
+def _roster_rows(db: Session) -> list:
+    """지금 명단. 화면과 그날 기록이 같은 함수를 쓰게 한다 —
+    따로 만들면 나중에 한쪽만 고쳐져서 '그날 명단' 이 화면과 달라진다."""
     residents = (db.query(LtcResident)
                  .filter(LtcResident.status.in_(["active", "pending"])).all())   # 예정자 포함
     asg = {a.resident_id: a for a in db.query(ResidentAssignment).all()}
@@ -62,6 +66,39 @@ def roster(db: Session = Depends(get_db), _: User = Depends(_editor)):
             "note": a.note if a else None,
         })
     rows.sort(key=lambda x: (x["floor"], x["room"] or "999", x["name"]))
+    return rows
+
+
+def save_snapshot(db: Session, who: Optional[str]) -> None:
+    """그날 명단을 통째로 남긴다. 바뀔 때마다 부른다.
+
+    하루에 여러 번 바뀌면 덮어쓴다 — 그날 탭이 보여주는 것은 '그날 마지막
+    모습' 이다. 퇴근할 때 뽑아 붙였을 종이와 같다.
+
+    여기서 나는 오류는 삼킨다. 기록을 남기려다 배정 자체가 실패하면
+    본말이 뒤집힌다.
+    """
+    try:
+        d = today_kst()
+        note = db.query(AssignNote).filter(AssignNote.id == 1).first()
+        row = db.query(AssignSnapshot).filter(AssignSnapshot.date == d).first()
+        if not row:
+            row = AssignSnapshot(date=d)
+            db.add(row)
+        row.rows = _roster_rows(db)
+        row.memo = (note.content if note else None)
+        row.changed_by = who
+        row.updated_at = _snap_now()
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.warning("담당 명단 그날 기록을 남기지 못했습니다", exc_info=True)
+
+
+@router.get("")
+def roster(db: Session = Depends(get_db), _: User = Depends(_editor)):
+    """층·호실별 명단 + 배정 + 담당별 집계."""
+    rows = _roster_rows(db)
 
     # 입사 예정자도 포함 — 새로 오실 선생님을 미리 배정해둘 수 있게
     staff = db.query(LtcStaffMember).filter(LtcStaffMember.status.in_(["active", "pending"])).all()
@@ -149,7 +186,46 @@ def save_note(body: NoteBody, db: Session = Depends(get_db),
     row.updated_by = current_user.name
     row.updated_at = _note_now()
     db.commit(); db.refresh(row)
+    # 메모도 명단과 함께 종이에 찍히던 것이라 그날 기록에 같이 남긴다
+    save_snapshot(db, current_user.name)
     return ApiResponse(success=True, data=_note_view(row))
+
+
+# ── 그날 명단 보기 ───────────────────────────────────────────────
+# 명단이 바뀐 날마다 한 장씩 남는다. 탭을 눌러 그날 모습을 본다.
+
+
+@router.get("/snapshots")
+def list_snapshots(db: Session = Depends(get_db), _: User = Depends(_editor)):
+    """명단이 바뀐 날 목록 — 최근 것이 먼저.
+
+    너무 오래된 것까지 탭으로 늘어놓으면 정작 최근 것을 못 찾는다.
+    목록은 최근 60일치만 준다(기록 자체는 지우지 않는다).
+    """
+    rows = (db.query(AssignSnapshot)
+            .order_by(AssignSnapshot.date.desc()).limit(60).all())
+    return ApiResponse(success=True, data={
+        "today": today_kst(),
+        "days": [{
+            "date": r.date,
+            "count": len(r.rows or []),
+            "changed_by": r.changed_by,
+            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+        } for r in rows],
+    })
+
+
+@router.get("/snapshots/{date}")
+def read_snapshot(date: str, db: Session = Depends(get_db), _: User = Depends(_editor)):
+    """그날 명단. 그날 붙어 있던 메모도 함께."""
+    r = db.query(AssignSnapshot).filter(AssignSnapshot.date == date).first()
+    if not r:
+        raise HTTPException(404, "그날 기록이 없습니다.")
+    return ApiResponse(success=True, data={
+        "date": r.date, "rows": r.rows or [], "memo": r.memo or "",
+        "changed_by": r.changed_by,
+        "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+    })
 
 
 @router.put("/{resident_id}")
@@ -201,6 +277,7 @@ def assign(resident_id: str, body: AssignBody, db: Session = Depends(get_db),
             r.room = new_room or None
     a.updated_by = who
     db.commit()
+    save_snapshot(db, who)
     return ApiResponse(success=True, message="저장했습니다.")
 
 
@@ -271,6 +348,7 @@ def auto_assign(kind: str = Query(..., description="care | rehab"),
         load[target.id] += 1
         made += 1
     db.commit()
+    save_snapshot(db, who)
     return ApiResponse(success=True, data={
         "assigned": made,
         "load": [{"name": s.name, "count": load[s.id]} for s in
