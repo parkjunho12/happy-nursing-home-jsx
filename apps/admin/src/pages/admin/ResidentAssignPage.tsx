@@ -110,6 +110,124 @@ export default function ResidentAssignPage() {
     () => buildRows(floor, shown, !past && showEmpty),
     [shown, roomInfo, floor, past, showEmpty])
 
+  /** 인쇄 표 하나. 층별 인쇄와 전체 층 인쇄가 같은 표를 쓴다 —
+   *  두 벌로 두면 한쪽만 고쳐져 같은 명단이 종이마다 달라진다. */
+  const printTable = (list: PrintRow[], sz: { f: number; p: number }) => {
+    // 호실 바뀔 때마다 음영 교차 — 방 단위가 한눈에 들어온다
+    let pv = '__'; let band = 0
+    const room = sz.f + 2                    // 호실은 조금 크게
+    const head = Math.max(8, sz.f - 3)       // 머리글은 조금 작게
+    return (
+      <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+        <colgroup>
+          <col style={{ width: '14%' }} /><col style={{ width: '22%' }} />
+          <col style={{ width: '21%' }} /><col style={{ width: '21%' }} /><col style={{ width: '22%' }} />
+        </colgroup>
+        <thead>
+          <tr>
+            {['호실', '성함', '담당 요양팀', '담당 재활팀', '기타'].map(h => (
+              <th key={h} style={{
+                border: '1px solid #99f6e4', background: '#ccfbf1', color: '#115e59',
+                padding: `${sz.p}px 4px`, fontSize: `${head}px`, fontWeight: 800,
+              }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {list.map((row, k) => {
+            if (row.kind === 'empty') {
+              const first = row.room !== pv
+              if (first) { pv = row.room; band += 1 }
+              const cell: React.CSSProperties = {
+                border: '1px solid #e2e8f0', background: band % 2 === 0 ? '#f8fafc' : 'white',
+                lineHeight: 1.3, padding: `${sz.p}px 7px`, fontSize: `${sz.f}px`,
+              }
+              return (
+                <tr key={`e-${row.room}-${row.idx}`} className={first ? 'asg-room-top' : ''}>
+                  <td style={{ ...cell, textAlign: 'center', fontWeight: 800,
+                    fontSize: `${room}px`, color: first ? '#0f766e' : '#cbd5e1' }}>
+                    {first ? `${row.room}호` : ''}
+                  </td>
+                  {/* 빈자리 — 손으로 적을 수 있게 비워 둔다 */}
+                  <td style={{ ...cell, color: '#cbd5e1' }}>빈자리</td>
+                  <td style={{ ...cell }} />
+                  <td style={{ ...cell }} />
+                  <td style={{ ...cell }} />
+                </tr>
+              )
+            }
+            const r = row.r
+            const first = r.room !== pv
+            if (first) { pv = r.room; band += 1 }
+            const incoming = (r.admission_date ?? '') > today
+            const bg = incoming ? '#fffbeb' : band % 2 === 0 ? '#f8fafc' : 'white'
+            const cell: React.CSSProperties = {
+              border: '1px solid #e2e8f0', background: bg, lineHeight: 1.3,
+              padding: `${sz.p}px 7px`, fontSize: `${sz.f}px`,
+            }
+            return (
+              <tr key={`p-${r.resident_id}-${k}`} className={first ? 'asg-room-top' : ''}>
+                <td style={{ ...cell, textAlign: 'center' }}>
+                  {first && <span style={{
+                    display: 'inline-block', minWidth: 46, borderRadius: 8,
+                    background: '#f0fdfa', border: '1px solid #99f6e4', color: '#0f766e',
+                    padding: '2px 8px',
+                    fontSize: `${room}px`, fontWeight: 900,
+                  }}>{r.room}호</span>}
+                </td>
+                <td style={{ ...cell, fontWeight: 800, color: '#111827', fontSize: `${sz.f + 1}px` }}>
+                  {r.name}
+                  {incoming && <span style={{ marginLeft: 5, fontSize: `${Math.max(8, sz.f - 4)}px`, fontWeight: 800, color: '#b45309', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 6, padding: '1px 5px', verticalAlign: 'middle' }}>입소 예정</span>}
+                </td>
+                <td style={{ ...cell, textAlign: 'center', color: '#111827', fontWeight: 700 }}>{r.care_staff_name ?? <span style={{ color: '#cbd5e1', fontWeight: 400 }}>—</span>}</td>
+                <td style={{ ...cell, textAlign: 'center', color: '#111827', fontWeight: 700 }}>{r.rehab_staff_name ?? <span style={{ color: '#cbd5e1', fontWeight: 400 }}>—</span>}</td>
+                <td style={{ ...cell, fontSize: `${Math.max(8, sz.f - 2)}px`, color: '#64748b' }}>
+                  {[incoming ? `${Number(r.admission_date!.slice(5, 7))}/${Number(r.admission_date!.slice(8, 10))} 입소` : '', r.note ?? ''].filter(Boolean).join(' · ')}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    )
+  }
+
+  /** 전체 층 인쇄 — 층을 두 단으로 나란히 놓아 한 장에 담는다.
+   *  세로로 이어 붙이면 층마다 한 장씩 나가 세 장이 된다. 옆으로 눕히고
+   *  두 단으로 나누면 같은 내용이 한 장에 들어간다.
+   *
+   *  단에 넣을 때는 줄 수가 적은 쪽부터 채운다 — 한 단만 길면 그만큼
+   *  종이가 넘치고, 넘치면 어차피 두 장이 된다. */
+  const PRINT_COLS = 2
+  const printCols = useMemo(() => {
+    const cols: { floor: string; list: PrintRow[]; cur: number; incom: number }[][] =
+      Array.from({ length: PRINT_COLS }, () => [])
+    const tot = new Array(PRINT_COLS).fill(0)
+    for (const f of floors) {
+      const people = rows.filter(r => r.floor === f)
+      const list = buildRows(f, people, true)
+      if (!list.length) continue
+      const cur = people.filter(r => (r.admission_date ?? '') <= today).length
+      let i = 0
+      for (let k = 1; k < PRINT_COLS; k++) if (tot[k] < tot[i]) i = k
+      cols[i].push({ floor: f, list, cur, incom: people.length - cur })
+      tot[i] += list.length + 2   // +2 = 층 이름 줄과 표 머리글
+    }
+    return cols.filter(c => c.length)
+  }, [rows, roomInfo, floors, today])
+
+  /** 두 단 중 긴 쪽에 맞춰 글자 크기를 정한다. 짧은 쪽 기준으로 잡으면
+   *  긴 쪽이 넘쳐 두 장이 된다. 한 장에 담는 것이 이 인쇄의 목적이다. */
+  const compactSize = useMemo(() => {
+    const n = Math.max(1, ...printCols.map(c =>
+      c.reduce((s, x) => s + x.list.length + 2, 0)))
+    return n <= 24 ? { f: 13, p: 2 }
+         : n <= 30 ? { f: 12, p: 1.5 }
+         : n <= 36 ? { f: 11, p: 1 }
+         : n <= 44 ? { f: 10, p: 0.5 }
+         :           { f: 9,  p: 0.5 }
+  }, [printCols])
+
   /** 빈자리에 넣을 수 있는 분 — 이름·호실로 찾는다.
    *  이미 그 방에 계신 분은 뺀다(같은 방으로 옮길 일이 없다). */
   const fillCandidates = useMemo(() => {
@@ -474,9 +592,43 @@ export default function ResidentAssignPage() {
 
       </div>{/* /print:hidden */}
 
-      {/* ── 인쇄 전용 — 층마다 한 장, 셀렉트 대신 글자로 ── */}
+      {/* ── 인쇄 전용 — 셀렉트 대신 글자로 ──
+          전체 층: 눕혀서 두 단으로, 한 장. 훑어보는 용도.
+          이 층만: 세로 한 장에 그 층만 크게. 벽에 붙이는 용도. */}
       <div className="hidden print:block">
-        {(printAll ? floors : [floor]).map(f => {
+        {printAll ? (
+          <div className="asg-print-page">
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', borderBottom: '3px solid #0d9488', paddingBottom: '5px', marginBottom: '7px' }}>
+              <div>
+                <p style={{ fontSize: '9px', fontWeight: 800, color: '#0d9488', letterSpacing: '0.2em', margin: 0 }}>행복한요양원 · 정성으로 모시겠습니다</p>
+                <h1 style={{ fontSize: '21px', fontWeight: 900, color: '#111827', margin: '2px 0 0', letterSpacing: '0.08em' }}>담당 어르신 명단 <span style={{ fontSize: '13px', color: '#0d9488' }}>전체 층</span></h1>
+              </div>
+              <p style={{ fontSize: '10px', color: '#6b7280', margin: 0 }}>
+                현원 <b style={{ color: '#111827' }}>{rows.filter(r => (r.admission_date ?? '') <= today).length}명</b> · 출력 {new Date().toLocaleDateString('ko-KR')}
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '7mm', alignItems: 'flex-start' }}>
+              {printCols.map((col, i) => (
+                <div key={i} style={{ flex: 1, minWidth: 0 }}>
+                  {col.map(({ floor: f, list, cur, incom }) => (
+                    <div key={f} style={{ marginBottom: '4mm' }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: 3 }}>
+                        <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 7, background: '#0d9488', color: 'white', fontSize: `${compactSize.f + 3}px`, fontWeight: 900 }}>{f}</span>
+                        <span style={{ fontSize: `${compactSize.f - 1}px`, color: '#6b7280' }}>
+                          현원 <b style={{ color: '#111827' }}>{cur}명</b>{incom > 0 && <> · 입소 예정 <b style={{ color: '#b45309' }}>{incom}명</b></>}
+                        </span>
+                      </div>
+                      {printTable(list, compactSize)}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+            <p style={{ fontSize: '8px', color: '#9ca3af', textAlign: 'right', margin: '4px 2px 0' }}>
+              ※ 담당 변경은 관리자 페이지 「담당 어르신 명단」에서 — 변경 이력이 함께 남습니다 · 행복한요양원
+            </p>
+          </div>
+        ) : [floor].map(f => {
           const people = rows.filter(r => r.floor === f)
           const cur = people.filter(r => (r.admission_date ?? '') <= today).length
           const incom = people.length - cur
@@ -494,8 +646,6 @@ export default function ResidentAssignPage() {
             (_, i) => list.slice(i * perPage, (i + 1) * perPage))
 
           return chunks.map((chunk, ci) => {
-          // 호실 바뀔 때마다 음영 교차 — 방 단위가 한눈에 들어온다
-          let pv = '__'; let band = 0
           // 한 장(A4)에 들어가는 선에서 최대한 크게. 인원이 적을수록 더 키운다.
           // 현장에서 벽에 붙여놓고 멀리서 보는 표라 글자 크기가 곧 쓸모다.
           // 크기는 A4 한 장 기준으로 실제 인쇄해 재서 정한 값이다(측정 최대치보다 한 단계 여유).
@@ -506,7 +656,6 @@ export default function ResidentAssignPage() {
                    : n <= 32 ? { f: 13,   p: 3 }
                    : n <= 36 ? { f: 12,   p: 2 }
                    :           { f: 11,   p: 1.5 }   // 빈자리까지 넣으면 한 층이 마흔 줄 가까이 된다
-          const room = sz.f + 2, head = sz.f - 3   // 호실은 크게, 머리글은 조금 작게
           return (
             <div key={`${f}-${ci}`} className="asg-print-page">
               {/* 머리글 */}
@@ -524,78 +673,7 @@ export default function ResidentAssignPage() {
                   </p>
                 </div>
               </div>
-              {/* 명단 표 */}
-              <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-                <colgroup>
-                  <col style={{ width: '14%' }} /><col style={{ width: '22%' }} />
-                  <col style={{ width: '21%' }} /><col style={{ width: '21%' }} /><col style={{ width: '22%' }} />
-                </colgroup>
-                <thead>
-                  <tr>
-                    {['호실', '성함', '담당 요양팀', '담당 재활팀', '기타'].map(h => (
-                      <th key={h} style={{
-                        border: '1px solid #99f6e4', background: '#ccfbf1', color: '#115e59',
-                        padding: `${sz.p}px 4px`, fontSize: `${head}px`, fontWeight: 800,
-                      }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {chunk.map((row, k) => {
-                    if (row.kind === 'empty') {
-                      const first = row.room !== pv
-                      if (first) { pv = row.room; band += 1 }
-                      const cell: React.CSSProperties = {
-                        border: '1px solid #e2e8f0', background: band % 2 === 0 ? '#f8fafc' : 'white',
-                        lineHeight: 1.3, padding: `${sz.p}px 7px`, fontSize: `${sz.f}px`,
-                      }
-                      return (
-                        <tr key={`e-${row.room}-${row.idx}`} className={first ? 'asg-room-top' : ''}>
-                          <td style={{ ...cell, textAlign: 'center', fontWeight: 800,
-                            fontSize: `${room}px`, color: first ? '#0f766e' : '#cbd5e1' }}>
-                            {first ? `${row.room}호` : ''}
-                          </td>
-                          {/* 빈자리 — 손으로 적을 수 있게 비워 둔다 */}
-                          <td style={{ ...cell, color: '#cbd5e1' }}>빈자리</td>
-                          <td style={{ ...cell }} />
-                          <td style={{ ...cell }} />
-                          <td style={{ ...cell }} />
-                        </tr>
-                      )
-                    }
-                    const r = row.r
-                    const first = r.room !== pv
-                    if (first) { pv = r.room; band += 1 }
-                    const incoming = (r.admission_date ?? '') > today
-                    const bg = incoming ? '#fffbeb' : band % 2 === 0 ? '#f8fafc' : 'white'
-                    const cell: React.CSSProperties = {
-                      border: '1px solid #e2e8f0', background: bg, lineHeight: 1.3,
-                      padding: `${sz.p}px 7px`, fontSize: `${sz.f}px`,
-                    }
-                    return (
-                      <tr key={`p-${r.resident_id}-${k}`} className={first ? 'asg-room-top' : ''}>
-                        <td style={{ ...cell, textAlign: 'center' }}>
-                          {first && <span style={{
-                            display: 'inline-block', minWidth: 46, borderRadius: 8,
-                            background: '#f0fdfa', border: '1px solid #99f6e4', color: '#0f766e',
-                            padding: '2px 8px',
-                            fontSize: `${room}px`, fontWeight: 900,
-                          }}>{r.room}호</span>}
-                        </td>
-                        <td style={{ ...cell, fontWeight: 800, color: '#111827', fontSize: `${sz.f + 1}px` }}>
-                          {r.name}
-                          {incoming && <span style={{ marginLeft: 5, fontSize: `${Math.max(9, sz.f - 4)}px`, fontWeight: 800, color: '#b45309', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 6, padding: '1px 5px', verticalAlign: 'middle' }}>입소 예정</span>}
-                        </td>
-                        <td style={{ ...cell, textAlign: 'center', color: '#111827', fontWeight: 700 }}>{r.care_staff_name ?? <span style={{ color: '#cbd5e1', fontWeight: 400 }}>—</span>}</td>
-                        <td style={{ ...cell, textAlign: 'center', color: '#111827', fontWeight: 700 }}>{r.rehab_staff_name ?? <span style={{ color: '#cbd5e1', fontWeight: 400 }}>—</span>}</td>
-                        <td style={{ ...cell, fontSize: `${sz.f - 2}px`, color: '#64748b' }}>
-                          {[incoming ? `${Number(r.admission_date!.slice(5, 7))}/${Number(r.admission_date!.slice(8, 10))} 입소` : '', r.note ?? ''].filter(Boolean).join(' · ')}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+              {printTable(chunk, sz)}
               {/* 담당별 인원 요약은 종이에 넣지 않는다 — 그 자리를 명단 글자 크기에 쓴다.
                   (화면 상단 집계에서 언제든 볼 수 있다) */}
               <p style={{ fontSize: '9px', color: '#9ca3af', textAlign: 'right', margin: '8px 2px 0' }}>
@@ -608,7 +686,8 @@ export default function ResidentAssignPage() {
       </div>
       <style>{`
         @media print {
-          @page { size: A4 portrait; margin: 10mm 12mm; }
+          /* 전체 층은 눕힌다 — 두 단을 나란히 놓아야 한 장에 들어간다 */
+          @page { size: A4 ${printAll ? 'landscape' : 'portrait'}; margin: ${printAll ? '8mm 10mm' : '10mm 12mm'}; }
           .asg-print-page { page-break-after: always; }
           .asg-print-page:last-child { page-break-after: auto; }
           .asg-room-top td { border-top: 2px solid #5eead4 !important; }
@@ -721,8 +800,10 @@ export default function ResidentAssignPage() {
       {/* ── 명단 아래 메모 ──
           어르신 한 분에 대한 이야기가 아니라, 이 명단을 보는 사람들이 다 같이
           알아야 하는 것을 적는 자리다 — '이번 주 독감 예방접종' 같은.
-          인쇄에도 함께 나간다. 벽에 붙는 종이에 지침이 같이 있어야 한다. */}
-      <section className="mt-3">
+
+          종이에는 내지 않는다. 벽에 붙는 명단은 어르신과 담당만 있어야 읽기
+          쉽고, 메모는 그때그때 바뀌어 붙여둔 종이의 것은 곧 옛말이 된다. */}
+      <section className="mt-3 print:hidden">
         <div className="flex items-center gap-1.5 mb-1.5 print:hidden">
           <StickyNote size={14} className="text-amber-600" />
           {/* 접어 둔다 — 한 층이 한 화면에 들어와야 한다.
@@ -734,7 +815,7 @@ export default function ResidentAssignPage() {
           </button>
           {!noteOpen && (
             <span className={`text-xs truncate ${(past ? snapMemo : note?.content) ? 'text-gray-700' : 'text-gray-400'}`}>
-              {(past ? snapMemo : note?.content) || '한 분이 아니라 다 같이 알아야 할 내용 — 명단과 함께 인쇄됩니다'}
+              {(past ? snapMemo : note?.content) || '한 분이 아니라 다 같이 알아야 할 내용 — 화면에서만 봅니다'}
             </span>
           )}
           {note?.updated_by && (
@@ -745,8 +826,7 @@ export default function ResidentAssignPage() {
           )}
         </div>
 
-        <div className={`rounded-xl border border-amber-200 bg-amber-50/60 p-3 print:border-gray-400 print:bg-white print:block ${noteOpen ? '' : 'hidden'}`}>
-          <p className="hidden print:block text-xs font-bold text-gray-700 mb-1">전체 어르신 메모</p>
+        <div className={`rounded-xl border border-amber-200 bg-amber-50/60 p-3 ${noteOpen ? '' : 'hidden'}`}>
           {past && <p className="text-[11px] text-teal-700 font-semibold mb-1 print:hidden">{viewDate} 당시 메모</p>}
           <textarea
             value={past ? snapMemo : noteDraft}
@@ -755,7 +835,7 @@ export default function ResidentAssignPage() {
             maxLength={note?.max_length ?? 1000}
             rows={3}
             placeholder="예) 이번 주 독감 예방접종 — 목요일 오전, 해당 어르신은 개별 안내드립니다."
-            className="eb-note w-full bg-transparent text-sm text-gray-800 resize-none focus:outline-none placeholder:text-gray-400" />
+            className="w-full bg-transparent text-sm text-gray-800 resize-none focus:outline-none placeholder:text-gray-400" />
           <div className={`items-center gap-2 mt-1 print:hidden ${past ? 'hidden' : 'flex'}`}>
             <button onClick={saveNote}
               disabled={noteBusy || noteDraft === (note?.content ?? '')}
@@ -801,13 +881,6 @@ export default function ResidentAssignPage() {
         </div>
       )}
 
-      <style>{`
-        @media print {
-          /* 입력칸이 종이에 네모 상자로 찍히면 읽기 나쁘다 — 글자만 남긴다 */
-          .eb-note { border: 0 !important; background: transparent !important; }
-          .eb-note::placeholder { color: transparent !important; }
-        }
-      `}</style>
     </div>
   )
 }
