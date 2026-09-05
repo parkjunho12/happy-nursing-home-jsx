@@ -112,11 +112,15 @@ export default function ResidentAssignPage() {
 
   /** 인쇄 표 하나. 층별 인쇄와 전체 층 인쇄가 같은 표를 쓴다 —
    *  두 벌로 두면 한쪽만 고쳐져 같은 명단이 종이마다 달라진다. */
-  const printTable = (list: PrintRow[], sz: { f: number; p: number }) => {
+  const printTable = (list: PrintRow[], sz: { f: number; p: number }, compact = false) => {
     // 호실 바뀔 때마다 음영 교차 — 방 단위가 한눈에 들어온다
     let pv = '__'; let band = 0
-    const room = sz.f + 2                    // 호실은 조금 크게
+    // 전체 층은 한 장에 담는 것이 목적이라 줄 높이를 올리는 것을 걷어낸다.
+    // 호실 알약(테두리+여백)과 큰 호실 글자가 그 줄의 높이를 정하고 있었다 —
+    // 실제로 재 보니 그 둘만 빼도 같은 종이에 글자를 두 단계 키울 수 있었다.
+    const room = compact ? sz.f : sz.f + 2   // 호실은 조금 크게 (전체 층은 본문과 같게)
     const head = Math.max(8, sz.f - 3)       // 머리글은 조금 작게
+    const lh = compact ? 1.25 : 1.3
     return (
       <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
         <colgroup>
@@ -140,7 +144,7 @@ export default function ResidentAssignPage() {
               if (first) { pv = row.room; band += 1 }
               const cell: React.CSSProperties = {
                 border: '1px solid #e2e8f0', background: band % 2 === 0 ? '#f8fafc' : 'white',
-                lineHeight: 1.3, padding: `${sz.p}px 7px`, fontSize: `${sz.f}px`,
+                lineHeight: lh, padding: `${sz.p}px 7px`, fontSize: `${sz.f}px`,
               }
               return (
                 <tr key={`e-${row.room}-${row.idx}`} className={first ? 'asg-room-top' : ''}>
@@ -162,26 +166,30 @@ export default function ResidentAssignPage() {
             const incoming = (r.admission_date ?? '') > today
             const bg = incoming ? '#fffbeb' : band % 2 === 0 ? '#f8fafc' : 'white'
             const cell: React.CSSProperties = {
-              border: '1px solid #e2e8f0', background: bg, lineHeight: 1.3,
+              border: '1px solid #e2e8f0', background: bg, lineHeight: lh,
               padding: `${sz.p}px 7px`, fontSize: `${sz.f}px`,
             }
             return (
               <tr key={`p-${r.resident_id}-${k}`} className={first ? 'asg-room-top' : ''}>
-                <td style={{ ...cell, textAlign: 'center' }}>
-                  {first && <span style={{
+                <td style={{ ...cell, textAlign: 'center',
+                  ...(compact ? { fontWeight: 800, color: '#0f766e' } : null) }}>
+                  {first && (compact ? `${r.room}호` : <span style={{
                     display: 'inline-block', minWidth: 46, borderRadius: 8,
                     background: '#f0fdfa', border: '1px solid #99f6e4', color: '#0f766e',
                     padding: '2px 8px',
                     fontSize: `${room}px`, fontWeight: 900,
-                  }}>{r.room}호</span>}
+                  }}>{r.room}호</span>)}
                 </td>
                 <td style={{ ...cell, fontWeight: 800, color: '#111827', fontSize: `${sz.f + 1}px` }}>
                   {r.name}
-                  {incoming && <span style={{ marginLeft: 5, fontSize: `${Math.max(8, sz.f - 4)}px`, fontWeight: 800, color: '#b45309', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 6, padding: '1px 5px', verticalAlign: 'middle' }}>입소 예정</span>}
+                  {incoming && (compact
+                    ? <span style={{ marginLeft: 4, fontSize: `${Math.max(8, sz.f - 3)}px`, fontWeight: 800, color: '#b45309' }}>예정</span>
+                    : <span style={{ marginLeft: 5, fontSize: `${Math.max(8, sz.f - 4)}px`, fontWeight: 800, color: '#b45309', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 6, padding: '1px 5px', verticalAlign: 'middle' }}>입소 예정</span>)}
                 </td>
                 <td style={{ ...cell, textAlign: 'center', color: '#111827', fontWeight: 700 }}>{r.care_staff_name ?? <span style={{ color: '#cbd5e1', fontWeight: 400 }}>—</span>}</td>
                 <td style={{ ...cell, textAlign: 'center', color: '#111827', fontWeight: 700 }}>{r.rehab_staff_name ?? <span style={{ color: '#cbd5e1', fontWeight: 400 }}>—</span>}</td>
-                <td style={{ ...cell, fontSize: `${Math.max(8, sz.f - 2)}px`, color: '#64748b' }}>
+                <td style={{ ...cell, fontSize: `${Math.max(8, sz.f - 2)}px`, color: '#64748b',
+                  ...(compact ? { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } as const : null) }}>
                   {[incoming ? `${Number(r.admission_date!.slice(5, 7))}/${Number(r.admission_date!.slice(8, 10))} 입소` : '', r.note ?? ''].filter(Boolean).join(' · ')}
                 </td>
               </tr>
@@ -198,8 +206,9 @@ export default function ResidentAssignPage() {
    *
    *  단에 넣을 때는 줄 수가 적은 쪽부터 채운다 — 한 단만 길면 그만큼
    *  종이가 넘치고, 넘치면 어차피 두 장이 된다. */
-  const PRINT_COLS = 2
   const printCols = useMemo(() => {
+    // 두 단이 기본. 층이 넷 이상 생기면 두 단으로는 한 장에 안 들어간다.
+    const PRINT_COLS = floors.length >= 4 ? 3 : 2
     const cols: { floor: string; list: PrintRow[]; cur: number; incom: number }[][] =
       Array.from({ length: PRINT_COLS }, () => [])
     const tot = new Array(PRINT_COLS).fill(0)
@@ -217,15 +226,22 @@ export default function ResidentAssignPage() {
   }, [rows, roomInfo, floors, today])
 
   /** 두 단 중 긴 쪽에 맞춰 글자 크기를 정한다. 짧은 쪽 기준으로 잡으면
-   *  긴 쪽이 넘쳐 두 장이 된다. 한 장에 담는 것이 이 인쇄의 목적이다. */
+   *  긴 쪽이 넘쳐 두 장이 된다. 한 장에 담는 것이 이 인쇄의 목적이다.
+   *
+   *  아래 값은 어림이 아니라 A4 가로(내용 277×194mm)에 같은 마크업을 그려
+   *  높이를 재서 정한 것이다. 처음에 눈대중으로 잡았을 때는 220mm 가 나와
+   *  한 장에 들어가지 않았다. 측정에서 딱 맞는 값보다 한 단계 작게 둔다 —
+   *  이름이 길거나 메모가 붙으면 조금씩 더 차오른다. */
   const compactSize = useMemo(() => {
     const n = Math.max(1, ...printCols.map(c =>
-      c.reduce((s, x) => s + x.list.length + 2, 0)))
-    return n <= 24 ? { f: 13, p: 2 }
-         : n <= 30 ? { f: 12, p: 1.5 }
-         : n <= 36 ? { f: 11, p: 1 }
-         : n <= 44 ? { f: 10, p: 0.5 }
-         :           { f: 9,  p: 0.5 }
+      c.reduce((s, x) => s + x.list.length + 2, 0)))   // +2 = 층 이름 줄과 표 머리글
+    return n <= 24 ? { f: 15, p: 2 }
+         : n <= 30 ? { f: 13, p: 1.5 }
+         : n <= 36 ? { f: 12, p: 1 }
+         : n <= 42 ? { f: 11, p: 0.5 }
+         : n <= 48 ? { f: 9,  p: 0.5 }
+         : n <= 54 ? { f: 8,  p: 0.5 }
+         :           { f: 7,  p: 0.5 }   // 여기까지 오면 두 장이 된다 — 층이 더 생겼을 때
   }, [printCols])
 
   /** 빈자리에 넣을 수 있는 분 — 이름·호실로 찾는다.
@@ -607,18 +623,18 @@ export default function ResidentAssignPage() {
                 현원 <b style={{ color: '#111827' }}>{rows.filter(r => (r.admission_date ?? '') <= today).length}명</b> · 출력 {new Date().toLocaleDateString('ko-KR')}
               </p>
             </div>
-            <div style={{ display: 'flex', gap: '7mm', alignItems: 'flex-start' }}>
+            <div style={{ display: 'flex', gap: '6mm', alignItems: 'flex-start' }}>
               {printCols.map((col, i) => (
                 <div key={i} style={{ flex: 1, minWidth: 0 }}>
                   {col.map(({ floor: f, list, cur, incom }) => (
-                    <div key={f} style={{ marginBottom: '4mm' }}>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: 3 }}>
-                        <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 7, background: '#0d9488', color: 'white', fontSize: `${compactSize.f + 3}px`, fontWeight: 900 }}>{f}</span>
+                    <div key={f} style={{ marginBottom: '3mm' }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 2 }}>
+                        <span style={{ display: 'inline-block', padding: '1px 8px', borderRadius: 6, background: '#0d9488', color: 'white', fontSize: `${compactSize.f + 2}px`, fontWeight: 900 }}>{f}</span>
                         <span style={{ fontSize: `${compactSize.f - 1}px`, color: '#6b7280' }}>
                           현원 <b style={{ color: '#111827' }}>{cur}명</b>{incom > 0 && <> · 입소 예정 <b style={{ color: '#b45309' }}>{incom}명</b></>}
                         </span>
                       </div>
-                      {printTable(list, compactSize)}
+                      {printTable(list, compactSize, true)}
                     </div>
                   ))}
                 </div>
