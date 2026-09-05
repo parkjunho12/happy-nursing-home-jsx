@@ -31,7 +31,28 @@ export interface AssignNote {
   max_length: number
 }
 
+export interface SnapDay {
+  date: string
+  count: number
+  changed_by?: string | null
+  updated_at?: string | null
+}
+
+export interface SnapDetail {
+  date: string
+  rows: AssignRow[]
+  memo: string
+  changed_by?: string | null
+  updated_at?: string | null
+}
+
 export const assignmentAPI = {
+  /** 명단이 바뀐 날 목록 — 그날 탭을 만든다 */
+  snapshots: () => apiClient.get(`${BASE}/snapshots`)
+    .then(unwrap<{ today: string; days: SnapDay[] }>),
+  snapshot: (date: string) =>
+    apiClient.get(`${BASE}/snapshots/${date}`).then(unwrap<SnapDetail>),
+
   /** 명단에 함께 붙는 메모 — 어르신 한 분이 아니라 다 같이 알아야 하는 것 */
   note: () => apiClient.get(`${BASE}/note`).then(unwrap<AssignNote>),
   saveNote: (content: string) =>
