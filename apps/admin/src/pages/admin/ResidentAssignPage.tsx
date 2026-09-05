@@ -31,6 +31,9 @@ export default function ResidentAssignPage() {
   const [snapRows, setSnapRows] = useState<AssignRow[] | null>(null)
   const [snapMemo, setSnapMemo] = useState('')
   const [snapBusy, setSnapBusy] = useState(false)
+  // 한 층이 한 화면에 들어와야 한다. 늘 보지 않아도 되는 것은 접어 둔다.
+  const [countOpen, setCountOpen] = useState(false)
+  const [noteOpen, setNoteOpen] = useState(false)
 
   const load = () => {
     assignmentAPI.roster()
@@ -199,10 +202,14 @@ export default function ResidentAssignPage() {
           </button>
         </div>
       </div>
-      <p className="text-xs text-gray-400 mb-3">담당·호실을 바꾸면 바로 저장되고 이력이 남습니다 · 호실 숫자를 누르면 침대 그림에서 고르거나 배정을 해제할 수 있어요 · 빈칸만 자동 배정(기존 담당 유지)</p>
+      <p className="text-[11px] text-gray-400 mb-2">바꾸면 바로 저장되고 이력이 남습니다 · 호실을 누르면 침대에서 고르거나 배정을 해제할 수 있어요</p>
 
-      {/* 담당별 집계 — 몇 명씩 맡고 있는지 */}
-      <div className="flex flex-wrap gap-3 mb-3">
+      {/* 담당별 집계 — 늘 보는 것이 아니라 접어 둔다. 그 자리를 명단에 쓴다. */}
+      <button onClick={() => setCountOpen(o => !o)}
+        className="mb-2 inline-flex items-center gap-1 text-[11px] font-semibold text-gray-500 hover:text-gray-700">
+        담당별 인원 {countOpen ? '접기 ▴' : '보기 ▾'}
+      </button>
+      <div className={`${countOpen ? 'flex' : 'hidden'} flex-wrap gap-3 mb-2`}>
         <div className="flex flex-wrap items-center gap-1 text-[11px]">
           <span className="font-bold text-teal-700 mr-0.5">요양팀</span>
           {counts('care_staff_name', care).map(([n, c]) => (
@@ -222,15 +229,11 @@ export default function ResidentAssignPage() {
           '지금' 은 고칠 수 있고, 지난 날은 볼 수만 있다 — 지난 기록을
           고치면 그건 더 이상 그날 모습이 아니다. */}
       {days.length > 0 && (
-        <div className="mb-3">
-          <div className="flex items-center gap-1.5 mb-1.5">
+        <div className="mb-2">
+          <div className="flex gap-1.5 flex-wrap items-center">
             <CalendarClock size={13} className="text-gray-400" />
-            <span className="text-[11px] text-gray-400">
-              명단이 바뀐 날 — 눌러서 그날 명단을 봅니다
-            </span>
+            <span className="text-[11px] text-gray-400 mr-0.5" title="명단이 바뀐 날 — 눌러서 그날 명단을 봅니다">바뀐 날</span>
             {snapBusy && <Loader2 size={12} className="animate-spin text-gray-300" />}
-          </div>
-          <div className="flex gap-1.5 flex-wrap">
             <button onClick={() => openDay(null)}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
                 !past ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}>
@@ -299,7 +302,7 @@ export default function ResidentAssignPage() {
                 {list.map(r => {
                   const incoming = (r.admission_date ?? '') > today
                   return (
-                    <div key={r.resident_id} className={`px-2 py-1.5 ${incoming ? 'bg-amber-50/50' : ''}`}>
+                    <div key={r.resident_id} className={`px-2 py-1 ${incoming ? 'bg-amber-50/50' : ''}`}>
                       <div className="flex items-center gap-1">
                         <button onClick={() => !past && setBed(r)} disabled={past}
                           className="text-[13px] font-bold text-gray-800 truncate hover:text-teal-700 disabled:hover:text-gray-800">
@@ -318,14 +321,14 @@ export default function ResidentAssignPage() {
                       <div className="flex gap-1 mt-0.5">
                         <button onClick={() => !past && openPick(r.resident_id, 'care', r.name)} disabled={past}
                           title="담당 요양팀"
-                          className={`flex-1 min-w-0 truncate px-1.5 py-1 text-[11px] rounded-md border font-semibold transition-colors ${
+                          className={`flex-1 min-w-0 truncate px-1.5 py-0.5 text-[11px] rounded-md border font-semibold transition-colors ${
                             r.care_staff_name ? 'border-teal-100 bg-teal-50/60 text-teal-800 hover:bg-teal-50'
                             : 'border-dashed border-gray-300 text-gray-400 hover:border-teal-300'}`}>
                           {r.care_staff_name ?? '+ 요양'}
                         </button>
                         <button onClick={() => !past && openPick(r.resident_id, 'rehab', r.name)} disabled={past}
                           title="담당 재활팀"
-                          className={`flex-1 min-w-0 truncate px-1.5 py-1 text-[11px] rounded-md border font-semibold transition-colors ${
+                          className={`flex-1 min-w-0 truncate px-1.5 py-0.5 text-[11px] rounded-md border font-semibold transition-colors ${
                             r.rehab_staff_name ? 'border-indigo-100 bg-indigo-50/60 text-indigo-800 hover:bg-indigo-50'
                             : 'border-dashed border-gray-300 text-gray-400 hover:border-indigo-300'}`}>
                           {r.rehab_staff_name ?? '+ 재활'}
@@ -529,13 +532,21 @@ export default function ResidentAssignPage() {
           어르신 한 분에 대한 이야기가 아니라, 이 명단을 보는 사람들이 다 같이
           알아야 하는 것을 적는 자리다 — '이번 주 독감 예방접종' 같은.
           인쇄에도 함께 나간다. 벽에 붙는 종이에 지침이 같이 있어야 한다. */}
-      <section className="mt-4">
+      <section className="mt-3">
         <div className="flex items-center gap-1.5 mb-1.5 print:hidden">
           <StickyNote size={14} className="text-amber-600" />
-          <h2 className="text-sm font-bold text-gray-800">전체 어르신 메모</h2>
-          <span className="text-[11px] text-gray-400">
-            한 분이 아니라 다 같이 알아야 할 내용 — 명단과 함께 인쇄됩니다
-          </span>
+          {/* 접어 둔다 — 한 층이 한 화면에 들어와야 한다.
+              다만 적힌 내용이 있으면 접힌 채로도 한 줄이 보인다.
+              아무도 못 보는 메모는 없는 것과 같다. */}
+          <button onClick={() => setNoteOpen(o => !o)}
+            className="text-sm font-bold text-gray-800 hover:text-amber-700 shrink-0">
+            전체 어르신 메모 {noteOpen ? '▴' : '▾'}
+          </button>
+          {!noteOpen && (
+            <span className={`text-xs truncate ${(past ? snapMemo : note?.content) ? 'text-gray-700' : 'text-gray-400'}`}>
+              {(past ? snapMemo : note?.content) || '한 분이 아니라 다 같이 알아야 할 내용 — 명단과 함께 인쇄됩니다'}
+            </span>
+          )}
           {note?.updated_by && (
             <span className="ml-auto text-[11px] text-gray-400">
               마지막 수정 {note.updated_by}
@@ -544,7 +555,7 @@ export default function ResidentAssignPage() {
           )}
         </div>
 
-        <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 print:border-gray-400 print:bg-white">
+        <div className={`rounded-xl border border-amber-200 bg-amber-50/60 p-3 print:border-gray-400 print:bg-white print:block ${noteOpen ? '' : 'hidden'}`}>
           <p className="hidden print:block text-xs font-bold text-gray-700 mb-1">전체 어르신 메모</p>
           {past && <p className="text-[11px] text-teal-700 font-semibold mb-1 print:hidden">{viewDate} 당시 메모</p>}
           <textarea
