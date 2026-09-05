@@ -68,7 +68,7 @@ export default function ResidentAssignPage() {
    *  지금 정원으로 알 수 없고, 어차피 그날 기록은 고칠 수도 없다.
    */
   const tableRows = useMemo(() => {
-    type Row = { kind: 'person'; r: AssignRow } | { kind: 'empty'; room: string; idx: number }
+    type Row = { kind: 'person'; r: AssignRow } | { kind: 'empty'; room: string; free: number }
     const out: Row[] = []
     const capOf = new Map<string, number>()
     roomInfo.find(f => f.floor === floor)?.rooms.forEach(r => capOf.set(r.room, r.capacity))
@@ -80,8 +80,11 @@ export default function ResidentAssignPage() {
       while (i < shown.length && shown[i].room === room) { group.push(shown[i]); i++ }
       group.forEach(r => out.push({ kind: 'person', r }))
       if (!past && room) {
+        // 빈 침대를 한 줄씩 늘어놓으면 표가 화면을 벗어난다. 방마다 한 줄로
+        // 묶고 몇 자리인지 숫자로 적는다 — 어느 방에 몇 자리 남았는지가
+        // 알고 싶은 것이지, 침대 하나하나를 보려는 게 아니다.
         const free = (capOf.get(room) ?? 0) - group.length
-        for (let k = 0; k < free; k++) out.push({ kind: 'empty', room, idx: k })
+        if (free > 0) out.push({ kind: 'empty', room, free })
       }
     }
     return out
@@ -326,14 +329,14 @@ export default function ResidentAssignPage() {
                   if (row.kind === 'empty') {
                     // 빈 침대 — 성함 자리를 누르면 어르신을 골라 넣는다
                     return (
-                      <tr key={`empty-${row.room}-${row.idx}`} className="bg-gray-50/40">
-                        <td className={`${td} text-center`}>
+                      <tr key={`empty-${row.room}`} className="bg-gray-50/40">
+                        <td className="border-b border-gray-100 px-2 py-0 text-center">
                           <span className="inline-block w-11 text-center text-[10px] text-gray-300">{row.room}</span>
                         </td>
-                        <td className={td} colSpan={4}>
+                        <td className="border-b border-gray-100 px-2 py-0" colSpan={4}>
                           <button onClick={() => { setFill({ floor, room: row.room }); setFillQ('') }}
-                            className="w-full text-left px-1.5 py-px text-[11px] rounded border border-dashed border-gray-300 text-gray-400 hover:border-teal-400 hover:text-teal-600 transition-colors">
-                            빈자리 — 눌러서 어르신 고르기
+                            className="w-full text-left px-1.5 py-px text-[10px] leading-tight rounded border border-dashed border-gray-300 text-gray-400 hover:border-teal-400 hover:text-teal-600 transition-colors">
+                            빈자리 {row.free} — 눌러서 어르신 고르기
                           </button>
                         </td>
                       </tr>
