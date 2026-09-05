@@ -39,6 +39,10 @@ export default function ResidentAssignPage() {
   // 빈자리를 눌렀을 때 열리는 '어르신 고르기'
   const [fill, setFill] = useState<{ floor: string; room: string } | null>(null)
   const [fillQ, setFillQ] = useState('')
+  // 빈자리를 줄로 다 보이면 한 층이 서른 몇 줄이 되어 화면을 넘는다.
+  // 둘 다 필요한 요구라 스위치로 둔다 — 기본은 보이는 쪽.
+  const [showEmpty, setShowEmpty] = useState(() => localStorage.getItem('asg.empty') !== '0')
+  useEffect(() => { localStorage.setItem('asg.empty', showEmpty ? '1' : '0') }, [showEmpty])
   const [noteOpen, setNoteOpen] = useState(false)
 
   const load = () => {
@@ -81,14 +85,14 @@ export default function ResidentAssignPage() {
       group.forEach(r => out.push({ kind: 'person', r }))
       // 빈 침대 하나에 빈 줄 하나 — 사람 줄과 같은 모양으로 통일한다.
       // 4인실에 두 분이면 두 줄이 비어 보이는 게 곧 '두 자리 남았다' 이다.
-      if (!past && room) {
+      if (!past && showEmpty && room) {
         const free = (capOf.get(room) ?? 0) - group.length
         for (let k = 0; k < free; k++) out.push({ kind: 'empty', room, idx: k })
       }
     }
     // 아무도 안 계신 방도 정원만큼 빈 줄을 낸다. 안 그러면 표에서 통째로
     // 사라지는데, 정작 자리가 가장 많이 남은 방이다.
-    if (!past) {
+    if (!past && showEmpty) {
       const has = new Set(shown.map(r => r.room).filter(Boolean))
       roomInfo.find(f => f.floor === floor)?.rooms
         .filter(r => !has.has(r.room) && r.capacity > 0)
@@ -96,7 +100,7 @@ export default function ResidentAssignPage() {
         .forEach(r => { for (let k = 0; k < r.capacity; k++) out.push({ kind: 'empty', room: r.room, idx: k }) })
     }
     return out
-  }, [shown, roomInfo, floor, past])
+  }, [shown, roomInfo, floor, past, showEmpty])
 
   /** 빈자리에 넣을 수 있는 분 — 이름·호실로 찾는다.
    *  이미 그 방에 계신 분은 뺀다(같은 방으로 옮길 일이 없다). */
@@ -280,8 +284,13 @@ export default function ResidentAssignPage() {
             <span className="text-[11px] text-gray-400 mr-0.5" title="명단이 바뀐 날 — 눌러서 그날 명단을 봅니다">바뀐 날</span>
             {snapBusy && <Loader2 size={12} className="animate-spin text-gray-300" />}
             {/* 안내를 따로 한 줄 두면 그만큼 표가 아래로 밀린다 — 빈자리에 붙인다 */}
-            <span className="ml-auto text-[10px] text-gray-300 hidden md:inline">
-              바꾸면 바로 저장·이력이 남습니다 · 호실을 누르면 침대에서 고릅니다
+            <label className="ml-auto inline-flex items-center gap-1 text-[11px] text-gray-500 cursor-pointer">
+              <input type="checkbox" checked={showEmpty} onChange={e => setShowEmpty(e.target.checked)}
+                className="accent-teal-600" />
+              빈자리 보기
+            </label>
+            <span className="text-[10px] text-gray-300 hidden xl:inline">
+              바꾸면 바로 저장·이력이 남습니다
             </span>
             <button onClick={() => openDay(null)}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
