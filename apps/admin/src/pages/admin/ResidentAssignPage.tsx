@@ -334,7 +334,7 @@ export default function ResidentAssignPage() {
             <table className="w-full border-collapse min-w-[560px]">
               <thead>
                 <tr className="bg-gray-50">
-                  <th className={`${th} w-14`}>호실</th>
+                  <th className={`${th} w-20`}>호실</th>
                   <th className={`${th} w-24`}>성함</th>
                   <th className={`${th} w-32 text-teal-700`}>담당 요양팀</th>
                   <th className={`${th} w-32 text-indigo-700`}>담당 재활팀</th>
@@ -365,7 +365,7 @@ export default function ResidentAssignPage() {
                   const incoming = (r.admission_date ?? '') > today
                   return (
                     <tr key={r.resident_id} className={`${first ? 'border-t-2 border-t-gray-300' : ''} ${incoming ? 'bg-amber-50/40' : ''}`}>
-                      <td className={`${td} text-center`}>
+                      <td className={`${td} text-center whitespace-nowrap`}>
                         <button onClick={() => !past && setBed(r)} disabled={past || bedBusy === r.resident_id}
                           title={past ? '지난 날 기록은 고칠 수 없습니다' : '눌러서 호실 변경 · 배정 해제'}
                           className={`w-11 text-center text-xs font-extrabold rounded py-0.5 transition-colors ${
@@ -380,7 +380,7 @@ export default function ResidentAssignPage() {
                         {first && r.room && freeByRoom.get(r.room) && (
                           <button onClick={() => { setFill({ floor, room: r.room! }); setFillQ('') }}
                             title={`${r.room}호에 ${freeByRoom.get(r.room)}자리 비어 있습니다 — 눌러서 어르신 고르기`}
-                            className="ml-0.5 px-1 rounded text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 align-middle">
+                            className="ml-0.5 px-1 rounded text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 align-middle whitespace-nowrap">
                             빈{freeByRoom.get(r.room)}
                           </button>
                         )}
