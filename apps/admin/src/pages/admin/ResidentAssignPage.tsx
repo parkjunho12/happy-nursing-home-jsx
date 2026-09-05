@@ -74,31 +74,32 @@ export default function ResidentAssignPage() {
   const tableRows = useMemo(() => {
     type Row = { kind: 'person'; r: AssignRow } | { kind: 'empty'; room: string; idx: number }
     const out: Row[] = []
+
     const capOf = new Map<string, number>()
     roomInfo.find(f => f.floor === floor)?.rooms.forEach(r => capOf.set(r.room, r.capacity))
 
-    let i = 0
-    while (i < shown.length) {
-      const room = shown[i].room
-      const group: AssignRow[] = []
-      while (i < shown.length && shown[i].room === room) { group.push(shown[i]); i++ }
+    /* 호실 번호 순서대로 낸다 — 201, 202 … 210.
+       아무도 안 계신 방을 뒤로 몰면 208호를 찾으려고 표 끝까지 내려가야 하고,
+       방 번호로 훑는 눈이 한 번 끊긴다. 벽에 붙은 호실 순서와 같아야 한다.
+       (사람이 있든 없든, 설정에 있는 방이든 사람만 있는 방이든 한 줄에 세운다) */
+    const rooms = [...new Set([
+      ...(roomInfo.find(f => f.floor === floor)?.rooms.map(r => r.room) ?? []),
+      ...shown.map(r => r.room).filter(Boolean) as string[],
+    ])].sort((a, b) => a.localeCompare(b, 'ko', { numeric: true }))
+
+    for (const room of rooms) {
+      const group = shown.filter(r => r.room === room)
       group.forEach(r => out.push({ kind: 'person', r }))
       // 빈 침대 하나에 빈 줄 하나 — 사람 줄과 같은 모양으로 통일한다.
       // 4인실에 두 분이면 두 줄이 비어 보이는 게 곧 '두 자리 남았다' 이다.
-      if (!past && showEmpty && room) {
+      if (!past && showEmpty) {
         const free = (capOf.get(room) ?? 0) - group.length
         for (let k = 0; k < free; k++) out.push({ kind: 'empty', room, idx: k })
       }
     }
-    // 아무도 안 계신 방도 정원만큼 빈 줄을 낸다. 안 그러면 표에서 통째로
-    // 사라지는데, 정작 자리가 가장 많이 남은 방이다.
-    if (!past && showEmpty) {
-      const has = new Set(shown.map(r => r.room).filter(Boolean))
-      roomInfo.find(f => f.floor === floor)?.rooms
-        .filter(r => !has.has(r.room) && r.capacity > 0)
-        .sort((a, b) => a.room.localeCompare(b.room, 'ko', { numeric: true }))
-        .forEach(r => { for (let k = 0; k < r.capacity; k++) out.push({ kind: 'empty', room: r.room, idx: k }) })
-    }
+
+    // 호실이 아직 없는 분은 맨 뒤에. 조용히 빠지면 그분만 명단에서 사라진다.
+    shown.filter(r => !r.room).forEach(r => out.push({ kind: 'person', r }))
     return out
   }, [shown, roomInfo, floor, past, showEmpty])
 
