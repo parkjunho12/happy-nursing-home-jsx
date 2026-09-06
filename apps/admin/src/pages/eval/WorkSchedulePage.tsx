@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Printer, Save, Eraser, Loader2, CalendarDays, Wand2, Users, History, Sparkles, Inbox, Trash2, FileSpreadsheet, X, Lock, Unlock } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Printer, Save, Eraser, Loader2, CalendarDays, Wand2, Users, History, Sparkles, Inbox, Trash2, FileSpreadsheet, X, Lock, Unlock, StickyNote } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
 import { useAuthStore } from '@/store/auth'
 import { apiClient } from '@/api/client'
-import { workScheduleAPI, type ScheduleData, type ScheduleRow, type HolidayInfo } from '@/api/workScheduleClient'
+import { workScheduleAPI, type ScheduleData, type ScheduleRow, type HolidayInfo, type StaffMemo } from '@/api/workScheduleClient'
 import { calcBase, DAILY_HOURS } from '@/utils/baseHours'
 import ScheduleHistoryModal from '@/components/schedule/ScheduleHistoryModal'
+import StaffMemoPanel from '@/components/schedule/StaffMemoPanel'
 import TeamPanel from '@/components/schedule/TeamPanel'
 import SettlementPanel from '@/components/schedule/SettlementPanel'
 import AuditPanel from '@/components/schedule/AuditPanel'
@@ -50,6 +51,23 @@ export default function WorkSchedulePage() {
   useEffect(() => { loadShiftCfg() }, [loadShiftCfg])
   const { staffList, residents, loadAll } = useLtcStore()
   const [ym, setYm] = useState(thisMonth())
+  // 그 달 선생님별 메모 — 근무표 문서와 따로 저장한다(잠금·버전을 건드리지 않게)
+  const [memos, setMemos] = useState<Record<string, StaffMemo>>({})
+  const [memoOpen, setMemoOpen] = useState(false)
+  const [memoFocus, setMemoFocus] = useState<string | null>(null)
+  useEffect(() => {
+    // 달이 바뀌면 비우고 다시 받는다 — 지난달 메모가 남아 있으면 이 달 것으로 읽힌다
+    setMemos({})
+    workScheduleAPI.memos(ym)
+      .then(list => setMemos(Object.fromEntries(list.map(x => [x.staff_id, x]))))
+      .catch(() => setMemos({}))
+  }, [ym])
+  const onMemoChange = (m: StaffMemo) => setMemos(s2 => {
+    const n = { ...s2 }
+    if ((m.memo ?? '').trim()) n[m.staff_id] = m
+    else delete n[m.staff_id]
+    return n
+  })
   // 보고 있는 달의 규칙으로 총시간을 계산한다.
   // 8월 표를 보는데 9월부터 바뀐 값을 쓰면 숫자가 어긋난다.
   useEffect(() => { useHoursFor(ym) }, [ym, useHoursFor])
@@ -772,6 +790,16 @@ export default function WorkSchedulePage() {
               className="inline-flex items-center gap-1.5 px-3 py-2.5 border border-indigo-200 text-indigo-700 rounded-xl text-sm font-semibold hover:bg-indigo-50">
               <Wand2 className="w-4 h-4" /> 교대조만
             </button>
+            {/* 선생님 메모 — 여러 명에게 이어서 적을 때는 목록으로 여는 편이 빠르다 */}
+            <button onClick={() => { setMemoFocus(null); setMemoOpen(true) }}
+              className="inline-flex items-center gap-1.5 px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">
+              <StickyNote className="w-4 h-4 text-amber-500" /> 메모
+              {Object.keys(memos).length > 0 && (
+                <span className="text-[11px] font-bold text-amber-700 bg-amber-100 rounded-full px-1.5">
+                  {Object.keys(memos).length}
+                </span>
+              )}
+            </button>
             <button onClick={() => setHistOpen(true)} className="inline-flex items-center gap-1.5 px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">
               <History className="w-4 h-4" /> 저장 이력
             </button>
@@ -1161,6 +1189,15 @@ export default function WorkSchedulePage() {
                     )}
                     <td className={`${td} ws-name sticky left-0 z-10 bg-white font-bold text-gray-800 group/nm relative`}>
                       {s.name}
+                      {/* 메모 — 적혀 있으면 노란 쪽지가 늘 보이고, 없으면 줄에 올렸을 때만.
+                          늘 보이면 이름 옆이 아이콘으로 빽빽해져 이름을 못 읽는다. */}
+                      <button type="button" tabIndex={-1}
+                        onClick={e => { e.stopPropagation(); setMemoFocus(s.id); setMemoOpen(true) }}
+                        title={memos[s.id]?.memo ? `메모: ${memos[s.id].memo}` : `${s.name} 선생님 메모 적기`}
+                        className={`absolute right-4 top-1/2 -translate-y-1/2 print:hidden p-0.5 transition-opacity ${
+                          memos[s.id]?.memo ? 'text-amber-500 opacity-100' : 'text-gray-300 opacity-0 group-hover/nm:opacity-100 hover:text-amber-500'}`}>
+                        <StickyNote className="w-3 h-3" />
+                      </button>
                       <button type="button" tabIndex={-1}
                         onClick={e => {
                           e.stopPropagation()
@@ -1372,6 +1409,19 @@ export default function WorkSchedulePage() {
           onClose={() => setPrintPickOpen(false)}
           onConfirm={printPicked}
         />
+      )}
+
+      {memoOpen && (
+        <StaffMemoPanel
+          ym={ym}
+          // 화면에 보이는 사람(shownStaff)이 아니라 그 달 전원을 넘긴다.
+          // 층으로 걸러 둔 채 열면 3층 선생님 메모가 목록에 없는데 위 숫자에는
+          // 잡혀, 몇 개가 어디 갔는지 찾게 된다.
+          people={staff.map(s2 => ({ id: s2.id, name: s2.name, pos: s2.pos, team: s2.team }))}
+          memos={memos}
+          onChange={onMemoChange}
+          focusId={memoFocus}
+          onClose={() => { setMemoOpen(false); setMemoFocus(null) }} />
       )}
 
       {histOpen && (

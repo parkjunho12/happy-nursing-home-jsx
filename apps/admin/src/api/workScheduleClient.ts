@@ -44,6 +44,12 @@ export interface MySchedule {
   updated_at?: string | null
   note?: string | null   // 개인별 한 줄 설명 (저장 시 생성)
 }
+export interface StaffMemo {
+  staff_id: string
+  memo: string
+  updated_by?: string | null
+  updated_at?: string | null
+}
 export interface SavePayload {
   year_month: string
   data: ScheduleData
@@ -111,6 +117,14 @@ export const workScheduleAPI = {
     code_hours?: Record<string, number>
     code_hours_rules?: { from: string; hours: Record<string, number> }[]
   }>),
+  /** 그 달 선생님별 메모 — 근무표를 고칠 수 있는 사람만 본다 */
+  memos: (month: string) =>
+    apiClient.get(`${BASE}/memos`, { params: { month } }).then(unwrap<StaffMemo[]>),
+  /** 한 사람 한 칸만 저장한다 — 칸을 벗어나는 순간 저장하기 위해.
+   *  근무표가 확정 잠금이어도 저장된다(메모는 근무표가 아니다). */
+  saveMemo: (b: { year_month: string; staff_id: string; memo: string }) =>
+    apiClient.put(`${BASE}/memos`, b).then(unwrap<StaffMemo>),
+
   versions: (month: string) =>
     apiClient.get(`${BASE}/versions`, { params: { month } }).then(unwrap<ScheduleVersion[]>),
   version: (id: string) =>

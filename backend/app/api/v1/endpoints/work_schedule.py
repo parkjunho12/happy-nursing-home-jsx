@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
-from app.models.work_schedule import (WorkSchedule, WorkScheduleVersion,
+from app.models.work_schedule import (WorkSchedule, WorkScheduleMemo, WorkScheduleVersion,
                                       WorkScheduleConfig, now_kst)
 from app.models.eval import LtcStaffMember
 from app.services.staff_notify import notify_all_staff
@@ -784,6 +784,68 @@ def set_lock(body: LockBody, db: Session = Depends(get_db),
     db.commit(); db.refresh(w)
     return ApiResponse(success=True, data=_view(w, body.year_month),
                        message="확정 잠금했습니다." if body.locked else "잠금을 풀었습니다.")
+
+
+class MemoBody(BaseModel):
+    year_month: str
+    staff_id: str
+    memo: str = ""
+
+
+@router.get("/memos")
+def list_memos(month: str = Query(...), db: Session = Depends(get_db),
+               _: User = Depends(_manager)):
+    """그 달 메모 전부 — 사람에 대한 기록이라 근무표를 고칠 수 있는 사람만 본다."""
+    if not _YM.match(month or ""):
+        raise HTTPException(400, "month 형식은 YYYY-MM 이어야 합니다.")
+    rows = db.query(WorkScheduleMemo).filter(WorkScheduleMemo.year_month == month).all()
+    return ApiResponse(success=True, data=[{
+        "staff_id": r.staff_id, "memo": r.memo or "",
+        "updated_by": r.updated_by,
+        "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+    } for r in rows])
+
+
+@router.put("/memos")
+def save_memo(body: MemoBody, db: Session = Depends(get_db),
+              current_user: User = Depends(_manager)):
+    """한 사람 메모 한 칸을 저장한다.
+
+    한 칸씩 보내는 이유 — 화면에서 칸을 벗어나는 순간 저장하기 위해서다.
+    저장 버튼을 두면 적어 놓고 안 누른 채 닫는 일이 반드시 생긴다.
+
+    근무표가 확정 잠금이어도 저장한다. 벽에 붙인 뒤에도 사람에 대한 메모는
+    계속 생기는데, 그것 때문에 잠금을 풀게 할 수는 없다. 메모는 근무표가
+    아니라 근무표를 보는 사람의 기록이다.
+    """
+    if not _YM.match(body.year_month or ""):
+        raise HTTPException(400, "year_month 형식은 YYYY-MM 이어야 합니다.")
+    if not (body.staff_id or "").strip():
+        raise HTTPException(400, "누구의 메모인지가 없습니다.")
+    text = (body.memo or "").strip()[:1000]
+
+    row = (db.query(WorkScheduleMemo)
+           .filter(WorkScheduleMemo.year_month == body.year_month,
+                   WorkScheduleMemo.staff_id == body.staff_id).first())
+    if not text:
+        # 비우면 지운다 — 빈 줄을 남겨 두면 '메모 있음' 표시가 계속 켜져 있다
+        if row:
+            db.delete(row)
+            db.commit()
+        return ApiResponse(success=True, data={"staff_id": body.staff_id, "memo": ""})
+
+    if not row:
+        row = WorkScheduleMemo(year_month=body.year_month, staff_id=body.staff_id)
+        db.add(row)
+    row.memo = text
+    row.updated_by = getattr(current_user, "name", None)
+    db.commit()
+    db.refresh(row)
+    return ApiResponse(success=True, data={
+        "staff_id": row.staff_id, "memo": row.memo,
+        "updated_by": row.updated_by,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    })
 
 
 @router.get("/versions")

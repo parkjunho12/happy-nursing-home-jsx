@@ -1,7 +1,7 @@
 """월별 근무표 (근무 스케줄) — 월 단위 JSON 문서로 저장"""
 import uuid
 from datetime import datetime, timezone, timedelta
-from sqlalchemy import Column, String, DateTime, JSON, Integer
+from sqlalchemy import Column, String, DateTime, JSON, Integer, Text, UniqueConstraint, Index
 from app.core.database import Base
 
 KST = timezone(timedelta(hours=9))
@@ -52,6 +52,45 @@ class WorkScheduleVersion(Base):
     changed = Column(Integer, default=0)            # 직전 저장 대비 바뀐 칸 수
     saved_by = Column(String(100), nullable=True)
     saved_at = Column(DateTime(timezone=True), default=now_kst, index=True)
+
+
+class WorkScheduleMemo(Base):
+    """그 달, 그 선생님에 대한 메모.
+
+    ■ 왜 근무표 문서 안에 넣지 않는가
+
+      근무표의 '비고' 열(rows[].note)이 이미 있지만 거기에 적으면 안 된다.
+      조 편성은 이번 달이 비어 있으면 지난달 것을 이어받는다 — 비고도 함께
+      따라온다. 8월에 적은 메모가 9월에 그대로 떠 있으면, 읽는 사람은 그것이
+      9월 이야기인 줄 안다.
+
+      확정 잠금도 걸린다. 근무표를 확정해 벽에 붙인 뒤에도 사람에 대한 메모는
+      계속 생긴다. 메모 한 줄 적으려고 잠금을 풀게 할 수는 없다.
+
+      저장할 때마다 근무표 스냅샷(버전)이 쌓이는 것도 곤란하다. 메모는
+      자주 고치는 것이라 되돌리기 이력이 메모로 뒤덮인다.
+
+      그래서 표를 따로 둔다. 근무표의 잠금·버전·수정시각을 건드리지 않는다.
+
+    ■ 벽보에는 나가지 않는다
+
+      사람에 대한 메모다. 근무표는 벽에 붙는 종이라 여기 적은 것을 함께
+      내보내면 안 된다. 화면에서만 본다.
+    """
+
+    __tablename__ = "work_schedule_memos"
+    __table_args__ = (
+        # 한 달에 한 사람 한 칸 — 둘이면 어느 것이 그 사람 메모인지 알 수 없다
+        UniqueConstraint("year_month", "staff_id", name="uq_ws_memo_month_staff"),
+        Index("ix_ws_memo_month", "year_month"),
+    )
+
+    id         = Column(String, primary_key=True, default=_uuid)
+    year_month = Column(String(7), nullable=False)
+    staff_id   = Column(String, nullable=False)
+    memo       = Column(Text, nullable=False, default="")
+    updated_by = Column(String(100), nullable=True)
+    updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)
 
 
 class WorkScheduleConfig(Base):
