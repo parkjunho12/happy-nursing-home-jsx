@@ -253,9 +253,12 @@ def edit_public_memo(month: str, body: PublicMemoBody, db: Session = Depends(get
 
 
 class TimesBody(BaseModel):
-    times: list   # [{time:'10:00~10:40', category:'인지'|'여가'|'신체'|null}] — 문자열도 허용(구버전)
+    times: list   # [{time:'10:00~10:40', category:'인지'|'여가'|'신체'|'맞춤형'|null}] — 문자열도 허용(구버전)
 
-TIME_CATS = ("인지", "여가", "신체")
+# 화면(ProgramPage.tsx 의 CATS)과 같아야 한다.
+# 여기 없는 분류로 저장하면 아래에서 소리 없이 None 이 되어, 화면에서는
+# 골랐는데 새로고침하면 사라진다.
+TIME_CATS = ("인지", "여가", "신체", "맞춤형")
 
 
 def _norm_times(raw) -> list:
@@ -283,7 +286,7 @@ def get_times(db: Session = Depends(get_db), _: User = Depends(_editor)):
 @router.put("/times")
 def save_times(body: TimesBody, db: Session = Depends(get_db),
                current_user: User = Depends(_editor)):
-    """진행 시간 목록 저장 — 카테고리(인지·여가·신체)를 지정하면 그 그룹의 기본 시간이 된다."""
+    """진행 시간 목록 저장 — 분류를 지정하면 그 그룹의 기본 시간이 된다."""
     times = _norm_times(body.times)
     row = db.query(ProgramSetting).first()
     if not row:

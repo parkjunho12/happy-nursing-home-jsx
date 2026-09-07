@@ -457,7 +457,7 @@ def care_status(db: Session = Depends(get_db)):
         if titled:
             picks = []
             for e in titled[:2]:
-                cat = next((c for c in ("인지", "여가", "신체") if (e.get("group") or "").startswith(c)), None)
+                cat = next((c for c in ("인지", "여가", "신체", "맞춤형") if (e.get("group") or "").startswith(c)), None)
                 label = f"{cat} 활동 · {e['title']}" if cat else e["title"]
                 picks.append(f"{e.get('slot', '')} {label}".strip())
             program_today = {"items": picks, "total": len(titled)}

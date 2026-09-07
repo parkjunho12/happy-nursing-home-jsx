@@ -56,16 +56,22 @@ export default function ProgramPage() {
   const [timesDraft, setTimesDraft] = useState<ProgramTime[]>([])
   const [newStart, setNewStart] = useState('')
   const [newEnd, setNewEnd] = useState('')
-  const [newCats, setNewCats] = useState<Set<string>>(new Set())   // 인지·여가·신체 복수 선택 — 하나씩 기본 시간으로 등록
+  const [newCats, setNewCats] = useState<Set<string>>(new Set())   // 복수 선택 — 하나씩 기본 시간으로 등록
+  /** 프로그램 분류 — 여기 한 곳에서만 정한다.
+   *  같은 목록이 네 군데에 흩어져 있었고, 하나만 고치면 조용히 갈라졌다.
+   *  (백엔드 programs.py 의 TIME_CATS 와도 같아야 한다 — 다르면 그 분류로
+   *   저장한 시간이 서버에서 소리 없이 버려진다) */
+  const CATS = ['인지', '여가', '신체', '맞춤형'] as const
+  const catOf = (name?: string | null) => CATS.find(c => (name ?? '').startsWith(c)) ?? null
   // 그룹명(인지A…)에 맞는 기본 시간
   const defaultTimeFor = (group: string | null): string | null => {
-    if (!group) return null
-    const cat = ['인지', '여가', '신체'].find(c => group.startsWith(c))
+    const cat = catOf(group)
     if (!cat) return null
     return times.find(t => t.category === cat)?.time ?? null
   }
   const CAT_BADGE: Record<string, string> = {
     인지: 'bg-violet-100 text-violet-700', 여가: 'bg-sky-100 text-sky-700', 신체: 'bg-emerald-100 text-emerald-700',
+    맞춤형: 'bg-amber-100 text-amber-800',
   }
   // 업로드 월 선택 — 엑셀 하단 탭(26.8월, 26.7월…) 중 어느 달을 가져올지
   const [pendFile, setPendFile] = useState<File | null>(null)
@@ -124,7 +130,7 @@ export default function ProgramPage() {
   const GROUP_KEY: Record<string, string> = { 인지: 'group_cognitive', 여가: 'group_leisure', 신체: 'group_physical' }
   const rosterOf = (group: string | null) => {
     if (!group) return [] as { floor: string; names: string[] }[]
-    const cat = ['인지', '여가', '신체'].find(c => group.startsWith(c))
+    const cat = catOf(group)
     const grade = cat ? group.slice(cat.length).trim() : ''
     if (!cat || !grade) return []
     const key = GROUP_KEY[cat]
@@ -217,17 +223,17 @@ export default function ProgramPage() {
     a.click()
     setTimeout(() => URL.revokeObjectURL(a.href), 3000)
   }
-  const ACCENT: Record<string, string> = { 인지: '#7c3aed', 여가: '#0284c7', 신체: '#059669' }
-  const CAT_EMOJI: Record<string, string> = { 인지: '🧩', 여가: '🎨', 신체: '💪' }
+  const ACCENT: Record<string, string> = { 인지: '#7c3aed', 여가: '#0284c7', 신체: '#059669', 맞춤형: '#b45309' }
+  const CAT_EMOJI: Record<string, string> = { 인지: '🧩', 여가: '🎨', 신체: '💪', 맞춤형: '🎯' }
   const emojiFor = (e: ProgramEntry) => {
     if (e.kind === '교육') return '📖'
-    const cat = ['인지', '여가', '신체'].find(c => (e.group ?? '').startsWith(c))
+    const cat = catOf(e.group)
     return (cat && CAT_EMOJI[cat]) || '🌸'
   }
   const downloadProgramRoster = async (e: ProgramEntry) => {
     const roster = rosterOf(e.group)
     if (roster.length === 0) { alert('이 그룹의 어르신 명단이 없습니다 — 수급자 관리에서 그룹을 지정해주세요.'); return }
-    const cat = ['인지', '여가', '신체'].find(c => (e.group ?? '').startsWith(c))
+    const cat = catOf(e.group)
     const now3 = new Date()
     setShareBusy(true)
     try {
@@ -721,7 +727,7 @@ export default function ProgramPage() {
               <button onClick={() => setTimesOpen(false)} className="ml-auto text-gray-300"><X size={16} /></button>
             </div>
             <p className="text-[11px] text-gray-400 mb-3">
-              인지·여가·신체를 고르고 추가하면 그 그룹의 <b>기본 시간</b>이 됩니다(여러 개 고르면 한 번에 등록). 아무것도 안 고르면 일반 시간으로 목록에만 나옵니다. 시간은 몇 개든 추가할 수 있어요.
+              분류를 고르고 추가하면 그 그룹의 <b>기본 시간</b>이 됩니다(여러 개 고르면 한 번에 등록). 아무것도 안 고르면 일반 시간으로 목록에만 나옵니다. 시간은 몇 개든 추가할 수 있어요.
             </p>
             <ul className="space-y-1 mb-3">
               {timesDraft.map((t, i) => (
@@ -741,17 +747,19 @@ export default function ProgramPage() {
               <input type="time" value={newEnd} onChange={e => setNewEnd(e.target.value)}
                 className="flex-1 px-2 py-2 text-sm border border-gray-200 rounded-xl" />
             </div>
-            <div className="flex items-center gap-1.5 mb-3">
-              {['인지', '여가', '신체'].map(c => {
+            <div className="grid grid-cols-4 gap-1.5 mb-2">
+              {CATS.map(c => {
                 const on = newCats.has(c)
                 return (
                   <button key={c} type="button"
                     onClick={() => setNewCats(p => { const n = new Set(p); if (n.has(c)) n.delete(c); else n.add(c); return n })}
-                    className={`flex-1 py-1.5 rounded-xl text-xs font-bold border ${on ? `${CAT_BADGE[c]} border-transparent` : 'text-gray-400 border-gray-200'}`}>
+                    className={`py-1.5 rounded-xl text-xs font-bold border ${on ? `${CAT_BADGE[c]} border-transparent` : 'text-gray-400 border-gray-200'}`}>
                     {c}{on && ' ✓'}
                   </button>
                 )
               })}
+            </div>
+            <div className="mb-3">
               <button type="button" disabled={!newStart || !newEnd}
                 onClick={() => {
                   const t = `${newStart}~${newEnd}`
@@ -768,8 +776,8 @@ export default function ProgramPage() {
                   })
                   setNewStart(''); setNewEnd(''); setNewCats(new Set())
                 }}
-                className="shrink-0 px-4 py-1.5 rounded-xl bg-violet-600 text-white text-sm font-bold disabled:opacity-40">
-                추가
+                className="w-full py-2 rounded-xl border border-violet-300 bg-violet-50 text-violet-700 text-sm font-bold hover:bg-violet-100 disabled:opacity-40">
+                목록에 추가
               </button>
             </div>
             <button onClick={async () => {
@@ -865,7 +873,7 @@ export default function ProgramPage() {
                 </div>
               ))}
               <datalist id="pg-groups">
-                {['인지A', '인지B', '인지C', '여가A', '여가B', '여가C', '신체A', '신체B', '신체C', '기독교', '천주교', '자원봉사', '사회적응'].map(g => <option key={g} value={g} />)}
+                {['맞춤형', '인지A', '인지B', '인지C', '여가A', '여가B', '여가C', '신체A', '신체B', '신체C', '기독교', '천주교', '자원봉사', '사회적응'].map(g => <option key={g} value={g} />)}
               </datalist>
               <button onClick={() => setEditDay(p => p && { ...p, entries: [...p.entries, { slot: '오후', group: null, title: '' }] })}
                 className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-dashed border-violet-300 bg-violet-50/50 text-violet-700 text-sm font-bold hover:bg-violet-50">
