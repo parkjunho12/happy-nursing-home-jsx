@@ -78,7 +78,24 @@ export interface DocChange {
   created_at?: string | null
 }
 
+/** 처리 순서 안내문 — 코드에 박혀 있던 것을 고칠 수 있게 뺐다 */
+export interface DocSop { content: string; updated_by?: string | null; updated_at?: string | null }
+export type SopKey = 'renewal_sop' | 'renewal_sms'
+export interface DocSopHistory {
+  id: string; content: string; length?: number | null
+  changed_by?: string | null; created_at?: string | null
+}
+
 export const residentDocAPI = {
+  /** 처리 순서 + 문자 예시를 한 번에 */
+  sop: () => apiClient.get(`${BASE}/sop`).then(unwrap<Record<SopKey, DocSop>>),
+  /** 고친다 — 고치기 전 내용이 이력에 통째로 남는다 */
+  saveSop: (key: SopKey, content: string) =>
+    apiClient.put(`${BASE}/sop/${key}`, { content })
+      .then(unwrap<{ content: string; changed: boolean; updated_by?: string | null; updated_at?: string | null }>),
+  sopHistory: (key: SopKey) =>
+    apiClient.get(`${BASE}/sop/${key}/history`).then(unwrap<DocSopHistory[]>),
+
   list: (includeInactive = false) =>
     apiClient.get(`${BASE}/records`, { params: includeInactive ? { include_inactive: true } : {} }).then(unwrap<ResidentDoc[]>),
   create: (b: DocInput) => apiClient.post(`${BASE}/records`, b).then(unwrap<ResidentDoc>),

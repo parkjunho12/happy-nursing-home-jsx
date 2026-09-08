@@ -12,6 +12,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
 from app.models.resident_docs import ResidentDocStatus, ResidentDocChange, now_kst
+from app.models.doc_sop import DocSop, DocSopHistory, KEY_RENEWAL_SOP, KEY_RENEWAL_SMS
 from app.schemas.response import ApiResponse
 
 router = APIRouter()
@@ -307,6 +308,86 @@ def _change_view(c: ResidentDocChange) -> dict:
         "action": c.action or "update", "changes": c.changes or [],
         "user_name": c.user_name, "created_at": c.created_at.isoformat() if c.created_at else None,
     }
+
+
+# ── 처리 순서 안내문 (고칠 수 있고, 이력이 남는다) ──────────────────────
+
+SOP_KEYS = (KEY_RENEWAL_SOP, KEY_RENEWAL_SMS)
+
+
+class SopBody(BaseModel):
+    content: str
+
+
+def _sop_row(db: Session, key: str) -> DocSop:
+    row = db.query(DocSop).filter(DocSop.key == key).first()
+    if not row:
+        # 마이그레이션이 넣어 두지만, 어떤 이유로든 없으면 빈 줄로 만든다.
+        # 여기서 404 를 내면 화면 전체가 안 뜬다.
+        row = DocSop(key=key, content="")
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+    return row
+
+
+@router.get("/sop")
+def get_sop(db: Session = Depends(get_db), _: User = Depends(_require)):
+    """처리 순서와 문자 예시 — 화면이 한 번에 받아 쓴다."""
+    out = {}
+    for k in SOP_KEYS:
+        r = _sop_row(db, k)
+        out[k] = {"content": r.content or "", "updated_by": r.updated_by,
+                  "updated_at": r.updated_at.isoformat() if r.updated_at else None}
+    return ApiResponse(success=True, data=out)
+
+
+@router.put("/sop/{key}")
+def save_sop(key: str, body: SopBody, db: Session = Depends(get_db),
+             current_user: User = Depends(_require)):
+    """고친다. 고치기 '전' 내용을 이력에 통째로 남긴다.
+
+    여러 사람이 그대로 따라 하는 절차라, 어느 날 한 줄이 사라졌을 때 누가 왜
+    지웠는지 알 수 있어야 한다. 줄 단위 차이가 아니라 전문을 남긴다 —
+    되돌리려면 그때 그 내용이 통째로 있어야 한다.
+    """
+    if key not in SOP_KEYS:
+        raise HTTPException(404, "그런 안내문이 없습니다.")
+    row = _sop_row(db, key)
+    new = (body.content or "").strip()
+    old = (row.content or "").strip()
+    if new == old:
+        # 안 바뀌었으면 이력을 쌓지 않는다 — 열었다 닫기만 해도 쌓이면
+        # 정작 무엇이 바뀌었는지 못 찾는다
+        return ApiResponse(success=True, data={"content": row.content or "", "changed": False})
+
+    db.add(DocSopHistory(key=key, content=old, length=len(old),
+                         changed_by=getattr(current_user, "name", None)))
+    row.content = new
+    row.updated_by = getattr(current_user, "name", None)
+    db.commit()
+    db.refresh(row)
+    return ApiResponse(success=True, data={
+        "content": row.content, "changed": True,
+        "updated_by": row.updated_by,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    })
+
+
+@router.get("/sop/{key}/history")
+def sop_history(key: str, limit: int = Query(30), db: Session = Depends(get_db),
+                _: User = Depends(_require)):
+    """고친 이력 — 그때 그 내용 통째로. 눌러서 되돌릴 수 있게."""
+    if key not in SOP_KEYS:
+        raise HTTPException(404, "그런 안내문이 없습니다.")
+    rows = (db.query(DocSopHistory).filter(DocSopHistory.key == key)
+            .order_by(DocSopHistory.created_at.desc())
+            .limit(max(1, min(limit, 100))).all())
+    return ApiResponse(success=True, data=[{
+        "id": h.id, "content": h.content or "", "length": h.length,
+        "changed_by": h.changed_by,
+        "created_at": h.created_at.isoformat() if h.created_at else None,
+    } for h in rows])
 
 
 @router.get("/records")

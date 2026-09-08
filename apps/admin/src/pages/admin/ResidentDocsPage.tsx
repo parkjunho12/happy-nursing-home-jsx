@@ -5,6 +5,7 @@ import { residentDocAPI, type ResidentDoc, type DocInput } from '../../api/resid
 import CertificationEditor from '@/components/eval/CertificationEditor'
 import DocEventsEditor from '@/components/eval/DocEventsEditor'
 import DocChangesModal from '@/components/eval/DocChangesModal'
+import SopEditor from '@/components/eval/SopEditor'
 import { CARE_TYPES, careMeta, deriveCare, needsFacilityApply, APPLY_STAGES, stageMeta, stageProgress } from '@/utils/careType'
 import { currentCert, certState, renewalDue, daysUntil, gradeLabel, benefitLabel } from '@/utils/cert'
 import { type DocEvent, type DocType, KINDS, kindMeta, asEvent, fmtYMD, fmtMD, autoDocEvents, appendAuto, fixRenewalDates, todayISO, STATUSES, statusMeta, effStatus, isAlert, isExplicitDone } from '@/utils/docEvents'
@@ -25,15 +26,6 @@ const plus6 = (s?: string | null) => {
   return fmtMD(`${ny}-${String(nm).padStart(2, '0')}-${String(Math.min(d, dim)).padStart(2, '0')}`)
 }
 
-const SOP = `▶ 서류(인정서, 개장기) 사진찍어 복지톡에 업로드
-▶ 보호자께 갱신 서류 도착 문자 알림
-▶ 서류 복사 후 복사본은 어르신 개인 파일에 철하기
-▶ 원본은 출입구 앞 파일에 넣기(보호자 오시면 드리기)
-▶ 계약서 준비 후 출입구 앞 파일에(내용 전부 미리 작성, 보호자 서명만)
-▶ 케어포 등급 및 본인부담률 수정 / 구글 현황표 수정
-* 갱신기준일자에 맞춰 급여제공계획서 작성 후 보호자 서명받아 철하기
-* 갱신기준일자에 맞춰 급여제공평가 등 각종 평가 작성
-* 국민건강보험공단에 갱신 등록`
 // 기존 엑셀 시트 '예시' 행에 적혀 있던 열별 작성 규칙 — 화면에서도 켜서 볼 수 있게 옮겨왔다
 const COL_RULES: Record<string, string[]> = {
   cert:     ['재가도 인정서 작성', '등급외는 1년으로 기재'],
@@ -44,7 +36,6 @@ const COL_RULES: Record<string, string[]> = {
   eval:     ['6개월마다 작성', '변화 시 작성', '퇴소 시 작성'],
 }
 
-const SMS = `안녕하세요. 행복한요양원 복지팀 000입니다. 어르신 인정서 갱신서류가 우편으로 도착했습니다. 원 방문 시 계약 서류 작성 부탁드립니다 ^^`
 
 export default function ResidentDocsPage() {
   const [rows, setRows] = useState<ResidentDoc[]>([])
@@ -291,14 +282,8 @@ export default function ResidentDocsPage() {
         </div>
       </div>
 
-      {sopOpen && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-3 text-sm">
-          <p className="font-bold text-amber-800 mb-1.5">★ 인정서·개장기 갱신 서류 도착 시 처리 순서 ★</p>
-          <pre className="whitespace-pre-wrap text-[13px] text-amber-800 leading-relaxed font-sans">{SOP}</pre>
-          <p className="font-bold text-amber-800 mt-3 mb-1">보호자 안내 문자 예시</p>
-          <div className="bg-white rounded-lg p-2.5 text-[13px] text-gray-600">{SMS}</div>
-        </div>
-      )}
+      {/* 처리 순서 — 코드에 박혀 있던 것을 고칠 수 있게 뺐다. 고친 이력도 남는다. */}
+      <SopEditor open={sopOpen} />
 
       {/* 요약 알림 — 클릭하면 필터 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
