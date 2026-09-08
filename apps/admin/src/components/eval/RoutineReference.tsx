@@ -78,7 +78,10 @@ export default function RoutineReference({ items, onOpen }: {
         || a.item.title.localeCompare(b.item.title, 'ko'))
   }, [facility, tab, q])
 
-  const total = facility.length
+  // 탭에 나오는 것만 센다. facility 에는 일회성도 들어 있어 그대로 세면
+  // 배지는 137인데 탭 합계는 86이라 서로 맞지 않는다.
+  const total = useMemo(
+    () => Object.values(counts).reduce((a, b) => a + b, 0), [counts])
 
   return (
     <section className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
