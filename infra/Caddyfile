@@ -52,8 +52,25 @@ admin.xn--p80bu1t60gba47bg6abm347gsla.com {
   root * /srv/admin
   file_server
 
-  # SPA 라우팅
-  try_files {path} /index.html
+  # 없는 에셋은 index.html 로 넘기지 않는다.
+  #
+  # 배포하면 옛 청크 파일이 서버에서 지워진다. 그런데 열어 둔 탭은 아직 옛
+  # index.html 로 돌고 있어서, 그 페이지로 이동할 때 지워진 청크를 부른다.
+  # 이때 try_files 가 index.html 을 200 으로 돌려주면 브라우저가 HTML 을
+  # 자바스크립트로 읽다 깨지고, 화면이 하얗게 남는다. 오류도 안 뜬다.
+  #
+  # 404 로 돌려주면 화면 쪽에서 '새 버전이 올라왔다' 고 알아채 다시 불러올 수
+  # 있다(ChunkGuard).
+  @asset path /assets/*
+  handle @asset {
+    file_server
+  }
+
+  # SPA 라우팅 — 나머지 경로만
+  handle {
+    try_files {path} /index.html
+    file_server
+  }
 
   # 정적 에셋 장기 캐싱
   @static {

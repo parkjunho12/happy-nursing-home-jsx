@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react'
+import ChunkGuard from '@/components/ChunkGuard'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './store/auth'
@@ -315,6 +316,8 @@ function App() {
         <LtcLoader />
         {/* 화면을 나눠 받으므로, 오는 동안 보여줄 것이 필요하다.
             빈 화면이 잠깐 뜨면 '멈췄나' 싶어 뒤로가기를 누르게 된다. */}
+        {/* 배포 뒤 옛 청크를 못 받으면 화면이 하얗게 남는다 — 그것을 잡는다 */}
+        <ChunkGuard>
         <Suspense fallback={<PageLoading />}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
@@ -420,6 +423,7 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </Suspense>
+        </ChunkGuard>
       </BrowserRouter>
     </QueryClientProvider>
   )

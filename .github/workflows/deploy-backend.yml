@@ -129,6 +129,19 @@ jobs:
             # 새 컨테이너 기동 — entrypoint의 alembic은 이미 head라 즉시 통과한다
             docker compose up -d --force-recreate backend
 
+            # Caddy 설정(infra/Caddyfile)도 이 워크플로가 가져온다. 그런데
+            # 재시작은 화면 배포 쪽에서만 하고 있어서, 두 배포의 순서에 따라
+            # 새 설정이 걸리지 않은 채로 남을 수 있었다.
+            #
+            # reload 는 무중단이라 매번 해도 된다. 다만 설정이 깨져 있으면
+            # 사이트 전체가 내려가므로, 반드시 검사부터 하고 통과할 때만 한다.
+            if docker compose exec -T caddy caddy validate --config /etc/caddy/Caddyfile; then
+              docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+              echo "✅ Caddy 설정 반영"
+            else
+              echo "⚠️ Caddy 설정이 올바르지 않아 반영하지 않았습니다 — 이전 설정으로 계속 돕니다"
+            fi
+
             # 상태 확인
             docker compose ps
             docker compose logs --tail=50 backend
