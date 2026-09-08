@@ -169,7 +169,10 @@ export default function EvalChecklistPage() {
 
   const metrics = useMemo(() => {
     let overdue = 0, weekTodo = 0, done = 0, total = 0, todayDue = 0
-    checklists.filter(c => c.active && !c.personId).forEach(c => {
+    // 왼쪽 목록에 실제로 뜨는 것만 센다. 오른쪽으로 옮긴 정기 업무까지 세면
+    // 목록은 51줄인데 숫자는 137이라 서로 맞지 않는다 — 숫자를 믿을 수 없게 된다.
+    checklists.filter(c => c.active && !c.personId
+                        && !RECURRING.includes(c.frequency as any)).forEach(c => {
       total++
       const d = deadlineOf(c)
       if (d.done) { done++; return }
