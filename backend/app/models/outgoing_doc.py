@@ -60,6 +60,14 @@ class OutgoingDoc(Base):
 
     # 어디로 나가는가 — 보호자 · 어르신 · 공단 · 병원 …
     target = Column(String(40), nullable=True)
+
+    # 지금 그 서류가 어디 있는가.
+    #
+    # 이게 없으면 교부하려고 꺼낼 때마다 "그거 어디 뒀지" 를 사람에게 묻는다.
+    # 서류는 대개 현관 앞에 모아 두므로 기본값을 '1층 현관' 으로 두고,
+    # 다른 데 뒀으면 고친다 — 매번 적게 하면 비워 두게 되고, 비면 없느니만
+    # 못하다.
+    location = Column(String(100), nullable=True)
     # 언제까지 — 비워도 된다. 급한 것만 적는다.
     due_date = Column(String(10), nullable=True)
 

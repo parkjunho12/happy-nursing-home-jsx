@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, FileOutput, Loader2, Plus, RotateCcw, Search, Trash2, X } from 'lucide-react'
+import { Check, FileOutput, Loader2, MapPin, Plus, RotateCcw, Search, Trash2, UserRound, X } from 'lucide-react'
 import { outgoingDocAPI, type OutgoingDoc } from '@/api/outgoingDocClient'
 import { useLtcStore } from '@/store/ltc'
 
@@ -23,6 +23,12 @@ import { useLtcStore } from '@/store/ltc'
  */
 const TARGETS = ['보호자', '어르신', '공단', '병원', '구청·주민센터', '기타'] as const
 
+/** 서류를 어디 두는가. 대개 현관 앞에 모아 두므로 그것을 기본값으로 둔다.
+ *  자주 쓰는 자리를 단추로 내놓고, 그 밖은 직접 적는다 — 목록만 두면
+ *  없는 자리를 못 적고, 자유 입력만 두면 같은 곳을 저마다 다르게 적는다. */
+const DEFAULT_LOCATION = '1층 현관'
+const PLACES = [DEFAULT_LOCATION, '사무실', '2층 간호사실', '3층 간호사실', '원장실'] as const
+
 const todayISO = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10)
 
 export default function OutgoingDocsPage() {
@@ -32,8 +38,17 @@ export default function OutgoingDocsPage() {
   const [q, setQ] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
-  const [form, setForm] = useState({ person_id: '', title: '', target: '보호자', due_date: '', note: '' })
+  const [form, setForm] = useState({
+    person_id: '', person_name: '', title: '', target: '보호자',
+    location: DEFAULT_LOCATION, due_date: '', note: '',
+  })
+  // 어르신 고르기 — 자유 입력은 이름을 정확히 안 치면 조용히 안 붙는다.
+  // 눌러서 찾아 고르게 한다(응급벨 명단과 같은 방식).
+  const [pickOpen, setPickOpen] = useState(false)
   const [pickQ, setPickQ] = useState('')
+  // 위치 고치기 — 어느 줄의 위치를 바꾸는 중인지
+  const [locFor, setLocFor] = useState<OutgoingDoc | null>(null)
+  const [locVal, setLocVal] = useState('')
   const [issueFor, setIssueFor] = useState<OutgoingDoc | null>(null)
   const [issueTo, setIssueTo] = useState('')
   const [issueOn, setIssueOn] = useState(todayISO())
@@ -68,11 +83,13 @@ export default function OutgoingDocsPage() {
     try {
       const d = await outgoingDocAPI.add({
         person_id: form.person_id || null, title: form.title.trim(),
-        target: form.target || null, due_date: form.due_date || null, note: form.note.trim(),
+        target: form.target || null, location: form.location.trim() || DEFAULT_LOCATION,
+        due_date: form.due_date || null, note: form.note.trim(),
       })
       setRows(rs => [d, ...(rs ?? [])])
-      setForm({ person_id: '', title: '', target: '보호자', due_date: '', note: '' })
-      setPickQ('')
+      // 위치는 남긴다 — 대개 같은 자리에 계속 둔다. 매번 다시 고르게 하지 않는다.
+      setForm(f => ({ person_id: '', person_name: '', title: '', target: '보호자',
+                      location: f.location, due_date: '', note: '' }))
     } catch (e: any) {
       alert(e?.response?.data?.detail ?? '추가하지 못했습니다.')
     } finally { setAdding(false) }
@@ -87,6 +104,18 @@ export default function OutgoingDocsPage() {
       setIssueFor(null); setIssueTo(''); setIssueOn(todayISO())
     } catch (e: any) {
       alert(e?.response?.data?.detail ?? '교부 처리에 실패했습니다.')
+    } finally { setBusy(null) }
+  }
+
+  const saveLoc = async () => {
+    if (!locFor) return
+    setBusy(locFor.id)
+    try {
+      const r = await outgoingDocAPI.edit(locFor.id, { location: locVal.trim() || DEFAULT_LOCATION })
+      setRows(rs => (rs ?? []).map(x => x.id === r.id ? r : x))
+      setLocFor(null)
+    } catch (e: any) {
+      alert(e?.response?.data?.detail ?? '위치를 바꾸지 못했습니다.')
     } finally { setBusy(null) }
   }
 
@@ -134,34 +163,11 @@ export default function OutgoingDocsPage() {
       {/* 새로 추가 */}
       <div className="rounded-2xl border border-gray-200 bg-white p-3">
         <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-          <div className="md:col-span-1">
-            {/* 어르신 — 시설 대외 문서면 비워 둔다.
-                이름을 치는 순간 맞춰 보고, 붙었는지 아래에 그대로 보여준다.
-                예전에는 칸을 벗어날 때만 맞춰 봐서, 이름을 정확히 안 치면
-                어르신이 조용히 안 붙었다. 고른 줄 알고 넘어가게 된다. */}
-            <input value={pickQ} list="odoc-res" placeholder="어르신 (선택)"
-              onChange={e => {
-                const v = e.target.value
-                setPickQ(v)
-                const hit = active.find(r => r.name === v.trim())
-                setForm(f => ({ ...f, person_id: hit?.id ?? '' }))
-              }}
-              className={`${ic} w-full ${pickQ.trim() && !form.person_id ? 'border-amber-400' : ''}`} />
-            <datalist id="odoc-res">
-              {cand.map(r => <option key={r.id} value={r.name}>{(r as any).room ? `${(r as any).room}호` : ''}</option>)}
-            </datalist>
-            {pickQ.trim() && (
-              form.person_id
-                ? <p className="mt-0.5 text-[10px] font-bold text-teal-700">
-                    ✓ {active.find(r => r.id === form.person_id)?.name}
-                    {(active.find(r => r.id === form.person_id) as any)?.room
-                      ? ` · ${(active.find(r => r.id === form.person_id) as any).room}호` : ''}
-                  </p>
-                : <p className="mt-0.5 text-[10px] font-bold text-amber-700">
-                    명단에 없는 이름입니다 — 어르신 없이 등록됩니다
-                  </p>
-            )}
-          </div>
+          {/* 어르신 — 눌러서 찾아 고른다. 시설 대외 문서면 비워 둔다. */}
+          <button type="button" onClick={() => { setPickOpen(true); setPickQ('') }}
+            className={`${ic} w-full text-left truncate ${form.person_id ? 'font-bold text-gray-900' : 'text-gray-400'}`}>
+            {form.person_name || '어르신 선택'}
+          </button>
           <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}
             placeholder="문서 이름 — 예) 장기요양인정서 갱신 서류"
             className={`${ic} md:col-span-2 font-bold`} />
@@ -172,6 +178,21 @@ export default function OutgoingDocsPage() {
           <input type="date" value={form.due_date} onChange={e => setForm({ ...form, due_date: e.target.value })}
             title="기한 (선택)" className={ic} />
         </div>
+
+        {/* 어디 뒀는가 — 자주 쓰는 자리는 눌러서, 그 밖은 직접 적는다 */}
+        <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+          <MapPin size={13} className="text-gray-400 shrink-0" />
+          {PLACES.map(pl => (
+            <button key={pl} type="button" onClick={() => setForm({ ...form, location: pl })}
+              className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold ${
+                form.location === pl ? 'bg-gray-800 border-gray-800 text-white' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+              {pl}
+            </button>
+          ))}
+          <input value={form.location} onChange={e => setForm({ ...form, location: e.target.value })}
+            placeholder="직접 입력" className={`${ic} w-32 py-1`} />
+        </div>
+
         <div className="flex gap-2 mt-2">
           <input value={form.note} onChange={e => setForm({ ...form, note: e.target.value })}
             placeholder="메모 (선택)" className={`${ic} flex-1`} />
@@ -217,17 +238,26 @@ export default function OutgoingDocsPage() {
                       <span className="font-semibold">{d.title}</span>
                       {d.target && <span className="ml-1.5 text-[11px] font-bold text-teal-700 bg-teal-50 border border-teal-100 rounded px-1.5 py-0.5">{d.target}</span>}
                     </p>
-                    <p className="text-[11px] text-gray-400 mt-0.5">
+                    <p className="text-[11px] text-gray-400 mt-0.5 flex items-center gap-1.5 flex-wrap">
                       {d.issued_at ? (
                         <>
-                          {d.issued_at} 교부
-                          {d.issued_to && <> · 받으신 분 <b className="text-gray-600">{d.issued_to}</b></>}
-                          {d.issued_by && <> · 처리 {d.issued_by}</>}
+                          <span>
+                            {d.issued_at} 교부
+                            {d.issued_to && <> · 받으신 분 <b className="text-gray-600">{d.issued_to}</b></>}
+                            {d.issued_by && <> · 처리 {d.issued_by}</>}
+                          </span>
                         </>
                       ) : (
                         <>
-                          {d.created_by && <>{d.created_by} 등록</>}
-                          {d.note && <> · {d.note}</>}
+                          {/* 위치 — 꺼내러 갈 때 제일 먼저 보는 것이라 눈에 띄게 두고,
+                              눌러서 바로 고칠 수 있게 한다 */}
+                          <button onClick={() => { setLocFor(d); setLocVal(d.location ?? DEFAULT_LOCATION) }}
+                            title="둔 곳 바꾸기"
+                            className="inline-flex items-center gap-0.5 text-[11px] font-bold text-gray-600 bg-gray-100 border border-gray-200 rounded px-1.5 py-0.5 hover:border-gray-400">
+                            <MapPin size={10} /> {d.location || DEFAULT_LOCATION}
+                          </button>
+                          {d.created_by && <span>{d.created_by} 등록</span>}
+                          {d.note && <span>· {d.note}</span>}
                         </>
                       )}
                     </p>
@@ -266,6 +296,96 @@ export default function OutgoingDocsPage() {
           </ul>
         )}
       </div>
+
+      {/* 어르신 고르기 — 이름·호실로 찾는다.
+          자유 입력은 이름을 정확히 안 치면 조용히 안 붙어, 고른 줄 알고 넘어간다. */}
+      {pickOpen && (
+        <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4"
+          onClick={() => setPickOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm max-h-[80vh] flex flex-col"
+            onClick={e => e.stopPropagation()}>
+            <div className="px-4 py-3 border-b flex items-center gap-2 shrink-0">
+              <UserRound size={15} className="text-teal-600" />
+              <h3 className="text-sm font-bold text-gray-900">어르신 선택</h3>
+              <button onClick={() => setPickOpen(false)} className="ml-auto text-gray-300 hover:text-gray-500"><X size={16} /></button>
+            </div>
+            <div className="px-3 py-2 border-b shrink-0">
+              <div className="relative">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-300" />
+                <input autoFocus value={pickQ} onChange={e => setPickQ(e.target.value)}
+                  placeholder="성함 · 호실로 찾기"
+                  className="w-full pl-7 pr-2 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:border-teal-400" />
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {cand.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-8">찾는 어르신이 없습니다.</p>
+              ) : (
+                <ul className="divide-y divide-gray-50">
+                  {cand.map(r => (
+                    <li key={r.id}>
+                      <button onClick={() => {
+                          setForm(f => ({ ...f, person_id: r.id, person_name: r.name }))
+                          setPickOpen(false)
+                        }}
+                        className="w-full text-left px-4 py-2.5 hover:bg-teal-50 flex items-center gap-2">
+                        <span className="text-[11px] font-bold text-gray-400 w-14 shrink-0">
+                          {(r as any).room ? `${(r as any).room}호` : (r as any).floor ?? ''}
+                        </span>
+                        <span className="text-sm font-bold text-gray-900">{r.name}</span>
+                        {r.status === 'pending' && <span className="ml-auto text-[10px] font-bold text-amber-600">입소 예정</span>}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            {/* 어르신 없이 등록하는 것도 정상적인 쓰임 — 시설 대외 문서 */}
+            <div className="px-3 py-2.5 border-t shrink-0">
+              <button onClick={() => { setForm(f => ({ ...f, person_id: '', person_name: '' })); setPickOpen(false) }}
+                className="w-full py-2 rounded-lg border border-gray-200 text-xs font-bold text-gray-500 hover:bg-gray-50">
+                어르신 없이 (시설 문서)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 둔 곳 바꾸기 */}
+      {locFor && (
+        <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4"
+          onClick={() => !busy && setLocFor(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-1.5 mb-1">
+              <MapPin size={14} className="text-gray-500" />
+              <h3 className="text-sm font-bold text-gray-900">둔 곳</h3>
+              <button onClick={() => setLocFor(null)} className="ml-auto text-gray-300"><X size={16} /></button>
+            </div>
+            <p className="text-[12px] text-gray-500 mb-3">
+              {locFor.person_name && <b>{locFor.person_name} 어르신 </b>}{locFor.title}
+            </p>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {PLACES.map(pl => (
+                <button key={pl} onClick={() => setLocVal(pl)}
+                  className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold ${
+                    locVal === pl ? 'bg-gray-800 border-gray-800 text-white' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                  {pl}
+                </button>
+              ))}
+            </div>
+            <input value={locVal} onChange={e => setLocVal(e.target.value)} maxLength={100}
+              onKeyDown={e => { if (e.key === 'Enter') saveLoc() }}
+              placeholder="직접 입력" className={`${ic} w-full`} />
+            <div className="flex gap-2 mt-3">
+              <span className="text-[11px] text-gray-400 self-center">비우면 「{DEFAULT_LOCATION}」으로 둡니다</span>
+              <button onClick={saveLoc} disabled={busy === locFor.id}
+                className="ml-auto px-4 py-2 rounded-xl bg-gray-800 text-white text-xs font-bold disabled:opacity-40">
+                {busy === locFor.id ? '저장 중…' : '저장'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 교부 — 받으신 분과 날짜를 함께 남긴다 */}
       {issueFor && (

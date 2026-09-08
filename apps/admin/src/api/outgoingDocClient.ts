@@ -14,6 +14,8 @@ export interface OutgoingDoc {
   title: string
   note: string
   target?: string | null
+  /** 지금 그 서류가 어디 있는가 — 기본 '1층 현관' */
+  location?: string | null
   due_date?: string | null
   issued_at?: string | null
   issued_by?: string | null
@@ -28,8 +30,12 @@ export const outgoingDocAPI = {
     apiClient.get(BASE, { params: issued === undefined ? {} : { issued } })
       .then(unwrap<OutgoingDoc[]>),
   add: (b: { person_id?: string | null; title: string; note?: string
-             target?: string | null; due_date?: string | null }) =>
+             target?: string | null; location?: string | null; due_date?: string | null }) =>
     apiClient.post(BASE, b).then(unwrap<OutgoingDoc>),
+  /** 교부 전에 고친다 — 위치가 가장 자주 바뀐다 */
+  edit: (id: string, b: { title?: string; note?: string; target?: string
+                          location?: string; due_date?: string }) =>
+    apiClient.patch(`${BASE}/${id}`, b).then(unwrap<OutgoingDoc>),
   /** 교부 — 목록에서 내리고 날짜를 남긴다 */
   issue: (id: string, b?: { issued_to?: string; issued_at?: string }) =>
     apiClient.post(`${BASE}/${id}/issue`, b ?? {}).then(unwrap<OutgoingDoc>),

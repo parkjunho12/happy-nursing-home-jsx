@@ -634,6 +634,8 @@ export default function DashboardPage() {
                     <span className="font-medium">{d.title}</span>
                   </p>
                   <div className="flex items-center gap-2 mt-0.5">
+                    {/* 둔 곳 — 꺼내러 갈 때 제일 먼저 필요한 것이라 여기 함께 낸다 */}
+                    {d.location && <span className="text-[10px] font-bold text-gray-500">📍 {d.location}</span>}
                     {d.target && <span className="text-[10px] font-bold text-teal-600">{d.target}</span>}
                     {d.note && <span className="text-[10px] text-gray-400 truncate">{d.note}</span>}
                   </div>

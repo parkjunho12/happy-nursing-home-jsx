@@ -26,6 +26,9 @@ _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # 어디로 나가는가 — 화면의 선택지와 같아야 한다
 TARGETS = ("보호자", "어르신", "공단", "병원", "구청·주민센터", "기타")
 
+# 서류를 어디 두는가. 대개 현관 앞에 모아 두므로 기본값을 그렇게 둔다.
+DEFAULT_LOCATION = "1층 현관"
+
 
 def _editor(current_user: User = Depends(get_current_user)) -> User:
     """서류를 다루는 사람 — 사회복지사 라인과 간호팀.
@@ -46,6 +49,16 @@ class DocIn(BaseModel):
     title: str
     note: Optional[str] = None
     target: Optional[str] = None
+    location: Optional[str] = None
+    due_date: Optional[str] = None
+
+
+class DocPatch(BaseModel):
+    """교부 전에 고칠 수 있는 것 — 위치가 제일 자주 바뀐다."""
+    title: Optional[str] = None
+    note: Optional[str] = None
+    target: Optional[str] = None
+    location: Optional[str] = None
     due_date: Optional[str] = None
 
 
@@ -59,7 +72,7 @@ def _view(d: OutgoingDoc) -> dict:
         "id": d.id,
         "person_id": d.person_id, "person_name": d.person_name,
         "title": d.title, "note": d.note or "",
-        "target": d.target, "due_date": d.due_date,
+        "target": d.target, "location": d.location, "due_date": d.due_date,
         "issued_at": d.issued_at, "issued_by": d.issued_by, "issued_to": d.issued_to,
         "created_by": d.created_by,
         "created_at": d.created_at.isoformat() if d.created_at else None,
@@ -103,10 +116,48 @@ def add_doc(body: DocIn, db: Session = Depends(get_db), current_user: User = Dep
         person_id=body.person_id or None, person_name=name,
         title=title[:200], note=((body.note or "").strip() or None),
         target=(body.target or "").strip() or None,
+        # 비워 보내면 기본값을 넣는다 — 빈 칸으로 두면 나중에 못 찾는다
+        location=((body.location or "").strip() or DEFAULT_LOCATION)[:100],
         due_date=due or None,
         created_by=getattr(current_user, "name", None),
     )
     db.add(d)
+    db.commit()
+    db.refresh(d)
+    return ApiResponse(success=True, data=_view(d))
+
+
+@router.patch("/{doc_id}")
+def edit(doc_id: str, body: DocPatch, db: Session = Depends(get_db),
+         _: User = Depends(_editor)):
+    """교부 전에 고친다 — 위치가 바뀌는 일이 가장 잦다.
+
+    교부한 뒤에는 못 고치게 막는다. 이미 나간 서류의 기록을 나중에 바꾸면
+    그 기록을 믿을 수 없게 된다.
+    """
+    d = db.query(OutgoingDoc).filter(OutgoingDoc.id == doc_id).first()
+    if not d:
+        raise HTTPException(404, "그 문서를 찾을 수 없습니다.")
+    if d.issued_at:
+        raise HTTPException(400, "교부한 기록은 고칠 수 없습니다. 먼저 교부를 취소해주세요.")
+
+    if body.title is not None:
+        t = body.title.strip()
+        if not t:
+            raise HTTPException(400, "어떤 문서인지 적어주세요.")
+        d.title = t[:200]
+    if body.note is not None:
+        d.note = body.note.strip() or None
+    if body.target is not None:
+        d.target = body.target.strip() or None
+    if body.location is not None:
+        # 비우면 기본값으로 되돌린다 — '위치 모름' 인 줄을 만들지 않는다
+        d.location = (body.location.strip() or DEFAULT_LOCATION)[:100]
+    if body.due_date is not None:
+        due = body.due_date.strip()
+        if due and not _DATE.match(due):
+            raise HTTPException(400, "기한은 YYYY-MM-DD 형식이어야 합니다.")
+        d.due_date = due or None
     db.commit()
     db.refresh(d)
     return ApiResponse(success=True, data=_view(d))
