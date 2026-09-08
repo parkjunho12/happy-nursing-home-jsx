@@ -77,6 +77,11 @@ class ChecklistItemOut(BaseModel):
     completed:            bool
     completed_date:       Optional[str] = None
     last_checked_date:    Optional[str] = None
+    # 불가 — 완료도 미완료도 아닌 셋째 상태. 사유가 함께 온다.
+    blocked:              bool = False
+    blocked_reason:       str = ""
+    blocked_by:           Optional[str] = None
+    blocked_date:         Optional[str] = None
     person_id:            Optional[str] = None
     person_name:          Optional[str] = None
     person_type:          Optional[str] = None
@@ -144,6 +149,9 @@ class ChecklistItemUpdate(BaseModel):
     active:               Optional[bool] = None
     completed:            Optional[bool] = None
     completed_date:       Optional[str] = None
+    # 불가 — 사유 없이 불가로 두지 못하게 화면·서버 양쪽에서 막는다
+    blocked:              Optional[bool] = None
+    blocked_reason:       Optional[str] = None
     person_id:            Optional[str] = None
     person_name:          Optional[str] = None
     person_type:          Optional[str] = None

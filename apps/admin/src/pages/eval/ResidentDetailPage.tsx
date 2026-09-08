@@ -88,6 +88,28 @@ export default function ResidentDetailPage() {
   const [editingCl, setEditingCl] = useState<ChecklistItem | null>(null)
   const [editingRes, setEditingRes] = useState(false)
   const [batchTag, setBatchTag] = useState<string | null>(null)   // 영역 전체 체크 진행 중
+  // 불가 사유 적기 — 어느 항목의 사유를 쓰는 중인지
+  const [blockFor, setBlockFor] = useState<{ id: string; title: string; reason: string } | null>(null)
+  const [blockBusy, setBlockBusy] = useState(false)
+
+  /** 불가로 표시하거나 되돌린다.
+   *
+   *  불가는 완료도 미완료도 아니다. 미완료로 두면 영원히 빨간 채로 남아
+   *  '아직 못 한 일' 과 '할 수 없는 일' 이 섞이고, 완료로 찍으면 하지 않은
+   *  일을 했다고 기록하게 된다.
+   *
+   *  사유 없이는 불가로 두지 않는다 — 왜 못 하는지가 없으면 나중에 아무도
+   *  판단할 수 없다.
+   */
+  const saveBlocked = async (id: string, blocked: boolean, reason = '') => {
+    setBlockBusy(true)
+    try {
+      await updateChecklist(id, { blocked, blockedReason: reason } as any)
+      setBlockFor(null)
+    } catch (e: any) {
+      alert(e?.response?.data?.detail ?? '저장하지 못했습니다.')
+    } finally { setBlockBusy(false) }
+  }
   const [doc, setDoc] = useState<ResidentDoc | null>(null)
   const [assign, setAssign] = useState<AssignRow | null>(null)
   const [subLoading, setSubLoading] = useState(true)
@@ -326,34 +348,47 @@ export default function ResidentDetailPage() {
                       : team === '복지' ? 'bg-teal-50/60 border-teal-200'
                       : c.riskLevel === 'high' ? 'bg-rose-50 border-rose-200'
                       : 'bg-white border-gray-100 hover:border-gray-200'
+                    const blocked = (c as any).blocked === true
                     return (
-                      <li key={c.id} className={`flex items-center gap-2.5 pl-2.5 pr-2 py-2 rounded-xl border text-xs transition-colors ${rowCls}`}>
+                      <li key={c.id} className={`flex items-center gap-2.5 pl-2.5 pr-2 py-2 rounded-xl border text-xs transition-colors ${blocked ? 'bg-gray-100 border-gray-200' : rowCls}`}>
                         {/* 체크 토글 */}
-                        <button type="button" disabled={busyId === c.id || batchTag !== null}
+                        <button type="button" disabled={busyId === c.id || batchTag !== null || blocked}
                         onClick={async () => {
                           setBusyId(c.id)
                           try { await toggleComplete(c.id, !ok) }
                           catch (e: any) { alert(e?.response?.data?.detail ?? '처리 실패') }
                           finally { setBusyId(null) }
                         }}
-                        title={ok ? '완료 취소' : '완료 처리'}
-                        className={`w-5 h-5 rounded-md border-2 shrink-0 flex items-center justify-center transition-colors ${ok ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-green-400 bg-white'} ${busyId === c.id ? 'opacity-40' : ''}`}>
-                        {ok && <span className="text-white text-[11px] font-black leading-none">✓</span>}
+                        title={blocked ? '불가로 표시된 항목입니다 — 먼저 불가를 해제해주세요' : ok ? '완료 취소' : '완료 처리'}
+                        className={`w-5 h-5 rounded-md border-2 shrink-0 flex items-center justify-center transition-colors ${
+                          blocked ? 'border-gray-300 bg-gray-200 cursor-not-allowed'
+                          : ok ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-green-400 bg-white'} ${busyId === c.id ? 'opacity-40' : ''}`}>
+                        {ok && !blocked && <span className="text-white text-[11px] font-black leading-none">✓</span>}
+                        {blocked && <span className="text-gray-500 text-[11px] font-black leading-none">–</span>}
                         </button>
                         {team && (
                         <span className={`shrink-0 text-[10px] font-extrabold px-1.5 py-0.5 rounded text-white ${team === '간호' ? 'bg-rose-500' : team === '물리' ? 'bg-blue-500' : 'bg-teal-500'}`}>{team}</span>
                         )}
-                        <span className={`flex-1 min-w-0 truncate text-[12.5px] ${ok ? 'line-through text-gray-400' : team === '간호' ? 'font-bold text-rose-800' : team === '물리' ? 'font-bold text-blue-800' : team === '복지' ? 'font-semibold text-teal-900' : 'font-semibold text-gray-700'}`} title={text}>
+                        <span className={`flex-1 min-w-0 truncate text-[12.5px] ${blocked ? 'text-gray-400' : ok ? 'line-through text-gray-400' : team === '간호' ? 'font-bold text-rose-800' : team === '물리' ? 'font-bold text-blue-800' : team === '복지' ? 'font-semibold text-teal-900' : 'font-semibold text-gray-700'}`} title={text}>
                         {text}
                         </span>
+                        {/* 불가 — 사유를 눌러 볼 수 있게 배지로 */}
+                        {blocked && (
+                        <button type="button" onClick={() => setBlockFor({ id: c.id, title: text, reason: (c as any).blockedReason ?? '' })}
+                          title="사유 고치기"
+                          className="shrink-0 inline-flex items-center gap-1 max-w-[16rem] text-[11px] font-bold text-gray-600 bg-white border border-gray-300 px-2 py-0.5 rounded-full hover:border-gray-400">
+                          불가
+                          {(c as any).blockedReason && <span className="font-medium text-gray-500 truncate">{(c as any).blockedReason}</span>}
+                        </button>
+                        )}
                         {/* 담당자 — 명확하게 */}
-                        {ok && (
+                        {ok && !blocked && (
                         <span className="shrink-0 inline-flex items-center gap-1 text-[11px] font-bold text-green-700 bg-white border border-green-200 px-2 py-0.5 rounded-full">
                           ✓ {(c as any).completedBy ?? '담당자 미기록'}
                           {c.completedDate && <span className="font-semibold text-green-500">{Number(c.completedDate.slice(5, 7))}/{Number(c.completedDate.slice(8, 10))}</span>}
                         </span>
                         )}
-                        {!ok && dday != null && (
+                        {!ok && !blocked && dday != null && (
                         <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${late ? 'bg-red-100 text-red-600' : dday <= 3 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-400'}`}>
                           {late ? `지연 ${-dday}일` : dday === 0 ? '오늘까지' : `D-${dday}`}
                         </span>
@@ -365,6 +400,17 @@ export default function ResidentDetailPage() {
                         }}
                         title="기한 설정 — 비우면 기한 없음"
                         className="shrink-0 w-[8.2rem] px-1.5 py-1 text-[11px] border border-gray-200 rounded-lg bg-white text-gray-500 hidden sm:block" />
+                        {/* 불가 — 할 수 없는 항목임을 사유와 함께 남긴다 */}
+                        <button type="button" disabled={blockBusy}
+                        onClick={() => blocked
+                          ? saveBlocked(c.id, false)
+                          : setBlockFor({ id: c.id, title: text, reason: '' })}
+                        title={blocked ? '불가 해제' : '불가로 표시 — 사유를 적습니다'}
+                        className={`shrink-0 px-1.5 py-0.5 rounded-lg border text-[10px] font-bold transition-colors ${
+                          blocked ? 'border-gray-400 bg-gray-200 text-gray-600 hover:bg-gray-300'
+                          : 'border-gray-200 text-gray-400 hover:border-gray-400 hover:text-gray-600'}`}>
+                        {blocked ? '해제' : '불가'}
+                        </button>
                         <button type="button" onClick={() => setEditingCl(c)} title="항목 수정"
                         className="shrink-0 p-1 text-gray-300 hover:text-gray-600 rounded"><Pencil size={12} /></button>
                         {!c.active && <span className="shrink-0 text-[9px] text-gray-400">중단</span>}
@@ -585,6 +631,37 @@ export default function ResidentDetailPage() {
       })()}
 
       {editingCl && <ChecklistFormModal existing={editingCl} onClose={() => setEditingCl(null)} />}
+
+      {/* 불가 사유 — 사유 없이 불가로 두면 나중에 '안 한 것' 과 구별되지 않는다 */}
+      {blockFor && (
+        <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4 print:hidden"
+          onClick={() => !blockBusy && setBlockFor(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-bold text-gray-900 mb-1">불가 사유</h3>
+            <p className="text-[11px] text-gray-400 mb-2 line-clamp-2">{blockFor.title}</p>
+            <textarea autoFocus value={blockFor.reason} rows={3} maxLength={300}
+              onChange={e => setBlockFor(b => b && { ...b, reason: e.target.value })}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && blockFor.reason.trim())
+                  saveBlocked(blockFor.id, true, blockFor.reason.trim())
+              }}
+              placeholder="예) 보호자 미동의 · 해당 없음 · 타 기관에서 이미 시행"
+              className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm resize-none focus:outline-none focus:border-gray-400" />
+            <div className="flex items-center gap-2 mt-3">
+              <span className="text-[11px] text-gray-400">
+                {blockFor.reason.trim() ? '완료 체크는 잠깁니다' : '사유를 적어야 저장됩니다'}
+              </span>
+              <button onClick={() => setBlockFor(null)} disabled={blockBusy}
+                className="ml-auto px-3 py-2 rounded-xl border border-gray-200 text-xs font-bold text-gray-500">취소</button>
+              <button onClick={() => saveBlocked(blockFor.id, true, blockFor.reason.trim())}
+                disabled={blockBusy || !blockFor.reason.trim()}
+                className="px-4 py-2 rounded-xl bg-gray-800 text-white text-xs font-bold disabled:opacity-40">
+                {blockBusy ? '저장 중…' : '불가로 표시'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {editingRes && <ResidentForm existing={r} onClose={() => setEditingRes(false)} />}
 
       {/* 하단 바로가기 */}

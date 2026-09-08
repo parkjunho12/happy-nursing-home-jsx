@@ -263,6 +263,12 @@ export function isPeriodCompleted(item: ChecklistItem, periodKey?: string): bool
 }
 
 export function isItemDone(item: ChecklistItem): boolean {
+  // 불가 — 할 수 없는 항목은 '남은 일' 에서 뺀다.
+  //
+  // 미완료로 세면 진행률이 영영 100%가 되지 않아, 정말 남은 일이 무엇인지
+  // 알 수 없게 된다. 완료로 세는 것이 아니라 '더 볼 것 없음' 으로 센다 —
+  // 화면에서는 회색 '불가' 배지와 사유로 완료와 구별된다.
+  if ((item as any).blocked === true) return true
   if (EVENT_FREQS.includes(item.frequency as Frequency)) return item.completed
   const key = getCurrentPeriodKey(item.frequency as Frequency)
 

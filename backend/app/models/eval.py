@@ -164,6 +164,19 @@ class ChecklistItem(Base):
     completed_date = Column(String(20), nullable=True)
     last_checked_date = Column(String(20), nullable=True)
 
+    # '불가' — 할 수 없는 항목. 완료도 미완료도 아니다.
+    #
+    # 미완료로 두면 영원히 빨간 채로 남아 '아직 못 한 일' 과 '할 수 없는 일' 이
+    # 섞인다. 그렇다고 완료로 찍으면 하지 않은 일을 했다고 기록하는 것이 된다.
+    # 그래서 셋째 상태를 둔다.
+    #
+    # 사유를 반드시 함께 남긴다. 왜 못 하는지가 없으면 나중에 아무도 판단할
+    # 수 없고, 감사에서도 '안 한 것' 과 구별되지 않는다.
+    blocked        = Column(Boolean, default=False)
+    blocked_reason = Column(Text, default="")
+    blocked_by     = Column(String(100), nullable=True)
+    blocked_date   = Column(String(20), nullable=True)
+
     person_id = Column(String, nullable=True, index=True)
     person_name = Column(String(100), nullable=True)
     person_type = Column(String(20), nullable=True)

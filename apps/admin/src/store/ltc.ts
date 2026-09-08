@@ -50,6 +50,11 @@ export interface ChecklistItem {
   completed: boolean
   completedDate?: string
   lastCheckedDate?: string
+  /** 불가 — 할 수 없는 항목. 완료도 미완료도 아닌 셋째 상태. */
+  blocked: boolean
+  blockedReason: string
+  blockedBy?: string
+  blockedDate?: string
   completionHistory: CompletionRecord[]
   occurrences: ChecklistOccurrence[]   // 신규 — 없으면 [], 있으면 우선 사용
   dueDate?: string         // one_time 기한
@@ -153,6 +158,10 @@ function mapCL(raw: any): ChecklistItem {
       ?? [...(raw.occurrences ?? [])].reverse().find((oc: any) => oc.status === 'completed' && oc.completed_by)?.completed_by
       ?? undefined,
     lastCheckedDate: raw.last_checked_date ?? undefined,
+    blocked:         raw.blocked          ?? false,
+    blockedReason:   raw.blocked_reason   ?? '',
+    blockedBy:       raw.blocked_by       ?? undefined,
+    blockedDate:     raw.blocked_date     ?? undefined,
     personId:        raw.person_id        ?? undefined,
     personName:      raw.person_name      ?? undefined,
     personType:      raw.person_type      ?? 'facility',
@@ -367,6 +376,9 @@ export const useLtcStore = create<LtcState>((set, get) => ({
     if (u.memo !== undefined)             p.memo              = u.memo
     if (u.attachmentName !== undefined)   p.attachment_name   = u.attachmentName
     if (u.active !== undefined)           p.active            = u.active
+    // 불가 — 해제할 때도 false 를 보내야 하므로 undefined 만 걸러낸다
+    if ((u as any).blocked !== undefined)       p.blocked        = (u as any).blocked
+    if ((u as any).blockedReason !== undefined) p.blocked_reason = (u as any).blockedReason
     if (u.personId !== undefined)         p.person_id         = u.personId || null
     if (u.personName !== undefined)       p.person_name       = u.personName || null
     if (u.personType !== undefined)       p.person_type       = u.personType

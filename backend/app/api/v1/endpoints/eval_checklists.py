@@ -266,7 +266,7 @@ def update_checklist(
     item_id: str,
     payload: ChecklistItemUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     item = _query_with_history(db).filter(ChecklistItem.id == item_id).first()
     if not item:
@@ -274,6 +274,24 @@ def update_checklist(
     updates = payload.model_dump(exclude_none=True)
     if updates.get("due_date") == "":   # 빈 문자열 = 기한 해제
         updates["due_date"] = None
+
+    # 불가 — 사유 없이 불가로 둘 수 없다. 화면에서도 막지만 여기서도 막는다.
+    # 사유 없는 '불가' 는 '안 한 것' 과 구별되지 않아, 나중에 아무도 판단할 수 없다.
+    if updates.get("blocked") is True:
+        reason = (updates.get("blocked_reason") or item.blocked_reason or "").strip()
+        if not reason:
+            raise HTTPException(400, "불가로 표시하려면 사유를 적어주세요.")
+        updates["blocked_reason"] = reason
+        updates["blocked_by"] = getattr(current_user, "name", None)
+        from app.services.occurrence import today_kst
+        updates["blocked_date"] = today_kst().isoformat()
+        # 불가와 완료는 함께 설 수 없다 — 하지 않은 일을 했다고 기록하게 된다
+        updates["completed"] = False
+        updates["completed_date"] = None
+    elif updates.get("blocked") is False:
+        updates["blocked_reason"] = ""
+        updates["blocked_by"] = None
+        updates["blocked_date"] = None
     if "frequency" in updates:
         updates["frequency"] = _normalize_freq(updates["frequency"])
     # FK 컬럼은 빈 문자열('')이 FK 제약 위반을 유발 → None 으로 정규화
