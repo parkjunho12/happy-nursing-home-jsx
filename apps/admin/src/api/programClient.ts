@@ -120,12 +120,12 @@ export const programAPI = {
   groups: () => apiClient.get(`${BASE}/groups`).then(unwrap<GroupSet | null>),
   /** 그 달 회차 기록(목표·진행) 전부. 변경 이력(logs)과 다른 것이다. */
   sessionLogs: (month: string) =>
-    apiClient.get(`${BASE}/logs`, { params: { month } }).then(unwrap<ProgramLog[]>),
+    apiClient.get(`${BASE}/session-logs`, { params: { month } }).then(unwrap<ProgramLog[]>),
   /** 회차 기록 저장 — 모두 비우면 지운다 */
   saveLog: (b: { month: string; day: number; title: string; grp?: string | null
                  goal?: string; doing?: string; tools?: string
                  support?: string; joined?: string; outcome?: string }) =>
-    apiClient.put(`${BASE}/logs`, b).then(unwrap<any>),
+    apiClient.put(`${BASE}/session-logs`, b).then(unwrap<any>),
 
   saveGroups: (groups: ProgramGroup[], religion: { name: string; members: string[] }[]) =>
     apiClient.put(`${BASE}/groups`, { groups, religion }).then(unwrap<{ group_count: number }>),

@@ -515,10 +515,15 @@ def _log_view(r: ProgramLog) -> dict:
             "updated_at": r.updated_at.isoformat() if r.updated_at else None}
 
 
-@router.get("/logs")
+@router.get("/session-logs")
 def list_logs_month(month: str = Query(...), db: Session = Depends(get_db),
                     _: User = Depends(_editor)):
-    """그 달 회차 기록 전부 — 화면이 (일·프로그램명)으로 찾아 쓴다."""
+    """그 달 회차 기록 전부 — 화면이 (일·프로그램명)으로 찾아 쓴다.
+
+    경로를 /logs 로 두었다가 이미 있던 변경 이력(/logs)에 가려 이 함수가
+    아예 불리지 않았다. 저장은 되는데 화면에는 안 보여, 적어 놓은 것이
+    사라진 것처럼 보였다. 이름이 겹치지 않게 /session-logs 로 둔다.
+    """
     if not _YM.match(month):
         raise HTTPException(400, "month는 YYYY-MM 형식이어야 합니다.")
     rows = (db.query(ProgramLog).filter(ProgramLog.month == month)
@@ -526,7 +531,7 @@ def list_logs_month(month: str = Query(...), db: Session = Depends(get_db),
     return ApiResponse(success=True, data=[_log_view(r) for r in rows])
 
 
-@router.put("/logs")
+@router.put("/session-logs")
 def save_log(body: LogBody, db: Session = Depends(get_db),
              current_user: User = Depends(_editor)):
     """회차 기록 저장 — 칸을 벗어나는 순간 부른다.
