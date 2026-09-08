@@ -135,17 +135,32 @@ export default function OutgoingDocsPage() {
       <div className="rounded-2xl border border-gray-200 bg-white p-3">
         <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
           <div className="md:col-span-1">
-            {/* 어르신 — 시설 대외 문서면 비워 둔다 */}
-            <input value={pickQ} onChange={e => setPickQ(e.target.value)} list="odoc-res"
-              placeholder="어르신 (선택)"
-              onBlur={() => {
-                const hit = active.find(r => r.name === pickQ.trim())
+            {/* 어르신 — 시설 대외 문서면 비워 둔다.
+                이름을 치는 순간 맞춰 보고, 붙었는지 아래에 그대로 보여준다.
+                예전에는 칸을 벗어날 때만 맞춰 봐서, 이름을 정확히 안 치면
+                어르신이 조용히 안 붙었다. 고른 줄 알고 넘어가게 된다. */}
+            <input value={pickQ} list="odoc-res" placeholder="어르신 (선택)"
+              onChange={e => {
+                const v = e.target.value
+                setPickQ(v)
+                const hit = active.find(r => r.name === v.trim())
                 setForm(f => ({ ...f, person_id: hit?.id ?? '' }))
               }}
-              className={`${ic} w-full`} />
+              className={`${ic} w-full ${pickQ.trim() && !form.person_id ? 'border-amber-400' : ''}`} />
             <datalist id="odoc-res">
               {cand.map(r => <option key={r.id} value={r.name}>{(r as any).room ? `${(r as any).room}호` : ''}</option>)}
             </datalist>
+            {pickQ.trim() && (
+              form.person_id
+                ? <p className="mt-0.5 text-[10px] font-bold text-teal-700">
+                    ✓ {active.find(r => r.id === form.person_id)?.name}
+                    {(active.find(r => r.id === form.person_id) as any)?.room
+                      ? ` · ${(active.find(r => r.id === form.person_id) as any).room}호` : ''}
+                  </p>
+                : <p className="mt-0.5 text-[10px] font-bold text-amber-700">
+                    명단에 없는 이름입니다 — 어르신 없이 등록됩니다
+                  </p>
+            )}
           </div>
           <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}
             placeholder="문서 이름 — 예) 장기요양인정서 갱신 서류"
