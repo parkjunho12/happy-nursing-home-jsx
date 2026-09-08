@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, BedDouble, CalendarDays, FileText, HeartHandshake, Loader2, Pencil, Printer, UserRound } from 'lucide-react'
+import { ArrowLeft, BedDouble, CalendarDays, FileText, HeartHandshake, Loader2, Pencil, Printer, StickyNote, UserRound } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
 import { calcAge, isItemDone } from '@/utils/period'
 import { residentDocAPI, type ResidentDoc } from '@/api/residentDocClient'
@@ -88,27 +88,38 @@ export default function ResidentDetailPage() {
   const [editingCl, setEditingCl] = useState<ChecklistItem | null>(null)
   const [editingRes, setEditingRes] = useState(false)
   const [batchTag, setBatchTag] = useState<string | null>(null)   // 영역 전체 체크 진행 중
-  // 불가 사유 적기 — 어느 항목의 사유를 쓰는 중인지
-  const [blockFor, setBlockFor] = useState<{ id: string; title: string; reason: string } | null>(null)
-  const [blockBusy, setBlockBusy] = useState(false)
+  // 메모 적기 — 어느 항목의 메모를 쓰는 중인지
+  const [memoFor, setMemoFor] = useState<{ id: string; title: string; memo: string } | null>(null)
+  const [memoBusy, setMemoBusy] = useState(false)
+  const [blockBusy, setBlockBusy] = useState<string | null>(null)
 
-  /** 불가로 표시하거나 되돌린다.
+  /** 불가로 표시하거나 되돌린다 — 누르면 바로.
    *
    *  불가는 완료도 미완료도 아니다. 미완료로 두면 영원히 빨간 채로 남아
    *  '아직 못 한 일' 과 '할 수 없는 일' 이 섞이고, 완료로 찍으면 하지 않은
    *  일을 했다고 기록하게 된다.
    *
-   *  사유 없이는 불가로 두지 않는다 — 왜 못 하는지가 없으면 나중에 아무도
-   *  판단할 수 없다.
+   *  사유는 묻지 않는다. 강요하면 급할 때 아무 글자나 넣게 되고, 그러면
+   *  없느니만 못하다. 적을 것이 있으면 메모에 적는다.
    */
-  const saveBlocked = async (id: string, blocked: boolean, reason = '') => {
-    setBlockBusy(true)
+  const toggleBlocked = async (id: string, blocked: boolean) => {
+    setBlockBusy(id)
     try {
-      await updateChecklist(id, { blocked, blockedReason: reason } as any)
-      setBlockFor(null)
+      await updateChecklist(id, { blocked } as any)
     } catch (e: any) {
       alert(e?.response?.data?.detail ?? '저장하지 못했습니다.')
-    } finally { setBlockBusy(false) }
+    } finally { setBlockBusy(null) }
+  }
+
+  /** 메모 — 불가와 상관없이 언제든 적는다. 비우면 지워진다. */
+  const saveMemo = async (id: string, memo: string) => {
+    setMemoBusy(true)
+    try {
+      await updateChecklist(id, { memo })
+      setMemoFor(null)
+    } catch (e: any) {
+      alert(e?.response?.data?.detail ?? '메모를 저장하지 못했습니다.')
+    } finally { setMemoBusy(false) }
   }
   const [doc, setDoc] = useState<ResidentDoc | null>(null)
   const [assign, setAssign] = useState<AssignRow | null>(null)
@@ -372,13 +383,19 @@ export default function ResidentDetailPage() {
                         <span className={`flex-1 min-w-0 truncate text-[12.5px] ${blocked ? 'text-gray-400' : ok ? 'line-through text-gray-400' : team === '간호' ? 'font-bold text-rose-800' : team === '물리' ? 'font-bold text-blue-800' : team === '복지' ? 'font-semibold text-teal-900' : 'font-semibold text-gray-700'}`} title={text}>
                         {text}
                         </span>
-                        {/* 불가 — 사유를 눌러 볼 수 있게 배지로 */}
+                        {/* 불가 — 누가 언제 그렇게 했는지 */}
                         {blocked && (
-                        <button type="button" onClick={() => setBlockFor({ id: c.id, title: text, reason: (c as any).blockedReason ?? '' })}
-                          title="사유 고치기"
-                          className="shrink-0 inline-flex items-center gap-1 max-w-[16rem] text-[11px] font-bold text-gray-600 bg-white border border-gray-300 px-2 py-0.5 rounded-full hover:border-gray-400">
+                        <span className="shrink-0 inline-flex items-center gap-1 text-[11px] font-bold text-gray-600 bg-white border border-gray-300 px-2 py-0.5 rounded-full">
                           불가
-                          {(c as any).blockedReason && <span className="font-medium text-gray-500 truncate">{(c as any).blockedReason}</span>}
+                          {(c as any).blockedBy && <span className="font-medium text-gray-400">{(c as any).blockedBy}</span>}
+                        </span>
+                        )}
+                        {/* 메모 — 적힌 것이 있으면 그대로 보인다. 눌러서 고친다. */}
+                        {c.memo && (
+                        <button type="button" onClick={() => setMemoFor({ id: c.id, title: text, memo: c.memo })}
+                          title={c.memo}
+                          className="shrink-0 inline-flex items-center gap-1 max-w-[15rem] text-[11px] text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full hover:border-amber-400">
+                          <span className="truncate">{c.memo}</span>
                         </button>
                         )}
                         {/* 담당자 — 명확하게 */}
@@ -400,13 +417,18 @@ export default function ResidentDetailPage() {
                         }}
                         title="기한 설정 — 비우면 기한 없음"
                         className="shrink-0 w-[8.2rem] px-1.5 py-1 text-[11px] border border-gray-200 rounded-lg bg-white text-gray-500 hidden sm:block" />
-                        {/* 불가 — 할 수 없는 항목임을 사유와 함께 남긴다 */}
-                        <button type="button" disabled={blockBusy}
-                        onClick={() => blocked
-                          ? saveBlocked(c.id, false)
-                          : setBlockFor({ id: c.id, title: text, reason: '' })}
-                        title={blocked ? '불가 해제' : '불가로 표시 — 사유를 적습니다'}
-                        className={`shrink-0 px-1.5 py-0.5 rounded-lg border text-[10px] font-bold transition-colors ${
+                        {/* 메모 — 불가와 상관없이 언제든. 적힌 것이 있으면 색이 남는다. */}
+                        <button type="button" onClick={() => setMemoFor({ id: c.id, title: text, memo: c.memo ?? '' })}
+                        title={c.memo ? '메모 고치기' : '메모 남기기'}
+                        className={`shrink-0 p-1 rounded transition-colors ${
+                          c.memo ? 'text-amber-500 hover:text-amber-700' : 'text-gray-300 hover:text-amber-600'}`}>
+                        <StickyNote size={12} />
+                        </button>
+                        {/* 불가 — 누르면 바로. 사유는 묻지 않는다. */}
+                        <button type="button" disabled={blockBusy === c.id}
+                        onClick={() => toggleBlocked(c.id, !blocked)}
+                        title={blocked ? '불가 해제' : '불가로 표시 — 할 수 없는 항목'}
+                        className={`shrink-0 px-1.5 py-0.5 rounded-lg border text-[10px] font-bold transition-colors disabled:opacity-40 ${
                           blocked ? 'border-gray-400 bg-gray-200 text-gray-600 hover:bg-gray-300'
                           : 'border-gray-200 text-gray-400 hover:border-gray-400 hover:text-gray-600'}`}>
                         {blocked ? '해제' : '불가'}
@@ -632,31 +654,30 @@ export default function ResidentDetailPage() {
 
       {editingCl && <ChecklistFormModal existing={editingCl} onClose={() => setEditingCl(null)} />}
 
-      {/* 불가 사유 — 사유 없이 불가로 두면 나중에 '안 한 것' 과 구별되지 않는다 */}
-      {blockFor && (
+      {/* 메모 — 불가와 상관없이 언제든. 비우면 지워진다. */}
+      {memoFor && (
         <div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4 print:hidden"
-          onClick={() => !blockBusy && setBlockFor(null)}>
+          onClick={() => !memoBusy && setMemoFor(null)}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-4" onClick={e => e.stopPropagation()}>
-            <h3 className="text-sm font-bold text-gray-900 mb-1">불가 사유</h3>
-            <p className="text-[11px] text-gray-400 mb-2 line-clamp-2">{blockFor.title}</p>
-            <textarea autoFocus value={blockFor.reason} rows={3} maxLength={300}
-              onChange={e => setBlockFor(b => b && { ...b, reason: e.target.value })}
+            <div className="flex items-center gap-1.5 mb-1">
+              <StickyNote size={14} className="text-amber-600" />
+              <h3 className="text-sm font-bold text-gray-900">메모</h3>
+            </div>
+            <p className="text-[11px] text-gray-400 mb-2 line-clamp-2">{memoFor.title}</p>
+            <textarea autoFocus value={memoFor.memo} rows={4} maxLength={500}
+              onChange={e => setMemoFor(m => m && { ...m, memo: e.target.value })}
               onKeyDown={e => {
-                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && blockFor.reason.trim())
-                  saveBlocked(blockFor.id, true, blockFor.reason.trim())
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) saveMemo(memoFor.id, memoFor.memo.trim())
               }}
-              placeholder="예) 보호자 미동의 · 해당 없음 · 타 기관에서 이미 시행"
-              className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm resize-none focus:outline-none focus:border-gray-400" />
+              placeholder="예) 보호자 미동의 · 해당 없음 · 타 기관에서 이미 시행 · 9/20 재요청 예정"
+              className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm resize-none focus:outline-none focus:border-amber-400" />
             <div className="flex items-center gap-2 mt-3">
-              <span className="text-[11px] text-gray-400">
-                {blockFor.reason.trim() ? '완료 체크는 잠깁니다' : '사유를 적어야 저장됩니다'}
-              </span>
-              <button onClick={() => setBlockFor(null)} disabled={blockBusy}
+              <span className="text-[11px] text-gray-400">비우고 저장하면 지워집니다</span>
+              <button onClick={() => setMemoFor(null)} disabled={memoBusy}
                 className="ml-auto px-3 py-2 rounded-xl border border-gray-200 text-xs font-bold text-gray-500">취소</button>
-              <button onClick={() => saveBlocked(blockFor.id, true, blockFor.reason.trim())}
-                disabled={blockBusy || !blockFor.reason.trim()}
-                className="px-4 py-2 rounded-xl bg-gray-800 text-white text-xs font-bold disabled:opacity-40">
-                {blockBusy ? '저장 중…' : '불가로 표시'}
+              <button onClick={() => saveMemo(memoFor.id, memoFor.memo.trim())} disabled={memoBusy}
+                className="px-4 py-2 rounded-xl bg-amber-600 text-white text-xs font-bold disabled:opacity-40">
+                {memoBusy ? '저장 중…' : '저장'}
               </button>
             </div>
           </div>

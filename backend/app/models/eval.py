@@ -170,12 +170,11 @@ class ChecklistItem(Base):
     # 섞인다. 그렇다고 완료로 찍으면 하지 않은 일을 했다고 기록하는 것이 된다.
     # 그래서 셋째 상태를 둔다.
     #
-    # 사유를 반드시 함께 남긴다. 왜 못 하는지가 없으면 나중에 아무도 판단할
-    # 수 없고, 감사에서도 '안 한 것' 과 구별되지 않는다.
-    blocked        = Column(Boolean, default=False)
-    blocked_reason = Column(Text, default="")
-    blocked_by     = Column(String(100), nullable=True)
-    blocked_date   = Column(String(20), nullable=True)
+    # 적을 것이 있으면 memo 에 적는다 — 메모는 불가와 상관없이 언제든 쓴다.
+    # 사유를 강제하면 급할 때 아무 글자나 넣게 되고, 그러면 없느니만 못하다.
+    blocked      = Column(Boolean, default=False)
+    blocked_by   = Column(String(100), nullable=True)
+    blocked_date = Column(String(20), nullable=True)
 
     person_id = Column(String, nullable=True, index=True)
     person_name = Column(String(100), nullable=True)

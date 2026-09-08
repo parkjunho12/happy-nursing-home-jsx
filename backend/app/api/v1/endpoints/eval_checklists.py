@@ -275,13 +275,9 @@ def update_checklist(
     if updates.get("due_date") == "":   # 빈 문자열 = 기한 해제
         updates["due_date"] = None
 
-    # 불가 — 사유 없이 불가로 둘 수 없다. 화면에서도 막지만 여기서도 막는다.
-    # 사유 없는 '불가' 는 '안 한 것' 과 구별되지 않아, 나중에 아무도 판단할 수 없다.
+    # 불가 — 누가 언제 그렇게 했는지는 남긴다. 사유는 강요하지 않는다.
+    # 적을 것이 있으면 메모에 적는다(메모는 불가와 상관없이 언제든 쓸 수 있다).
     if updates.get("blocked") is True:
-        reason = (updates.get("blocked_reason") or item.blocked_reason or "").strip()
-        if not reason:
-            raise HTTPException(400, "불가로 표시하려면 사유를 적어주세요.")
-        updates["blocked_reason"] = reason
         updates["blocked_by"] = getattr(current_user, "name", None)
         from app.services.occurrence import today_kst
         updates["blocked_date"] = today_kst().isoformat()
@@ -289,7 +285,6 @@ def update_checklist(
         updates["completed"] = False
         updates["completed_date"] = None
     elif updates.get("blocked") is False:
-        updates["blocked_reason"] = ""
         updates["blocked_by"] = None
         updates["blocked_date"] = None
     if "frequency" in updates:
