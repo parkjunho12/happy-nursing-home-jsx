@@ -58,6 +58,9 @@ def _roster_rows(db: Session) -> list:
         rows.append({
             "resident_id": r.id, "name": r.name,
             "floor": r.floor or "미지정", "room": r.room or "",
+            # 방을 남녀로 나눠 칠하려면 성별이 필요하다. 비어 있는 분도 있어
+            # (수급자 관리에서 안 고른 경우) 그대로 내보내고 화면에서 회색으로 둔다.
+            "gender": r.gender or "",
             "admission_date": r.admission_date,
             "care_staff_id": a.care_staff_id if a else None,
             "care_staff_name": a.care_staff_name if a else None,
@@ -110,6 +113,9 @@ def roster(db: Session = Depends(get_db), _: User = Depends(_editor)):
 
 
 class AssignBody(BaseModel):
+    # 성별 — 'male' | 'female' | '' (모름). 방 색이 이 값으로 정해진다.
+    gender: Optional[str] = None
+    set_gender: Optional[bool] = None
     care_staff_id: Optional[str] = None
     rehab_staff_id: Optional[str] = None
     note: Optional[str] = None
@@ -252,6 +258,14 @@ def assign(resident_id: str, body: AssignBody, db: Session = Depends(get_db),
     if body.set_note:
         _log(db, r, "기타", a.note, body.note, who)
         a.note = (body.note or "").strip() or None
+    if body.set_gender:
+        # 아는 값만 받는다. 오타가 들어오면 방 색이 회색으로 빠져
+        # '왜 이 방만 색이 없지' 를 한참 찾게 된다.
+        g = (body.gender or "").strip().lower()
+        if g not in ("male", "female", ""):
+            raise HTTPException(400, "성별은 male · female 또는 빈 값이어야 합니다.")
+        _log(db, r, "성별", r.gender, g or None, who)
+        r.gender = g
     # 층·호실은 한 번에 바뀌는 일이 많다(다른 층으로 이사) — 정원은 옮길 방 기준으로 한 번만 본다
     if body.set_room or body.set_floor:
         new_floor = (body.floor or "").strip() if body.set_floor else (r.floor or "")

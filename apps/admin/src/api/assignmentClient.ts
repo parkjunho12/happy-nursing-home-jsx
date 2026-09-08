@@ -11,6 +11,8 @@ export interface AssignRow {
   name: string
   floor: string
   room: string
+  /** 'male' | 'female' | '' (모름) — 방 색이 이 값으로 정해진다 */
+  gender?: string | null
   admission_date?: string | null
   care_staff_id?: string | null
   care_staff_name?: string | null
@@ -65,6 +67,9 @@ export const assignmentAPI = {
     apiClient.put(`${BASE}/${rid}`, { rehab_staff_id: staffId, set_rehab: true }).then(r => r.data),
   setNote: (rid: string, note: string) =>
     apiClient.put(`${BASE}/${rid}`, { note, set_note: true }).then(r => r.data),
+  /** 성별 바꾸기 — 명단에서 바로. 방 색이 이 값으로 정해진다. */
+  setGender: (rid: string, gender: 'male' | 'female' | '') =>
+    apiClient.put(`${BASE}/${rid}`, { gender, set_gender: true }).then(r => r.data),
   setRoom: (rid: string, room: string) =>
     apiClient.put(`${BASE}/${rid}`, { room, set_room: true }).then(r => r.data),
   /** 층·호실을 한 번에 — 빈 문자열 둘 다 보내면 배정 해제. force=만실 강행 */

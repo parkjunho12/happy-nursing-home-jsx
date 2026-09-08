@@ -4,6 +4,7 @@ import { assignmentAPI, type AssignRow, type StaffOpt, type AssignLog, type Assi
 import RoomPicker from '@/components/eval/RoomPicker'
 import { useLtcStore } from '@/store/ltc'
 import { roomAPI, type FloorInfo } from '@/api/roomClient'
+import { normGender, roomGender, TONE, PRINT_TONE, type Gender } from '@/utils/genderTone'
 
 /**
  * 담당 어르신 명단 — 엑셀 명단을 그대로 화면으로.
@@ -110,9 +111,45 @@ export default function ResidentAssignPage() {
     () => buildRows(floor, shown, !past && showEmpty),
     [shown, roomInfo, floor, past, showEmpty])
 
+  /** 방마다의 성별 — '층 호실' 을 열쇠로. 화면과 인쇄가 같은 값을 쓴다.
+   *  섞여 있거나 안 정해진 방은 회색으로 둔다(genderTone.roomGender). */
+  const genderOfRoom = useMemo(() => {
+    const m = new Map<string, Gender>()
+    const by = new Map<string, string[]>()
+    base.forEach(r => {
+      if (!r.room) return
+      const k = `${r.floor} ${r.room}`
+      by.set(k, [...(by.get(k) ?? []), String(r.gender ?? '')])
+    })
+    by.forEach((gs, k) => m.set(k, roomGender(gs)))
+    return m
+  }, [base])
+
+  /** 성별 바꾸기 — 명단에서 바로 남↔여로 돌린다. */
+  const [genderBusy, setGenderBusy] = useState<string | null>(null)
+  const toggleGender = async (r: AssignRow) => {
+    if (past) return
+    const cur = normGender(r.gender)
+    // 남 → 여 → 모름 → 남. 모름을 거치게 두어 '아직 안 정함'으로 되돌릴 수 있다.
+    const next: Gender = cur === 'male' ? 'female' : cur === 'female' ? '' : 'male'
+    setGenderBusy(r.resident_id)
+    patch(r.resident_id, { gender: next } as Partial<AssignRow>)
+    try {
+      await assignmentAPI.setGender(r.resident_id, next)
+    } catch (e: any) {
+      patch(r.resident_id, { gender: r.gender } as Partial<AssignRow>)   // 되돌린다
+      alert(e?.response?.data?.detail ?? '성별을 바꾸지 못했습니다.')
+    } finally { setGenderBusy(null) }
+  }
+
   /** 인쇄 표 하나. 층별 인쇄와 전체 층 인쇄가 같은 표를 쓴다 —
    *  두 벌로 두면 한쪽만 고쳐져 같은 명단이 종이마다 달라진다. */
-  const printTable = (list: PrintRow[], sz: { f: number; p: number }, compact = false) => {
+  const printTable = (list: PrintRow[], sz: { f: number; p: number }, compact = false,
+                     fl?: string) => {
+    // 방 성별 — 종이에도 화면과 같은 색으로. 흑백 프린터를 쓰는 곳이 있어
+    // 색만으로 나누지 않고 호실 옆에 남/여 글자를 함께 찍는다.
+    const gOf = (room: string): Gender =>
+      (room ? genderOfRoom.get(`${fl ?? floor} ${room}`) : '') ?? ''
     // 호실 바뀔 때마다 음영 교차 — 방 단위가 한눈에 들어온다
     let pv = '__'; let band = 0
     // 전체 층은 한 장에 담는 것이 목적이라 줄 높이를 올리는 것을 걷어낸다.
@@ -142,15 +179,17 @@ export default function ResidentAssignPage() {
             if (row.kind === 'empty') {
               const first = row.room !== pv
               if (first) { pv = row.room; band += 1 }
+              const tn = PRINT_TONE[gOf(row.room)]
               const cell: React.CSSProperties = {
-                border: '1px solid #e2e8f0', background: band % 2 === 0 ? '#f8fafc' : 'white',
+                border: '1px solid #e2e8f0', background: band % 2 === 0 ? tn.bg : 'white',
                 lineHeight: lh, padding: `${sz.p}px 7px`, fontSize: `${sz.f}px`,
               }
               return (
                 <tr key={`e-${row.room}-${row.idx}`} className={first ? 'asg-room-top' : ''}>
                   <td style={{ ...cell, textAlign: 'center', fontWeight: 800,
-                    fontSize: `${room}px`, color: first ? '#0f766e' : '#cbd5e1' }}>
+                    fontSize: `${room}px`, color: first ? tn.ink : '#cbd5e1' }}>
                     {first ? `${row.room}호` : ''}
+                    {first && tn.label && <span style={{ fontSize: `${Math.max(7, sz.f - 3)}px`, marginLeft: 2 }}>{tn.label}</span>}
                   </td>
                   {/* 빈자리 — 손으로 적을 수 있게 비워 둔다 */}
                   <td style={{ ...cell, color: '#cbd5e1' }}>빈자리</td>
@@ -164,7 +203,8 @@ export default function ResidentAssignPage() {
             const first = r.room !== pv
             if (first) { pv = r.room; band += 1 }
             const incoming = (r.admission_date ?? '') > today
-            const bg = incoming ? '#fffbeb' : band % 2 === 0 ? '#f8fafc' : 'white'
+            const tn = PRINT_TONE[r.room ? gOf(r.room) : normGender(r.gender)]
+            const bg = incoming ? '#fffbeb' : band % 2 === 0 ? tn.bg : 'white'
             const cell: React.CSSProperties = {
               border: '1px solid #e2e8f0', background: bg, lineHeight: lh,
               padding: `${sz.p}px 7px`, fontSize: `${sz.f}px`,
@@ -172,13 +212,15 @@ export default function ResidentAssignPage() {
             return (
               <tr key={`p-${r.resident_id}-${k}`} className={first ? 'asg-room-top' : ''}>
                 <td style={{ ...cell, textAlign: 'center',
-                  ...(compact ? { fontWeight: 800, color: '#0f766e' } : null) }}>
-                  {first && r.room && (compact ? `${r.room}호` : <span style={{
-                    display: 'inline-block', minWidth: 46, borderRadius: 8,
-                    background: '#f0fdfa', border: '1px solid #99f6e4', color: '#0f766e',
-                    padding: '2px 8px',
-                    fontSize: `${room}px`, fontWeight: 900,
-                  }}>{r.room}호</span>)}
+                  ...(compact ? { fontWeight: 800, color: tn.ink } : null) }}>
+                  {first && r.room && (compact
+                    ? <>{r.room}호{tn.label && <span style={{ fontSize: `${Math.max(7, sz.f - 3)}px`, marginLeft: 2 }}>{tn.label}</span>}</>
+                    : <span style={{
+                        display: 'inline-block', minWidth: 46, borderRadius: 8,
+                        background: tn.bg, border: `1px solid ${tn.band}`, color: tn.ink,
+                        padding: '2px 8px',
+                        fontSize: `${room}px`, fontWeight: 900,
+                      }}>{r.room}호{tn.label && <span style={{ fontSize: `${Math.max(8, room - 5)}px`, marginLeft: 3 }}>{tn.label}</span>}</span>)}
                 </td>
                 <td style={{ ...cell, fontWeight: 800, color: '#111827', fontSize: `${sz.f + 1}px`,
                   ...(compact ? { whiteSpace: 'nowrap' } as const : null) }}>
@@ -502,12 +544,13 @@ export default function ResidentAssignPage() {
                     // 성함 자리를 누르면 어르신을 골라 넣는다.
                     const first = row.room !== prevRoom
                     prevRoom = row.room
+                    const eg = genderOfRoom.get(`${floor} ${row.room}`) ?? ''
                     return (
                       <tr key={`empty-${row.room}-${row.idx}`}
-                        className={first ? 'border-t-2 border-t-gray-300' : ''}>
+                        className={`${first ? 'border-t-2 border-t-gray-300' : ''} ${TONE[eg].row}`}>
                         <td className={`${td} text-center whitespace-nowrap`}>
-                          <span className={`inline-block w-11 text-center text-xs font-extrabold rounded py-0.5 ${
-                            first ? 'bg-gray-300 text-white' : 'text-gray-200'}`}>{row.room}</span>
+                          <span className={`inline-block w-11 text-center text-xs font-extrabold rounded py-0.5 border ${
+                            first ? TONE[eg].room : 'text-gray-200 border-transparent'}`}>{row.room}</span>
                         </td>
                         <td className={td}>
                           <button onClick={() => { setFill({ floor, room: row.room }); setFillQ('') }}
@@ -525,21 +568,29 @@ export default function ResidentAssignPage() {
                   const first = r.room !== prevRoom
                   prevRoom = r.room
                   const incoming = (r.admission_date ?? '') > today
+                  const rg = r.room ? (genderOfRoom.get(`${r.floor} ${r.room}`) ?? '') : normGender(r.gender)
                   return (
-                    <tr key={r.resident_id} className={`${first ? 'border-t-2 border-t-gray-300' : ''} ${incoming ? 'bg-amber-50/40' : ''}`}>
+                    <tr key={r.resident_id} className={`${first ? 'border-t-2 border-t-gray-300' : ''} ${incoming ? 'bg-amber-50/40' : TONE[rg].row}`}>
                       <td className={`${td} text-center whitespace-nowrap`}>
                         <button onClick={() => !past && setBed(r)} disabled={past || bedBusy === r.resident_id}
                           title={past ? '지난 날 기록은 고칠 수 없습니다' : '눌러서 호실 변경 · 배정 해제'}
-                          className={`w-11 text-center text-xs font-extrabold rounded py-0.5 transition-colors ${
-                            !r.room ? 'text-gray-300 border border-dashed border-gray-300 hover:border-teal-400'
-                            : first ? 'bg-gray-800 text-white hover:bg-teal-600'
-                            : 'text-gray-300 bg-transparent hover:bg-gray-100'}`}>
+                          className={`w-11 text-center text-xs font-extrabold rounded py-0.5 border transition-colors ${
+                            !r.room ? 'text-gray-300 border-dashed border-gray-300 hover:border-teal-400'
+                            : first ? `${TONE[rg].room} hover:brightness-95`
+                            : 'text-gray-300 bg-transparent border-transparent hover:bg-gray-100'}`}>
                           {bedBusy === r.resident_id
                             ? <Loader2 size={11} className="animate-spin mx-auto" />
                             : (r.room || '-')}
                         </button>
                       </td>
                       <td className={`${td} font-bold text-gray-800 whitespace-nowrap`}>
+                        {/* 성별 — 눌러서 남 → 여 → 모름 순으로 돌린다.
+                            방 색이 이 값으로 정해지므로 여기서 바로 고칠 수 있어야 한다. */}
+                        <button onClick={() => toggleGender(r)} disabled={past || genderBusy === r.resident_id}
+                          title={past ? '지난 날 기록은 고칠 수 없습니다' : '눌러서 남 → 여 → 모름'}
+                          className={`mr-1 inline-flex items-center justify-center w-4 h-4 rounded-full text-[9px] font-extrabold text-white align-middle disabled:opacity-50 ${TONE[normGender(r.gender)].dot}`}>
+                          {genderBusy === r.resident_id ? '·' : TONE[normGender(r.gender)].label}
+                        </button>
                         {r.name}
                         {incoming && <span className="ml-1 text-[9px] font-bold text-amber-600">{Number(r.admission_date!.slice(5, 7))}/{Number(r.admission_date!.slice(8, 10))} 입소</span>}
                       </td>
@@ -634,14 +685,14 @@ export default function ResidentAssignPage() {
                           현원 <b style={{ color: '#111827' }}>{cur}명</b>{incom > 0 && <> · 입소 예정 <b style={{ color: '#b45309' }}>{incom}명</b></>}
                         </span>
                       </div>
-                      {printTable(list, compactSize, true)}
+                      {printTable(list, compactSize, true, f)}
                     </div>
                   ))}
                 </div>
               ))}
             </div>
             <p style={{ fontSize: '8px', color: '#9ca3af', textAlign: 'right', margin: '4px 2px 0' }}>
-              ※ 담당 변경은 관리자 페이지 「담당 어르신 명단」에서 — 변경 이력이 함께 남습니다 · 행복한요양원
+              ※ 호실 색 — <span style={{ color: PRINT_TONE.male.ink, fontWeight: 700 }}>파랑 남</span> · <span style={{ color: PRINT_TONE.female.ink, fontWeight: 700 }}>분홍 여</span> · 담당 변경은 「담당 어르신 명단」에서 · 행복한요양원
             </p>
           </div>
         ) : [floor].map(f => {
@@ -689,11 +740,11 @@ export default function ResidentAssignPage() {
                   </p>
                 </div>
               </div>
-              {printTable(chunk, sz)}
+              {printTable(chunk, sz, false, f)}
               {/* 담당별 인원 요약은 종이에 넣지 않는다 — 그 자리를 명단 글자 크기에 쓴다.
                   (화면 상단 집계에서 언제든 볼 수 있다) */}
               <p style={{ fontSize: '9px', color: '#9ca3af', textAlign: 'right', margin: '8px 2px 0' }}>
-                ※ 담당 변경은 관리자 페이지 「담당 어르신 명단」에서 — 변경 이력이 함께 남습니다 · 행복한요양원
+                ※ 호실 색 — <span style={{ color: PRINT_TONE.male.ink, fontWeight: 700 }}>파랑 남</span> · <span style={{ color: PRINT_TONE.female.ink, fontWeight: 700 }}>분홍 여</span> · 담당 변경은 「담당 어르신 명단」에서 · 행복한요양원
               </p>
             </div>
           )
