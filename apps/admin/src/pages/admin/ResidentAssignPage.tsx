@@ -181,7 +181,7 @@ export default function ResidentAssignPage() {
               if (first) { pv = row.room; band += 1 }
               const tn = PRINT_TONE[gOf(row.room)]
               const cell: React.CSSProperties = {
-                border: '1px solid #e2e8f0', background: band % 2 === 0 ? tn.bg : 'white',
+                border: '1px solid #e2e8f0', background: band % 2 === 0 ? tn.bg : tn.bg2,
                 lineHeight: lh, padding: `${sz.p}px 7px`, fontSize: `${sz.f}px`,
               }
               return (
@@ -204,7 +204,7 @@ export default function ResidentAssignPage() {
             if (first) { pv = r.room; band += 1 }
             const incoming = (r.admission_date ?? '') > today
             const tn = PRINT_TONE[r.room ? gOf(r.room) : normGender(r.gender)]
-            const bg = incoming ? '#fffbeb' : band % 2 === 0 ? tn.bg : 'white'
+            const bg = incoming ? '#fffbeb' : band % 2 === 0 ? tn.bg : tn.bg2
             const cell: React.CSSProperties = {
               border: '1px solid #e2e8f0', background: bg, lineHeight: lh,
               padding: `${sz.p}px 7px`, fontSize: `${sz.f}px`,

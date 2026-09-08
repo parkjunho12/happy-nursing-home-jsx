@@ -47,7 +47,10 @@ export const TONE = {
  *  옆에 남/여 글자를 함께 찍는다. 색은 옅게 — 진하면 성함이 안 읽힌다.
  */
 export const PRINT_TONE = {
-  male:   { bg: '#eff6ff', band: '#bfdbfe', ink: '#1e40af', label: '남' },
-  female: { bg: '#fff1f2', band: '#fecdd3', ink: '#9f1239', label: '여' },
-  '':     { bg: '#f8fafc', band: '#e2e8f0', ink: '#64748b', label: '' },
+  // bg / bg2 — 방이 바뀔 때마다 두 톤을 번갈아 쓴다. 예전에는 한쪽을 흰색으로
+  // 뒀는데, 그러면 같은 여자 방인 201호가 흰색, 202호가 분홍으로 보여
+  // 성별 색이 오히려 헷갈렸다. 같은 계열 안에서 진하기만 바꾼다.
+  male:   { bg: '#eff6ff', bg2: '#dbeafe', band: '#bfdbfe', ink: '#1e40af', label: '남' },
+  female: { bg: '#fff1f2', bg2: '#ffe4e6', band: '#fecdd3', ink: '#9f1239', label: '여' },
+  '':     { bg: '#f8fafc', bg2: '#f1f5f9', band: '#e2e8f0', ink: '#64748b', label: '' },
 } as const
