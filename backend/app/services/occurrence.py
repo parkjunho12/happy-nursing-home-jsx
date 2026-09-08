@@ -18,6 +18,8 @@ ChecklistOccurrence 서비스
 """
 from __future__ import annotations
 
+import logging
+
 import uuid
 from datetime import date, timedelta, datetime, timezone
 from typing import Optional, List, Tuple
@@ -28,6 +30,8 @@ from sqlalchemy import text
 from app.models.eval import ChecklistItem, ChecklistOccurrence
 
 # ── 상수 ──────────────────────────────────────────────────────────────────
+logger = logging.getLogger(__name__)
+
 RECURRING_FREQS = {'daily', 'weekly', 'monthly', 'quarterly', 'half-yearly', 'yearly',
                    'weekly_dow', 'monthly_day', 'monthly_nth_dow'}
 EVENT_FREQS     = {'on_admission', 'on_discharge', 'on_hire', 'on_resign'}
@@ -463,6 +467,22 @@ def backfill_occurrences(
     if item_ids:
         q = q.filter(ChecklistItem.id.in_(item_ids))
     items = q.all()
+
+    # 시설 공통 반복 업무는 주기마다 만들지 않는다.
+    #
+    # 일일·주별·월별… 업무가 주기가 돌 때마다 체크할 항목으로 자동으로 쌓였다.
+    # 그런데 이건 '이번 주기에 누가 해야 할 일' 이라기보다 '우리 시설이 이런
+    # 것들을 한다' 는 목록에 가깝다. 자동으로 쌓이면 아무도 안 지운 항목이
+    # 계속 밀려 '남은 일' 이 무엇인지 알 수 없게 된다.
+    #
+    # 그래서 화면 오른쪽의 '보기 전용 목록' 으로만 쓰고, 여기서는 건너뛴다.
+    # 이미 만들어진 것은 지우지 않는다 — 지난 완료 기록이 함께 사라진다.
+    # 어르신·직원에게 붙은 것(입소·입사 체크리스트)은 그대로 만든다.
+    before = len(items)
+    items = [i for i in items
+             if not (i.person_id is None and canon_freq(i.frequency) in RECURRING_FREQS)]
+    if before != len(items):
+        logger.debug("시설 공통 반복 업무 %d건은 주기 생성에서 건너뜀", before - len(items))
 
     # 기존 occurrence period_key를 아이템별로 미리 조회 (N+1 방지)
     item_id_list = [i.id for i in items]

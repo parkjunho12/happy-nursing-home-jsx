@@ -16,6 +16,7 @@ import { apiClient } from '@/api/client'
 import ChecklistDetailModal from '@/components/eval/ChecklistDetailModal'
 import ChecklistFormModal from '@/components/eval/ChecklistFormModal'
 import ChecklistCalendarModal from '@/components/eval/ChecklistCalendarModal'
+import RoutineReference from '@/components/eval/RoutineReference'
 import type { ChecklistItem } from '@/utils/period'
 import {
   FREQUENCY_LABELS,
@@ -185,6 +186,9 @@ export default function EvalChecklistPage() {
       // 입소·퇴소·입사 자동 생성(인물 연결) 체크리스트는 여기서 제외 —
       // 수급자 관리 / 직원 관리 카드에서 확인한다.
       if (c.personId) return false
+      // 시설 정기 업무(일일·주별·월별…)는 오른쪽 '시설 정기 업무' 로 옮겼다.
+      // 양쪽에 다 두면 같은 줄이 두 번 보여 어느 쪽에서 체크해야 할지 헷갈린다.
+      if (RECURRING.includes(c.frequency as any)) return false
 
       if (activeFreq !== 'all' && c.frequency !== activeFreq) return false
 
@@ -523,6 +527,12 @@ export default function EvalChecklistPage() {
         )}
       </div>
 
+      {/* ── 왼쪽: 내 업무 · 오른쪽: 시설 정기 업무 ──
+          정기 업무는 '이번 주기에 누가 할 일' 이라기보다 '우리 시설이 이런
+          것들을 한다' 는 목록이라, 체크 대상과 섞으면 정작 남은 일이 안 보인다. */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
+      <div className="lg:col-span-3 space-y-4">
+
       {/* 목록 (긴급도별 그룹) */}
       {sorted.length === 0 ? (
         <div className="text-center py-16 text-gray-400 bg-white rounded-xl border border-gray-100">
@@ -550,6 +560,14 @@ export default function EvalChecklistPage() {
           ))}
         </div>
       )}
+
+      </div>
+
+      {/* 오른쪽 — 무엇을 해야 하는지 주기별로. 보기 전용. */}
+      <div className="lg:col-span-2">
+        <RoutineReference items={checklists} onOpen={setSelectedItem} />
+      </div>
+      </div>
 
       {selectedItem && (
         <ChecklistDetailModal item={selectedItem} onClose={() => setSelectedItem(null)} />
