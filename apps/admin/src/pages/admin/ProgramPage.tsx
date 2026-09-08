@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CalendarRange, Clock3, Download, Eye, EyeOff, History, Loader2, MessageCircle, Pencil, Plus, Printer, Radio, Save, Trash2, Upload, Users, X } from 'lucide-react'
 import { programAPI, type ProgramMonthData, type ProgramEntry, type ProgramTime,
-  type ProgramPhoto } from '@/api/programClient'
+  type ProgramPhoto, type ProgramLog } from '@/api/programClient'
 import { broadcastAPI, mediaUrl,
   type ProgramCastConfig, type ProgramCastItem } from '@/api/broadcastClient'
 import { useAuthStore } from '@/store/auth'
 import { evalResidentsAPI } from '@/api/evalClient'
 import GroupEditor from '@/components/program/GroupEditor'
+import SessionLogForm from '@/components/program/SessionLogForm'
 import { isKakaoShareEnabled, shareText } from '@/lib/kakaoShare'
 
 /**
@@ -1400,6 +1401,8 @@ function ProgramPhotoTab({ ym, onMove, days, draft }: {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [openDay, setOpenDay] = useState<number | null>(null)
+  // 회차 기록(목표·진행) — (일·프로그램명) 을 열쇠로 찾는다
+  const [logs, setLogs] = useState<Record<string, ProgramLog>>({})
   // 고른 사진들 — 스무 장을 한 장씩 지우게 하지 않는다
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
@@ -1413,8 +1416,19 @@ function ProgramPhotoTab({ ym, onMove, days, draft }: {
   const load = () => {
     setLoading(true)
     programAPI.photos(ym).then(setRows).catch(() => setRows([])).finally(() => setLoading(false))
+    programAPI.sessionLogs(ym)
+      .then(ls => setLogs(Object.fromEntries(ls.map(l => [`${l.day}|${l.title}`, l]))))
+      .catch(() => setLogs({}))
   }
   useEffect(load, [ym])
+
+  const onLogSaved = (day: number, title: string, l: ProgramLog | null) =>
+    setLogs(s2 => {
+      const n = { ...s2 }
+      if (l) n[`${day}|${title}`] = l
+      else delete n[`${day}|${title}`]
+      return n
+    })
 
   /** 그 달 프로그램 목록 — 사진에 붙일 후보 */
   const progsOf = (day: number) => {
@@ -1602,6 +1616,20 @@ function ProgramPhotoTab({ ym, onMove, days, draft }: {
                 <X size={18} />
               </button>
             </div>
+
+            {/* 그날 프로그램별 활동 기록 — 사진을 올리는 김에 적는다.
+                여기 적힌 것이 블로그 초안의 본문이 된다. 비어 있으면
+                '기록에 활동 설명이 없어…' 라는 글밖에 안 나온다. */}
+            {progsOf(openDay).length > 0 && (
+              <div className="space-y-2 mb-3">
+                {progsOf(openDay).map((e, i) => (
+                  <SessionLogForm key={`${e.title}-${i}`}
+                    month={ym} day={openDay} title={(e.title || '').trim()} grp={e.group}
+                    log={logs[`${openDay}|${(e.title || '').trim()}`] ?? null}
+                    onSaved={l => onLogSaved(openDay!, (e.title || '').trim(), l)} />
+                ))}
+              </div>
+            )}
 
             {/* 고르기 막대 — 여러 장을 한 번에 지울 때 쓴다 */}
             {dayRows.length > 0 && (

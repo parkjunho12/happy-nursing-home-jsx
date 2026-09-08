@@ -23,6 +23,7 @@ from app.core.security import get_current_user
 from app.models.user import User
 from app.models.enteral import EnteralProduct, EnteralTransaction, now_kst
 from app.models.carefor import CareforResident
+from app.models.eval import LtcResident
 from app.schemas.response import ApiResponse
 
 logger = logging.getLogger("enteral")
@@ -287,15 +288,35 @@ def resident_costs(
 # 입소자(어르신) 목록 — 출고 대상 선택용
 # --------------------------------------------------------------------------- #
 @router.get("/residents")
-def list_residents(db: Session = Depends(get_db), current_user: User = Depends(_require_manager)):
-    rows = (
-        db.query(CareforResident)
-        .filter(CareforResident.status == "active")
-        .order_by(CareforResident.name.asc())
-        .all()
-    )
+def list_residents(all: bool = Query(False, description="경관식 대상이 아닌 분까지 전부"),
+                   db: Session = Depends(get_db),
+                   current_user: User = Depends(_require_manager)):
+    """반출 대상 어르신.
+
+    ■ 왜 수급자 관리를 보는가
+
+      예전에는 외부에서 가져온 명단(CareforResident)을 봤는데, 그 명단은
+      갱신이 멈춰 새로 입소하신 분이 반출 대상에 뜨지 않았다. 실제로 경관식을
+      드시는 어르신이 목록에 없어 출고를 못 하는 일이 생겼다.
+      지금 쓰는 명단은 수급자 관리(LtcResident)이므로 그쪽을 본다.
+
+    ■ 왜 경관식 대상만 보여주는가
+
+      서른여섯 분 중 경관식을 드시는 분은 세 분이다. 서른여섯 명을 훑어
+      고르면 옆 사람을 잘못 고르기 쉽고, 그러면 남의 재고에서 빠진다.
+      수급자 관리에서 '경관식' 을 체크한 분만 낸다.
+
+      all=true 면 전부 낸다 — 체크가 아직 안 된 분에게 급히 나가야 할 때가
+      있어 길을 막지는 않는다. 화면에서 한 번 더 확인하고 쓴다.
+    """
+    q = (db.query(LtcResident)
+         .filter(LtcResident.status.in_(["active", "pending"])))
+    if not all:
+        q = q.filter(LtcResident.tube_feeding.is_(True))
+    rows = q.order_by(LtcResident.name.asc()).all()
     return ApiResponse(success=True, data=[
-        {"id": r.id, "name": r.name, "room_name": r.room_name} for r in rows
+        {"id": r.id, "name": r.name, "room_name": r.room, "tube_feeding": bool(r.tube_feeding)}
+        for r in rows
     ])
 
 

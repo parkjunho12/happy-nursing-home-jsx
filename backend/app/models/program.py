@@ -5,7 +5,8 @@
 """
 import uuid
 from datetime import datetime, timezone, timedelta
-from sqlalchemy import Column, String, Boolean, DateTime, Integer, JSON, Text
+from sqlalchemy import (Column, String, Boolean, DateTime, Integer, JSON, Text,
+                        UniqueConstraint, Index)
 from app.core.database import Base
 
 KST = timezone(timedelta(hours=9))
@@ -84,6 +85,60 @@ class ProgramChangeLog(Base):
     summary    = Column(String(300), nullable=True)
     changed_by = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_kst, index=True)
+
+
+class ProgramLog(Base):
+    """그 회차에 무엇을 했는가 — 목표와 진행 내용.
+
+    ■ 왜 사진이 아니라 회차에 붙이는가
+
+      한 프로그램에 사진이 스무 장씩 올라온다. 사진마다 적게 하면 같은 내용을
+      스무 번 쓰게 되고, 아무도 안 쓴다. 기록은 (날짜 · 프로그램) 하나에 한 벌
+      붙인다.
+
+    ■ 왜 필요한가
+
+      지금 남는 것은 프로그램명과 시간뿐이다. 그래서 블로그 초안을 만들면
+      '기록에 활동 설명이 없어 활동명만 안내드립니다' 라는 글이 나온다.
+      여기 한두 줄만 있으면 그대로 본문이 된다.
+
+      급여·평가에 쓰이는 숫자가 아니라 '무엇을 했는지'를 남기는 자리다.
+      길게 쓸 필요 없다. 도구와 순서, 도운 것만 적혀 있어도 글이 달라진다.
+
+    ■ 사진과 같은 방식으로 회차를 가리킨다
+
+      프로그램 항목에는 고유 id 가 없다(일정표 JSON 안의 한 줄이다).
+      ProgramPhoto 와 똑같이 (달·일·프로그램명) 으로 가리켜, 사진과 기록이
+      같은 열쇠로 만나게 한다.
+    """
+
+    __tablename__ = "program_logs"
+    __table_args__ = (
+        # 한 회차에 기록 한 벌 — 둘이면 어느 것이 그날 기록인지 알 수 없다
+        UniqueConstraint("month", "day", "title", name="uq_program_log_session"),
+        Index("ix_program_log_month", "month", "day"),
+    )
+
+    id    = Column(String, primary_key=True, default=_uuid)
+    month = Column(String(7), nullable=False)
+    day   = Column(Integer, nullable=False)
+    title = Column(String(200), nullable=False)     # 프로그램명 — 사진과 같은 열쇠
+    grp   = Column(String(50), nullable=True)
+
+    goal    = Column(Text, nullable=True)           # 목표 — 무엇을 위해 했는가
+    doing   = Column(Text, nullable=True)           # 진행 — 무엇을 어떤 순서로 했는가
+    tools   = Column(String(300), nullable=True)    # 사용한 도구·재료
+    support = Column(Text, nullable=True)           # 직원이 도운 것
+    joined  = Column(String(100), nullable=True)    # 참여 인원·방식
+    outcome = Column(Text, nullable=True)           # 마무리 · 기록으로 확인된 반응
+
+    updated_by = Column(String(100), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_kst)
+    updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)
+
+    @property
+    def has_content(self) -> bool:
+        return any((self.goal, self.doing, self.tools, self.support, self.joined, self.outcome))
 
 
 class ProgramPhoto(Base):

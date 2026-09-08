@@ -19,7 +19,8 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
 from app.models.program import (ProgramMonth, ProgramGroupSet, ProgramChangeLog,
-                                ProgramSetting, ProgramGroupLog, ProgramPhoto)
+                                ProgramSetting, ProgramGroupLog, ProgramPhoto,
+                                ProgramLog)
 from app.schemas.response import ApiResponse
 
 logger = logging.getLogger(__name__)
@@ -486,6 +487,82 @@ def _photo_view(p: ProgramPhoto) -> dict:
         "uploaded_by": p.uploaded_by,
         "created_at": p.created_at.isoformat() if p.created_at else None,
     }
+
+
+# ── 회차 기록 (목표·진행) ────────────────────────────────────────────────
+
+LOG_FIELDS = ("goal", "doing", "tools", "support", "joined", "outcome")
+
+
+class LogBody(BaseModel):
+    month: str
+    day: int
+    title: str
+    grp: Optional[str] = None
+    goal: Optional[str] = None
+    doing: Optional[str] = None
+    tools: Optional[str] = None
+    support: Optional[str] = None
+    joined: Optional[str] = None
+    outcome: Optional[str] = None
+
+
+def _log_view(r: ProgramLog) -> dict:
+    return {"month": r.month, "day": r.day, "title": r.title, "grp": r.grp,
+            "goal": r.goal or "", "doing": r.doing or "", "tools": r.tools or "",
+            "support": r.support or "", "joined": r.joined or "", "outcome": r.outcome or "",
+            "updated_by": r.updated_by,
+            "updated_at": r.updated_at.isoformat() if r.updated_at else None}
+
+
+@router.get("/logs")
+def list_logs_month(month: str = Query(...), db: Session = Depends(get_db),
+                    _: User = Depends(_editor)):
+    """그 달 회차 기록 전부 — 화면이 (일·프로그램명)으로 찾아 쓴다."""
+    if not _YM.match(month):
+        raise HTTPException(400, "month는 YYYY-MM 형식이어야 합니다.")
+    rows = (db.query(ProgramLog).filter(ProgramLog.month == month)
+            .order_by(ProgramLog.day).all())
+    return ApiResponse(success=True, data=[_log_view(r) for r in rows])
+
+
+@router.put("/logs")
+def save_log(body: LogBody, db: Session = Depends(get_db),
+             current_user: User = Depends(_editor)):
+    """회차 기록 저장 — 칸을 벗어나는 순간 부른다.
+
+    모두 비우면 지운다. 빈 줄이 남아 있으면 '기록 있음' 표시가 계속 켜져
+    있어, 채워야 할 회차를 찾을 수 없다.
+    """
+    if not _YM.match(body.month or ""):
+        raise HTTPException(400, "month는 YYYY-MM 형식이어야 합니다.")
+    if not (1 <= int(body.day) <= 31):
+        raise HTTPException(400, "day는 1~31 이어야 합니다.")
+    title = (body.title or "").strip()
+    if not title:
+        raise HTTPException(400, "어느 프로그램인지가 없습니다.")
+
+    vals = {f: ((getattr(body, f) or "").strip() or None) for f in LOG_FIELDS}
+    row = (db.query(ProgramLog)
+           .filter(ProgramLog.month == body.month, ProgramLog.day == body.day,
+                   ProgramLog.title == title).first())
+
+    if not any(vals.values()):
+        if row:
+            db.delete(row)
+            db.commit()
+        return ApiResponse(success=True, data={"month": body.month, "day": body.day,
+                                               "title": title, "deleted": True})
+    if not row:
+        row = ProgramLog(month=body.month, day=body.day, title=title)
+        db.add(row)
+    for f, v in vals.items():
+        setattr(row, f, v)
+    row.grp = (body.grp or "").strip() or row.grp
+    row.updated_by = getattr(current_user, "name", None)
+    db.commit()
+    db.refresh(row)
+    return ApiResponse(success=True, data=_log_view(row))
 
 
 @router.get("/photos")

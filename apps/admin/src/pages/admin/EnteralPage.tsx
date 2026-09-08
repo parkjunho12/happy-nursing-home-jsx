@@ -287,6 +287,8 @@ function TxModal({ products, presetType, lockProduct, onClose, onSaved }: {
   const [residentId, setResidentId] = useState<string | null>(null)
   const [residents, setResidents] = useState<EnteralResident[]>([])
   const [residentMode, setResidentMode] = useState<'list' | 'manual'>('list')
+  // 기본은 경관식 대상만. 서른여섯 분을 훑어 고르면 옆 사람을 잘못 고른다.
+  const [showAll, setShowAll] = useState(false)
   const [txDate, setTxDate] = useState(today())
   const [unitPrice, setUnitPrice] = useState<number>(products[0]?.unit_price ?? 0)
   const [note, setNote] = useState('')
@@ -299,8 +301,8 @@ function TxModal({ products, presetType, lockProduct, onClose, onSaved }: {
   }, [productId])
 
   useEffect(() => {
-    enteralAPI.residents().then(setResidents).catch(() => setResidents([]))
-  }, [])
+    enteralAPI.residents(showAll).then(setResidents).catch(() => setResidents([]))
+  }, [showAll])
 
   const save = async () => {
     if (!productId) { setError('제품을 선택해주세요.'); return }
@@ -353,20 +355,38 @@ function TxModal({ products, presetType, lockProduct, onClose, onSaved }: {
         {txType === 'in' && <p className="text-[11px] text-gray-400">입고 단가를 입력하면 이 제품의 기본 단가로 저장되어 이후 출고 원가에 자동 적용됩니다.</p>}
         {txType === 'out' && (
           <div>
-            <label className={labelCls}>어르신(반출 대상)</label>
+            <label className={labelCls}>
+              어르신(반출 대상)
+              <span className="ml-1.5 font-normal text-gray-400">
+                {showAll ? '전체 어르신' : '수급자 관리에서 경관식으로 표시된 분'}
+              </span>
+            </label>
             {residentMode === 'list' && residents.length > 0 ? (
               <select value={resident} onChange={e => { setResident(e.target.value); setResidentId(residents.find(x => x.name === e.target.value)?.id ?? null) }} className={inputCls}>
                 <option value="">어르신 선택</option>
-                {residents.map(r => <option key={r.id} value={r.name}>{r.name}{r.room_name ? ` · ${r.room_name}` : ''}</option>)}
+                {residents.map(r => <option key={r.id} value={r.name}>{r.name}{r.room_name ? ` · ${r.room_name}호` : ''}</option>)}
               </select>
             ) : (
               <input value={resident} onChange={e => { setResident(e.target.value); setResidentId(null) }} className={inputCls} placeholder="성함" />
             )}
-            {residents.length > 0 && (
-              <button type="button" onClick={() => setResidentMode(m => (m === 'list' ? 'manual' : 'list'))} className="mt-1 text-xs text-gray-400 hover:text-gray-600">
+            {/* 경관식 대상이 하나도 없으면 왜 비었는지 말해준다.
+                빈 목록만 보이면 고장인 줄 안다. */}
+            {residentMode === 'list' && residents.length === 0 && !showAll && (
+              <p className="mt-1 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+                경관식으로 표시된 어르신이 없습니다 — 수급자 관리에서 어르신 수정을 열어 <b>경관식</b>을 체크해주세요.
+              </p>
+            )}
+            <div className="mt-1 flex items-center gap-3 flex-wrap">
+              <button type="button" onClick={() => setResidentMode(m => (m === 'list' ? 'manual' : 'list'))} className="text-xs text-gray-400 hover:text-gray-600">
                 {residentMode === 'list' ? '목록에 없으면 직접 입력 →' : '← 목록에서 선택'}
               </button>
-            )}
+              {residentMode === 'list' && (
+                <label className="inline-flex items-center gap-1 text-xs text-gray-400 cursor-pointer">
+                  <input type="checkbox" checked={showAll} onChange={e => setShowAll(e.target.checked)} className="accent-blue-600" />
+                  전체 어르신 보기
+                </label>
+              )}
+            </div>
           </div>
         )}
         <div><label className={labelCls}>메모</label><textarea value={note} onChange={e => setNote(e.target.value)} rows={2} className={inputCls} placeholder="비고" /></div>

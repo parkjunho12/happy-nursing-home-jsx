@@ -56,6 +56,8 @@ export interface EnteralResident {
   id: string
   name: string
   room_name?: string | null
+  /** 수급자 관리에서 '경관식' 을 체크한 분인가 */
+  tube_feeding?: boolean
 }
 
 export interface ResidentCost {
@@ -78,7 +80,10 @@ export const enteralAPI = {
   residentCosts: (params?: { start_date?: string; end_date?: string }) =>
     apiClient.get(`${BASE}/resident-costs`, { params: params ?? {} })
       .then(unwrap<{ items: ResidentCost[]; total: number; count: number }>),
-  residents: () => apiClient.get(`${BASE}/residents`).then(unwrap<EnteralResident[]>),
+  /** 반출 대상 — 기본은 경관식 대상만. all=true 면 전원. */
+  residents: (all = false) =>
+    apiClient.get(`${BASE}/residents`, { params: all ? { all: true } : {} })
+      .then(unwrap<EnteralResident[]>),
   exportBlob: (kind: 'transactions' | 'resident-costs' | 'stock', params?: Record<string, string | undefined>) =>
     apiClient.get(`${BASE}/export/${kind}`, { params: params ?? {}, responseType: 'blob' }).then(r => r.data as Blob),
 }

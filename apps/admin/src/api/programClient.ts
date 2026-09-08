@@ -29,6 +29,19 @@ export interface ProgramPhoto {
   created_at?: string | null
 }
 
+/** 그 회차에 무엇을 했는가 — (달·일·프로그램명) 하나에 한 벌 */
+export interface ProgramLog {
+  month: string; day: number; title: string; grp?: string | null
+  goal: string      // 목표
+  doing: string     // 진행 — 무엇을 어떤 순서로
+  tools: string     // 도구·재료
+  support: string   // 직원이 도운 것
+  joined: string    // 참여 인원·방식
+  outcome: string   // 마무리 · 확인된 반응
+  updated_by?: string | null
+  updated_at?: string | null
+}
+
 export interface ProgramTime { time: string; category?: string | null }
 export interface ProgramGroup {
   category: string; grade: string; members: string[]
@@ -105,6 +118,15 @@ export const programAPI = {
     apiClient.post(`${BASE}/upload-groups`, form(file), { headers: { 'Content-Type': undefined as any } })
       .then(unwrap<{ based_on: string; group_count: number }>),
   groups: () => apiClient.get(`${BASE}/groups`).then(unwrap<GroupSet | null>),
+  /** 그 달 회차 기록(목표·진행) 전부. 변경 이력(logs)과 다른 것이다. */
+  sessionLogs: (month: string) =>
+    apiClient.get(`${BASE}/logs`, { params: { month } }).then(unwrap<ProgramLog[]>),
+  /** 회차 기록 저장 — 모두 비우면 지운다 */
+  saveLog: (b: { month: string; day: number; title: string; grp?: string | null
+                 goal?: string; doing?: string; tools?: string
+                 support?: string; joined?: string; outcome?: string }) =>
+    apiClient.put(`${BASE}/logs`, b).then(unwrap<any>),
+
   saveGroups: (groups: ProgramGroup[], religion: { name: string; members: string[] }[]) =>
     apiClient.put(`${BASE}/groups`, { groups, religion }).then(unwrap<{ group_count: number }>),
   editNotes: (month: string, notes: string[]) =>
