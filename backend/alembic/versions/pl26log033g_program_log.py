@@ -8,14 +8,14 @@
 스무 장씩 올라오는데 사진마다 적게 하면 아무도 안 쓴다.
 
 Revision ID: pl26log033g
-Revises: bd26blog032f
+Revises: wm26memo031e
 """
 from alembic import op
 import sqlalchemy as sa
 
 
 revision = "pl26log033g"
-down_revision = "bd26blog032f"
+down_revision = "wm26memo031e"
 branch_labels = None
 depends_on = None
 
