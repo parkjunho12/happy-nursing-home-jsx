@@ -58,6 +58,7 @@ const IncidentsPage = lazy(() => import('./pages/admin/IncidentsPage'))
 const MonthlyReportPage = lazy(() => import('./pages/admin/MonthlyReportPage'))
 const ResidentAssignPage = lazy(() => import('./pages/admin/ResidentAssignPage'))
 const CaregiverDayPage = lazy(() => import('./pages/admin/CaregiverDayPage'))
+const OutgoingDocsPage = lazy(() => import('./pages/admin/OutgoingDocsPage'))
 const ProgramPage = lazy(() => import('./pages/admin/ProgramPage'))
 const ExpensePage = lazy(() => import('./pages/admin/ExpensePage'))
 const FacilityNewsPage = lazy(() => import('./pages/admin/FacilityNewsPage'))
@@ -388,6 +389,8 @@ function App() {
             <Route path="assignments"              element={<NurseLeadRoute><ResidentAssignPage /></NurseLeadRoute>} />
             {/* 요양보호사 하루 일정 — 정하는 것은 관리자·시설장까지 */}
             <Route path="caregiver-day"            element={<ManagerRoute><CaregiverDayPage /></ManagerRoute>} />
+            {/* 내보내야 할 문서 — 서류를 다루는 사람들이 함께 본다 */}
+            <Route path="outgoing-docs"            element={<NurseLeadRoute><OutgoingDocsPage /></NurseLeadRoute>} />
             <Route path="programs"                 element={<ExtOr menu="/programs" otherwise={SocialWorkerRoute}><ProgramPage /></ExtOr>} />
             <Route path="handover/:id"             element={<HandoverDetailPage />} />
             <Route path="resident-docs"            element={<SocialWorkerRoute><ResidentDocsPage /></SocialWorkerRoute>} />

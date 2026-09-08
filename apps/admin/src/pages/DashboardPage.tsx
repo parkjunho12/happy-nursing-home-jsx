@@ -1,11 +1,12 @@
 import { useEffect, useState, useMemo } from 'react'
 import MyDayCard from '@/components/dashboard/MyDayCard'
+import { outgoingDocAPI, type OutgoingDoc } from '@/api/outgoingDocClient'
 import { useNavigate } from 'react-router-dom'
 import {
   Users, UserCog, MessageSquare, TrendingUp, Calendar,
-  AlertTriangle, CheckCircle2, Clock, ChevronRight,
+  AlertTriangle, CheckCircle2, ChevronRight,
   LogIn, LogOut, UserPlus, UserMinus, ClipboardList,
-  Receipt, Image as ImageIcon, Inbox, Megaphone, Loader2, Check , CalendarClock, ArrowLeftRight, CalendarCheck} from 'lucide-react'
+  Receipt, Image as ImageIcon, Inbox, Megaphone, Loader2, Check , CalendarClock, ArrowLeftRight, CalendarCheck, FileOutput} from 'lucide-react'
 import { dashboardAPI, apiClient } from '@/api/client'
 import { adminRoutineAPI, type RoutineItem, type RoutineMonth } from '@/api/adminRoutineClient'
 import { expenseAPI } from '@/api/expenseClient'
@@ -146,6 +147,23 @@ export default function DashboardPage() {
   }
 
   const isAdmin = authUser?.role === 'ADMIN'
+  // 내보내야 할 문서 — '나에게 할당된 업무' 자리를 대신한다.
+  // 할당 업무는 체크리스트 페이지에서 이미 잘 보이는데, 내보낼 서류는
+  // 어디에도 안 모여 있어 놓치기 쉽다. 대시보드 자리는 그쪽이 더 값지다.
+  const [outDocs, setOutDocs] = useState<OutgoingDoc[]>([])
+  useEffect(() => {
+    outgoingDocAPI.list(false).then(setOutDocs).catch(() => setOutDocs([]))
+  }, [])
+  const [outBusy, setOutBusy] = useState<string | null>(null)
+  const issueDoc = async (d: OutgoingDoc) => {
+    setOutBusy(d.id)
+    try {
+      await outgoingDocAPI.issue(d.id)
+      setOutDocs(ds => ds.filter(x => x.id !== d.id))
+    } catch (e: any) {
+      alert(e?.response?.data?.detail ?? '교부 처리에 실패했습니다.')
+    } finally { setOutBusy(null) }
+  }
   // 요양보호사는 앱을 열자마자 '오늘 무슨 근무 · 무슨 일과 · 누구를 맡는가' 를
   // 봐야 한다. 그 아래에 있는 것들은 오늘 손이 가는 일이 아니다.
   const isCaregiver = authUser?.role !== 'ADMIN'
@@ -408,37 +426,6 @@ export default function DashboardPage() {
 
   const [toggling, setToggling] = useState<string | null>(null)
 
-  // 나에게 할당된 업무 — 지연 먼저, 그다음 D-day 가까운 순 (최대 6개)
-  const myTasks = useMemo(() => {
-    if (!authUser?.id) return [] as (TodayTask & { dueDate: string })[]
-    const itemMap = new Map(checklists.map(c => [c.id, c]))
-    const latest = new Map<string, typeof occurrences[0]>()
-    occurrences
-      .filter(o => o.status === 'pending' || o.status === 'overdue' || o.status === 'in_progress')
-      .filter(o => o.frequency === 'one_time' || o.status === 'overdue' || (o.scheduledDate <= todayStr && o.dueDate >= todayStr))
-      .forEach(o => {
-        const ex = latest.get(o.checklistItemId)
-        if (!ex || o.dueDate > ex.dueDate) latest.set(o.checklistItemId, o)
-      })
-    const out: (TodayTask & { dueDate: string })[] = []
-    latest.forEach(o => {
-      const item = itemMap.get(o.checklistItemId)
-      if (!item || !item.active) return
-      if ((item as any).assigned_user_id !== authUser.id) return
-      out.push({
-        occId: o.id, itemId: item.id, title: item.title, frequency: item.frequency,
-        riskLevel: item.riskLevel, personName: item.personName,
-        personId: item.personId, personType: item.personType,
-        assignee: item.assignee, isEvent: false,
-        daysOverdue: Math.max(0, -daysFromToday(o.dueDate)),
-        inProgress: o.status === 'in_progress',
-        dueDate: o.dueDate,
-      })
-    })
-    return out
-      .sort((a, b) => (b.daysOverdue - a.daysOverdue) || a.dueDate.localeCompare(b.dueDate))
-      .slice(0, 6)
-  }, [checklists, occurrences, authUser?.id, todayStr])
 
   const handleToggle = async (occId: string, itemId: string) => {
     setToggling(occId || itemId)
@@ -603,59 +590,76 @@ export default function DashboardPage() {
 
   // 일일 업무 체크 — 모바일 최우선 액션
   // 나에게 할당된 업무 체크 — 지연 우선, D-day 오름차순 6개
-  const secMine = !canChecklist ? null : (
+  /** 내보내야 할 문서 — '나에게 할당된 업무' 자리를 대신한다.
+   *
+   *  할당 업무는 체크리스트 페이지에서 이미 잘 보인다. 반면 내보낼 서류는
+   *  어디에도 안 모여 있어 "그거 드렸던가" 를 사람이 기억으로 붙잡고 있었다.
+   *  대시보드의 자리는 그쪽이 더 값지다.
+   *
+   *  여기서 바로 교부할 수 있게 둔다 — 목록을 보러 들어갔다 나오는 동안
+   *  잊어버리는 것이 실제로 일어나는 일이다.
+   */
+  const secOutDocs = !canChecklist ? null : (
     <section className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
       <div className="flex items-center justify-between px-4 md:px-5 py-3 md:py-3.5 border-b border-gray-50">
         <div className="flex items-center gap-2 min-w-0">
-          <Clock size={15} className="text-primary-orange shrink-0"/>
-          <h2 className="text-sm font-bold text-gray-800 shrink-0">나에게 할당된 업무</h2>
+          <FileOutput size={15} className="text-teal-600 shrink-0"/>
+          <h2 className="text-sm font-bold text-gray-800 shrink-0">내보내야 할 문서</h2>
           <span className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${
-            myTasks.length === 0 ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
-            {myTasks.length === 0 ? '✓ 완료' : `${myTasks.length}건`}
+            outDocs.length === 0 ? 'bg-green-100 text-green-700' : 'bg-teal-100 text-teal-700'}`}>
+            {outDocs.length === 0 ? '✓ 없음' : `${outDocs.length}건`}
           </span>
         </div>
-        <button onClick={() => navigate('/eval/checklist')} className="text-xs text-gray-400 hover:text-primary-orange flex items-center gap-0.5 shrink-0">
+        <button onClick={() => navigate('/outgoing-docs')} className="text-xs text-gray-400 hover:text-teal-600 flex items-center gap-0.5 shrink-0">
           전체보기<ChevronRight size={13}/>
         </button>
       </div>
-      {myTasks.length === 0 ? (
+      {outDocs.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-8 md:py-10">
           <CheckCircle2 size={32} className="mb-2 text-green-400"/>
-          <p className="text-sm font-medium text-green-600">내 담당 업무 모두 완료!</p>
+          <p className="text-sm font-medium text-green-600">내보낼 문서 없음</p>
         </div>
       ) : (
         <div className="divide-y divide-gray-50">
-          {myTasks.map(task => (
-            <div key={task.occId || task.itemId} className="flex items-center gap-1 md:gap-3 px-2 md:px-4 py-1.5 md:py-2.5 hover:bg-orange-50/30 transition-colors">
-              <button onClick={() => handleToggle(task.occId, task.itemId)} disabled={toggling === (task.occId || task.itemId)}
-                aria-label="완료 처리"
-                className="w-11 h-11 md:w-9 md:h-9 shrink-0 flex items-center justify-center rounded-full active:bg-orange-100 disabled:opacity-50">
-                <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                  toggling === (task.occId || task.itemId) ? 'border-primary-orange' : 'border-gray-300 hover:border-primary-orange hover:bg-orange-50'}`}>
-                  {toggling === (task.occId || task.itemId) && <div className="w-2.5 h-2.5 border border-primary-orange border-t-transparent rounded-full animate-spin"/>}
-                </span>
-              </button>
-              <div className="flex-1 min-w-0 cursor-pointer py-1"
-                onClick={() => {
-                  if (task.personType === 'resident' && task.personId) navigate(`/eval/residents/${task.personId}`)
-                  else if (task.personType === 'staff' && task.personId) navigate(`/eval/staff/${task.personId}`)
-                  else navigate('/eval/checklist')
-                }}>
-                <p className="text-sm font-medium text-gray-800 truncate">{task.title}</p>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-[10px] text-gray-400">{FREQUENCY_LABELS[task.frequency] ?? task.frequency}</span>
-                  {task.personName && <span className="text-[10px] text-purple-500 font-medium">👤 {task.personName}</span>}
+          {outDocs.slice(0, 6).map(d => {
+            const dd = d.due_date
+              ? Math.round((new Date(d.due_date + 'T00:00:00').getTime()
+                  - new Date(new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) + 'T00:00:00').getTime()) / 86400000)
+              : null
+            return (
+              <div key={d.id} className="flex items-center gap-2 px-3 md:px-4 py-2 md:py-2.5 hover:bg-teal-50/30 transition-colors">
+                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => navigate('/outgoing-docs')}>
+                  <p className="text-sm text-gray-800 truncate">
+                    {d.person_name && <span className="font-bold">{d.person_name} 어르신 </span>}
+                    <span className="font-medium">{d.title}</span>
+                  </p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    {d.target && <span className="text-[10px] font-bold text-teal-600">{d.target}</span>}
+                    {d.note && <span className="text-[10px] text-gray-400 truncate">{d.note}</span>}
+                  </div>
                 </div>
+                {dd != null && (
+                  <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                    dd < 0 ? 'bg-red-100 text-red-600' : dd === 0 ? 'bg-amber-100 text-amber-700'
+                    : dd <= 3 ? 'bg-orange-50 text-orange-600' : 'bg-gray-100 text-gray-400'}`}>
+                    {dd < 0 ? `지연 ${-dd}일` : dd === 0 ? '오늘까지' : `D-${dd}`}
+                  </span>
+                )}
+                {/* 교부 — 여기서 바로. 들어갔다 나오는 동안 잊는다. */}
+                <button onClick={() => issueDoc(d)} disabled={outBusy === d.id}
+                  title="교부 — 오늘 날짜로 기록됩니다"
+                  className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-teal-600 text-white text-[11px] font-bold disabled:opacity-40">
+                  {outBusy === d.id ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />} 교부
+                </button>
               </div>
-              <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-                task.daysOverdue > 0 ? 'bg-red-100 text-red-600'
-                : daysFromToday(task.dueDate) === 0 ? 'bg-amber-100 text-amber-700'
-                : daysFromToday(task.dueDate) <= 3 ? 'bg-orange-50 text-orange-600' : 'bg-gray-100 text-gray-500'}`}>
-                {task.daysOverdue > 0 ? `지연 ${task.daysOverdue}일` : daysFromToday(task.dueDate) === 0 ? '오늘까지' : `D-${daysFromToday(task.dueDate)}`}
-              </span>
-              <ChevronRight size={13} className="text-gray-300 shrink-0"/>
-            </div>
-          ))}
+            )
+          })}
+          {outDocs.length > 6 && (
+            <button onClick={() => navigate('/outgoing-docs')}
+              className="w-full py-2 text-[11px] font-bold text-gray-400 hover:text-teal-600">
+              나머지 {outDocs.length - 6}건 더 보기
+            </button>
+          )}
         </div>
       )}
     </section>
@@ -962,7 +966,7 @@ export default function DashboardPage() {
         {secPending}
         {secNotices}
         {secDocs}
-        {secMine}
+        {secOutDocs}
         {secAdmission}
           {secHire}
         {secStaffing}
@@ -993,7 +997,7 @@ export default function DashboardPage() {
           서류 현황(계획서·계약서)은 어르신별 진행 상황이라 그 아래로 내린다. */}
       {isAdmin && (
         <div className="grid lg:grid-cols-5 gap-4">
-          <div className="lg:col-span-3">{secMine}</div>
+          <div className="lg:col-span-3">{secOutDocs}</div>
           <div className="lg:col-span-2">{secRoutine}</div>
         </div>
       )}
@@ -1002,7 +1006,7 @@ export default function DashboardPage() {
 
       <div className="grid lg:grid-cols-5 gap-4">
         <div className="lg:col-span-3 space-y-4">
-          {!isAdmin && secMine}
+          {!isAdmin && secOutDocs}
           {secAdmission}
           {secHire}
         </div>

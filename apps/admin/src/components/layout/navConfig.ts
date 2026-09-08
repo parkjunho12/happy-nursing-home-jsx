@@ -168,6 +168,7 @@ export function getNavConfig(
           items: [
             { to: '/eval/residents', icon: UserRound, label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined },
             { to: '/resident-docs', icon: ClipboardList, label: '어르신 서류현황' },
+            { to: '/outgoing-docs', icon: FileText, label: '내보내야 할 문서' },
             { to: '/assignments', icon: Users, label: '담당 어르신 명단' },
             { to: '/enteral', icon: Soup, label: '경관식 관리' },
             { to: '/programs', icon: CalendarDays, label: '프로그램 관리' },
@@ -273,6 +274,7 @@ export function getNavConfig(
           items: [
             { to: '/eval/residents', icon: UserRound, label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined },
             { to: '/resident-docs', icon: ClipboardList, label: '어르신 서류현황' },
+            { to: '/outgoing-docs', icon: FileText, label: '내보내야 할 문서' },
             { to: '/assignments', icon: Users, label: '담당 어르신 명단' },
             { to: '/enteral', icon: Soup, label: '경관식 관리' },
             { to: '/programs', icon: CalendarDays, label: '프로그램 관리' },
@@ -375,6 +377,8 @@ export function getNavConfig(
     residentItems.push({ to: '/eval/residents', icon: UserRound, label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined })
   if (isSocialWorker || isManager)
     residentItems.push({ to: '/resident-docs', icon: ClipboardList, label: '어르신 서류현황' })
+  if (isSocialWorker || isNurse || isManager)
+    residentItems.push({ to: '/outgoing-docs', icon: FileText, label: '내보내야 할 문서' })
   if (isSocialWorker || isNurse || isManager)
     residentItems.push({ to: '/assignments', icon: Users, label: '담당 어르신 명단' })
   if (canEnteral)
