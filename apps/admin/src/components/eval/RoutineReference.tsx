@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
-import { ListChecks, Search, X } from 'lucide-react'
+import { ListChecks, Loader2, Plus, Search, X } from 'lucide-react'
 import type { ChecklistItem } from '@/utils/period'
-import { dutyRoleOf, ROLE_TONE } from '@/utils/dutyRole'
+import { dutyRoleOf, DUTY_ROLES, ROLE_TONE } from '@/utils/dutyRole'
 import { useLtcStore } from '@/store/ltc'
 
 /**
@@ -30,13 +30,14 @@ import { useLtcStore } from '@/store/ltc'
 
 /** 화면에 낼 주기와 그 차례. 여기 없는 주기(일회성·입소 시 등)는 안 낸다 —
  *  그건 정기 업무가 아니라 그때그때 생기는 일이다. */
-const PERIODS: { id: string; keys: string[]; label: string }[] = [
-  { id: 'daily',   keys: ['daily'], label: '일일' },
-  { id: 'weekly',  keys: ['weekly', 'weekly_dow'], label: '주별' },
-  { id: 'monthly', keys: ['monthly', 'monthly_day', 'monthly_nth_dow'], label: '월별' },
-  { id: 'quarter', keys: ['quarterly'], label: '분기별' },
-  { id: 'half',    keys: ['half-yearly'], label: '반기별' },
-  { id: 'yearly',  keys: ['yearly'], label: '연별' },
+const PERIODS: { id: string; keys: string[]; label: string; save: string }[] = [
+  // keys — 이 탭에 담을 저장값들(옛 표기까지). save — 새로 만들 때 쓸 값.
+  { id: 'daily',   keys: ['daily'], label: '일일', save: 'daily' },
+  { id: 'weekly',  keys: ['weekly', 'weekly_dow'], label: '주별', save: 'weekly' },
+  { id: 'monthly', keys: ['monthly', 'monthly_day', 'monthly_nth_dow'], label: '월별', save: 'monthly' },
+  { id: 'quarter', keys: ['quarterly'], label: '분기별', save: 'quarterly' },
+  { id: 'half',    keys: ['half-yearly'], label: '반기별', save: 'half-yearly' },
+  { id: 'yearly',  keys: ['yearly'], label: '연별', save: 'yearly' },
 ]
 
 export default function RoutineReference({ items, onOpen }: {
@@ -45,7 +46,47 @@ export default function RoutineReference({ items, onOpen }: {
 }) {
   const [tab, setTab] = useState('daily')
   const [q, setQ] = useState('')
-  const { staffList } = useLtcStore()
+  const { staffList, addChecklist } = useLtcStore()
+  // 새 업무 넣기 — 지금 보고 있는 탭의 주기로 들어간다
+  const [addOpen, setAddOpen] = useState(false)
+  const [form, setForm] = useState({ title: '', description: '', role: '간호팀' })
+  const [saving, setSaving] = useState(false)
+
+  /** 정기 업무 하나 넣기.
+   *
+   *  직종을 담당자 칸(assignee)에 그대로 적는다. dutyRoleOf 가 ② 규칙으로
+   *  다시 읽어 같은 직종으로 보여주므로, 사람 이름을 적을 때와 달리
+   *  담당이 바뀌어도 목록이 틀리지 않는다.
+   *
+   *  주기는 지금 보고 있는 탭을 그대로 쓴다 — '월별' 을 보다가 추가하면
+   *  월별로 들어간다. 어느 주기인지 또 고르게 하면 잘못 고르기 쉽다.
+   */
+  const add = async () => {
+    const title = form.title.trim()
+    if (!title) return alert('어떤 업무인지 적어주세요.')
+    const p = PERIODS.find(x => x.id === tab)!
+    setSaving(true)
+    try {
+      await addChecklist({
+        title, description: form.description.trim(),
+        frequency: p.save as any,
+        relatedIndicatorId: '', relatedCategoryId: '', relatedDomainId: '',
+        assignee: form.role, assigned_user_id: null,
+        evidenceRequired: '', storageLocation: '', howTo: '', evalNote: '',
+        riskLevel: 'medium' as any,
+        // 시설 공통 업무 — 어르신·직원에게 붙이지 않는다.
+        // 붙이면 왼쪽 '내 업무' 로 가고 주기마다 자동 생성된다.
+        personId: undefined, personName: undefined, personType: 'facility',
+        recurWeekday: null, recurWeekOfMonth: null, recurDay: null, recurDueDay: null,
+        active: true, memo: '', attachmentName: '', completed: false,
+        blocked: false, occurrences: [],
+      } as any)
+      setForm({ title: '', description: '', role: form.role })
+      setAddOpen(false)
+    } catch (e: any) {
+      alert(e?.response?.data?.detail ?? e?.message ?? '추가하지 못했습니다.')
+    } finally { setSaving(false) }
+  }
 
   /** 이름 → 직종. 직원 명단이 기준이라 담당이 바뀌어도 저절로 따라간다. */
   const staffPos = useMemo(() => {
@@ -92,9 +133,15 @@ export default function RoutineReference({ items, onOpen }: {
         <div className="relative ml-auto">
           <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-300" />
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="업무 · 직종"
-            className="w-32 sm:w-40 pl-7 pr-6 py-1.5 rounded-lg border border-gray-200 text-[12px] focus:outline-none focus:border-gray-400" />
+            className="w-28 sm:w-36 pl-7 pr-6 py-1.5 rounded-lg border border-gray-200 text-[12px] focus:outline-none focus:border-gray-400" />
           {q && <button onClick={() => setQ('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500"><X size={11} /></button>}
         </div>
+        <button onClick={() => setAddOpen(o => !o)}
+          title={addOpen ? '닫기' : '이 주기에 업무 추가'}
+          className={`shrink-0 inline-flex items-center gap-0.5 px-2 py-1.5 rounded-lg text-[12px] font-bold transition-colors ${
+            addOpen ? 'bg-gray-800 text-white' : 'border border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+          {addOpen ? <X size={12} /> : <Plus size={12} />}
+        </button>
       </div>
 
       {/* 주기 탭 — 실제로는 한 주기만 본다 */}
@@ -110,6 +157,42 @@ export default function RoutineReference({ items, onOpen }: {
           </button>
         ))}
       </div>
+
+      {/* 새 업무 — 지금 보고 있는 주기로 들어간다.
+          어느 주기인지 또 고르게 하면 잘못 고르기 쉽다. */}
+      {addOpen && (
+        <div className="px-3 py-2.5 border-b border-gray-100 bg-gray-50/60 space-y-2">
+          <p className="text-[11px] font-bold text-gray-500">
+            「{PERIODS.find(p => p.id === tab)?.label}」 업무로 들어갑니다
+          </p>
+          <input value={form.title} autoFocus
+            onChange={e => setForm({ ...form, title: e.target.value })}
+            onKeyDown={e => { if (e.key === 'Enter' && form.title.trim()) add() }}
+            placeholder="업무 이름 — 예) 비상발전기 작동 점검"
+            className="w-full px-2.5 py-2 rounded-lg border border-gray-200 text-[13px] font-bold focus:outline-none focus:border-gray-500" />
+          <input value={form.description}
+            onChange={e => setForm({ ...form, description: e.target.value })}
+            onKeyDown={e => { if (e.key === 'Enter' && form.title.trim()) add() }}
+            placeholder="설명 (선택) — 무엇을 어떻게 확인하는지"
+            className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-[12px] focus:outline-none focus:border-gray-500" />
+          <div className="flex flex-wrap gap-1">
+            {DUTY_ROLES.map(r => (
+              <button key={r} onClick={() => setForm({ ...form, role: r })}
+                className={`px-2 py-1 rounded text-[11px] font-bold transition-colors ${
+                  form.role === r ? ROLE_TONE[r] : 'text-gray-400 border border-gray-200 hover:bg-white'}`}>
+                {r}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-gray-400">체크 항목은 생기지 않습니다 — 목록에만 들어갑니다</span>
+            <button onClick={add} disabled={saving || !form.title.trim()}
+              className="ml-auto inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-800 text-white text-[12px] font-bold disabled:opacity-40">
+              {saving ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />} 추가
+            </button>
+          </div>
+        </div>
+      )}
 
       <p className="px-4 py-1.5 text-[11px] text-gray-400 border-b border-gray-50">
         무엇을 해야 하는지 보는 목록입니다 — 완료 처리는 왼쪽 「내 업무」에서 합니다.

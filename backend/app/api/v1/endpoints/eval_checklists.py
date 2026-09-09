@@ -200,8 +200,16 @@ def create_checklist(
     db.add(item)
     db.flush()  # id 확보
 
-    # 현재 주기 occurrence 즉시 생성
-    get_or_create_occurrence(db, item)
+    # 현재 주기 occurrence 즉시 생성.
+    #
+    # 다만 시설 공통 반복 업무(사람에 안 붙은 일일·주별·월별…)는 만들지 않는다.
+    # 그건 '이번 주기에 누가 할 일' 이 아니라 '우리 시설이 이런 것들을 한다' 는
+    # 목록이고, 화면에서도 보기 전용으로만 쓴다. 여기서 만들면 새로 넣은 업무만
+    # 왼쪽 '내 업무' 에 나타나 이미 있던 것들과 다르게 굴어 혼란스럽다.
+    # (backfill_occurrences 도 같은 규칙으로 건너뛴다)
+    from app.services.occurrence import canon_freq as _cf, RECURRING_FREQS as _RF
+    if not (item.person_id is None and _cf(item.frequency) in _RF):
+        get_or_create_occurrence(db, item)
 
     db.commit()
 
