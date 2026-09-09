@@ -491,7 +491,7 @@ def _photo_view(p: ProgramPhoto) -> dict:
 
 # ── 회차 기록 (목표·진행) ────────────────────────────────────────────────
 
-LOG_FIELDS = ("goal", "doing", "tools", "support", "joined", "outcome")
+LOG_FIELDS = ("goal", "doing")
 
 
 class LogBody(BaseModel):
@@ -499,18 +499,13 @@ class LogBody(BaseModel):
     day: int
     title: str
     grp: Optional[str] = None
-    goal: Optional[str] = None
-    doing: Optional[str] = None
-    tools: Optional[str] = None
-    support: Optional[str] = None
-    joined: Optional[str] = None
-    outcome: Optional[str] = None
+    goal: Optional[str] = None      # 목표
+    doing: Optional[str] = None     # 프로그램 내용
 
 
 def _log_view(r: ProgramLog) -> dict:
     return {"month": r.month, "day": r.day, "title": r.title, "grp": r.grp,
-            "goal": r.goal or "", "doing": r.doing or "", "tools": r.tools or "",
-            "support": r.support or "", "joined": r.joined or "", "outcome": r.outcome or "",
+            "goal": r.goal or "", "doing": r.doing or "",
             "updated_by": r.updated_by,
             "updated_at": r.updated_at.isoformat() if r.updated_at else None}
 

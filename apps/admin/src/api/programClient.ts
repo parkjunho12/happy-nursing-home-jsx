@@ -33,11 +33,7 @@ export interface ProgramPhoto {
 export interface ProgramLog {
   month: string; day: number; title: string; grp?: string | null
   goal: string      // 목표
-  doing: string     // 진행 — 무엇을 어떤 순서로
-  tools: string     // 도구·재료
-  support: string   // 직원이 도운 것
-  joined: string    // 참여 인원·방식
-  outcome: string   // 마무리 · 확인된 반응
+  doing: string     // 프로그램 내용 — 무엇을 어떻게 했는가
   updated_by?: string | null
   updated_at?: string | null
 }
@@ -123,8 +119,7 @@ export const programAPI = {
     apiClient.get(`${BASE}/session-logs`, { params: { month } }).then(unwrap<ProgramLog[]>),
   /** 회차 기록 저장 — 모두 비우면 지운다 */
   saveLog: (b: { month: string; day: number; title: string; grp?: string | null
-                 goal?: string; doing?: string; tools?: string
-                 support?: string; joined?: string; outcome?: string }) =>
+                 goal?: string; doing?: string }) =>
     apiClient.put(`${BASE}/session-logs`, b).then(unwrap<any>),
 
   saveGroups: (groups: ProgramGroup[], religion: { name: string; members: string[] }[]) =>

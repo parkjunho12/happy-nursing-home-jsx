@@ -125,12 +125,16 @@ class ProgramLog(Base):
     title = Column(String(200), nullable=False)     # 프로그램명 — 사진과 같은 열쇠
     grp   = Column(String(50), nullable=True)
 
-    goal    = Column(Text, nullable=True)           # 목표 — 무엇을 위해 했는가
-    doing   = Column(Text, nullable=True)           # 진행 — 무엇을 어떤 순서로 했는가
-    tools   = Column(String(300), nullable=True)    # 사용한 도구·재료
-    support = Column(Text, nullable=True)           # 직원이 도운 것
-    joined  = Column(String(100), nullable=True)    # 참여 인원·방식
-    outcome = Column(Text, nullable=True)           # 마무리 · 기록으로 확인된 반응
+    # 두 칸만 둔다.
+    #
+    # 처음에는 목표·진행·도구·참여·직원 도움·마무리 여섯 칸이었다. 무엇을
+    # 적을지 알려주려던 것인데, 여섯 칸이 비어 있으면 '다 채워야 하나' 싶어
+    # 손이 안 간다. 실제로 한 달 동안 한 건도 안 적혔다.
+    #
+    # 두 칸이면 적는다. 그리고 이 둘이면 블로그 본문이 나온다 —
+    # 나머지는 '진행 내용' 안에 자연스럽게 들어간다.
+    goal  = Column(Text, nullable=True)   # 목표 — 무엇을 위해 했는가
+    doing = Column(Text, nullable=True)   # 프로그램 내용 — 무엇을 어떻게 했는가
 
     updated_by = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_kst)
@@ -138,7 +142,7 @@ class ProgramLog(Base):
 
     @property
     def has_content(self) -> bool:
-        return any((self.goal, self.doing, self.tools, self.support, self.joined, self.outcome))
+        return any((self.goal, self.doing))
 
 
 class ProgramPhoto(Base):

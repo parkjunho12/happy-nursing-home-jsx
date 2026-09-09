@@ -16,11 +16,10 @@ import { programAPI, type ProgramLog } from '@/api/programClient'
  *   한 프로그램에 사진이 스무 장씩 올라온다. 사진마다 적게 하면 같은 내용을
  *   스무 번 쓰게 되고, 그러면 아무도 안 쓴다.
  *
- * ■ 왜 칸을 여섯으로 나누는가
+ * ■ 왜 두 칸인가
  *
- *   빈 상자 하나를 주면 무엇을 적을지 몰라 "즐겁게 진행함" 한 줄로 끝난다.
- *   그 한 줄로는 글이 안 나온다. 무엇을 물어보는지 칸 이름으로 알려주면
- *   적을 것이 떠오른다. 다 채울 필요는 없다 — 한 칸만 있어도 글이 달라진다.
+ *   아래 FIELDS 주석에 적었다 — 여섯 칸으로 두었더니 한 달 동안 한 건도
+ *   안 적혔다.
  *
  * ■ 저장 버튼이 없다
  *
@@ -28,19 +27,25 @@ import { programAPI, type ProgramLog } from '@/api/programClient'
  *   하면 안 누르고 닫는다.
  */
 
-type Field = { key: keyof Pick<ProgramLog, 'goal' | 'doing' | 'tools' | 'support' | 'joined' | 'outcome'>
+type Field = { key: keyof Pick<ProgramLog, 'goal' | 'doing'>
               label: string; ph: string; rows: number }
 
+/** 두 칸만 둔다.
+ *
+ *  처음에는 목표·진행·도구·참여·직원 도움·마무리 여섯 칸이었다. 무엇을 적을지
+ *  알려주려던 것인데, 여섯 칸이 비어 있으면 '다 채워야 하나' 싶어 손이 안 간다.
+ *  실제로 한 달 동안 한 건도 안 적혔다.
+ *
+ *  두 칸이면 적는다. 도구·참여·마무리는 '프로그램 내용' 한 줄에 자연스럽게
+ *  들어간다 — 칸을 나눠 물을 필요가 없다. */
 const FIELDS: Field[] = [
-  { key: 'goal',    label: '목표',        ph: '예) 앉은 자세로 상지 근력과 균형 감각을 쓰는 시간', rows: 2 },
-  { key: 'doing',   label: '진행 내용',   ph: '예) 준비체조 → 두 팀으로 나눠 공 굴리기 → 정리체조', rows: 3 },
-  { key: 'tools',   label: '도구 · 재료', ph: '예) 폼볼, 미니 골대, 스피커', rows: 1 },
-  { key: 'joined',  label: '참여',        ph: '예) 2층 12명 · 휠체어 이용 어르신 포함', rows: 1 },
-  { key: 'support', label: '직원 도움',   ph: '예) 공 방향을 잡아드리고 순서를 안내함', rows: 2 },
-  { key: 'outcome', label: '마무리 · 반응', ph: '예) 정리체조 후 마침 · 다음 회차 재참여 희망 표시', rows: 2 },
+  { key: 'goal',  label: '오늘의 목표', rows: 2,
+    ph: '예) 앉은 자세로 상지 근력과 균형 감각을 쓰는 시간' },
+  { key: 'doing', label: '프로그램 내용', rows: 4,
+    ph: '예) 준비체조로 몸을 풀고, 두 팀으로 나눠 폼볼을 굴려 미니 골대에 넣었습니다.\n직원이 공 방향을 잡아드렸고, 정리체조로 마쳤습니다. 2층 12명 참여.' },
 ]
 
-const EMPTY = { goal: '', doing: '', tools: '', support: '', joined: '', outcome: '' }
+const EMPTY = { goal: '', doing: '' }
 
 export default function SessionLogForm({ month, day, title, grp, log, onSaved }: {
   month: string
@@ -55,10 +60,7 @@ export default function SessionLogForm({ month, day, title, grp, log, onSaved }:
   const saved = useRef({ ...EMPTY })
 
   useEffect(() => {
-    const next = log
-      ? { goal: log.goal, doing: log.doing, tools: log.tools,
-          support: log.support, joined: log.joined, outcome: log.outcome }
-      : { ...EMPTY }
+    const next = log ? { goal: log.goal, doing: log.doing } : { ...EMPTY }
     setV(next)
     saved.current = next
   }, [log, month, day, title])
@@ -88,7 +90,7 @@ export default function SessionLogForm({ month, day, title, grp, log, onSaved }:
       <div className="flex items-center gap-1.5 mb-2">
         <NotebookPen size={13} className="text-violet-600" />
         <p className="text-xs font-bold text-gray-800">{title} · 활동 기록</p>
-        <span className="text-[10px] text-gray-400">{filled}/6</span>
+        <span className="text-[10px] text-gray-400">{filled}/2</span>
         <span className="ml-auto text-[10px]">
           {busy === 'saving' && <Loader2 size={11} className="animate-spin text-gray-300 inline" />}
           {busy === 'ok' && <span className="inline-flex items-center gap-0.5 font-bold text-emerald-600"><Check size={10} />저장</span>}
@@ -96,14 +98,14 @@ export default function SessionLogForm({ month, day, title, grp, log, onSaved }:
         </span>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+      <div className="space-y-2">
         {FIELDS.map(f => (
-          <div key={f.key} className={f.rows > 2 ? 'md:col-span-2' : ''}>
+          <div key={f.key}>
             <label className="block text-[10px] font-bold text-gray-500 mb-0.5">{f.label}</label>
             <textarea
               value={v[f.key] ?? ''}
               rows={f.rows}
-              maxLength={f.key === 'tools' || f.key === 'joined' ? 300 : 1000}
+              maxLength={2000}
               onChange={e => setV(s => ({ ...s, [f.key]: e.target.value }))}
               onBlur={save}
               // 키보드만으로 끝낼 수 있게
@@ -115,7 +117,7 @@ export default function SessionLogForm({ month, day, title, grp, log, onSaved }:
       </div>
 
       <p className="text-[10px] text-gray-400 mt-1.5">
-        칸을 벗어나면 바로 저장됩니다 · 아는 것만 적으셔도 됩니다 · 여기 적힌 내용이 블로그 초안의 본문이 됩니다
+        칸을 벗어나면 바로 저장됩니다 · 한 칸만 적으셔도 됩니다 · 여기 적힌 내용이 블로그 초안의 본문이 됩니다
       </p>
     </div>
   )
