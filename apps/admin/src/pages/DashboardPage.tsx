@@ -1,12 +1,13 @@
 import { useEffect, useState, useMemo } from 'react'
 import MyDayCard from '@/components/dashboard/MyDayCard'
 import { outgoingDocAPI, type OutgoingDoc } from '@/api/outgoingDocClient'
+import { blogDraftAPI } from '@/api/blogDraftClient'
 import { useNavigate } from 'react-router-dom'
 import {
   Users, UserCog, MessageSquare, TrendingUp, Calendar,
   AlertTriangle, CheckCircle2, ChevronRight,
   LogIn, LogOut, UserPlus, UserMinus, ClipboardList,
-  Receipt, Image as ImageIcon, Inbox, Megaphone, Loader2, Check , CalendarClock, ArrowLeftRight, CalendarCheck, FileOutput} from 'lucide-react'
+  Receipt, Image as ImageIcon, Inbox, Megaphone, Loader2, Check , CalendarClock, ArrowLeftRight, CalendarCheck, FileOutput, PenLine} from 'lucide-react'
 import { dashboardAPI, apiClient } from '@/api/client'
 import { adminRoutineAPI, type RoutineItem, type RoutineMonth } from '@/api/adminRoutineClient'
 import { expenseAPI } from '@/api/expenseClient'
@@ -67,7 +68,7 @@ export default function DashboardPage() {
   const canChecklist = can('/eval/checklist')
   const [siteStats, setSiteStats] = useState<DashboardStats | null>(null)
   const [loadingSite, setLoadingSite] = useState(true)
-  const [pending, setPending] = useState<{ expense: number; album: number; leave: number; swap: number; visit: number; refund: number; returning: number }>({ expense: 0, album: 0, leave: 0, swap: 0, visit: 0, refund: 0, returning: 0 })
+  const [pending, setPending] = useState<{ expense: number; album: number; leave: number; swap: number; visit: number; refund: number; returning: number; blog: number; blogPhoto: number }>({ expense: 0, album: 0, leave: 0, swap: 0, visit: 0, refund: 0, returning: 0, blog: 0, blogPhoto: 0 })
   const [expiringContracts, setExpiringContracts] = useState(0)
   const [recentNews, setRecentNews] = useState<FacilityNews[]>([])
 
@@ -171,7 +172,7 @@ export default function DashboardPage() {
   const canApproveLeave = authUser?.role === 'ADMIN' || authUser?.position === '시설장'
   const canVisit = authUser?.role === 'ADMIN' || ['시설장', '사회복지사'].includes(authUser?.position ?? '')
   const loadPending = async () => {
-    const [exp, alb, news, lv, sw, vs, rf, rt] = await Promise.all([
+    const [exp, alb, news, lv, sw, vs, rf, rt, bg] = await Promise.all([
       can('/expense')
         ? expenseAPI.list({}).then(r => r.filter(x => x.status === 'pending' || x.status === 'manager_approved').length).catch(() => 0) : Promise.resolve(0),
       can('/eval/albums')
@@ -200,8 +201,14 @@ export default function DashboardPage() {
               .catch(() => 0)
           })()
         : Promise.resolve(0),
+      // 블로그 자동 초안 — 검토를 기다리는 글, 그리고 공개 사용 확인을 기다리는 사진.
+      // 사진 확인이 막혀 있으면 예약이 돌아도 글이 안 만들어지므로 그것도 할 일이다.
+      can('/blog-drafts')
+        ? blogDraftAPI.pendingCount().catch(() => ({ drafts: 0, photos_unconfirmed: 0 }))
+        : Promise.resolve({ drafts: 0, photos_unconfirmed: 0 }),
     ])
-    setPending({ expense: exp, album: alb, leave: lv, swap: sw, visit: vs, refund: rf, returning: rt })
+    setPending({ expense: exp, album: alb, leave: lv, swap: sw, visit: vs, refund: rf, returning: rt,
+                 blog: bg.drafts, blogPhoto: bg.photos_unconfirmed })
     setRecentNews(news)
   }
 
@@ -448,6 +455,8 @@ export default function DashboardPage() {
     { show: canVisit && pending.visit > 0, label: '면회 예약 확인 대기', value: pending.visit, unit: '건', to: '/schedule', icon: CalendarClock, tone: 'orange' as const },
     { show: can('/schedule') && pending.returning > 0, label: '귀원 기록 대기 (외출·외박·외래)', value: pending.returning, unit: '건', to: '/schedule', icon: CalendarClock, tone: 'orange' as const },
     { show: can('/staff-hr') && pending.refund > 0, label: '카드키 보증금 이체 대기', value: pending.refund, unit: '건', to: '/staff-hr', icon: Receipt, tone: 'emerald' as const },
+    { show: can('/blog-drafts') && pending.blog > 0, label: '블로그 초안 검토 대기', value: pending.blog, unit: '건', to: '/blog-drafts', icon: PenLine, tone: 'blue' as const },
+    { show: can('/blog-drafts') && pending.blogPhoto > 0, label: '블로그 사진 공개 사용 확인', value: pending.blogPhoto, unit: '장', to: '/blog-drafts?tab=photos', icon: ImageIcon, tone: 'orange' as const },
     { show: expiringContracts > 0, label: '갱신 임박 계약 (45일 이내)', value: expiringContracts, unit: '건', to: '/operations', icon: Receipt, tone: 'orange' as const },
   ].filter(i => i.show)
 
@@ -511,7 +520,7 @@ export default function DashboardPage() {
   const secSchedule = can('/schedule') ? <UpcomingSchedule limit={isMobile ? 4 : 6} days={45} /> : null
 
   // 처리 대기 — 모바일은 비었을 때 렌더하지 않음(빈 카드로 화면 낭비 방지)
-  const hasPendingScope = can('/expense') || can('/eval/albums') || can('/contacts') || canApproveLeave || canVisit
+  const hasPendingScope = can('/expense') || can('/eval/albums') || can('/contacts') || canApproveLeave || canVisit || can('/blog-drafts')
   const secPending = (!hasPendingScope || (isMobile && pendingItems.length === 0)) ? null : (
     <section>
       <div className="flex items-center gap-2 mb-2">

@@ -30,6 +30,7 @@ from app.api.v1.endpoints.payslips import router as payslips_router
 from app.api.v1.endpoints.assignments import router as assignments_router
 from app.api.v1.endpoints.caregiver_day import router as caregiver_day_router
 from app.api.v1.endpoints.outgoing_docs import router as outgoing_docs_router
+from app.api.v1.endpoints.blog_drafts import router as blog_drafts_router
 from app.api.v1.endpoints.rooms import router as rooms_router
 from app.api.v1.endpoints.programs import router as programs_router, family_router as programs_family_router
 from app.api.v1.endpoints.meals import router as meals_router
@@ -162,6 +163,7 @@ api_router.include_router(payslips_router, prefix="/admin/payslips", tags=["admi
 api_router.include_router(assignments_router, prefix="/admin/assignments", tags=["admin-assignments"])
 api_router.include_router(caregiver_day_router, prefix="/admin/caregiver-day", tags=["caregiver-day"])
 api_router.include_router(outgoing_docs_router, prefix="/admin/outgoing-docs", tags=["outgoing-docs"])
+api_router.include_router(blog_drafts_router, prefix="/admin/blog-drafts", tags=["blog-drafts"])
 api_router.include_router(rooms_router, prefix="/admin/rooms", tags=["admin-rooms"])
 api_router.include_router(programs_router, prefix="/admin/programs", tags=["admin-programs"])
 api_router.include_router(programs_family_router, prefix="/family", tags=["family-programs"])

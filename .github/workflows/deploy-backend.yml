@@ -77,6 +77,11 @@ jobs:
         # 요양보호사는 보기만, 화장실 칸에는 이름을 넣지 않는다,
         # 이름 없이 '재실' 로 둘 수 없다 — 이 세 가지를 지킨다.
         run: python3 backend/tests/test_emergency_bell.py
+      - name: 블로그 주 2회 예약 · 사진 공개 사용 문턱
+        # 공개로 나가는 글이다. 문턱이 헐거워지면 동의를 확인하지 않은 사진이
+        # 블로그에 올라가고, 그건 되돌릴 수 없다. 예약 요일·시각이 어긋나면
+        # 매 점검마다 글을 만들어 돈이 샌다.
+        run: python3 backend/tests/test_blog_schedule.py
       - name: 마이그레이션 head가 하나인지 검사
         # head가 갈라지면 alembic upgrade가 서버에서 실패한다 — 미리 잡는다
         run: |

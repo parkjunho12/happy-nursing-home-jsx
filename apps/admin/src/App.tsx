@@ -59,6 +59,7 @@ const MonthlyReportPage = lazy(() => import('./pages/admin/MonthlyReportPage'))
 const ResidentAssignPage = lazy(() => import('./pages/admin/ResidentAssignPage'))
 const CaregiverDayPage = lazy(() => import('./pages/admin/CaregiverDayPage'))
 const OutgoingDocsPage = lazy(() => import('./pages/admin/OutgoingDocsPage'))
+const BlogDraftsPage = lazy(() => import('./pages/admin/BlogDraftsPage'))
 const ProgramPage = lazy(() => import('./pages/admin/ProgramPage'))
 const ExpensePage = lazy(() => import('./pages/admin/ExpensePage'))
 const FacilityNewsPage = lazy(() => import('./pages/admin/FacilityNewsPage'))
@@ -392,6 +393,8 @@ function App() {
             {/* 내보내야 할 문서 — 서류를 다루는 사람들이 함께 본다 */}
             <Route path="outgoing-docs"            element={<NurseLeadRoute><OutgoingDocsPage /></NurseLeadRoute>} />
             <Route path="programs"                 element={<ExtOr menu="/programs" otherwise={SocialWorkerRoute}><ProgramPage /></ExtOr>} />
+            {/* 블로그 자동 초안 — 공개로 나가는 글이라 사회복지사 라인까지 */}
+            <Route path="blog-drafts"              element={<SocialWorkerRoute><BlogDraftsPage /></SocialWorkerRoute>} />
             <Route path="handover/:id"             element={<HandoverDetailPage />} />
             <Route path="resident-docs"            element={<SocialWorkerRoute><ResidentDocsPage /></SocialWorkerRoute>} />
             <Route path="education"                element={<StaffEducationPage />} />

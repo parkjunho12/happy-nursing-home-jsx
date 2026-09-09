@@ -92,12 +92,17 @@ async def lifespan(app: FastAPI):
     from app.services.server_monitor import monitor_loop as _monitor_loop
     _health_task = asyncio.create_task(_monitor_loop())
 
+    # 블로그 초안 주 2회 자동 생성 (화·금 오전 10시 KST) — 발행은 하지 않는다
+    from app.services.blog_schedule import loop as _blog_loop
+    _blog_task = asyncio.create_task(_blog_loop())
+
     yield
     # Shutdown
     _scheduler_task.cancel()
     _override_task.cancel()
     _health_task.cancel()
-    for _t in (_scheduler_task, _override_task, _health_task):
+    _blog_task.cancel()
+    for _t in (_scheduler_task, _override_task, _health_task, _blog_task):
         try:
             await _t
         except Exception:

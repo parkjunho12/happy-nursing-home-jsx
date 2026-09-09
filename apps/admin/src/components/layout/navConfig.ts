@@ -24,6 +24,7 @@ export const MOBILE_HIDDEN = new Set<string>([
   '/monthly-report',       // 인쇄 중심 리포트
   '/recruitment',
   '/eval/blog-ai-writer',
+  '/blog-drafts',
   '/history',
   '/reviews',
   '/operations',          // 운영·계약 — 넓은 표
@@ -39,6 +40,7 @@ export interface NavUser {
 export const EXT_MENU_CATALOG: { to: string; label: string }[] = [
   { to: '/eval/albums', label: '보호자 앨범' },
   { to: '/eval/blog-ai-writer', label: '블로그 AI 작성' },
+  { to: '/blog-drafts', label: '블로그 자동 초안' },
   { to: '/history', label: '블로그 관리' },
   { to: '/reviews', label: '후기 관리' },
   { to: '/facility-news', label: '시설소식' },
@@ -115,7 +117,7 @@ export function getNavConfig(
   if (user?.role !== 'ADMIN' && user?.position === '외부담당') {
     const allowed = new Set(user?.allowed_menus ?? [])
     const ICONS: Record<string, LucideIcon> = {
-      '/eval/albums': ImageIcon, '/eval/blog-ai-writer': PenLine, '/history': FileText,
+      '/eval/albums': ImageIcon, '/eval/blog-ai-writer': PenLine, '/blog-drafts': PenLine, '/history': FileText,
       '/reviews': Star, '/facility-news': Megaphone, '/schedule': CalendarDays,
       '/programs': CalendarDays, '/meals': ChefHat, '/education': GraduationCap,
     }
@@ -247,6 +249,7 @@ export function getNavConfig(
           items: [
             { to: '/history', icon: FileText, label: '블로그' },
             { to: '/eval/blog-ai-writer', icon: PenLine, label: '블로그 AI 작성' },
+            { to: '/blog-drafts', icon: PenLine, label: '블로그 자동 초안' },
             { to: '/reviews', icon: Star, label: '후기 관리' },
             { to: '/naver-ads', icon: Megaphone, label: '네이버 광고 관리' },
             { to: '/analytics/page-views', icon: LayoutDashboard, label: '페이지뷰 통계' },
@@ -338,6 +341,7 @@ export function getNavConfig(
           items: [
             { to: '/history', icon: FileText, label: '블로그' },
             { to: '/eval/blog-ai-writer', icon: PenLine, label: '블로그 AI 작성' },
+            { to: '/blog-drafts', icon: PenLine, label: '블로그 자동 초안' },
             { to: '/reviews', icon: Star, label: '후기 관리' },
             { to: '/analytics/page-views', icon: LayoutDashboard, label: '페이지뷰 통계' },
             { to: '/analytics/suspicious-ips', icon: ShieldCheck, label: '의심 IP 통계' },
@@ -427,6 +431,7 @@ export function getNavConfig(
 
   const marketingItems: NavItem[] = []
   if (isSocialWorker || isManager) marketingItems.push({ to: '/eval/blog-ai-writer', icon: PenLine, label: '블로그 AI 작성' })
+  if (isSocialWorker || isManager) marketingItems.push({ to: '/blog-drafts', icon: PenLine, label: '블로그 자동 초안' })
 
   const sections: NavSection[] = [
     { label: '운영', items: operItems },

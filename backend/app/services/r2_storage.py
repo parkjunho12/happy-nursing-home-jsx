@@ -171,6 +171,22 @@ class R2Storage:
             return url[len(_public_url()):].lstrip("/")
         return None
 
+    def put_bytes(self, data: bytes, key_name: str, prefix: str,
+                  content_type: str = "image/jpeg") -> Optional[str]:
+        """바이트를 그대로 올린다 — 서버가 만든 파일(가린 사진 등)에 쓴다.
+
+        upload_file 은 사용자가 올린 UploadFile 을 받는데, 여기서 필요한 것은
+        우리가 방금 만든 바이트다. 썸네일도 만들지 않는다.
+        """
+        try:
+            client = _get_client()
+        except Exception:
+            return None
+        key = f"{prefix}/{key_name}"
+        client.put_object(Bucket=_bucket(), Key=key, Body=data,
+                          ContentType=content_type)
+        return _make_cdn_url(key)
+
     def read_bytes(self, file_url: str) -> Optional[bytes]:
         """R2 에서 파일을 그대로 읽어온다 — 묶어서 내려줄 때 쓴다."""
         key = self.key_of(file_url or "")
