@@ -172,6 +172,18 @@ function BroadcastRoute({ children }: { children: React.ReactNode }) {
 }
 
 // 직원 관리·직원 상세 — ADMIN · 시설장 · 대표 · 이사만 접근
+// 전체 근무표 '보기' — 편성은 못 하고 보기만 한다.
+// StaffAdminRoute 를 넓히지 않은 이유: 그 문에는 직원 상세(주민번호·계좌·급여)와
+// 퇴직연금이 함께 걸려 있다. 근무표를 보여주자고 인사기록까지 열 수는 없다.
+function ScheduleViewRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, user } = useAuthStore()
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  const ok = user?.role === 'ADMIN'
+    || ['시설장', '대표', '이사', '사회복지사'].includes(user?.position ?? '')
+  if (!ok) return <Navigate to="/eval/checklist" replace />
+  return <>{children}</>
+}
+
 function StaffAdminRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
@@ -373,7 +385,7 @@ function App() {
             <Route path="staff-hr"                 element={<StaffAdminRoute><StaffHrPage /></StaffAdminRoute>} />
             <Route path="staffing"                 element={<ManagerRoute><StaffingSimulatorPage /></ManagerRoute>} />
             <Route path="work-schedule"           element={<ManagerRoute><WorkSchedulePage /></ManagerRoute>} />
-            <Route path="work-schedule-view"      element={<StaffAdminRoute><WorkScheduleViewPage /></StaffAdminRoute>} />
+            <Route path="work-schedule-view"      element={<ScheduleViewRoute><WorkScheduleViewPage /></ScheduleViewRoute>} />
             {/* 직원 평가(인사고과) — ADMIN 만. 서버에서도 다시 막는다(staff_eval.py):
                 이 가드는 메뉴를 감출 뿐이고, 주소를 직접 치면 그만이다. */}
             <Route path="eval/staff-eval"         element={<AdminRoute><StaffEvalPage /></AdminRoute>} />

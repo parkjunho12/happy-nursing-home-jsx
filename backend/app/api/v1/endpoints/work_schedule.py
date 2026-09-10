@@ -1,4 +1,8 @@
-"""근무표 API — 읽기·쓰기 모두 ADMIN·시설장 전용"""
+"""근무표 API.
+
+편성은 관리자·시설장. 보기는 거기에 대표·이사·사회복지사까지.
+누가 무엇을 할 수 있는지는 아래 can_edit_schedule / can_view_schedule 한 곳에 있다.
+"""
 from __future__ import annotations
 import logging
 import re
@@ -23,21 +27,50 @@ router = APIRouter()
 _YM = re.compile(r"^\d{4}-\d{2}$")
 
 
+# ── 누가 볼 수 있고, 누가 고칠 수 있는가 ─────────────────────────────────
+#
+# 판정을 role 로만 하면 시설장이 자기 근무표를 못 만진다 — 시설장의 role 은
+# STAFF 다. 그래서 직종도 함께 본다.
+#
+# 편성(EDIT)은 관리자·시설장뿐이다. 근무표는 급여·연차로 이어지므로 고칠 수
+# 있는 손은 좁게 둔다.
+#
+# 열람(VIEW)에 사회복지사가 있는 이유 — 프로그램·면회·외래 일정을 잡으려면
+# 그날 누가 나오는지를 봐야 한다. 매번 시설장에게 물어보게 하면 일이 멈춘다.
+# 보기만 열어 둔다. 편성·메모·잠금·버전은 그대로 시설장 손에 있다.
+EDIT_POSITIONS = ("시설장",)
+VIEW_POSITIONS = ("시설장", "대표", "이사", "사회복지사")
+
+
+def _pos_of(user) -> str:
+    pos = getattr(user, "position", None)
+    return pos.value if hasattr(pos, "value") else str(pos or "")
+
+
+def _role_of(user) -> str:
+    role = getattr(user, "role", None)
+    return role.value if hasattr(role, "value") else str(role or "")
+
+
+def can_edit_schedule(role: str, pos: Optional[str]) -> bool:
+    """근무표를 고칠 수 있는가 — 편성·메모·잠금·버전."""
+    return role == "ADMIN" or (pos or "") in EDIT_POSITIONS
+
+
+def can_view_schedule(role: str, pos: Optional[str]) -> bool:
+    """전체 근무표를 볼 수 있는가. 고칠 수 있는 사람은 당연히 볼 수도 있다."""
+    return can_edit_schedule(role, pos) or (pos or "") in VIEW_POSITIONS
+
+
 def _manager(current_user: User = Depends(get_current_user)) -> User:
-    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
-    pos = getattr(current_user, "position", None)
-    pos = pos.value if hasattr(pos, "value") else str(pos or "")
-    if role != "ADMIN" and pos != "시설장":
+    if not can_edit_schedule(_role_of(current_user), _pos_of(current_user)):
         raise HTTPException(403, "근무표 접근 권한이 없습니다. (관리자·시설장)")
     return current_user
 
 
 def _viewer(current_user: User = Depends(get_current_user)) -> User:
-    """읽기 전용 — 대표·이사도 전체 근무표를 볼 수 있다(수정은 _manager만)."""
-    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
-    pos = getattr(current_user, "position", None)
-    pos = pos.value if hasattr(pos, "value") else str(pos or "")
-    if role != "ADMIN" and pos not in ("시설장", "대표", "이사"):
+    """읽기 전용 — 편성은 못 한다."""
+    if not can_view_schedule(_role_of(current_user), _pos_of(current_user)):
         raise HTTPException(403, "근무표 열람 권한이 없습니다.")
     return current_user
 

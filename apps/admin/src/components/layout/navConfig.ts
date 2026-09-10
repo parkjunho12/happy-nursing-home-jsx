@@ -373,7 +373,10 @@ export function getNavConfig(
     // 매달 반복되는 내 업무 — 자기 것만 보인다
     { to: '/monthly-routines', icon: CalendarCheck, label: '월간 업무' },
   ]
-  if (isManager) operItems.push({ to: '/work-schedule-view', icon: CalendarClock, label: '전체 근무표 보기' })
+  // 사회복지사도 본다 — 프로그램·면회 일정을 잡으려면 그날 누가 나오는지 알아야 한다.
+  // 보기만 한다. 편성은 근무표 페이지(시설장)에 그대로 있다.
+  if (isManager || isSocialWorker)
+    operItems.push({ to: '/work-schedule-view', icon: CalendarClock, label: '전체 근무표 보기' })
 
   // 어르신 — 수급자·명단·경관식·프로그램·식단
   const residentItems: NavItem[] = []
