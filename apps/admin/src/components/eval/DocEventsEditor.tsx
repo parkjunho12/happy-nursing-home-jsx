@@ -60,36 +60,45 @@ export default function DocEventsEditor({ type, value, onChange, addLabel = '+ �
           <div key={i}
             onDragOver={e => { e.preventDefault(); if (overI !== i) setOverI(i) }}
             onDrop={() => drop(i)}
-            className={`flex flex-wrap items-center gap-1.5 rounded-lg transition-all ${overI === i && dragI !== null ? 'ring-2 ring-teal-300 ring-offset-1' : ''} ${dragI === i ? 'opacity-40' : ''} ${flashI === i ? 'ring-2 ring-teal-400 bg-teal-50/60' : ''}`}
+            /* 한 일시 = 테두리 하나. 좁은 화면에서 줄이 접히면 상태 칸이 아래로
+               내려가는데, 칸막이가 없으면 그게 어느 날짜의 상태인지 헷갈린다. */
+            className={`rounded-xl border bg-white px-2 py-1.5 transition-all ${
+              overI === i && dragI !== null ? 'border-teal-300 ring-2 ring-teal-300 ring-offset-1' : 'border-gray-200'
+            } ${dragI === i ? 'opacity-40' : ''} ${flashI === i ? 'ring-2 ring-teal-400 bg-teal-50/60' : ''}`}
           >
-            <span draggable onDragStart={() => setDragI(i)} onDragEnd={() => { setDragI(null); setOverI(null) }}
-              className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 shrink-0" title="드래그로 순서 변경">
-              <GripVertical className="w-4 h-4" />
-            </span>
-            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${meta.dot}`} />
-            <select value={it.kind ?? kinds[0].v} onChange={e => patch(i, { kind: e.target.value })} className={`${inp} w-28`}>
-              {kinds.map(k => <option key={k.v} value={k.v}>{k.label}</option>)}
-            </select>
-            <DateField value={it.date} onChange={v => patch(i, { date: v })} className={inp} wrapperClassName="flex-1 min-w-[8rem]" placeholder="날짜(선택)" />
-            <input value={it.memo ?? ''} onChange={e => patch(i, { memo: e.target.value })} placeholder="메모(선택)" className={`${inp} flex-1 min-w-[7rem]`} />
-            {(() => {
-              const cur = effStatus(it, admission)
-              const sm = statusMeta(cur)
-              return (
-                <select
-                  title="서류 상태"
-                  value={cur ?? ''}
-                  onChange={e => {
-                    const v = (e.target.value || null) as EventStatus | null
-                    patch(i, { status: v, done: v === '완료' })
-                  }}
-                  className={`shrink-0 text-[11px] font-bold px-2 py-1.5 rounded-lg border cursor-pointer focus:outline-none ${sm ? sm.chip : 'bg-white border-gray-200 text-gray-400'}`}>
-                  <option value="">상태 없음</option>
-                  {STATUSES.map(st => <option key={st.v} value={st.v}>{st.label}</option>)}
-                </select>
-              )
-            })()}
-            <button type="button" onClick={() => rm(i)} className="text-gray-300 hover:text-red-500 shrink-0"><X className="w-4 h-4" /></button>
+            {/* 윗줄: 날짜와 상태를 한 줄에 둔다 — 짝이 눈에 바로 보이게 */}
+            <div className="flex items-center gap-1.5">
+              <span draggable onDragStart={() => setDragI(i)} onDragEnd={() => { setDragI(null); setOverI(null) }}
+                className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 shrink-0" title="드래그로 순서 변경">
+                <GripVertical className="w-4 h-4" />
+              </span>
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${meta.dot}`} />
+              <select value={it.kind ?? kinds[0].v} onChange={e => patch(i, { kind: e.target.value })} className={`${inp} w-24 shrink-0`}>
+                {kinds.map(k => <option key={k.v} value={k.v}>{k.label}</option>)}
+              </select>
+              <DateField value={it.date} onChange={v => patch(i, { date: v })} className={inp} wrapperClassName="flex-1 min-w-[7.5rem]" placeholder="날짜(선택)" />
+              {(() => {
+                const cur = effStatus(it, admission)
+                const sm = statusMeta(cur)
+                return (
+                  <select
+                    title="이 날짜의 서류 상태"
+                    value={cur ?? ''}
+                    onChange={e => {
+                      const v = (e.target.value || null) as EventStatus | null
+                      patch(i, { status: v, done: v === '완료' })
+                    }}
+                    className={`shrink-0 text-[11px] font-bold px-2 py-1.5 rounded-lg border cursor-pointer focus:outline-none ${sm ? sm.chip : 'bg-white border-gray-200 text-gray-400'}`}>
+                    <option value="">상태 없음</option>
+                    {STATUSES.map(st => <option key={st.v} value={st.v}>{st.label}</option>)}
+                  </select>
+                )
+              })()}
+              <button type="button" onClick={() => rm(i)} className="text-gray-300 hover:text-red-500 shrink-0"><X className="w-4 h-4" /></button>
+            </div>
+            {/* 아랫줄: 메모 — 없어도 되는 칸이라 날짜·상태 아래로 내린다 */}
+            <input value={it.memo ?? ''} onChange={e => patch(i, { memo: e.target.value })} placeholder="메모(선택)"
+              className={`${inp} w-full mt-1 py-1.5 text-[13px] border-gray-100 bg-gray-50/60`} />
           </div>
         )
       })}

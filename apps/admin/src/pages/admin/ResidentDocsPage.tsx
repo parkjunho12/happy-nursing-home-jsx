@@ -210,7 +210,9 @@ export default function ResidentDocsPage() {
       const marked = isExplicitDone(e)             // 직접 완료 체크한 것만 체크표시/취소선
       const late = !done && !!e.date && e.date < today
       return (
-        <div key={rk} className="whitespace-nowrap flex items-center gap-1">
+        // 한 칸에 날짜가 여러 줄 쌓인다. 줄 사이에 선이 없으면 어느 배지가
+        // 어느 날짜의 것인지 눈이 헷갈린다.
+        <div key={rk} className="whitespace-nowrap flex items-center gap-1 py-0.5">
           {marked
             ? <Check className="w-3 h-3 shrink-0 text-green-600" strokeWidth={3} />
             : <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${st ? st.dot : meta.dot} ${mode === 'dim' ? 'opacity-40' : ''}`} />}
@@ -231,20 +233,24 @@ export default function ResidentDocsPage() {
 
     if (open) {
       return (
-        <div className="space-y-0.5">
-          {[...dated, ...undated].map((e, i) => row(e, `a${i}`, e === next ? 'next' : (e.done || (!!e.date && e.date < today)) && e !== next ? 'dim' : 'plain'))}
-          <button onClick={() => toggleExp(key)} className="text-[10px] text-indigo-500">접기 ▴</button>
+        <div>
+          <div className="divide-y divide-gray-200/70">
+            {[...dated, ...undated].map((e, i) => row(e, `a${i}`, e === next ? 'next' : (e.done || (!!e.date && e.date < today)) && e !== next ? 'dim' : 'plain'))}
+          </div>
+          <button onClick={() => toggleExp(key)} className="text-[10px] text-indigo-500 mt-0.5">접기 ▴</button>
         </div>
       )
     }
     const hiddenCount = evs.length - (next ? 1 : 0) - undated.length - (lastDone ? 1 : 0)
     return (
-      <div className="space-y-0.5">
-        {next ? row(next, 'next', 'next') : <span className="text-[11px] text-gray-300">예정 없음</span>}
-        {undated.map((e, i) => row(e, `u${i}`))}
-        {lastDone && row(lastDone, 'last', 'dim')}
+      <div>
+        <div className="divide-y divide-gray-200/70">
+          {next ? row(next, 'next', 'next') : <span className="text-[11px] text-gray-300">예정 없음</span>}
+          {undated.map((e, i) => row(e, `u${i}`))}
+          {lastDone && row(lastDone, 'last', 'dim')}
+        </div>
         {hiddenCount > 0 && (
-          <button onClick={() => toggleExp(key)} className="text-[10px] text-indigo-500">전체 {evs.length}건 ▾</button>
+          <button onClick={() => toggleExp(key)} className="text-[10px] text-indigo-500 mt-0.5">전체 {evs.length}건 ▾</button>
         )}
       </div>
     )
