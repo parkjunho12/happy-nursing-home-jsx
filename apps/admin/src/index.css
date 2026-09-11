@@ -102,3 +102,15 @@
      (인쇄 미디어에서는 md 브레이크포인트가 화면과 다르게 평가될 수 있다) */
   .md\:hidden { display: none !important; }
 }
+
+
+/* ── 식이 현황 인쇄 — 주방 벽에 붙이는 한 장 ─────────────────────────
+   층 세 칸이 종이 폭을 다 쓰게 하고, 한 사람이 두 쪽에 걸쳐 잘리지 않게 한다.
+   색으로만 구분하는 칸이 있어 배경색을 강제로 찍는다(print-color-adjust). */
+@media print {
+  .diet-print { width: 100%; }
+  .diet-print * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .diet-print section { break-inside: avoid; }
+  .diet-print .diet-line { break-inside: avoid; }
+  @page { size: A4 portrait; margin: 10mm; }
+}

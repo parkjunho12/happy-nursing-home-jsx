@@ -3,7 +3,7 @@ import {
   Star, Settings, ClipboardList, ClipboardCheck, CalendarDays,
   UserRound, ShieldCheck, Sparkles, FileSearch,
   Image as ImageIcon, Users, BookOpen, PenLine, Megaphone, Bell, CalendarClock, CalendarCheck, HeartHandshake, Briefcase, Soup, Receipt, GraduationCap,
-  type LucideIcon, AlertTriangle, BarChart3, ChefHat, Landmark, Radio, Wand2, UserCheck, BellRing
+  type LucideIcon, AlertTriangle, BarChart3, ChefHat, Landmark, Radio, Wand2, UserCheck, BellRing, UtensilsCrossed
 } from 'lucide-react'
 
 /**
@@ -106,6 +106,7 @@ export function getNavConfig(
           items: [
             { to: '/schedule', icon: CalendarClock, label: '일정 캘린더' },
             { to: '/meals', icon: ChefHat, label: '식단표' },
+            { to: '/diet', icon: UtensilsCrossed, label: '식이 현황' },
             { to: '/meal-count', icon: ChefHat, label: '식수 정산' },
           ],
         },
@@ -152,6 +153,8 @@ export function getNavConfig(
             { to: '/eval/calendar', icon: CalendarDays, label: '체크 캘린더' },
             { to: '/schedule', icon: CalendarDays, label: '일정 캘린더' },
             { to: '/my-schedule', icon: CalendarDays, label: '내 근무표' },
+            // 배식 전에 확인하는 자리 — 죽·미음·경관식을 잘못 드리면 사고가 된다
+            { to: '/diet', icon: UtensilsCrossed, label: '식이 현황' },
             { to: '/education', icon: GraduationCap, label: '직원 교육' },
           ],
         },
@@ -176,6 +179,7 @@ export function getNavConfig(
             { to: '/programs', icon: CalendarDays, label: '프로그램 관리' },
             { to: '/therapy-groups', icon: HeartHandshake, label: '치료 프로그램 조 편성' },
             { to: '/meals', icon: ChefHat, label: '식단표' },
+            { to: '/diet', icon: UtensilsCrossed, label: '식이 현황' },
             { to: '/meal-count', icon: ChefHat, label: '식수 정산' },
           ],
         },
@@ -283,6 +287,7 @@ export function getNavConfig(
             { to: '/programs', icon: CalendarDays, label: '프로그램 관리' },
             { to: '/therapy-groups', icon: HeartHandshake, label: '치료 프로그램 조 편성' },
             { to: '/meals', icon: ChefHat, label: '식단표' },
+            { to: '/diet', icon: UtensilsCrossed, label: '식이 현황' },
             { to: '/meal-count', icon: ChefHat, label: '식수 정산' },
           ],
         },
@@ -392,6 +397,9 @@ export function getNavConfig(
     residentItems.push({ to: '/enteral', icon: Soup, label: '경관식 관리' })
   if (isSocialWorker)
     residentItems.push({ to: '/programs', icon: CalendarDays, label: '프로그램 관리' })
+  // 식이 현황은 모두 본다 — 밥을 나르는 손이 봐야 하는 정보다.
+  // (바꾸는 것은 간호·영양·사회복지 라인까지만. 백엔드가 막는다)
+  residentItems.push({ to: '/diet', icon: UtensilsCrossed, label: '식이 현황' })
   if (canMeal)
     residentItems.push(
       { to: '/meals', icon: ChefHat, label: '식단표' },
@@ -467,6 +475,7 @@ export function getMobileTabs(user: NavUser | null): NavItem[] {
       { to: '/',         icon: LayoutDashboard, label: '홈' },
       { to: '/schedule', icon: CalendarDays,    label: '일정' },
       { to: '/meals',    icon: ChefHat,         label: '식단표' },
+      { to: '/diet',     icon: UtensilsCrossed, label: '식이' },
     ]
   }
   const isCaregiver = user?.role === 'STAFF' && pos === '요양보호사'

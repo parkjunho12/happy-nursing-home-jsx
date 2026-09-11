@@ -60,6 +60,7 @@ const ResidentAssignPage = lazy(() => import('./pages/admin/ResidentAssignPage')
 const CaregiverDayPage = lazy(() => import('./pages/admin/CaregiverDayPage'))
 const OutgoingDocsPage = lazy(() => import('./pages/admin/OutgoingDocsPage'))
 const BlogDraftsPage = lazy(() => import('./pages/admin/BlogDraftsPage'))
+const DietPage = lazy(() => import('./pages/admin/DietPage'))
 const ProgramPage = lazy(() => import('./pages/admin/ProgramPage'))
 const ExpensePage = lazy(() => import('./pages/admin/ExpensePage'))
 const FacilityNewsPage = lazy(() => import('./pages/admin/FacilityNewsPage'))
@@ -376,6 +377,8 @@ function App() {
             <Route path="notices"                  element={<NurseLeadRoute><InternalNoticesPage /></NurseLeadRoute>} />
             <Route path="meals"                    element={<ExtOr menu="/meals" otherwise={MealRoute}><MealPlanPage /></ExtOr>} />
             <Route path="meal-count"               element={<MealRoute><MealCountPage /></MealRoute>} />
+            {/* 식이 현황 — 보기는 전 직원(배식하는 손이 봐야 한다), 바꾸기는 백엔드가 직종으로 막는다 */}
+            <Route path="diet"                     element={<DietPage />} />
             <Route path="operations"               element={<AdminRoute><OperationsPage /></AdminRoute>} />
             {/* AI 페이지 편집기 — 소스를 고치고 배포까지 가는 화면이라 ADMIN 전용 */}
             <Route path="ai-editor"                element={<AdminRoute><AiEditorPage /></AdminRoute>} />
