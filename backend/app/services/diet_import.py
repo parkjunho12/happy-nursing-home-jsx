@@ -59,25 +59,33 @@ def _txt(v: Any) -> str:
 
 
 def _blocks(ws) -> List[Dict[str, int]]:
-    """층 블록의 열 자리를 머리글에서 찾는다 (2층·3층·4층이 옆으로 나란히 있다)."""
+    """층 블록의 열 자리를 머리글에서 찾는다 (2층·3층·4층이 옆으로 나란히 있다).
+
+    자리를 세지 않고 머리글 글자로만 찾는다. 시트마다 열이 다르기도 하고
+    (55장 중 8장이 두 칸 어긋나 있었다), 우리가 식이 종류를 하나 더 만들면
+    '이름에서 몇 번째 칸' 이라는 계산이 통째로 밀린다. 종이에 없는 종류는
+    그냥 안 잡히면 된다.
+    """
     out: List[Dict[str, int]] = []
     width = ws.max_column or 0
+    wanted = set(RICE_TYPES) | set(SIDE_TYPES)
     for c in range(1, width + 1):
         if _txt(ws.cell(HEADER_ROW, c).value) != "이름":
             continue
         blk = {"name": c, "room": c - 1}
-        for i, label in enumerate(RICE_TYPES + [""] + SIDE_TYPES):
-            if not label:
-                continue
-            # 머리글이 실제로 그 자리에 있는지 확인하고 쓴다
-            col = c + 1 + i
-            if col <= width and _txt(ws.cell(HEADER_ROW, col).value) == label:
-                blk[label] = col
-        for look in range(c + 1, min(c + 14, width + 1)):
-            if _txt(ws.cell(HEADER_ROW, look).value).replace("\n", "").replace(" ", "") == "입퇴소입원":
-                blk["note"] = look
+        # 이 블록은 다음 '이름' 머리글 전까지다 — 옆 층 칸을 끌어오지 않게
+        stop = width + 1
+        for look in range(c + 1, width + 1):
+            if _txt(ws.cell(HEADER_ROW, look).value) == "이름":
+                stop = look - 1
                 break
-        if any(k in blk for k in RICE_TYPES) or any(k in blk for k in SIDE_TYPES):
+        for look in range(c + 1, stop):
+            head = _txt(ws.cell(HEADER_ROW, look).value)
+            if head in wanted and head not in blk:
+                blk[head] = look
+            elif head.replace("\n", "").replace(" ", "") == "입퇴소입원" and "note" not in blk:
+                blk["note"] = look
+        if any(k in blk for k in wanted):
             out.append(blk)
     return out
 

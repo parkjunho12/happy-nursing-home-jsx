@@ -110,7 +110,7 @@ export default function DietEditModal({
             <>
               <div>
                 <p className="text-xs font-bold text-gray-500 mb-1.5">밥</p>
-                <div className="grid grid-cols-4 gap-1.5">
+                <div className="grid grid-cols-3 gap-1.5">
                   {rice.map((t, i) => btn(t, r === t, RICE_TONE[t]?.chip ?? '',
                     () => setR(r === t ? null : t), i === 0 ? first : undefined))}
                 </div>

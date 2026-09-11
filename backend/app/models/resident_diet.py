@@ -42,7 +42,7 @@ class DietChange(Base):
     # 이날부터 이 식이로 드신다. 적은 날(created_at)과 다를 수 있다.
     effective_date = Column(String(10), nullable=False, index=True)
 
-    rice = Column(String(10), nullable=True)   # 일반식 · 당뇨식 · 죽 · 미음
+    rice = Column(String(10), nullable=True)   # 일반식 · 당뇨식 · 다진식 · 죽 · 미음
     side = Column(String(10), nullable=True)   # 일반찬 · 다진찬 · 갈찬
     tube = Column(Boolean, nullable=False, default=False)   # 경관식 — 밥·반찬을 고르지 않는다
 

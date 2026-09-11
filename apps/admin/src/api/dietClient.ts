@@ -12,7 +12,7 @@ export interface DietRow {
   name: string
   floor?: string | null
   room?: string | null
-  rice?: string | null          // 일반식 · 당뇨식 · 죽 · 미음
+  rice?: string | null          // 일반식 · 당뇨식 · 다진식 · 죽 · 미음
   side?: string | null          // 일반찬 · 다진찬 · 갈찬
   tube: boolean                 // 경관식 — 밥·반찬을 고르지 않는다
   /** 이 식이가 시작된 날 */

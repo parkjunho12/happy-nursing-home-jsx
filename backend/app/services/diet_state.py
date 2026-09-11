@@ -27,7 +27,11 @@ from __future__ import annotations
 from typing import Any, Dict, Iterable, List, Optional
 
 # 밥 — 한 분에 하나. 경관식은 밥을 고르지 않는다(tube=True, rice=None).
-RICE_TYPES = ["일반식", "당뇨식", "죽", "미음"]
+#
+# 차례는 '손이 더 가는 쪽으로' 다: 일반식 → 다진식 → 죽 → 미음.
+# 당뇨식은 삼킴이 아니라 질환 때문이라 결이 다르지만, 쓰시던 표의 자리를
+# 그대로 두었다 — 주방이 보던 차례가 바뀌면 그게 더 헷갈린다.
+RICE_TYPES = ["일반식", "당뇨식", "다진식", "죽", "미음"]
 # 반찬 — 한 분에 하나.
 SIDE_TYPES = ["일반찬", "다진찬", "갈찬"]
 

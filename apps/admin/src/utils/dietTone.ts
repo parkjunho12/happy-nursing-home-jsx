@@ -9,7 +9,7 @@
  */
 /** 밥·반찬 종류 — 백엔드(diet_state.py)와 같은 차례·같은 말.
  *  화면이 목록을 받기 전에도 버튼을 그릴 수 있게 여기에도 둔다. 값 검사는 서버가 한다. */
-export const RICE_TYPES = ['일반식', '당뇨식', '죽', '미음']
+export const RICE_TYPES = ['일반식', '당뇨식', '다진식', '죽', '미음']
 export const SIDE_TYPES = ['일반찬', '다진찬', '갈찬']
 
 export interface Tone { chip: string; dot: string; text: string }
@@ -17,6 +17,10 @@ export interface Tone { chip: string; dot: string; text: string }
 export const RICE_TONE: Record<string, Tone> = {
   일반식: { chip: 'bg-gray-100 text-gray-600 border-gray-200', dot: 'bg-gray-400', text: 'text-gray-600' },
   당뇨식: { chip: 'bg-indigo-100 text-indigo-700 border-indigo-200', dot: 'bg-indigo-500', text: 'text-indigo-700' },
+  // 다진식은 일반식과 죽 사이다 — 색도 회색과 주황 사이(라임)에 둔다.
+  // 다진찬(청록)과 일부러 다른 색으로 잡았다. 한 줄에 [밥][반찬] 이 나란히
+  // 붙는데 두 칩이 비슷한 초록이면 '같은 걸 두 번 찍었나' 싶어 눈이 멈춘다.
+  다진식: { chip: 'bg-lime-100 text-lime-800 border-lime-300', dot: 'bg-lime-500', text: 'text-lime-800' },
   죽:     { chip: 'bg-amber-100 text-amber-800 border-amber-200', dot: 'bg-amber-500', text: 'text-amber-800' },
   미음:   { chip: 'bg-rose-100 text-rose-700 border-rose-200', dot: 'bg-rose-500', text: 'text-rose-700' },
 }

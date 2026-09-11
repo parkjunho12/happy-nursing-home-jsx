@@ -19,7 +19,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.services import diet_state as ds          # noqa: E402
-from app.services.diet_import import sheet_date    # noqa: E402
+from app.services.diet_import import sheet_date, _blocks, read_sheet   # noqa: E402
 
 fails = []
 
@@ -60,6 +60,7 @@ eq((ds.state_at(S, "2026-09-11") or {}).get("rice"), "미음", "같은 날 두 �
 # ── ② 주방에 올릴 숫자 ────────────────────────────────────────────────────
 STATES = [
     {"rice": "일반식", "side": "일반찬", "tube": False},
+    {"rice": "다진식", "side": "다진찬", "tube": False},
     {"rice": "일반식", "side": "다진찬", "tube": False},
     {"rice": "죽", "side": "다진찬", "tube": False},
     {"rice": "미음", "side": "갈찬", "tube": False},
@@ -68,25 +69,26 @@ STATES = [
 ]
 c = ds.counts(STATES)
 eq(c["일반식"], 2, "일반식")
+eq(c["다진식"], 1, "다진식")
 eq(c["죽"], 1, "죽")
 eq(c["미음"], 1, "미음")
 eq(c["당뇨식"], 0, "당뇨식 — 쓰지 않아도 칸은 있다")
 eq(c["일반찬"], 1, "일반찬")
-eq(c["다진찬"], 2, "다진찬")
+eq(c["다진찬"], 3, "다진찬")
 eq(c["갈찬"], 1, "갈찬")
 eq(c["경관식"], 1, "경관식")
 eq(c["미정"], 1, "미정")
-eq(c["합계"], 6, "합계")
+eq(c["합계"], 7, "합계")
 # 경관식이 밥·반찬에도 세어지면 주방이 더 만든다
-eq(sum(c[k] for k in ds.RICE_TYPES), 4, "밥 합계는 경관식·미정을 빼고 4")
-eq(sum(c[k] for k in ds.SIDE_TYPES), 4, "반찬 합계도 4")
+eq(sum(c[k] for k in ds.RICE_TYPES), 5, "밥 합계는 경관식·미정을 빼고 5")
+eq(sum(c[k] for k in ds.SIDE_TYPES), 5, "반찬 합계도 5")
 
 # 밥만 정하고 반찬을 안 정한 경우 — 미정으로 세지 않는다(밥은 정해졌다)
 half = ds.counts([{"rice": "죽", "side": None, "tube": False}])
 eq((half["죽"], half["미정"]), (1, 0), "밥만 정해진 분")
 
 # ── ③ 값 검사 ─────────────────────────────────────────────────────────────
-for v, want in [("일반식", True), ("당뇨식", True), ("죽", True), ("미음", True),
+for v, want in [("일반식", True), ("당뇨식", True), ("다진식", True), ("죽", True), ("미음", True),
                 (None, True), ("라면", False), ("일반찬", False), ("", False)]:
     eq(ds.valid_rice(v), want, f"밥 값 검사 {v!r}")
 for v, want in [("일반찬", True), ("다진찬", True), ("갈찬", True),
@@ -107,10 +109,72 @@ for name, want in [("26.09.07", "2026-09-07"), ("26.8.21", "2026-08-21"),
                    ("26.13.01", None), ("26.09.32", None), ("", None)]:
     eq(sheet_date(name), want, f"시트 이름 {name!r}")
 
+# ── ⑥ 엑셀에서 열을 어떻게 찾는가 ─────────────────────────────────────────
+# 시트마다 열이 다르다. 실제 파일에서 이른 시기 8장은 '당뇨식' 칸이 아예 없어
+# 그 뒤가 통째로 한 칸씩 당겨져 있었다. 자리를 세면 그 8장의 죽·미음·반찬을
+# 조용히 못 읽는다 — 그러면 그 시기 이력이 통째로 틀린다.
+# 그래서 머리글 글자로 찾는다. openpyxl 없이 확인하려고 시트를 흉내 낸다.
+class FakeCell:
+    def __init__(self, v): self.value = v
+
+
+class FakeSheet:
+    """rows: {(행, 열): 값}"""
+    def __init__(self, rows, width):
+        self._rows, self.max_column = rows, width
+
+    def cell(self, r, c):
+        return FakeCell(self._rows.get((r, c)))
+
+
+def sheet(headers, body=()):
+    """headers: {열: 머리글}, body: {(행, 열): 값}"""
+    rows = {(13, c): h for c, h in headers.items()}
+    rows.update(body)
+    return FakeSheet(rows, max(list(headers) + [c for _, c in rows]) + 2)
+
+
+# ⓐ 지금 쓰는 모양 (당뇨식 있음)
+now = sheet({1: "호실", 2: "이름", 3: "일반식", 4: "당뇨식", 5: "죽", 6: "미음",
+             8: "일반찬", 9: "다진찬", 10: "갈찬", 12: "입퇴소\n 입원"})
+b = _blocks(now)[0]
+eq((b.get("죽"), b.get("미음"), b.get("일반찬"), b.get("갈찬"), b.get("note")),
+   (5, 6, 8, 10, 12), "지금 모양 — 열 찾기")
+
+# ⓑ 이른 시기 모양 (당뇨식 없음 — 뒤가 한 칸씩 당겨짐)
+old = sheet({1: "호실", 2: "이름", 3: "일반식", 4: "죽", 5: "미음",
+             7: "일반찬", 8: "다진찬", 9: "갈찬", 11: "입퇴소\n 입원"})
+b = _blocks(old)[0]
+eq((b.get("죽"), b.get("미음"), b.get("일반찬"), b.get("갈찬"), b.get("note")),
+   (4, 5, 7, 9, 11), "당뇨식 없는 모양 — 열 찾기")
+eq("당뇨식" in b, False, "없는 칸은 안 잡힌다")
+
+# ⓒ 층 블록 두 개가 나란히 — 옆 층 칸을 끌어오지 않아야
+two = sheet({1: "호실", 2: "이름", 3: "일반식", 4: "죽", 6: "일반찬", 8: "입퇴소\n 입원",
+             13: "호실", 14: "이름", 15: "일반식", 16: "죽", 18: "일반찬", 20: "입퇴소\n 입원"})
+bs = _blocks(two)
+eq(len(bs), 2, "블록 두 개")
+eq(bs[0].get("note"), 8, "왼쪽 블록의 입퇴소 칸")
+eq(bs[1].get("note"), 20, "오른쪽 블록의 입퇴소 칸")
+eq(bs[0].get("일반식"), 3, "왼쪽 블록의 일반식")
+eq(bs[1].get("일반식"), 15, "오른쪽 블록의 일반식")
+
+# ⓓ 줄을 실제로 읽는다 — 호실은 위에서 이어받고, 경관은 비고로 판단한다
+s2 = sheet({1: "호실", 2: "이름", 3: "일반식", 4: "죽", 6: "일반찬", 7: "다진찬", 9: "입퇴소\n 입원"},
+           {(14, 1): 201, (14, 2): "가", (14, 3): 0, (14, 6): 0,
+            (15, 2): "나", (15, 4): 0, (15, 7): 0,
+            (16, 2): "다", (16, 9): "경관",
+            (18, 1): 202, (18, 2): "라", (18, 3): 0, (18, 6): 0})
+got = [(r["name"], r["room"], r["rice"], r["side"], r["tube"]) for r in read_sheet(s2)]
+eq(got, [("가", "201", "일반식", "일반찬", False),
+         ("나", "201", "죽", "다진찬", False),
+         ("다", "201", None, None, True),
+         ("라", "202", "일반식", "일반찬", False)], "줄 읽기")
+
 if fails:
     print("❌ 식이 계산 이상")
     for f in fails:
         print("  -", f)
     sys.exit(1)
-print(f"✅ 식이 계산 정상 — 시점 판정 9건 · 집계 13건 · 값 검사 14건 "
-      f"· 이력 문구 4건 · 시트 이름 8건")
+print("✅ 식이 계산 정상 — 시점 판정 9건 · 집계 14건 · 값 검사 15건 "
+      "· 이력 문구 4건 · 시트 이름 8건 · 엑셀 열 찾기 9건")
