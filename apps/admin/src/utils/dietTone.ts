@@ -46,3 +46,40 @@ export const dietLabel = (rice?: string | null, side?: string | null, tube?: boo
   const parts = [rice, side].filter(Boolean)
   return parts.length ? parts.join(' · ') : '미정'
 }
+
+/**
+ * 언제 적었는가 — 이력에 붙이는 시각.
+ *
+ * 적용일(effective_date)과 적은 시각(created_at)은 다르다. 오늘 오후에
+ * 적으면서 '내일부터' 로 잡을 수 있다. 이력에서 둘이 구분되지 않으면
+ * "그래서 언제 결정한 거냐" 를 다시 물어봐야 한다.
+ *
+ * 서버는 KST 로 적어 보내지만, 보는 사람의 시계가 다른 곳에 맞춰져 있어도
+ * 같은 시각이 보이도록 서울 시간으로 못박아 표시한다.
+ */
+export const fmtStamp = (iso?: string | null, opts?: { withDate?: boolean }): string => {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  // ko-KR 로 날짜를 맡기면 '9. 11.' 처럼 점이 붙는다 — 화면의 다른 날짜(9/11)와 어긋난다.
+  // 그래서 조각을 받아 우리가 붙인다.
+  const part = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Seoul', hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  }).formatToParts(d).reduce<Record<string, string>>((a, x) => (a[x.type] = x.value, a), {})
+  // 자정은 '24' 로 오는 환경이 있다 — 0 으로 되돌린다
+  const hh = part.hour === '24' ? '00' : part.hour
+  const time = `${hh}:${part.minute}`
+  if (!opts?.withDate) return time
+  return `${Number(part.month)}/${Number(part.day)} ${time}`
+}
+
+/** 적은 날이 적용일과 다른가 — 다르면 이력에 날짜까지 적는다 */
+export const stampedOnAnotherDay = (iso?: string | null, effective?: string | null): boolean => {
+  if (!iso || !effective) return false
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return false
+  const ymd = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(d)  // YYYY-MM-DD
+  return ymd !== effective
+}

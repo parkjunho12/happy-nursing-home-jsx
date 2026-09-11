@@ -4,7 +4,7 @@ import {
   ChevronLeft, ChevronRight, AlertTriangle, CalendarClock, Trash2, Search,
 } from 'lucide-react'
 import { dietAPI, type DietRow, type DietToday, type DietChange, type ImportResult } from '@/api/dietClient'
-import { RICE_TONE, SIDE_TONE, TUBE_TONE, UNSET_TONE, dietLabel } from '@/utils/dietTone'
+import { RICE_TONE, SIDE_TONE, TUBE_TONE, UNSET_TONE, dietLabel, fmtStamp, stampedOnAnotherDay } from '@/utils/dietTone'
 import DietEditModal from '@/components/diet/DietEditModal'
 
 /**
@@ -359,7 +359,15 @@ function ChangeLog({ rows, canEdit, onRemoved }: {
                     {dietLabel(c.rice, c.side, c.tube)}
                   </span>
                   {c.note && <span className="text-[11px] text-gray-400 truncate max-w-[16rem]">· {c.note}</span>}
-                  <span className="ml-auto text-[11px] text-gray-300 shrink-0">
+                  {/* 적용일과 적은 시각은 다르다 — 오늘 적으면서 '모레부터' 로 잡을 수 있다.
+                      적은 날이 적용일과 다르면 날짜까지 적는다. */}
+                  <span className="ml-auto text-[11px] text-gray-400 shrink-0 tabular-nums">
+                    {c.created_at && (
+                      stampedOnAnotherDay(c.created_at, c.effective_date)
+                        ? `${fmtStamp(c.created_at, { withDate: true })} 적음`
+                        : fmtStamp(c.created_at))}
+                  </span>
+                  <span className="text-[11px] text-gray-300 shrink-0">
                     {c.source === 'import' ? '엑셀에서 가져옴' : c.changed_by ?? ''}
                   </span>
                   {canEdit && (

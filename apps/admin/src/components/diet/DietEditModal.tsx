@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Check, History, Loader2, X, ExternalLink } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { dietAPI, type DietChange } from '@/api/dietClient'
-import { RICE_TONE, SIDE_TONE, RICE_TYPES, SIDE_TYPES, dietLabel } from '@/utils/dietTone'
+import { RICE_TONE, SIDE_TONE, RICE_TYPES, SIDE_TYPES, dietLabel, fmtStamp, stampedOnAnotherDay } from '@/utils/dietTone'
 
 /**
  * 식이 바꾸기 — 식이 현황·수급자 관리 어디서 눌러도 같은 창이 뜬다.
@@ -162,7 +162,14 @@ export default function DietEditModal({
                         {future && <span className="font-bold">예정 · </span>}
                         {h.diff?.[0] ?? dietLabel(h.rice, h.side, h.tube)}
                       </span>
-                      <span className="text-gray-300">{h.source === 'import' ? '엑셀' : h.changed_by ?? ''}</span>
+                      {/* 언제 적었는지 — 적용일과 다른 날 적었으면 날짜까지 */}
+                      <span className="text-gray-400 tabular-nums shrink-0">
+                        {h.created_at && (
+                          stampedOnAnotherDay(h.created_at, h.effective_date)
+                            ? fmtStamp(h.created_at, { withDate: true })
+                            : fmtStamp(h.created_at))}
+                      </span>
+                      <span className="text-gray-300 shrink-0">{h.source === 'import' ? '엑셀' : h.changed_by ?? ''}</span>
                     </div>
                   )
                 })}
