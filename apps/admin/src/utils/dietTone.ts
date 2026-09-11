@@ -7,6 +7,11 @@
  *
  * 인쇄는 흑백으로 나갈 수 있어 글자를 함께 적는다 — 색만으로 구분하지 않는다.
  */
+/** 밥·반찬 종류 — 백엔드(diet_state.py)와 같은 차례·같은 말.
+ *  화면이 목록을 받기 전에도 버튼을 그릴 수 있게 여기에도 둔다. 값 검사는 서버가 한다. */
+export const RICE_TYPES = ['일반식', '당뇨식', '죽', '미음']
+export const SIDE_TYPES = ['일반찬', '다진찬', '갈찬']
+
 export interface Tone { chip: string; dot: string; text: string }
 
 export const RICE_TONE: Record<string, Tone> = {

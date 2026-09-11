@@ -79,6 +79,28 @@ def _check_room_capacity(db: Session, floor, room, exclude_id=None):
                                  f"먼저 기존 어르신을 다른 방으로 옮기거나 설정에서 정원을 조정해주세요.")
 
 
+def _sync_diet_tube(db: Session, r: LtcResident, was_tube: bool, who) -> None:
+    """수급자 수정 화면에서 경관식을 켜고 끄면 식이 기록에도 한 줄 남긴다.
+
+    안 그러면 두 화면이 어긋난다 — 수급자 관리는 '경관식', 식이 현황은
+    '일반식 · 일반찬'. 주방은 그중 하나를 보고 차리는데, 어느 쪽을 봤는지
+    아무도 모르게 된다.
+
+    경관식을 풀 때는 무엇을 드시는지 여기서 알 수 없다. 지어내지 않고
+    '미정' 으로 두어 식이 현황에서 눈에 띄게 한다(빨간 점선 칩).
+    """
+    if bool(r.tube_feeding) == bool(was_tube):
+        return
+    from app.models.resident_diet import DietChange
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    today = _dt.now(_tz(_td(hours=9))).strftime("%Y-%m-%d")
+    db.add(DietChange(
+        resident_id=r.id, resident_name=r.name, effective_date=today,
+        rice=None, side=None, tube=bool(r.tube_feeding),
+        note="수급자 관리에서 경관식 " + ("표시" if r.tube_feeding else "해제 — 식이 다시 정해 주세요"),
+        source="manual", changed_by=getattr(who, "name", None)))
+
+
 @residents_router.post("", response_model=ApiResponse, status_code=201)
 def create_ltc_resident(
     payload: LtcResidentCreate,
@@ -106,6 +128,9 @@ def create_ltc_resident(
                        {k: data.get(k) for k in GROUP_LOG_FIELDS}, _)
     db.commit()
     db.refresh(r)
+    # 경관식으로 등록했으면 식이 기록에도 한 줄 — 식이 현황에서 '미정' 으로 뜨지 않게
+    _sync_diet_tube(db, r, was_tube=False, who=_)
+    db.commit()
 
     # 어르신 서류 현황 표에 자동 추가 (급여/등급·인정서 기간 포함)
     try:
@@ -216,10 +241,13 @@ def update_ltc_resident(
     if new_room and moved and not force:
         _check_room_capacity(db, new_floor, new_room, exclude_id=rid)
     before = {k: getattr(r, k, None) for k in GROUP_LOG_FIELDS}
+    was_tube = bool(r.tube_feeding)
     for k, v in data.items():
         setattr(r, k, v)
     _log_group_changes(db, r.name, before,
                        {k: getattr(r, k, None) for k in GROUP_LOG_FIELDS}, current_user)
+    # 경관식을 여기서 켜고 껐으면 식이 기록도 함께 — 두 화면이 어긋나지 않게
+    _sync_diet_tube(db, r, was_tube, current_user)
     db.commit()
     db.refresh(r)
     # 층 변경 시 연동된 서류현황에도 반영 (해제는 r.floor와 같은 None으로 — 빈 문자열을 남기지 않는다)

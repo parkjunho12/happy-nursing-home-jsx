@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, BedDouble, CalendarDays, FileText, HeartHandshake, Loader2, Pencil, Printer, StickyNote, UserRound } from 'lucide-react'
+import { ArrowLeft, BedDouble, CalendarDays, FileText, HeartHandshake, Loader2, Pencil, Printer, StickyNote, UserRound, UtensilsCrossed } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
 import { calcAge, isItemDone } from '@/utils/period'
 import { residentDocAPI, type ResidentDoc } from '@/api/residentDocClient'
@@ -9,6 +9,9 @@ import { currentCert, certState, fmtD, gradeLabel } from '@/utils/cert'
 import ChecklistFormModal from '@/components/eval/ChecklistFormModal'
 import { ResidentForm } from './EvalResidentsPage'
 import type { ChecklistItem } from '@/utils/period'
+import { dietAPI, type DietRow } from '@/api/dietClient'
+import DietEditModal from '@/components/diet/DietEditModal'
+import { RICE_TONE, SIDE_TONE, TUBE_TONE, UNSET_TONE, dietLabel } from '@/utils/dietTone'
 import { genderLabel, genderAvatarClass } from '@/utils/gender'
 
 /**
@@ -93,6 +96,16 @@ export default function ResidentDetailPage() {
   const [memoBusy, setMemoBusy] = useState(false)
   const [blockBusy, setBlockBusy] = useState<string | null>(null)
 
+  /** 식이 — 「식이 현황」이 쥔 기록을 그대로 읽고 그대로 고친다.
+   *  여기 따로 저장하는 값이 아니라, 한쪽에서 바꾸면 양쪽이 같이 바뀐다.
+   *  지난 내력은 「식이 현황」에서 본다 — 이 화면은 지금 무엇을 드시는가만. */
+  const [diet, setDiet] = useState<DietRow | null>(null)
+  const [dietOpen, setDietOpen] = useState(false)
+  const loadDiet = () => dietAPI.today()
+    .then(d => setDiet(d.residents.find(x => x.resident_id === id) ?? null))
+    .catch(() => setDiet(null))
+  useEffect(() => { if (id) loadDiet() }, [id])
+
   /** 불가로 표시하거나 되돌린다 — 누르면 바로.
    *
    *  불가는 완료도 미완료도 아니다. 미완료로 두면 영원히 빨간 채로 남아
@@ -176,6 +189,18 @@ export default function ResidentDetailPage() {
               <span className="text-xs font-bold text-teal-700 bg-teal-50 border border-teal-100 px-2 py-0.5 rounded-full">
                 {r.floor}{r.room ? ` ${r.room}호` : ''}
               </span>
+            )}
+            {/* 식이 — 눌러서 바로 바꾼다. 「식이 현황」과 같은 기록이다 */}
+            {diet && (
+              <button onClick={() => setDietOpen(true)} title="눌러서 식이 변경 · 지난 내력은 식이 현황에서"
+                className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full border hover:brightness-95 ${
+                  diet.tube ? TUBE_TONE.chip
+                    : (diet.unset || (!diet.rice && !diet.side)) ? UNSET_TONE.chip
+                    : RICE_TONE[diet.rice ?? '']?.chip ?? SIDE_TONE[diet.side ?? '']?.chip ?? UNSET_TONE.chip}`}>
+                <UtensilsCrossed size={11} />
+                {(diet.unset || (!diet.rice && !diet.side)) && !diet.tube ? '식이 미정' : dietLabel(diet.rice, diet.side, diet.tube)}
+                {diet.since && !diet.unset && <span className="font-normal opacity-60">{Number(diet.since.slice(5, 7))}/{Number(diet.since.slice(8, 10))}~</span>}
+              </button>
             )}
           </div>
           <p className="text-xs text-gray-400 mt-0.5">{genderLabel(r.gender)} · 만 {calcAge(r.birthDate)}세 · 입소 {r.admissionDate}{r.dischargeDate && ` · 퇴소 ${r.dischargeDate}${(r as any).dischargeTime ? ` ${(r as any).dischargeTime}` : ''}`}</p>
@@ -683,7 +708,14 @@ export default function ResidentDetailPage() {
           </div>
         </div>
       )}
-      {editingRes && <ResidentForm existing={r} onClose={() => setEditingRes(false)} />}
+      {editingRes && <ResidentForm existing={r} onClose={() => { setEditingRes(false); loadDiet() }} />}
+      {dietOpen && diet && (
+        <DietEditModal residentId={diet.resident_id} name={diet.name}
+          sub={`${diet.floor ?? ''} ${diet.room ? diet.room + '호' : ''}`.trim()}
+          current={diet}
+          onClose={() => setDietOpen(false)}
+          onSaved={() => { setDietOpen(false); loadDiet(); loadAll(true) }} />
+      )}
 
       {/* 하단 바로가기 */}
       <div className="flex gap-2 flex-wrap">

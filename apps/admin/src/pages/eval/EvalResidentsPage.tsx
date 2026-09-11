@@ -3,7 +3,7 @@ import RoomPicker from '@/components/eval/RoomPicker'
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/auth'
-import { UserPlus, LogOut, Edit2, AlertTriangle, RotateCcw, Trash2, BedDouble, Loader2 } from 'lucide-react'
+import { UserPlus, LogOut, Edit2, AlertTriangle, RotateCcw, Trash2, BedDouble, Loader2, UtensilsCrossed } from 'lucide-react'
 import DateField from '@/components/ui/DateField'
 import CertificationEditor from '@/components/eval/CertificationEditor'
 import { genderLabel, genderAvatarClass } from '@/utils/gender'
@@ -16,6 +16,9 @@ import type { ChecklistItem } from '@/utils/period'
 import { calcAge, isItemDone } from '@/utils/period'
 import { adminAlbumAPI } from '@/api/albumClient'
 import { residentDocAPI } from '@/api/residentDocClient'
+import { dietAPI, type DietRow } from '@/api/dietClient'
+import DietEditModal from '@/components/diet/DietEditModal'
+import { RICE_TONE, SIDE_TONE, TUBE_TONE, UNSET_TONE, dietLabel } from '@/utils/dietTone'
 
 type Tab = 'active' | 'pending' | 'discharged' | 'all'
 
@@ -31,6 +34,16 @@ export default function EvalResidentsPage() {
   const [addGuardianFor, setAddGuardianFor] = useState<{ id: string; name: string } | null>(null)
 
   useEffect(() => { loadAll() }, [loadAll])
+
+  /** 오늘 기준 식이 — 「식이 현황」과 같은 기록을 읽는다.
+   *  여기에 따로 저장하지 않는다. 두 곳에 적으면 언젠가 어긋나고,
+   *  그때는 주방이 어느 쪽을 보고 차렸는지 알 수 없다. */
+  const [diet, setDiet] = useState<Record<string, DietRow>>({})
+  const [dietEdit, setDietEdit] = useState<DietRow | null>(null)
+  const loadDiet = () => dietAPI.today()
+    .then(d => setDiet(Object.fromEntries(d.residents.map(x => [x.resident_id, x]))))
+    .catch(() => {})            // 권한이 없으면 칩만 안 보인다 — 목록은 그대로 뜬다
+  useEffect(() => { loadDiet() }, [])
 
   const handleDeleteResident = async (r: LtcResident) => {
     if (!confirm(`'${r.name}' 수급자를 완전히 삭제할까요?\n\n개인 체크리스트·수행기록·서류현황이 함께 삭제되며 되돌릴 수 없습니다.`)) return
@@ -121,7 +134,8 @@ export default function EvalResidentsPage() {
       ) : (
         <div className="space-y-2.5">
           {filtered.map(r => (
-            <ResidentCard key={r.id} r={r}
+            <ResidentCard key={r.id} r={r} diet={diet[r.id]}
+              onDiet={() => diet[r.id] && setDietEdit(diet[r.id])}
               onDetail={() => navigate(`/eval/residents/${r.id}`)}
               onEdit={() => setEditingId(r.id)}
               onDischarge={() => setShowDischarge(r.id)}
@@ -132,6 +146,17 @@ export default function EvalResidentsPage() {
         </div>
       )}
 
+      {dietEdit && (
+        <DietEditModal residentId={dietEdit.resident_id} name={dietEdit.name}
+          sub={`${dietEdit.floor ?? ''} ${dietEdit.room ? dietEdit.room + '호' : ''}`.trim()}
+          current={dietEdit}
+          onClose={() => setDietEdit(null)}
+          onSaved={() => {
+            setDietEdit(null)
+            loadDiet()          // 「식이 현황」과 같은 곳에서 다시 읽는다
+            loadAll(true)       // 경관식 여부가 어르신 기록에도 반영된다
+          }} />
+      )}
       {showAdd       && <ResidentForm onClose={() => setShowAdd(false)} />}
       {editingId     && <ResidentForm existing={residents.find(r=>r.id===editingId)} onClose={() => setEditingId(null)} />}
       {showDischarge && <DischargeModal residentId={showDischarge} onClose={() => setShowDischarge(null)} />}
@@ -147,9 +172,11 @@ export default function EvalResidentsPage() {
   )
 }
 
-function ResidentCard({ r, onEdit, onDischarge, onDelete, onDetail, checklists, onAddGuardian }: {
+function ResidentCard({ r, onEdit, onDischarge, onDelete, onDetail, checklists, onAddGuardian, diet, onDiet }: {
   r: LtcResident; onEdit:()=>void; onDischarge:()=>void; onDelete:()=>void; onDetail:()=>void;
   checklists: ChecklistItem[]; onAddGuardian:()=>void;
+  /** 오늘 기준 식이 — 「식이 현황」이 쥐고 있는 그 값 */
+  diet?: DietRow; onDiet:()=>void;
 }) {
   // 케어팀(간호팀장·물리/작업치료사)은 열람·체크 중심 — 삭제는 숨긴다
   const canDelete = useAuthStore(st => st.user?.role === 'ADMIN' || ['사회복지사', '시설장', '대표', '이사'].includes(st.user?.position ?? ''))
@@ -207,7 +234,19 @@ function ResidentCard({ r, onEdit, onDischarge, onDelete, onDetail, checklists, 
                 {r.floor || r.room ? `${r.floor}${r.room ? ` ${r.room}호` : ''}` : '호실 미지정'}
               </button>
             )}
-            {r.tubeFeeding && <span className="text-[9px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1 py-0.5 rounded">경관식</span>}
+            {/* 식이 — 눌러서 바로 바꾼다. 「식이 현황」과 같은 기록이라 한쪽에서 바꾸면 양쪽이 같이 바뀐다 */}
+            {diet ? (
+              <button onClick={e => { e.stopPropagation(); onDiet() }} title="눌러서 식이 바로 변경"
+                className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded border hover:brightness-95 ${
+                  diet.tube ? TUBE_TONE.chip
+                    : (diet.unset || (!diet.rice && !diet.side)) ? UNSET_TONE.chip
+                    : RICE_TONE[diet.rice ?? '']?.chip ?? SIDE_TONE[diet.side ?? '']?.chip ?? UNSET_TONE.chip}`}>
+                <UtensilsCrossed size={10} />
+                {(diet.unset || (!diet.rice && !diet.side)) && !diet.tube ? '식이 미정' : dietLabel(diet.rice, diet.side, diet.tube)}
+              </button>
+            ) : r.tubeFeeding && (
+              <span className="text-[9px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1 py-0.5 rounded">경관식</span>
+            )}
             {(r as any).positioning && <span className="text-[9px] font-bold text-violet-700 bg-violet-50 border border-violet-200 px-1 py-0.5 rounded">체위변경</span>}
             {hasHigh && <AlertTriangle size={13} className="text-red-500"/>}
           </div>
