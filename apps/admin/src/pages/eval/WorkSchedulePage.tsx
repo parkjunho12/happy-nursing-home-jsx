@@ -180,7 +180,11 @@ export default function WorkSchedulePage() {
         const saved = doc.base_hours && doc.base_hours.trim()
         setAutoBase(!saved)
         if (saved) { setBaseHours(doc.base_hours!); setBaseDays(doc.base_days || '') }
-        setAsOf(doc.as_of || todayISO())
+        // 작성 기준일은 '이 표를 언제 기준으로 본 것인가' 다. 페이지를 연 날이
+        // 곧 그날이므로 저장된 값을 따라가지 않고 오늘로 맞춘다.
+        // (지난달 표를 열어 인쇄할 때 옛 날짜가 찍혀 나가던 일을 막는다)
+        // 고칠 수는 있다 — 손으로 바꾸면 그 값이 저장된다.
+        setAsOf(todayISO())
         setOffsets({ ...DEFAULT_TEAM_OFFSET, ...(doc.team_offsets || {}) })
         setUpdatedBy(doc.updated_by ?? null); setDirty(false)
         setLock({ locked: !!doc.locked, by: doc.locked_by, at: doc.locked_at })
@@ -885,6 +889,9 @@ export default function WorkSchedulePage() {
           </div>
           <label className="text-xs text-gray-500">작성 기준일
             <input type="date" value={asOf} onChange={e => { setAsOf(e.target.value); setDirty(true) }} className="ml-1 px-2 py-1.5 text-sm border border-gray-200 rounded-lg" />
+            {asOf === todayISO()
+              ? <span className="ml-1.5 text-[11px] text-gray-400">오늘로 맞춰 둡니다 · 고칠 수 있습니다</span>
+              : <span className="ml-1.5 text-[11px] font-bold text-amber-600">오늘이 아닌 날짜입니다</span>}
           </label>
         </div>
 
@@ -1433,7 +1440,7 @@ export default function WorkSchedulePage() {
             // 화면에만 적용 — 저장을 눌러야 확정된다
             setData(v.data || {}); setRows(v.rows || [])
             if (v.base_hours) { setAutoBase(false); setBaseHours(v.base_hours); setBaseDays(v.base_days || '') }
-            if (v.as_of) setAsOf(v.as_of)
+            // 기준일은 되돌리지 않는다 — 오늘 이 표를 보고 있는 것이 사실이다
             setOffsets({ ...DEFAULT_TEAM_OFFSET, ...(v.team_offsets || {}) })
             setDirty(true)
           }}
