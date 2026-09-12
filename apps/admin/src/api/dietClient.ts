@@ -28,7 +28,7 @@ export interface DietRow {
 /** 그날 그 끼니에 계신 직원 — 근무표에서 세어 낸다 */
 export interface StaffMeal {
   meal: string
-  /** 그 끼니 시각 'HH:MM' — 식사 시간 설정에서 온다 */
+  /** 아침에서 오후로 넘어가는 시각 'HH:MM' — 이 선을 지나 일하시면 드신다 */
   time: string
   /** 그 달 근무표가 아직 없으면 false. 그때 counts 는 null */
   has_schedule: boolean

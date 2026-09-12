@@ -293,7 +293,7 @@ function CountStrip({ data }: { data: DietToday }) {
           <div>
             <p className="text-[10px] font-bold text-gray-400 mb-1 pl-0.5 flex items-center gap-1">
               <Users size={10} /> 직원 점심
-              <span className="font-normal text-gray-300">{sm.time} 기준 · 근무표에서</span>
+              <span className="font-normal text-gray-300">근무표에서 · 오전↔오후 경계 {sm.time} 기준</span>
             </p>
             <div className="flex gap-1.5 flex-wrap">
               {sm.groups.map(g => cell(g, STAFF_TONE[g] ?? '', sm.counts?.[g] ?? 0))}
@@ -338,13 +338,12 @@ function CountStrip({ data }: { data: DietToday }) {
                 </div>
               </div>
               <p className="text-[10px] text-gray-400 mt-1.5 leading-relaxed">
-                근무 시간이 <b className="text-gray-500">{sm.time}</b>을 품으면 셉니다 —
+                아침에서 오후로 넘어가는 <b className="text-gray-500">{sm.time}</b>을 지나 일하시면 셉니다 —
                 주간·모닝·오전 근무가 모두 들어갑니다.
-                {sm.time}에 <b className="text-gray-500">끝나는</b> 근무(예: 09:30~{sm.time.replace(':', ':')})는
-                마치고 나가시는 중이라 빠지고, 짧아도 그 시각을 품으면(예: 10:00~13:00) 듭니다 ·
+                {sm.time}에 <b className="text-gray-500">끝나는</b> 근무(09:30~{sm.time})는 마치고 나가시는 중이라 빠지고,
+                짧아도 그 선을 넘기면(10:00~13:00) 듭니다 ·
                 그만두신 분·입사 전인 분은 근무표에 칸이 남아 있어도 빠집니다 ·
-                직종은 「직원 관리」에 적힌 것을 따릅니다 ·
-                점심 시각은 「식단표 › 식사 시간 설정」에서 바꿉니다
+                직종은 「직원 관리」에 적힌 것을 따릅니다
               </p>
             </details>
           </div>

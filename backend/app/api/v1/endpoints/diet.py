@@ -91,30 +91,21 @@ def _by_resident(db: Session) -> Dict[str, List[Dict[str, Any]]]:
     return out
 
 
-# 끼니 시각을 못 찾았을 때 쓸 점심 시각. 설정이 비어 있다고 직원 수를
-# 0으로 낼 수는 없다 — 주방은 그 숫자만큼 덜 짓는다.
-#
-# 이 시설 점심은 12:30 이다. 이 값이 중요한 이유 — 12:30 에 끝나는 근무
-# (09:30~12:30)는 마치고 나가시는 중이라 빠지고, 12:30 을 품는 근무는
-# 짧아도 든다. 시각이 한 시간만 어긋나도 세는 사람이 달라진다.
-DEFAULT_LUNCH = "12:30"
-
-
 def _staff_meal(db: Session, on: str, meal: str = "lunch") -> Dict[str, Any]:
-    """그날 그 끼니에 계신 직원 수 — 근무표에서 세어 낸다.
+    """그날 점심을 드시는 직원 수 — 근무표에서 세어 낸다.
+
+    아침에서 오후로 넘어가는 12:30 을 지나 일하시면 드시는 것으로 본다.
 
     근무표가 아직 없는 달이면 셀 수가 없다. 0 으로 내려놓으면 '아무도 안
     나온 날' 처럼 보이므로, 없다고 분명히 말한다.
     """
-    from app.models.meal import MealTimeSetting
     from app.models.work_schedule import WorkSchedule
     from app.services import staff_meal as sm
 
-    row = db.query(MealTimeSetting).first()
-    hhmm = (getattr(row, meal, None) or "").strip() or DEFAULT_LUNCH
-    minutes = sm.to_minutes(hhmm)
-    if minutes is None:
-        hhmm, minutes = DEFAULT_LUNCH, sm.to_minutes(DEFAULT_LUNCH)
+    # 배식 시각(식사 시간 설정)이 아니라 '아침에서 오후로 넘어가는 시각' 으로
+    # 가른다. 그 설정은 어르신 식수 정산이 쓰는 값이라, 누가 바꾸면 직원
+    # 인원까지 조용히 달라진다.
+    hhmm, minutes = sm.NOON_SPLIT_LABEL, sm.NOON_SPLIT
 
     y, m, d = int(on[:4]), int(on[5:7]), int(on[8:10])
     prev = date(y, m, d) - timedelta(days=1)
