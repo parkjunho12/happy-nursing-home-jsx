@@ -177,6 +177,7 @@ eq(got, [("가", "201", "일반식", "일반찬", False),
 # 야간조를 두 번 세거나(어제 것 + 오늘 것) 반일 근무를 빼먹기 쉬운 자리다.
 LUNCH, BREAKFAST = 12 * 60, 8 * 60
 
+# 시각만 볼 때 — 그 시각에 시설에 계신가
 for code, want, why in [
     ("D", True, "주간 08:50~18:00"),
     ("M", True, "모닝 06:50~16:00"),
@@ -188,7 +189,19 @@ for code, want, why in [
     ("1330~1800", False, "직접 적은 오후"),
     ("", False, "빈 칸"), (None, False, "없음"), ("??", False, "모르는 표시"),
 ]:
-    eq(smeal.at_meal(code, LUNCH), want, f"점심 — {why}")
+    eq(smeal.at_meal(code, LUNCH), want, f"그 시각에 계신가 — {why}")
+
+# 점심 식수는 주간(D) 만 센다. 시설이 그렇게 세어 왔다.
+# 시각도 함께 본다 — D 의 시간대가 바뀌어 점심에 안 걸치면 세지 않아야 한다.
+eq(smeal.LUNCH_CODES, ("D",), "점심에 세는 코드")
+for code, want, why in [
+    ("D", True, "주간"),
+    ("M", False, "모닝 — 시간은 걸치지만 D 가 아니다"),
+    ("AD", False, "오전 — 시간은 걸치지만 D 가 아니다"),
+    ("0850 1600", False, "직접 적은 시간대 — D 가 아니다"),
+    ("PD", False, "오후"), ("N", False, "야간"), ("休", False, "연차"),
+]:
+    eq(smeal.at_meal(code, LUNCH, only_codes=smeal.LUNCH_CODES), want, f"점심 D만 — {why}")
 
 # 끝나는 시각에 딱 맞으면 나가시는 중이다. 시작 시각에 맞으면 계신다.
 eq(smeal.at_meal("AD", 13 * 60 + 30), False, "13:30 퇴근 — 13:30 끼니는 안 드신다")
@@ -216,6 +229,10 @@ eq(smeal.at_meal("0930~1230", LUNCH), False, "시간제는 점심 시각에 걸�
 
 # 빠진 까닭을 사람 말로 적는다 — 숫자만 주면 근무표를 다시 펴 보게 된다
 eq(smeal.why("休", LUNCH), "연차", "사유 — 연차")
+# 까닭은 근본적인 것부터 — 야간은 'D 가 아니라서' 가 아니라 '안 계셔서' 다
+eq(smeal.why("N", LUNCH, only_codes=smeal.LUNCH_CODES), "그 시각엔 아직 출근 전(N)", "사유 — 야간은 시각으로")
+eq(smeal.why("M", LUNCH, only_codes=smeal.LUNCH_CODES), "D 근무만 셉니다(M)", "사유 — 모닝은 규칙으로")
+eq(smeal.why("D", LUNCH, only_codes=smeal.LUNCH_CODES), "", "세는 근무는 까닭이 없다")
 eq(smeal.why("N", LUNCH), "그 시각엔 아직 출근 전(N)", "사유 — 야간")
 eq(smeal.why("AD", 18 * 60), "그 시각엔 이미 퇴근(AD)", "사유 — 퇴근 뒤")
 eq(smeal.why("0930~1230", LUNCH), "시간제 근무(0930~1230 · 3시간)", "사유 — 시간제")
@@ -236,9 +253,9 @@ REPORTED = [("간호팀장", "D"), ("사회복지사", "D"), ("사회복지사",
             ("시설장", "D"), ("작업치료사", "D"),
             ("물리치료사", "0930~1230"),          # 시간제 — 세지 않는다
             ("요양보호사", "D"), ("요양보호사", "M"), ("영양사", "D")]
-eq(smeal.count_for_day(REPORTED, LUNCH),
-   {"사무실": 4, "간호": 1, "요양": 2, "기타": 1, "합계": 8},
-   "간호팀장 1 · 사회복지사 2 가 제 칸에 들어간다")
+eq(smeal.count_for_day(REPORTED, LUNCH, only_codes=smeal.LUNCH_CODES),
+   {"사무실": 4, "간호": 1, "요양": 1, "기타": 1, "합계": 7},
+   "간호팀장 1 · 사회복지사 2 가 제 칸에 들어간다 (D 만)")
 
 CELLS = [("시설장", "D"), ("사회복지사", "D"), ("사무원", "休"),
          ("간호팀장", "D"), ("간호사", "N"), ("간호조무사", "AD"),
@@ -261,4 +278,4 @@ if fails:
     sys.exit(1)
 print("✅ 식이 계산 정상 — 시점 판정 9건 · 집계 14건 · 값 검사 15건 "
       "· 이력 문구 4건 · 시트 이름 8건 · 엑셀 열 찾기 9건 "
-      "· 직원 점심 48건")
+      "· 직원 점심 59건")

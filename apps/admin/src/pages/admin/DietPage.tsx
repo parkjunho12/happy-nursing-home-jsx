@@ -292,7 +292,11 @@ function CountStrip({ data }: { data: DietToday }) {
         ) : (
           <div>
             <p className="text-[10px] font-bold text-gray-400 mb-1 pl-0.5 flex items-center gap-1">
-              <Users size={10} /> 직원 점심 <span className="font-normal text-gray-300">{sm.time} 기준 · 근무표에서</span>
+              <Users size={10} /> 직원 점심
+              <span className="font-normal text-gray-300">
+                {sm.time} 기준 · 근무표에서
+                {sm.codes.length > 0 && ` · ${sm.codes.join('·')} 근무만`}
+              </span>
             </p>
             <div className="flex gap-1.5 flex-wrap">
               {sm.groups.map(g => cell(g, STAFF_TONE[g] ?? '', sm.counts?.[g] ?? 0))}
@@ -336,8 +340,10 @@ function CountStrip({ data }: { data: DietToday }) {
                   </div>
                 </div>
               </div>
-              <p className="text-[10px] text-gray-400 mt-1.5">
-                네 시간이 안 되는 근무(예: 09:30~12:30)는 시간제로 보아 세지 않습니다 ·
+              <p className="text-[10px] text-gray-400 mt-1.5 leading-relaxed">
+                {sm.codes.length > 0 && <>주간({sm.codes.join('·')}) 근무만 셉니다 — 모닝·오전 근무는 점심 시각에 계셔도 세지 않습니다 · </>}
+                네 시간이 안 되는 근무(예: 09:30~12:30)는 시간제로 봅니다 ·
+                그만두신 분·입사 전인 분은 근무표에 칸이 남아 있어도 빠집니다 ·
                 직종은 「직원 관리」에 적힌 것을 따릅니다
               </p>
             </details>

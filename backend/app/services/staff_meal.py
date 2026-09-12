@@ -8,13 +8,15 @@
 
 ■ 무엇을 '점심을 드신다' 로 보는가
 
-  근무 시간대가 점심 시각을 품고 있으면 드시는 것으로 본다. 코드마다
-  시간대가 정해져 있고(D 08:50~18:00 · PD 13:30~18:00 …), 근무표에
-  '0850 1600' 처럼 직접 적은 시간대도 그대로 읽는다.
+  이 시설은 점심 식수를 **주간(D) 근무만** 센다. 모닝(M)·오전(AD)은 시간이
+  점심에 걸쳐도 세지 않는다 — 시설이 그렇게 세어 왔다.
 
-  · D · M · AD  → 점심 시각에 계신다
-  · PD          → 13:30 출근이라 12시 점심에는 안 계신다
-  · N           → 09:00 퇴근이라 안 계신다
+  그래도 시각은 함께 본다. D 의 시간대가 바뀌어 점심에 안 걸치게 되면 그때는
+  세지 않아야 하기 때문이다. 코드만 보고 세면 그런 변화를 놓친다.
+
+  · D              → 센다 (08:50~18:00, 점심에 계신다)
+  · M · AD         → 시간은 걸치지만 세지 않는다 (D 가 아니다)
+  · PD · N         → 그 시각에 안 계신다
   · 연차·대휴·병가 → 안 나오신다
 
   '점심 시각' 은 식사 시간 설정에서 온다. 시설이 12:00 을 12:30 으로 바꾸면
@@ -54,6 +56,12 @@ GROUPS: List[Tuple[str, Tuple[str, ...]]] = [
     ("요양", ("요양보호사", "요양팀장")),
 ]
 GROUP_NAMES = [g for g, _ in GROUPS] + ["기타"]
+
+# 점심 식수에 세는 근무 코드. 시설이 주간(D) 근무만 센다.
+#
+# 코드를 늘릴 일이 생기면 여기만 고치면 된다 — 세는 규칙이 화면·집계·
+# 사유 문구에 흩어져 있지 않게 한 곳에 둔다.
+LUNCH_CODES: Tuple[str, ...] = ("D",)
 
 # 이보다 짧은 근무는 시간제로 보고 식사에 세지 않는다.
 #
@@ -110,8 +118,13 @@ def is_part_time(code: Optional[str]) -> bool:
     return bool(sp) and (sp[1] - sp[0]) < PART_TIME_MAX_MIN
 
 
-def at_meal(code: Optional[str], meal_minutes: int, *, from_yesterday: bool = False) -> bool:
+def at_meal(code: Optional[str], meal_minutes: int, *,
+            from_yesterday: bool = False,
+            only_codes: Optional[Iterable[str]] = None) -> bool:
     """그 칸의 근무가 그 끼니 시각에 걸치는가.
+
+    only_codes 를 주면 그 코드만 센다 — 점심은 D 만 센다(LUNCH_CODES).
+    시각도 함께 보므로, D 의 시간대가 바뀌어 점심에 안 걸치면 세지 않는다.
 
     from_yesterday 는 '어제 칸' 을 볼 때 켠다. 야간 근무는 어제 18시에 시작해
     오늘 9시에 끝나므로, 오늘 아침을 드시는 분은 '어제 N' 이다. '오늘 N' 인
@@ -122,10 +135,13 @@ def at_meal(code: Optional[str], meal_minutes: int, *, from_yesterday: bool = Fa
     끝나는 시각에 딱 맞으면 나가시는 중이라 세지 않는다 — 13:30 퇴근인
     오전 근무는 13:30 점심을 드시지 않는다.
     """
-    sp = span_of(code)
+    c = (code or "").strip()
+    if only_codes is not None and c not in set(only_codes):
+        return False
+    sp = span_of(c)
     if not sp:
         return False
-    if is_part_time(code):
+    if is_part_time(c):
         return False
     start, end = sp
     m = meal_minutes + 24 * 60 if from_yesterday else meal_minutes
@@ -136,6 +152,7 @@ def count_for_day(
     cells: Iterable[Tuple[Optional[str], Optional[str]]],
     meal_minutes: int,
     prev_cells: Optional[Iterable[Tuple[Optional[str], Optional[str]]]] = None,
+    only_codes: Optional[Iterable[str]] = None,
 ) -> Dict[str, int]:
     """(직종, 근무코드) 목록 → 칸별 인원.
 
@@ -153,19 +170,23 @@ def count_for_day(
         out["합계"] += 1
 
     for position, code in cells:
-        if at_meal(code, meal_minutes):
+        if at_meal(code, meal_minutes, only_codes=only_codes):
             add(position)
     for position, code in (prev_cells or []):
-        if at_meal(code, meal_minutes, from_yesterday=True):
+        if at_meal(code, meal_minutes, from_yesterday=True, only_codes=only_codes):
             add(position)
     return out
 
 
-def why(code: Optional[str], meal_minutes: int, *, from_yesterday: bool = False) -> str:
-    """세지 않은 까닭 — 화면에 그대로 적는다.
+def why(code: Optional[str], meal_minutes: int, *, from_yesterday: bool = False,
+        only_codes: Optional[Iterable[str]] = None) -> str:
+    """세지 않은 까닭 — 화면에 그대로 적는다. 세는 경우에는 빈 문자열.
 
     숫자만 보여주면 '왜 저 선생님이 빠졌지' 를 물어볼 데가 없다. 근무표를
     다시 펴서 대조하게 되고, 그러면 이 기능을 안 쓰게 된다.
+
+    까닭은 근본적인 것부터 본다. 야간 근무자는 'D 가 아니라서' 가 아니라
+    '그 시각에 안 계셔서' 안 드시는 것이다. 그 편이 읽는 사람에게 맞다.
     """
     c = (code or "").strip()
     if not c:
@@ -183,4 +204,9 @@ def why(code: Optional[str], meal_minutes: int, *, from_yesterday: bool = False)
     m = meal_minutes + 24 * 60 if from_yesterday else meal_minutes
     if m < start:
         return f"그 시각엔 아직 출근 전({c})"
-    return f"그 시각엔 이미 퇴근({c})"
+    if m >= end:
+        return f"그 시각엔 이미 퇴근({c})"
+    # 그 시각에 계시지만 세지 않는 근무 — 시설이 정한 규칙이다
+    if only_codes is not None and c not in set(only_codes):
+        return f"{' · '.join(only_codes)} 근무만 셉니다({c})"
+    return ""
