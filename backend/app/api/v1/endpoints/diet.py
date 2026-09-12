@@ -93,7 +93,11 @@ def _by_resident(db: Session) -> Dict[str, List[Dict[str, Any]]]:
 
 # 끼니 시각을 못 찾았을 때 쓸 점심 시각. 설정이 비어 있다고 직원 수를
 # 0으로 낼 수는 없다 — 주방은 그 숫자만큼 덜 짓는다.
-DEFAULT_LUNCH = "12:00"
+#
+# 이 시설 점심은 12:30 이다. 이 값이 중요한 이유 — 12:30 에 끝나는 근무
+# (09:30~12:30)는 마치고 나가시는 중이라 빠지고, 12:30 을 품는 근무는
+# 짧아도 든다. 시각이 한 시간만 어긋나도 세는 사람이 달라진다.
+DEFAULT_LUNCH = "12:30"
 
 
 def _staff_meal(db: Session, on: str, meal: str = "lunch") -> Dict[str, Any]:
@@ -162,14 +166,12 @@ def _staff_meal(db: Session, on: str, meal: str = "lunch") -> Dict[str, Any]:
     if today_cells is None:
         return {"meal": meal, "time": hhmm, "has_schedule": False,
                 "counts": None, "groups": sm.GROUP_NAMES,
-                "codes": list(sm.LUNCH_CODES) if meal == "lunch" else [],
                 "counted": [], "skipped": []}
     prev_cells = cells_of(prev.strftime("%Y-%m"), prev.day) or []
 
-    # 점심은 주간(D) 근무만 센다 — 시설이 그렇게 세어 왔다
-    only = sm.LUNCH_CODES if meal == "lunch" else None
+    # 그 시각에 계시면 센다 — 직종도 코드도 따지지 않는다
     counts = sm.count_for_day([(p, c) for _, p, c in today_cells], minutes,
-                              [(p, c) for _, p, c in prev_cells], only_codes=only)
+                              [(p, c) for _, p, c in prev_cells])
 
     # 누가 세어졌고 누가 왜 빠졌는지 — 숫자만 주면 근무표를 다시 펴 보게 된다
     counted, skipped = [], []
@@ -177,12 +179,12 @@ def _staff_meal(db: Session, on: str, meal: str = "lunch") -> Dict[str, Any]:
         row = {"name": name_of.get(sid) or "(이름 없음)",
                "position": position or "직종 미지정",
                "group": sm.group_of(position), "code": (code or "").strip()}
-        if sm.at_meal(code, minutes, only_codes=only):
+        if sm.at_meal(code, minutes):
             counted.append(row)
         elif (code or "").strip():
-            skipped.append({**row, "why": sm.why(code, minutes, only_codes=only)})
+            skipped.append({**row, "why": sm.why(code, minutes)})
     for sid, position, code in prev_cells:
-        if sm.at_meal(code, minutes, from_yesterday=True, only_codes=only):
+        if sm.at_meal(code, minutes, from_yesterday=True):
             counted.append({"name": name_of.get(sid) or "(이름 없음)",
                             "position": position or "직종 미지정",
                             "group": sm.group_of(position),
@@ -193,7 +195,6 @@ def _staff_meal(db: Session, on: str, meal: str = "lunch") -> Dict[str, Any]:
     skipped.sort(key=lambda x: (order.get(x["group"], 9), x["name"]))
     return {"meal": meal, "time": hhmm, "has_schedule": True,
             "counts": counts, "groups": sm.GROUP_NAMES,
-            "codes": list(only) if only else [],
             "counted": counted, "skipped": skipped}
 
 

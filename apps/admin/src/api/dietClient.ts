@@ -34,8 +34,6 @@ export interface StaffMeal {
   has_schedule: boolean
   counts: Record<string, number> | null
   groups: string[]
-  /** 이 근무 코드만 센다 (점심은 ['D']) */
-  codes: string[]
   /** 세어진 분들 — 숫자의 근거 */
   counted: { name: string; position: string; group: string; code: string }[]
   /** 빠진 분들과 그 까닭 */
