@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  UtensilsCrossed, Printer, Upload, Loader2, X, Users,
+  UtensilsCrossed, Printer, Upload, Loader2, X, Users, Info,
   ChevronLeft, ChevronRight, AlertTriangle, CalendarClock, Trash2, Search,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -290,16 +290,57 @@ function CountStrip({ data }: { data: DietToday }) {
             <Link to="/work-schedule" className="font-bold underline">근무표 만들기 ›</Link>
           </p>
         ) : (
-          <div className="flex items-end gap-x-4 gap-y-2 flex-wrap">
-            <div>
-              <p className="text-[10px] font-bold text-gray-400 mb-1 pl-0.5 flex items-center gap-1">
-                <Users size={10} /> 직원 점심 <span className="font-normal text-gray-300">{sm.time} 기준 · 근무표에서</span>
-              </p>
-              <div className="flex gap-1.5">
-                {sm.groups.map(g => cell(g, STAFF_TONE[g] ?? '', sm.counts?.[g] ?? 0))}
-                {cell('합계', 'bg-gray-800 text-white border-gray-800', staff)}
-              </div>
+          <div>
+            <p className="text-[10px] font-bold text-gray-400 mb-1 pl-0.5 flex items-center gap-1">
+              <Users size={10} /> 직원 점심 <span className="font-normal text-gray-300">{sm.time} 기준 · 근무표에서</span>
+            </p>
+            <div className="flex gap-1.5 flex-wrap">
+              {sm.groups.map(g => cell(g, STAFF_TONE[g] ?? '', sm.counts?.[g] ?? 0))}
+              {cell('합계', 'bg-gray-800 text-white border-gray-800', staff)}
             </div>
+
+            {/* 숫자의 근거 — 누가 세어졌고 누가 왜 빠졌는지.
+                숫자만 보여주면 '왜 저 선생님이 빠졌지' 를 물어볼 데가 없어
+                근무표를 다시 펴 보게 된다. 그러면 이 기능을 안 쓰게 된다. */}
+            <details className="mt-2 print:hidden">
+              <summary className="text-[11px] text-gray-400 cursor-pointer hover:text-gray-600 inline-flex items-center gap-1">
+                <Info size={11} /> 누가 세어졌는지 보기
+                {sm.skipped.length > 0 && <span className="text-gray-300">· 빠진 분 {sm.skipped.length}명</span>}
+              </summary>
+              <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <p className="text-[10px] font-bold text-gray-500 mb-1">드시는 분 {sm.counted.length}명</p>
+                  <div className="rounded-lg border border-gray-100 divide-y divide-gray-50">
+                    {sm.counted.map((x, i) => (
+                      <div key={i} className="px-2 py-1 flex items-center gap-1.5 text-[11px]">
+                        <span className={`text-[9px] font-bold px-1 py-0.5 rounded border ${STAFF_TONE[x.group] ?? ''}`}>{x.group}</span>
+                        <span className="font-bold text-gray-700">{x.name}</span>
+                        <span className="text-gray-400">{x.position}</span>
+                        <span className="ml-auto text-gray-400 tabular-nums">{x.code}</span>
+                      </div>
+                    ))}
+                    {sm.counted.length === 0 && <p className="px-2 py-2 text-[11px] text-gray-300">없습니다</p>}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-gray-500 mb-1">안 드시는 분 {sm.skipped.length}명</p>
+                  <div className="rounded-lg border border-gray-100 divide-y divide-gray-50">
+                    {sm.skipped.map((x, i) => (
+                      <div key={i} className="px-2 py-1 flex items-center gap-1.5 text-[11px]">
+                        <span className="font-bold text-gray-500">{x.name}</span>
+                        <span className="text-gray-400">{x.position}</span>
+                        <span className="ml-auto text-gray-400 truncate">{x.why}</span>
+                      </div>
+                    ))}
+                    {sm.skipped.length === 0 && <p className="px-2 py-2 text-[11px] text-gray-300">없습니다</p>}
+                  </div>
+                </div>
+              </div>
+              <p className="text-[10px] text-gray-400 mt-1.5">
+                네 시간이 안 되는 근무(예: 09:30~12:30)는 시간제로 보아 세지 않습니다 ·
+                직종은 「직원 관리」에 적힌 것을 따릅니다
+              </p>
+            </details>
           </div>
         )}
       </div>

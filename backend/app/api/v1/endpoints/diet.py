@@ -115,34 +115,64 @@ def _staff_meal(db: Session, on: str, meal: str = "lunch") -> Dict[str, Any]:
     y, m, d = int(on[:4]), int(on[5:7]), int(on[8:10])
     prev = date(y, m, d) - timedelta(days=1)
 
+    # 직종은 직원 명단이 기준이다. 근무표 왼쪽 열(rows)에 적어 둔 것이 있으면
+    # 그걸로 덮는다 — 그 달만 직종이 달랐던 경우가 있다.
+    #
+    # 예전에는 rows 를 먼저 보고 '비어 있으면' 명단을 봤는데, rows 자체가 빈
+    # 배열이면 '비어 있지 않다' 로 읽혀 명단을 안 봤다. 그래서 모든 직원이
+    # 직종 없는 사람이 되어 사무실·간호·요양이 전부 0 이 됐다.
+    from app.models.eval import LtcStaffMember
+    staff = {st.id: st for st in db.query(LtcStaffMember).all()}
+    pos_of = {sid: st.position for sid, st in staff.items()}
+    name_of = {sid: st.name for sid, st in staff.items()}
+
     def cells_of(ym: str, day: int):
         doc = db.query(WorkSchedule).filter(WorkSchedule.year_month == ym).first()
         if not doc or not doc.data:
             return None
-        # 근무표의 왼쪽 고정열(rows)에 직종이 있다. 없으면 직원 명단에서 찾는다.
-        pos_of = {r.get("staff_id"): r.get("position")
-                  for r in (doc.rows or []) if isinstance(r, dict)}
-        if not all(pos_of.values()):
-            from app.models.eval import LtcStaffMember
-            for st in db.query(LtcStaffMember).all():
-                if not pos_of.get(st.id):
-                    pos_of[st.id] = st.position
+        for r in (doc.rows or []):
+            if isinstance(r, dict) and r.get("staff_id") and r.get("position"):
+                pos_of[r["staff_id"]] = r["position"]
         out = []
         for sid, days in (doc.data or {}).items():
             if not isinstance(days, dict):
                 continue
             code = days.get(str(day)) or days.get(day)
-            out.append((pos_of.get(sid), code))
+            out.append((sid, pos_of.get(sid), code))
         return out
 
     today_cells = cells_of(on[:7], d)
     if today_cells is None:
         return {"meal": meal, "time": hhmm, "has_schedule": False,
-                "counts": None, "groups": sm.GROUP_NAMES}
+                "counts": None, "groups": sm.GROUP_NAMES, "counted": [], "skipped": []}
     prev_cells = cells_of(prev.strftime("%Y-%m"), prev.day) or []
-    counts = sm.count_for_day(today_cells, minutes, prev_cells)
+
+    counts = sm.count_for_day([(p, c) for _, p, c in today_cells], minutes,
+                              [(p, c) for _, p, c in prev_cells])
+
+    # 누가 세어졌고 누가 왜 빠졌는지 — 숫자만 주면 근무표를 다시 펴 보게 된다
+    counted, skipped = [], []
+    for sid, position, code in today_cells:
+        row = {"name": name_of.get(sid) or "(이름 없음)",
+               "position": position or "직종 미지정",
+               "group": sm.group_of(position), "code": (code or "").strip()}
+        if sm.at_meal(code, minutes):
+            counted.append(row)
+        elif (code or "").strip():
+            skipped.append({**row, "why": sm.why(code, minutes)})
+    for sid, position, code in prev_cells:
+        if sm.at_meal(code, minutes, from_yesterday=True):
+            counted.append({"name": name_of.get(sid) or "(이름 없음)",
+                            "position": position or "직종 미지정",
+                            "group": sm.group_of(position),
+                            "code": f"어제 {(code or '').strip()}"})
+
+    order = {g: i for i, g in enumerate(sm.GROUP_NAMES)}
+    counted.sort(key=lambda x: (order.get(x["group"], 9), x["name"]))
+    skipped.sort(key=lambda x: (order.get(x["group"], 9), x["name"]))
     return {"meal": meal, "time": hhmm, "has_schedule": True,
-            "counts": counts, "groups": sm.GROUP_NAMES}
+            "counts": counts, "groups": sm.GROUP_NAMES,
+            "counted": counted, "skipped": skipped}
 
 
 @router.get("")

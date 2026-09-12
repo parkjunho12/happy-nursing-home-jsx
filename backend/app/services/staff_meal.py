@@ -45,13 +45,25 @@ CODE_SPAN: Dict[str, Tuple[int, int]] = {
 # 나오지 않는 날 — 세지 않는다
 OFF_CODES = {"休", "대휴", "초과휴", "◆병", "◆"}
 
-# 직종 묶음 — 쓰시던 월별 표의 네 칸 그대로
+# 직종 묶음 — 쓰시던 월별 표의 네 칸 그대로.
+# 작업치료사가 사무실에 있는 것은 시설이 그렇게 세어 왔기 때문이다.
 GROUPS: List[Tuple[str, Tuple[str, ...]]] = [
-    ("사무실", ("시설장", "대표", "이사", "사회복지사", "사무원", "사무국장")),
+    ("사무실", ("시설장", "대표", "이사", "사회복지사", "사무원", "사무국장",
+               "작업치료사")),
     ("간호", ("간호팀장", "간호사", "간호조무사")),
     ("요양", ("요양보호사", "요양팀장")),
 ]
 GROUP_NAMES = [g for g, _ in GROUPS] + ["기타"]
+
+# 이보다 짧은 근무는 시간제로 보고 식사에 세지 않는다.
+#
+# 시설에 09:30~12:30(3시간)만 오시는 물리치료사 같은 분들이 계신다. 시간이
+# 점심에 걸쳐도 여기서 드시지 않는다. 반대로 오전 근무(AD 09:00~13:30,
+# 4시간 30분)는 드신다 — 그래서 경계를 네 시간에 뒀다.
+#
+# 직종으로 가르지 않은 이유: 같은 물리치료사라도 전일로 오시면 드신다.
+# 사람이 아니라 그날 근무가 짧은지를 본다.
+PART_TIME_MAX_MIN = 4 * 60
 
 _TIME_RE = re.compile(r"^(\d{1,2})[:\s]?(\d{2})\s*[-~\s]\s*(\d{1,2})[:\s]?(\d{2})$")
 
@@ -92,6 +104,12 @@ def span_of(code: Optional[str]) -> Optional[Tuple[int, int]]:
     return (start, end)
 
 
+def is_part_time(code: Optional[str]) -> bool:
+    """그날 근무가 시간제로 볼 만큼 짧은가 — 짧으면 식사를 세지 않는다."""
+    sp = span_of(code)
+    return bool(sp) and (sp[1] - sp[0]) < PART_TIME_MAX_MIN
+
+
 def at_meal(code: Optional[str], meal_minutes: int, *, from_yesterday: bool = False) -> bool:
     """그 칸의 근무가 그 끼니 시각에 걸치는가.
 
@@ -106,6 +124,8 @@ def at_meal(code: Optional[str], meal_minutes: int, *, from_yesterday: bool = Fa
     """
     sp = span_of(code)
     if not sp:
+        return False
+    if is_part_time(code):
         return False
     start, end = sp
     m = meal_minutes + 24 * 60 if from_yesterday else meal_minutes
@@ -139,3 +159,28 @@ def count_for_day(
         if at_meal(code, meal_minutes, from_yesterday=True):
             add(position)
     return out
+
+
+def why(code: Optional[str], meal_minutes: int, *, from_yesterday: bool = False) -> str:
+    """세지 않은 까닭 — 화면에 그대로 적는다.
+
+    숫자만 보여주면 '왜 저 선생님이 빠졌지' 를 물어볼 데가 없다. 근무표를
+    다시 펴서 대조하게 되고, 그러면 이 기능을 안 쓰게 된다.
+    """
+    c = (code or "").strip()
+    if not c:
+        return "근무표가 비어 있음"
+    if c in OFF_CODES:
+        return {"休": "연차", "대휴": "대체휴무", "초과휴": "초과근무 휴가",
+                "◆병": "병가", "◆": "경조사 휴가"}.get(c, "휴무")
+    sp = span_of(c)
+    if not sp:
+        return f"읽을 수 없는 표시({c})"
+    if is_part_time(c):
+        mins = sp[1] - sp[0]
+        return f"시간제 근무({c} · {mins // 60}시간{f' {mins % 60}분' if mins % 60 else ''})"
+    start, end = sp
+    m = meal_minutes + 24 * 60 if from_yesterday else meal_minutes
+    if m < start:
+        return f"그 시각엔 아직 출근 전({c})"
+    return f"그 시각엔 이미 퇴근({c})"
