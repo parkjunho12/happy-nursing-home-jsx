@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.services import diet_state as ds          # noqa: E402
 from app.services.diet_import import sheet_date, _blocks, read_sheet   # noqa: E402
+from app.services import staff_meal as smeal        # noqa: E402
 
 fails = []
 
@@ -171,10 +172,61 @@ eq(got, [("가", "201", "일반식", "일반찬", False),
          ("다", "201", None, None, True),
          ("라", "202", "일반식", "일반찬", False)], "줄 읽기")
 
+# ── ⑦ 직원 점심 인원 ──────────────────────────────────────────────────────
+# 주방은 어르신 몫만으로 끝나지 않는다. 직원 수를 덜 세면 그만큼 덜 짓는다.
+# 야간조를 두 번 세거나(어제 것 + 오늘 것) 반일 근무를 빼먹기 쉬운 자리다.
+LUNCH, BREAKFAST = 12 * 60, 8 * 60
+
+for code, want, why in [
+    ("D", True, "주간 08:50~18:00"),
+    ("M", True, "모닝 06:50~16:00"),
+    ("AD", True, "오전 09:00~13:30"),
+    ("PD", False, "오후 13:30 출근 — 12시 점심에는 안 계신다"),
+    ("N", False, "야간 18:00 출근 — 점심에는 안 계신다"),
+    ("休", False, "연차"), ("대휴", False, "대체휴무"), ("◆병", False, "병가"),
+    ("0850 1600", True, "직접 적은 시간대"),
+    ("1330~1800", False, "직접 적은 오후"),
+    ("", False, "빈 칸"), (None, False, "없음"), ("??", False, "모르는 표시"),
+]:
+    eq(smeal.at_meal(code, LUNCH), want, f"점심 — {why}")
+
+# 끝나는 시각에 딱 맞으면 나가시는 중이다. 시작 시각에 맞으면 계신다.
+eq(smeal.at_meal("AD", 13 * 60 + 30), False, "13:30 퇴근 — 13:30 끼니는 안 드신다")
+eq(smeal.at_meal("PD", 13 * 60 + 30), True, "13:30 출근 — 13:30 끼니는 드신다")
+
+# 야간은 '어제 칸' 으로만 오늘 아침에 계신다. 한 조건으로 묶으면 두 번 세어진다.
+eq(smeal.at_meal("N", BREAKFAST), False, "오늘 야간 — 오늘 아침에는 아직 안 오셨다")
+eq(smeal.at_meal("N", BREAKFAST, from_yesterday=True), True, "어제 야간 — 오늘 아침에 계신다")
+eq(smeal.at_meal("N", 9 * 60, from_yesterday=True), False, "09:00 퇴근 — 09:00 끼니는 안 드신다")
+eq(smeal.at_meal("D", BREAKFAST, from_yesterday=True), False, "어제 주간이 오늘로 넘어오지 않는다")
+
+# 직종 묶기 — 쓰시던 월별 표의 네 칸
+for pos, want in [("시설장", "사무실"), ("사회복지사", "사무실"), ("사무원", "사무실"),
+                  ("간호팀장", "간호"), ("간호사", "간호"), ("간호조무사", "간호"),
+                  ("요양보호사", "요양"), ("요양팀장", "요양"),
+                  ("영양사", "기타"), ("조리원", "기타"), ("물리치료사", "기타"),
+                  ("", "기타"), (None, "기타")]:
+    eq(smeal.group_of(pos), want, f"직종 묶기 {pos!r}")
+
+CELLS = [("시설장", "D"), ("사회복지사", "D"), ("사무원", "休"),
+         ("간호팀장", "D"), ("간호사", "N"), ("간호조무사", "AD"),
+         ("요양보호사", "D"), ("요양보호사", "D"), ("요양보호사", "N"),
+         ("요양보호사", "PD"), ("요양팀장", "M"),
+         ("영양사", "D"), ("조리원", "0600 1500"), ("물리치료사", "대휴")]
+YESTERDAY = [("간호사", "N"), ("요양보호사", "D")]
+got = smeal.count_for_day(CELLS, LUNCH, YESTERDAY)
+eq(got, {"사무실": 2, "간호": 2, "요양": 3, "기타": 2, "합계": 9}, "점심 인원")
+# 어제 야간이 점심에 섞이면 안 된다 — 어제 칸을 빼도 같아야 한다
+eq(smeal.count_for_day(CELLS, LUNCH), got, "어제 칸은 점심에 영향 없음")
+# 아침은 어제 야간이 들어온다
+b = smeal.count_for_day(CELLS, BREAKFAST, YESTERDAY)
+eq((b["간호"], b["요양"], b["합계"]), (1, 1, 3), "아침 — 어제 야간 둘 + 오늘 모닝 하나")
+
 if fails:
     print("❌ 식이 계산 이상")
     for f in fails:
         print("  -", f)
     sys.exit(1)
 print("✅ 식이 계산 정상 — 시점 판정 9건 · 집계 14건 · 값 검사 15건 "
-      "· 이력 문구 4건 · 시트 이름 8건 · 엑셀 열 찾기 9건")
+      "· 이력 문구 4건 · 시트 이름 8건 · 엑셀 열 찾기 9건 "
+      "· 직원 점심 32건")

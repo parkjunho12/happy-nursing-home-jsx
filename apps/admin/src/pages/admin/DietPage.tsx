@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  UtensilsCrossed, Printer, Upload, Loader2, X,
+  UtensilsCrossed, Printer, Upload, Loader2, X, Users,
   ChevronLeft, ChevronRight, AlertTriangle, CalendarClock, Trash2, Search,
 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { dietAPI, type DietRow, type DietToday, type DietChange, type ImportResult } from '@/api/dietClient'
 import { RICE_TONE, SIDE_TONE, TUBE_TONE, UNSET_TONE, dietLabel, fmtStamp, stampedOnAnotherDay } from '@/utils/dietTone'
 import DietEditModal from '@/components/diet/DietEditModal'
@@ -226,20 +227,38 @@ export default function DietPage() {
 }
 
 /* ══════════ 주방에 넘길 숫자 ══════════ */
+/** 직원 칸 색 — 어르신 식이 칩과 섞이지 않게 한 계열(회색)로 묶고 글자로 가른다 */
+const STAFF_TONE: Record<string, string> = {
+  사무실: 'bg-slate-100 text-slate-700 border-slate-200',
+  간호: 'bg-cyan-100 text-cyan-800 border-cyan-200',
+  요양: 'bg-orange-100 text-orange-800 border-orange-200',
+  기타: 'bg-stone-100 text-stone-600 border-stone-200',
+}
+
 function CountStrip({ data }: { data: DietToday }) {
   const c = data.counts
+  const sm = data.staff_meal
   const cell = (label: string, tone: string, n: number, big = false) => (
     <div key={label} className={`rounded-xl border px-3 py-2 text-center ${tone} ${n === 0 ? 'opacity-40' : ''}`}>
       <p className={`font-extrabold leading-none ${big ? 'text-2xl' : 'text-xl'}`}>{n}</p>
       <p className="text-[10px] font-bold mt-1">{label}</p>
     </div>
   )
+  // 어르신 식사 인원 — 경관식은 상을 안 차린다
+  const elders = (c['합계'] ?? 0) - (c['경관식'] ?? 0)
+  const staff = sm?.counts?.['합계'] ?? 0
+
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-3 print:p-2 mb-4 print:mb-2">
-      <div className="flex items-center gap-2 mb-2">
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
         <p className="text-xs font-bold text-gray-700">{fmtFull(data.date)} 주방에 올릴 수량</p>
-        <span className="text-[11px] text-gray-400">재원 {c['합계']}명 (경관식 {c['경관식']}명 제외하면 {c['합계'] - c['경관식']}명)</span>
+        <span className="text-[11px] text-gray-400">
+          어르신 {elders}명{sm?.has_schedule ? ` + 직원 ${staff}명` : ''}
+          {sm?.has_schedule && <b className="text-gray-600"> = {elders + staff}인분</b>}
+          <span className="text-gray-300"> · 경관식 {c['경관식'] ?? 0}명은 상을 안 차립니다</span>
+        </span>
       </div>
+
       {/* 밥·반찬·그 외를 갈라 둔다 — 주방은 솥과 찬을 따로 잡는다.
           한 줄로 아홉 칸을 늘어놓으면 어디까지가 밥인지 세어 봐야 한다. */}
       <div className="flex flex-wrap gap-x-4 gap-y-2">
@@ -259,6 +278,30 @@ function CountStrip({ data }: { data: DietToday }) {
             {(c['미정'] ?? 0) > 0 && cell('미정', UNSET_TONE.chip, c['미정'])}
           </div>
         </div>
+      </div>
+
+      {/* 직원 점심 — 어르신 몫만 지으면 그날 나온 선생님들이 굶는다.
+          근무표에서 세므로 사람이 훑어 세는 것보다 빠지는 분이 없다. */}
+      <div className="mt-3 pt-3 border-t border-dashed border-gray-200">
+        {!sm?.has_schedule ? (
+          <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 inline-flex items-center gap-1.5">
+            <AlertTriangle size={12} />
+            {data.date.slice(0, 7)} 근무표가 아직 없어 직원 식수를 셀 수 없습니다
+            <Link to="/work-schedule" className="font-bold underline">근무표 만들기 ›</Link>
+          </p>
+        ) : (
+          <div className="flex items-end gap-x-4 gap-y-2 flex-wrap">
+            <div>
+              <p className="text-[10px] font-bold text-gray-400 mb-1 pl-0.5 flex items-center gap-1">
+                <Users size={10} /> 직원 점심 <span className="font-normal text-gray-300">{sm.time} 기준 · 근무표에서</span>
+              </p>
+              <div className="flex gap-1.5">
+                {sm.groups.map(g => cell(g, STAFF_TONE[g] ?? '', sm.counts?.[g] ?? 0))}
+                {cell('합계', 'bg-gray-800 text-white border-gray-800', staff)}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

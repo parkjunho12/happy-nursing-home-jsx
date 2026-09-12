@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -91,6 +91,60 @@ def _by_resident(db: Session) -> Dict[str, List[Dict[str, Any]]]:
     return out
 
 
+# 끼니 시각을 못 찾았을 때 쓸 점심 시각. 설정이 비어 있다고 직원 수를
+# 0으로 낼 수는 없다 — 주방은 그 숫자만큼 덜 짓는다.
+DEFAULT_LUNCH = "12:00"
+
+
+def _staff_meal(db: Session, on: str, meal: str = "lunch") -> Dict[str, Any]:
+    """그날 그 끼니에 계신 직원 수 — 근무표에서 세어 낸다.
+
+    근무표가 아직 없는 달이면 셀 수가 없다. 0 으로 내려놓으면 '아무도 안
+    나온 날' 처럼 보이므로, 없다고 분명히 말한다.
+    """
+    from app.models.meal import MealTimeSetting
+    from app.models.work_schedule import WorkSchedule
+    from app.services import staff_meal as sm
+
+    row = db.query(MealTimeSetting).first()
+    hhmm = (getattr(row, meal, None) or "").strip() or DEFAULT_LUNCH
+    minutes = sm.to_minutes(hhmm)
+    if minutes is None:
+        hhmm, minutes = DEFAULT_LUNCH, sm.to_minutes(DEFAULT_LUNCH)
+
+    y, m, d = int(on[:4]), int(on[5:7]), int(on[8:10])
+    prev = date(y, m, d) - timedelta(days=1)
+
+    def cells_of(ym: str, day: int):
+        doc = db.query(WorkSchedule).filter(WorkSchedule.year_month == ym).first()
+        if not doc or not doc.data:
+            return None
+        # 근무표의 왼쪽 고정열(rows)에 직종이 있다. 없으면 직원 명단에서 찾는다.
+        pos_of = {r.get("staff_id"): r.get("position")
+                  for r in (doc.rows or []) if isinstance(r, dict)}
+        if not all(pos_of.values()):
+            from app.models.eval import LtcStaffMember
+            for st in db.query(LtcStaffMember).all():
+                if not pos_of.get(st.id):
+                    pos_of[st.id] = st.position
+        out = []
+        for sid, days in (doc.data or {}).items():
+            if not isinstance(days, dict):
+                continue
+            code = days.get(str(day)) or days.get(day)
+            out.append((pos_of.get(sid), code))
+        return out
+
+    today_cells = cells_of(on[:7], d)
+    if today_cells is None:
+        return {"meal": meal, "time": hhmm, "has_schedule": False,
+                "counts": None, "groups": sm.GROUP_NAMES}
+    prev_cells = cells_of(prev.strftime("%Y-%m"), prev.day) or []
+    counts = sm.count_for_day(today_cells, minutes, prev_cells)
+    return {"meal": meal, "time": hhmm, "has_schedule": True,
+            "counts": counts, "groups": sm.GROUP_NAMES}
+
+
 @router.get("")
 def current(date: Optional[str] = Query(None), floor: Optional[str] = Query(None),
             db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -137,6 +191,8 @@ def current(date: Optional[str] = Query(None), floor: Optional[str] = Query(None
         "rice_types": ds.RICE_TYPES,
         "side_types": ds.SIDE_TYPES,
         "can_edit": can_edit_diet(_role(current_user), _pos(current_user)),
+        # 직원 점심 — 주방은 어르신 몫만으로 끝나지 않는다
+        "staff_meal": _staff_meal(db, on),
     })
 
 

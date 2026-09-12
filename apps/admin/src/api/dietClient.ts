@@ -25,6 +25,17 @@ export interface DietRow {
   upcoming?: { date: string; rice?: string | null; side?: string | null; tube: boolean } | null
 }
 
+/** 그날 그 끼니에 계신 직원 — 근무표에서 세어 낸다 */
+export interface StaffMeal {
+  meal: string
+  /** 그 끼니 시각 'HH:MM' — 식사 시간 설정에서 온다 */
+  time: string
+  /** 그 달 근무표가 아직 없으면 false. 그때 counts 는 null */
+  has_schedule: boolean
+  counts: Record<string, number> | null
+  groups: string[]
+}
+
 export interface DietToday {
   date: string
   residents: DietRow[]
@@ -32,6 +43,7 @@ export interface DietToday {
   rice_types: string[]
   side_types: string[]
   can_edit: boolean
+  staff_meal: StaffMeal
 }
 
 export interface DietChange {
