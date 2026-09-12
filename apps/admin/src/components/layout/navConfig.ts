@@ -3,7 +3,7 @@ import {
   Star, Settings, ClipboardList, ClipboardCheck, CalendarDays,
   UserRound, ShieldCheck, Sparkles, FileSearch,
   Image as ImageIcon, Users, BookOpen, PenLine, Megaphone, Bell, CalendarClock, CalendarCheck, HeartHandshake, Briefcase, Soup, Receipt, GraduationCap,
-  type LucideIcon, AlertTriangle, BarChart3, ChefHat, Landmark, Radio, Wand2, UserCheck, BellRing, UtensilsCrossed
+  type LucideIcon, AlertTriangle, BarChart3, ChefHat, Landmark, Radio, Wand2, UserCheck, BellRing, UtensilsCrossed, Ambulance
 } from 'lucide-react'
 
 /**
@@ -176,6 +176,7 @@ export function getNavConfig(
             { to: '/outgoing-docs', icon: FileText, label: '내보내야 할 문서' },
             { to: '/assignments', icon: Users, label: '담당 어르신 명단' },
             { to: '/enteral', icon: Soup, label: '경관식 관리' },
+            { to: '/hospital-escort', icon: Ambulance, label: '병원동행 요청' },
             { to: '/programs', icon: CalendarDays, label: '프로그램 관리' },
             { to: '/therapy-groups', icon: HeartHandshake, label: '치료 프로그램 조 편성' },
             { to: '/meals', icon: ChefHat, label: '식단표' },
@@ -284,6 +285,7 @@ export function getNavConfig(
             { to: '/outgoing-docs', icon: FileText, label: '내보내야 할 문서' },
             { to: '/assignments', icon: Users, label: '담당 어르신 명단' },
             { to: '/enteral', icon: Soup, label: '경관식 관리' },
+            { to: '/hospital-escort', icon: Ambulance, label: '병원동행 요청' },
             { to: '/programs', icon: CalendarDays, label: '프로그램 관리' },
             { to: '/therapy-groups', icon: HeartHandshake, label: '치료 프로그램 조 편성' },
             { to: '/meals', icon: ChefHat, label: '식단표' },
@@ -395,6 +397,9 @@ export function getNavConfig(
     residentItems.push({ to: '/assignments', icon: Users, label: '담당 어르신 명단' })
   if (canEnteral)
     residentItems.push({ to: '/enteral', icon: Soup, label: '경관식 관리' })
+  // 병원동행 — 간호팀이 올리고 복지팀이 업체에 전한다
+  if (isSocialWorker || isNurse || isManager)
+    residentItems.push({ to: '/hospital-escort', icon: Ambulance, label: '병원동행 요청' })
   if (isSocialWorker)
     residentItems.push({ to: '/programs', icon: CalendarDays, label: '프로그램 관리' })
   // 식이 현황은 모두 본다 — 밥을 나르는 손이 봐야 하는 정보다.
