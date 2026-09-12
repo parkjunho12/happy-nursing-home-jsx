@@ -1,9 +1,10 @@
 """병원동행 요청 — 간호팀이 올리고, 복지팀이 업체에 전달한다.
 
-권한을 두 팀으로 나눈 이유:
-  · 어르신 상태(보행·편마비·주의사항)는 간호팀이 본다. 복지팀이 짐작해
-    적으면 그 짐작대로 차가 잡힌다.
-  · 업체와의 연락은 복지팀이 한다.
+권한:
+  · 동행 요청을 올리고 어르신 상태를 적는 것 — 간호팀·복지팀·재활팀.
+    상태를 직접 보는 자리는 간호팀만이 아니다. 사회복지사는 보호자·병원
+    연락을 받고, 치료사는 치료 중에 다친 것을 먼저 안다.
+  · 업체와의 연락과 이동수단 기록 — 복지팀.
 관리자·시설장은 양쪽 다 할 수 있다 — 사람이 없는 날 일이 멈추면 안 된다.
 """
 from __future__ import annotations
@@ -34,6 +35,15 @@ KST = timezone(timedelta(hours=9))
 MANAGE = ("시설장", "대표", "이사")
 NURSE = ("간호팀장", "간호사", "간호조무사")
 WELFARE = ("사회복지사",)
+# 재활팀 — 치료 중에 병원 갈 일을 먼저 아는 자리다
+REHAB = ("물리치료사", "작업치료사")
+
+# 동행 요청을 올릴 수 있는 사람.
+#
+# 어르신 상태를 직접 보는 자리는 간호팀만이 아니다. 사회복지사는 보호자·
+# 병원 연락을 받고, 치료사는 치료 중에 다친 것을 먼저 안다. 올릴 수 있는
+# 사람을 좁히면 '간호선생님 오실 때까지' 기다렸다가 말로 전하게 된다.
+REQUESTERS = MANAGE + NURSE + WELFARE + REHAB
 
 
 def _pos(u) -> str:
@@ -47,13 +57,13 @@ def _role(u) -> str:
 
 
 def can_view(role: str, pos: Optional[str]) -> bool:
-    """어르신 건강 상태가 적히는 표다 — 다루는 두 팀과 관리자까지."""
-    return role == "ADMIN" or (pos or "") in (MANAGE + NURSE + WELFARE)
+    """어르신 건강 상태가 적히는 표다 — 올릴 수 있는 자리까지만 본다."""
+    return role == "ADMIN" or (pos or "") in REQUESTERS
 
 
 def can_write_nursing(role: str, pos: Optional[str]) -> bool:
-    """상태를 적는 것은 간호팀. 관리자·시설장도 할 수 있다."""
-    return role == "ADMIN" or (pos or "") in (MANAGE + NURSE)
+    """동행 요청을 올리고 어르신 상태를 적는다 — 간호팀·복지팀·재활팀."""
+    return role == "ADMIN" or (pos or "") in REQUESTERS
 
 
 def can_write_welfare(role: str, pos: Optional[str]) -> bool:
@@ -63,13 +73,13 @@ def can_write_welfare(role: str, pos: Optional[str]) -> bool:
 
 def _viewer(u: User = Depends(get_current_user)) -> User:
     if not can_view(_role(u), _pos(u)):
-        raise HTTPException(403, "병원동행 요청 열람 권한이 없습니다. (간호팀·복지팀·관리자)")
+        raise HTTPException(403, "병원동행 요청 열람 권한이 없습니다. (간호팀·복지팀·재활팀·관리자)")
     return u
 
 
 def _nursing(u: User = Depends(get_current_user)) -> User:
     if not can_write_nursing(_role(u), _pos(u)):
-        raise HTTPException(403, "어르신 상태는 간호팀이 적습니다. (간호팀·시설장·관리자)")
+        raise HTTPException(403, "동행 요청 권한이 없습니다. (간호팀·복지팀·재활팀·시설장·관리자)")
     return u
 
 
@@ -97,6 +107,8 @@ def _dict(e: HospitalEscort) -> Dict[str, Any]:
         "walking": e.walking, "hemiplegia": e.hemiplegia, "wheelchair": e.wheelchair,
         "notes": e.notes, "hospital": e.hospital, "department": e.department,
         "visit_date": e.visit_date, "visit_time": e.visit_time,
+        "guardian_name": e.guardian_name, "guardian_relation": e.guardian_relation,
+        "guardian_phone": e.guardian_phone,
         "status": e.status,
         "vendor": e.vendor, "transport": e.transport, "transport_note": e.transport_note,
         "cancel_reason": e.cancel_reason,
@@ -113,6 +125,9 @@ def _view(e: HospitalEscort, u: User) -> Dict[str, Any]:
     d = _dict(e)
     # 붙여넣을 글은 서버가 만든다 — 화면마다 다른 글이 나가지 않게
     d["request_text"] = et.request_text(d, writer=e.created_by, stamp=_stamp(e.created_at))
+    # 업체로 나가는 글에만 보호자 연락처가 들어간다 — 톡방 글에는 넣지 않는다
+    d["vendor_text"] = et.vendor_text(d, writer=e.sent_by or e.created_by,
+                                      stamp=_stamp(e.sent_at or e.created_at))
     d["decision_text"] = (et.decision_text(d, writer=e.decided_by, stamp=_stamp(e.decided_at))
                           if e.transport else None)
     d["missing"] = et.missing_fields(d)
@@ -148,6 +163,28 @@ def list_escorts(scope: str = Query("open", description="open | all | done"),
     })
 
 
+@router.get("/guardians")
+def guardians(resident_id: str = Query(...), db: Session = Depends(get_db),
+              _: User = Depends(_viewer)):
+    """그 어르신에게 등록된 보호자 — 골라 넣게 한다.
+
+    손으로 옮겨 적으면 번호가 한 자리씩 틀리고, 그러면 업체가 협의를 못 한다.
+    """
+    from app.models.album import GuardianAccount, ResidentGuardian
+    links = (db.query(ResidentGuardian)
+             .filter(ResidentGuardian.resident_id == resident_id).all())
+    if not links:
+        return ApiResponse(success=True, data=[])
+    accs = {a.id: a for a in db.query(GuardianAccount)
+            .filter(GuardianAccount.id.in_([l.guardian_id for l in links])).all()}
+    out = []
+    for l in links:
+        a = accs.get(l.guardian_id)
+        if a:
+            out.append({"name": a.name, "relation": l.relation, "phone": a.phone})
+    return ApiResponse(success=True, data=out)
+
+
 class EscortBody(BaseModel):
     resident_id: Optional[str] = None
     resident_name: str
@@ -161,6 +198,9 @@ class EscortBody(BaseModel):
     department: Optional[str] = None
     visit_date: str
     visit_time: Optional[str] = None
+    guardian_name: Optional[str] = None
+    guardian_relation: Optional[str] = None
+    guardian_phone: Optional[str] = None
 
 
 def _check(b: EscortBody) -> None:

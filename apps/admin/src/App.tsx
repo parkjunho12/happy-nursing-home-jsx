@@ -222,6 +222,16 @@ function AuditCheckRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+// 병원동행 요청 — 간호팀·복지팀·재활팀 + 관리자·시설장
+function EscortRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, user } = useAuthStore()
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  const ok = user?.role === 'ADMIN' || ['시설장', '대표', '이사', '사회복지사',
+    '간호팀장', '간호사', '간호조무사', '물리치료사', '작업치료사'].includes(user?.position ?? '')
+  if (!ok) return <Navigate to="/eval/checklist" replace />
+  return <>{children}</>
+}
+
 function MealRoute({ children }: { children: React.ReactNode }) {
   // 식단표 — 사회복지사급 + 영양사
   const { isAuthenticated, user } = useAuthStore()
@@ -380,8 +390,8 @@ function App() {
             <Route path="meal-count"               element={<MealRoute><MealCountPage /></MealRoute>} />
             {/* 식이 현황 — 보기는 전 직원(배식하는 손이 봐야 한다), 바꾸기는 백엔드가 직종으로 막는다 */}
             <Route path="diet"                     element={<DietPage />} />
-            {/* 병원동행 — 어르신 건강 상태가 적히는 표라 간호·복지·관리자까지 (백엔드가 막는다) */}
-            <Route path="hospital-escort"          element={<NurseLeadRoute><HospitalEscortPage /></NurseLeadRoute>} />
+            {/* 병원동행 — 간호·복지·재활팀이 올린다. 치료사는 치료 중에 병원 갈 일을 먼저 안다 */}
+            <Route path="hospital-escort"          element={<EscortRoute><HospitalEscortPage /></EscortRoute>} />
             <Route path="operations"               element={<AdminRoute><OperationsPage /></AdminRoute>} />
             {/* AI 페이지 편집기 — 소스를 고치고 배포까지 가는 화면이라 ADMIN 전용 */}
             <Route path="ai-editor"                element={<AdminRoute><AiEditorPage /></AdminRoute>} />

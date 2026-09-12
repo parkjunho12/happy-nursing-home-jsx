@@ -78,6 +78,49 @@ def request_text(e: Dict[str, Any], *, writer: Optional[str] = None,
     return "\n".join(lines)
 
 
+def guardian_line(e: Dict[str, Any]) -> str:
+    """보호자 한 줄 — '성함(관계) 전화번호'."""
+    name = (e.get("guardian_name") or "").strip()
+    rel = (e.get("guardian_relation") or "").strip()
+    phone = (e.get("guardian_phone") or "").strip()
+    if not (name or phone):
+        return UNSET
+    head = f"{name}{f'({rel})' if rel else ''}".strip()
+    return " ".join(x for x in [head, phone] if x) or UNSET
+
+
+def vendor_text(e: Dict[str, Any], *, writer: Optional[str] = None,
+                stamp: Optional[str] = None) -> str:
+    """병원동행업체에 보내는 글.
+
+    부서 톡방 글과 나눠 둔 이유 — 여기에만 보호자 연락처가 들어간다.
+    업체는 보호자와 이동수단을 협의해야 하므로 연락처가 필요하지만, 내부
+    톡방에까지 번호를 뿌릴 이유는 없다. 나가는 곳을 좁게 둔다.
+    """
+    where = " ".join(x for x in [(e.get("floor") or ""), (f"{e['room']}호" if e.get("room") else "")] if x)
+    dept = (e.get("department") or "").strip()
+    when = _date_label(e.get("visit_date"))
+    time = (e.get("visit_time") or "").strip()
+    lines = [
+        "[병원동행 의뢰]",
+        f"· 어르신: {_val(e.get('resident_name'))}{f' ({where})' if where else ''}",
+        f"· 진료: {_val(e.get('hospital'))}{f' {dept}' if dept else ''} · {when}{f' {time}' if time else ''}",
+        f"· 보행: {_val(e.get('walking'))}",
+        f"· 편마비: {_val(e.get('hemiplegia'))}",
+        f"· 휠체어: {_val(e.get('wheelchair'))}",
+        f"· 이동 시 주의사항: {(e.get('notes') or '').strip() or '없음'}",
+        f"· 보호자: {guardian_line(e)}",
+        "",
+        "이동수단은 어르신 상태를 보시고 보호자님과 협의해 정해 주시기 바랍니다.",
+        "정해지면 시설로도 알려 주세요.",
+    ]
+    tail = _who(writer, "행복한요양원")
+    if stamp:
+        tail += f" · {stamp}"
+    lines.append(f"— {tail}")
+    return "\n".join(lines)
+
+
 def decision_text(e: Dict[str, Any], *, writer: Optional[str] = None,
                   stamp: Optional[str] = None) -> str:
     """이동수단이 정해진 뒤 복지팀이 톡방에 올리는 글."""
@@ -112,4 +155,8 @@ def missing_fields(e: Dict[str, Any]) -> list:
     need = [("walking", "보행 가능 여부"), ("hemiplegia", "편마비 여부"),
             ("wheelchair", "휠체어 사용 여부"), ("hospital", "병원명"),
             ("visit_date", "진료 날짜")]
-    return [label for key, label in need if not (e.get(key) or "").strip()]
+    out = [label for key, label in need if not (e.get(key) or "").strip()]
+    # 보호자 연락처가 없으면 업체가 협의할 상대가 없다 — 시설이 대신 정하게 된다
+    if not (e.get("guardian_phone") or "").strip():
+        out.append("보호자 연락처")
+    return out

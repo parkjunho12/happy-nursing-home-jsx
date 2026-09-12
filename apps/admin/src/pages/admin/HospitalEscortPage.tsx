@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   Ambulance, Plus, Copy, Check, Loader2, X, Clock, History,
-  AlertTriangle, Send, MessageSquare, CarFront, UserRound, Trash2,
+  AlertTriangle, Send, MessageSquare, CarFront, UserRound, Trash2, Phone,
 } from 'lucide-react'
-import { escortAPI, type Escort, type EscortList, type EscortInput, type EscortLog } from '@/api/escortClient'
+import { escortAPI, type Escort, type EscortList, type EscortInput, type EscortLog, type GuardianOption } from '@/api/escortClient'
 import ResidentPickerModal from '@/components/eval/ResidentPickerModal'
 import { useLtcStore } from '@/store/ltc'
 
@@ -60,6 +60,7 @@ const EMPTY: EscortInput = {
   resident_id: null, resident_name: '', floor: null, room: null,
   walking: null, hemiplegia: null, wheelchair: null, notes: '',
   hospital: '', department: '', visit_date: todayISO(), visit_time: '',
+  guardian_name: '', guardian_relation: '', guardian_phone: '',
 }
 
 export default function HospitalEscortPage() {
@@ -229,6 +230,12 @@ function EscortCard({ e, onChanged, onEdit, onLogs }: {
           <Chip label="보행" v={e.walking} tone={e.walking === '불가' ? 'rose' : e.walking === '부축 필요' ? 'amber' : 'gray'} />
           <Chip label="편마비" v={e.hemiplegia} tone={e.hemiplegia === '있음' ? 'amber' : 'gray'} />
           <Chip label="휠체어" v={e.wheelchair} tone={e.wheelchair === '사용' ? 'sky' : 'gray'} />
+          {e.guardian_phone
+            ? <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">
+                <Phone size={9} className="inline mr-0.5" />
+                보호자 {e.guardian_name}{e.guardian_relation ? `(${e.guardian_relation})` : ''} {e.guardian_phone}
+              </span>
+            : <span className="px-2 py-0.5 rounded-full bg-white text-rose-500 border border-red-300 border-dashed">보호자 연락처 확인 필요</span>}
           {e.vendor && <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">업체 {e.vendor}</span>}
           {e.transport && (
             <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">
@@ -268,6 +275,12 @@ function EscortCard({ e, onChanged, onEdit, onLogs }: {
             <button onClick={() => act(() => escortAPI.share(e.id), 'share')} disabled={busy === 'share'}
               className="px-3 py-2 rounded-xl border border-amber-300 text-amber-700 text-xs font-bold hover:bg-amber-50 flex items-center gap-1.5">
               <MessageSquare size={13} /> 톡방에 올렸습니다
+            </button>
+          )}
+          {e.can_welfare && (
+            <button onClick={() => copy(e.vendor_text, 'vendor')}
+              className="px-3 py-2 rounded-xl border border-gray-300 bg-gray-50 text-gray-700 text-xs font-bold hover:bg-gray-100 flex items-center gap-1.5">
+              {copied === 'vendor' ? <Check size={13} /> : <Copy size={13} />} 업체에 보낼 내용 복사
             </button>
           )}
           {e.can_welfare && !e.sent_at && (
@@ -366,6 +379,13 @@ function EscortForm({ existing, options, onClose, onSaved }: {
   } : { ...EMPTY })
   const [pick, setPick] = useState(false)
   const [busy, setBusy] = useState(false)
+  // 등록된 보호자를 골라 넣는다 — 손으로 옮겨 적으면 번호가 한 자리씩 틀리고,
+  // 그러면 업체가 협의를 못 한다
+  const [guards, setGuards] = useState<GuardianOption[]>([])
+  useEffect(() => {
+    if (!f.resident_id) { setGuards([]); return }
+    escortAPI.guardians(f.resident_id).then(setGuards).catch(() => setGuards([]))
+  }, [f.resident_id])
   const opt = options ?? { walking: ['가능', '부축 필요', '불가'], hemiplegia: ['없음', '있음'], wheelchair: ['미사용', '사용'] }
 
   const save = async () => {
@@ -428,6 +448,41 @@ function EscortForm({ existing, options, onClose, onSaved }: {
               className={`${inp} resize-none`} />
           </div>
 
+          {/* 보호자 — 업체가 이동수단을 협의할 상대다. 톡방 글에는 안 들어가고
+              업체에 보내는 글에만 들어간다. */}
+          <div>
+            <p className="text-xs font-bold text-gray-500 mb-1.5">
+              보호자 <span className="font-normal text-gray-400">— 업체가 이동수단을 협의할 분</span>
+            </p>
+            {guards.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {guards.map((g, i) => {
+                  const on = f.guardian_phone === g.phone
+                  return (
+                    <button key={i} type="button"
+                      onClick={() => setF(s2 => ({ ...s2, guardian_name: g.name,
+                        guardian_relation: g.relation ?? '', guardian_phone: g.phone }))}
+                      className={`px-2.5 py-1.5 rounded-xl text-[12px] font-bold border ${
+                        on ? 'bg-rose-500 text-white border-rose-500' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}>
+                      {g.name}{g.relation ? `(${g.relation})` : ''} {g.phone}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+            <div className="grid grid-cols-3 gap-2">
+              <input value={f.guardian_name ?? ''} onChange={e => setF(s2 => ({ ...s2, guardian_name: e.target.value }))}
+                placeholder="성함" className={inp} />
+              <input value={f.guardian_relation ?? ''} onChange={e => setF(s2 => ({ ...s2, guardian_relation: e.target.value }))}
+                placeholder="관계 (예: 딸)" className={inp} />
+              <input value={f.guardian_phone ?? ''} onChange={e => setF(s2 => ({ ...s2, guardian_phone: e.target.value }))}
+                placeholder="전화번호" className={inp} inputMode="tel" />
+            </div>
+            {guards.length === 0 && f.resident_id && (
+              <p className="text-[11px] text-gray-400 mt-1">등록된 보호자가 없어 직접 적으셔야 합니다.</p>
+            )}
+          </div>
+
           <div>
             <p className="text-xs font-bold text-gray-500 mb-1.5">6. 진료 병원 및 일정</p>
             <div className="grid grid-cols-2 gap-2">
@@ -442,6 +497,7 @@ function EscortForm({ existing, options, onClose, onSaved }: {
 
           <p className="text-[11px] text-gray-400 leading-relaxed">
             적어 주신 내용은 부서 톡방에 붙여넣을 글로 만들어 드립니다 ·
+            보호자 연락처는 <b className="text-gray-500">업체에 보낼 글에만</b> 들어갑니다(톡방 글에는 안 들어갑니다) ·
             이동수단은 시설에서 정하지 않고, 보호자와 동행업체가 협의합니다
           </p>
         </div>

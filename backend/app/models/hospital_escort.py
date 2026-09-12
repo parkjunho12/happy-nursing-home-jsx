@@ -75,6 +75,15 @@ class HospitalEscort(Base):
     visit_date = Column(String(10), nullable=False)    # 'YYYY-MM-DD'
     visit_time = Column(String(5), nullable=True)      # 'HH:MM'
 
+    # 보호자 — 업체가 이동수단을 협의할 상대다.
+    #
+    # 어르신 기록에서 끌어오지 않고 여기에 찍어 둔다. 요청할 당시 누구와
+    # 협의하기로 했는지가 남아야 한다. 보호자가 여럿이거나 나중에 바뀌면
+    # '그때 누구에게 연락하라고 했는지' 를 알 수 없게 된다.
+    guardian_name = Column(String(50), nullable=True)
+    guardian_relation = Column(String(20), nullable=True)   # 자녀·배우자 등
+    guardian_phone = Column(String(30), nullable=True)
+
     status = Column(String(12), nullable=False, default=ST_DRAFT, index=True)
 
     # 부서 톡방 공유

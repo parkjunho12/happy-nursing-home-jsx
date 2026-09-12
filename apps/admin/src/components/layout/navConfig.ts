@@ -397,8 +397,9 @@ export function getNavConfig(
     residentItems.push({ to: '/assignments', icon: Users, label: '담당 어르신 명단' })
   if (canEnteral)
     residentItems.push({ to: '/enteral', icon: Soup, label: '경관식 관리' })
-  // 병원동행 — 간호팀이 올리고 복지팀이 업체에 전한다
-  if (isSocialWorker || isNurse || isManager)
+  // 병원동행 — 간호팀·복지팀·재활팀이 올리고, 복지팀이 업체에 전한다.
+  // 치료사(isCareTeam)도 넣는다 — 치료 중에 병원 갈 일을 먼저 안다.
+  if (isSocialWorker || isCareTeam || isManager)
     residentItems.push({ to: '/hospital-escort', icon: Ambulance, label: '병원동행 요청' })
   if (isSocialWorker)
     residentItems.push({ to: '/programs', icon: CalendarDays, label: '프로그램 관리' })

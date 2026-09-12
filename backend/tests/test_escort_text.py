@@ -15,11 +15,12 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.services.escort_text import (  # noqa: E402
-    request_text, decision_text, missing_fields, UNSET,
+    request_text, vendor_text, decision_text, missing_fields, guardian_line, UNSET,
 )
 
 fails = []
@@ -41,6 +42,7 @@ FULL = {
     "notes": "오른쪽 편마비로 왼쪽에서 부축",
     "hospital": "의정부성모병원", "department": "정형외과",
     "visit_date": "2026-09-25", "visit_time": "10:30",
+    "guardian_name": "홍말자", "guardian_relation": "딸", "guardian_phone": "010-1234-5678",
 }
 
 # ── ① 여섯 가지가 정해진 차례로 ───────────────────────────────────────────
@@ -77,6 +79,28 @@ eq(request_text({"resident_name": "김분임"}).splitlines()[1], "1. 어르신: 
 has(request_text({**FULL, "visit_date": "2026-09-25"}), "9월 25일(금)", "요일")
 has(request_text({**FULL, "visit_date": "2026-10-01"}), "10월 1일(목)", "요일2")
 
+# ── ②-2 보호자 연락처는 업체에 보내는 글에만 ──────────────────────────────
+# 업체는 보호자와 이동수단을 협의해야 하니 번호가 필요하다. 내부 톡방에까지
+# 번호를 뿌릴 이유는 없다 — 나가는 곳을 좁게 둔다.
+eq("010-1234-5678" in t, False, "톡방 글에는 보호자 전화번호가 없다")
+eq("홍말자" in t, False, "톡방 글에는 보호자 성함도 없다")
+
+v = vendor_text(FULL, writer="박복지", stamp="9/18 11:05")
+has(v, "[병원동행 의뢰]", "업체 글 머리")
+has(v, "· 보호자: 홍말자(딸) 010-1234-5678", "보호자 성함·관계·전화번호")
+has(v, "· 보행: 부축 필요", "업체 글에도 상태가 다 있다")
+has(v, "· 편마비: 있음", "편마비")
+has(v, "· 휠체어: 사용", "휠체어")
+has(v, "· 이동 시 주의사항: 오른쪽 편마비로 왼쪽에서 부축", "주의사항")
+has(v, "보호자님과 협의해 정해 주시기 바랍니다", "이동수단은 업체·보호자가 정한다")
+has(v, "— 행복한요양원 박복지 · 9/18 11:05", "어디서 보냈는지")
+
+# 관계가 없거나 번호만 있어도 읽히게
+eq(guardian_line({"guardian_name": "홍말자", "guardian_phone": "010-1234-5678"}),
+   "홍말자 010-1234-5678", "관계 없는 보호자")
+eq(guardian_line({"guardian_phone": "010-1234-5678"}), "010-1234-5678", "번호만 있을 때")
+eq(guardian_line({}), UNSET, "보호자가 없을 때")
+
 # ── ③ 이동수단 확정 글 ────────────────────────────────────────────────────
 d = decision_text({**FULL, "transport": "휠체어 리프트 차량", "vendor": "행복동행케어",
                    "transport_note": "보호자(딸)와 업체 통화로 확정"},
@@ -94,11 +118,42 @@ eq("협의 내용:" in d2, False, "협의 내용 없으면 그 줄 없음")
 # ── ④ 업체에 넘기기 전 채워야 하는 칸 ─────────────────────────────────────
 eq(missing_fields(FULL), [], "다 적힌 건")
 eq(missing_fields({"hospital": "A병원", "visit_date": "2026-09-25"}),
-   ["보행 가능 여부", "편마비 여부", "휠체어 사용 여부"], "상태를 안 적은 건")
+   ["보행 가능 여부", "편마비 여부", "휠체어 사용 여부", "보호자 연락처"], "상태를 안 적은 건")
 eq(missing_fields({"walking": "가능", "hemiplegia": "없음", "wheelchair": "미사용"}),
-   ["병원명", "진료 날짜"], "진료를 안 적은 건")
+   ["병원명", "진료 날짜", "보호자 연락처"], "진료를 안 적은 건")
+# 보호자 연락처가 없으면 업체가 협의할 상대가 없다 — 시설이 대신 정하게 된다
+eq(missing_fields({**FULL, "guardian_phone": ""}), ["보호자 연락처"], "보호자만 빠진 건")
 # 특이사항은 없을 수 있다 — 막지 않는다
 eq("특이사항" in " ".join(missing_fields({**FULL, "notes": ""})), False, "특이사항은 필수가 아니다")
+
+# ── ⑤ 누가 올릴 수 있는가 ─────────────────────────────────────────────────
+# 올릴 수 있는 사람을 좁히면 '간호선생님 오실 때까지' 기다렸다가 말로 전하게
+# 된다. 상태를 직접 보는 자리는 간호팀만이 아니다 — 사회복지사는 보호자·병원
+# 연락을 받고, 치료사는 치료 중에 다친 것을 먼저 안다.
+#
+# 반대로 업체 연락과 이동수단 기록은 복지팀에 둔다. 여러 곳에서 업체에
+# 전화하면 업체가 어느 말을 따라야 하는지 모른다.
+_SRC = (Path(__file__).resolve().parent.parent
+        / "app" / "api" / "v1" / "endpoints" / "hospital_escorts.py").read_text(encoding="utf-8")
+_ns = {"Optional": None}
+exec(compile(_SRC[_SRC.index("MANAGE = "):_SRC.index("def _viewer")].replace("Optional[str]", "str"),
+             "perm", "exec"), _ns, _ns)
+
+for pos, view, req, vendor in [
+    ("시설장", True, True, True), ("대표", True, True, True), ("이사", True, True, True),
+    ("사회복지사", True, True, True),
+    ("간호팀장", True, True, False), ("간호사", True, True, False), ("간호조무사", True, True, False),
+    ("물리치료사", True, True, False), ("작업치료사", True, True, False),
+    ("요양보호사", False, False, False), ("요양팀장", False, False, False),
+    ("영양사", False, False, False), ("조리원", False, False, False),
+    ("앨범담당", False, False, False), ("", False, False, False), (None, False, False, False),
+]:
+    eq(_ns["can_view"]("STAFF", pos), view, f"열람 — {pos!r}")
+    eq(_ns["can_write_nursing"]("STAFF", pos), req, f"요청 — {pos!r}")
+    eq(_ns["can_write_welfare"]("STAFF", pos), vendor, f"업체 전달 — {pos!r}")
+# 관리자는 직종과 무관하게 다 된다
+for fn in ("can_view", "can_write_nursing", "can_write_welfare"):
+    eq(_ns[fn]("ADMIN", "요양보호사"), True, f"관리자 — {fn}")
 
 if fails:
     print("❌ 병원동행 글 이상")
@@ -106,4 +161,4 @@ if fails:
         print("  -", f)
     sys.exit(1)
 print("✅ 병원동행 글 정상 — 여섯 항목 차례 12건 · 빈 칸 표기 7건 "
-      "· 요일 2건 · 확정 글 7건 · 필수 칸 4건")
+      "· 요일 2건 · 업체 글 13건 · 확정 글 7건 · 필수 칸 5건 · 권한 51건")

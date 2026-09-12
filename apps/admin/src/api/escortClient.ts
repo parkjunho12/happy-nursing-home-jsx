@@ -25,6 +25,10 @@ export interface Escort {
   department?: string | null
   visit_date: string
   visit_time?: string | null
+  /** 보호자 — 업체가 이동수단을 협의할 상대 */
+  guardian_name?: string | null
+  guardian_relation?: string | null
+  guardian_phone?: string | null
   status: EscortStatus
   vendor?: string | null
   transport?: string | null
@@ -36,8 +40,10 @@ export interface Escort {
   done_at?: string | null; done_by?: string | null
   created_by?: string | null
   created_at?: string | null
-  /** 부서 톡방에 붙여넣을 글 — 서버가 만든다 */
+  /** 부서 톡방에 붙여넣을 글 — 서버가 만든다 (보호자 연락처는 넣지 않는다) */
   request_text: string
+  /** 병원동행업체에 보낼 글 — 여기에만 보호자 연락처가 들어간다 */
+  vendor_text: string
   /** 이동수단 확정 알림 글 (정해진 뒤에만) */
   decision_text?: string | null
   /** 업체에 넘기기 전에 채워야 하는 칸 */
@@ -75,6 +81,16 @@ export interface EscortInput {
   department?: string | null
   visit_date: string
   visit_time?: string | null
+  guardian_name?: string | null
+  guardian_relation?: string | null
+  guardian_phone?: string | null
+}
+
+/** 어르신에게 등록된 보호자 */
+export interface GuardianOption {
+  name: string
+  relation?: string | null
+  phone: string
 }
 
 export const escortAPI = {
@@ -96,5 +112,9 @@ export const escortAPI = {
   cancel: (id: string, reason: string) =>
     apiClient.post(`${BASE}/${id}/cancel`, { reason }).then(unwrap<Escort>),
   logs: (id: string) => apiClient.get(`${BASE}/${id}/logs`).then(unwrap<EscortLog[]>),
+  /** 그 어르신에게 등록된 보호자 — 골라 넣는다(손으로 옮기면 번호가 틀린다) */
+  guardians: (residentId: string) =>
+    apiClient.get(`${BASE}/guardians`, { params: { resident_id: residentId } })
+      .then(unwrap<GuardianOption[]>),
   remove: (id: string) => apiClient.delete(`${BASE}/${id}`).then(unwrap<{ deleted: string }>),
 }
