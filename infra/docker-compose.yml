@@ -97,9 +97,10 @@ services:
     expose:
       - "8000"
 
-    # healthcheck: curl 없는 이미지면 실패 가능 → wget 방식 권장
+    # healthcheck: 이 이미지에는 wget 도 curl 도 들어있지 않다(확인함).
+    # 파이썬은 항상 있으니 그것으로 /health 를 찍는다.
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health >/dev/null 2>&1 || exit 1"]
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=5).status == 200 else 1)"]
       interval: 30s
       timeout: 10s
       retries: 3
