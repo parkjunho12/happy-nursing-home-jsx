@@ -1,11 +1,26 @@
-"""블로그 초안 — 관리자 화면에서 검토하고, 네이버에는 사람이 붙여넣는다.
+"""블로그 초안 — 관리자 화면에서 검토하고, 검토가 끝난 글은 Aside 가 네이버에 올린다.
 
-■ 왜 발행 연동을 두지 않는가
+■ 발행은 어떻게 하는가
 
-  네이버는 공식 글쓰기 API 를 열어두지 않았다. 로그인 자동화로 흉내 내는
-  방법은 있지만 그건 우회다. 그래서 여기까지만 한다 — 초안을 잘 만들어
-  보여주고, 본문 복사와 번호 붙은 사진 묶음을 준다. 붙여넣는 것은 사람이
-  한다. 대신 붙여넣기가 편하도록 사진 순서와 번호를 본문과 맞춰 둔다.
+  네이버는 공식 글쓰기 API 를 열어두지 않았다. 그래서 사람이 네이버에
+  로그인해 둔 브라우저(Aside)에서, 브라우저 에이전트가 글쓰기 화면에 제목·
+  본문·사진을 넣고 발행한다. 서버는 그 브라우저를 직접 만지지 않는다 —
+  '발행할 것' 을 줄 세워 두면(queued), Mac 에서 도는 발행기(apps/blog-publisher)
+  가 하나씩 가져가(publishing) Aside 로 올리고 결과 주소를 돌려준다(published).
+
+  사람이 하는 일은 둘뿐이다. 네이버에 한 번 로그인해 두는 것, 그리고 초안을
+  검토해 '발행' 을 누르는 것. 검토 없이 나가는 글은 없다 — 공개로 나가는
+  사진은 되돌릴 수 없다.
+
+■ 발행 상태
+
+  draft → approved → queued → publishing → published
+                                   ↘ publish_failed (사유와 함께 · 다시 발행 가능)
+
+  publishing 은 발행기가 '가져갔다' 는 임대(lease)다. 발행기가 도중에 죽으면
+  임대 시한이 지나 다시 queued 취급된다. 다만 '올라갔는지 확실치 않다' 고
+  보고된 것은 자동으로 다시 올리지 않는다 — 같은 글이 두 번 올라가는 것이
+  한 번 안 올라가는 것보다 나쁘다.
 
 ■ 표 셋
 
@@ -118,7 +133,8 @@ class BlogDraft(Base):
     run_key = Column(String(40), nullable=True)          # 'auto-2026-09-08' 같은 회차 표식
 
     status  = Column(String(20), nullable=False, default="draft")
-    # draft(검토 대기) | approved(검토 완료) | held(보류) | failed
+    # draft(검토 대기) | approved(검토 완료) | held(보류)
+    # queued(발행 대기) | publishing(발행 중) | published(발행됨) | publish_failed(발행 실패)
 
     title      = Column(String(200), nullable=True)
     title_alts = Column(JSON, nullable=True)             # 제목 후보 3개
@@ -147,6 +163,22 @@ class BlogDraft(Base):
     approved_at = Column(DateTime(timezone=True), nullable=True)
     # 검토 완료 뒤 내용이 바뀌면 다시 검토하도록 이 값을 비운다
     content_rev = Column(Integer, nullable=False, default=0)
+
+    # ── 발행 ──
+    publish_requested_by = Column(String(100), nullable=True)
+    publish_requested_at = Column(DateTime(timezone=True), nullable=True)
+    # 발행기가 가져간 시각과 임대 시한. 시한이 지나도 결과가 없으면 다시 줄에 선다.
+    publish_worker      = Column(String(100), nullable=True)
+    publish_lease_until = Column(DateTime(timezone=True), nullable=True)
+    publish_attempts    = Column(Integer, nullable=False, default=0)
+    publish_error       = Column(String(500), nullable=True)
+    # Aside 세션 id — 무슨 일이 있었는지 Aside 쪽에서 되짚을 때 쓴다
+    publish_session     = Column(String(80), nullable=True)
+    published_url       = Column(String(500), nullable=True)
+    published_log_no    = Column(String(40), nullable=True)
+    published_at        = Column(DateTime(timezone=True), nullable=True)
+    # 발행기가 올라간 글을 실제로 열어 확인했는가. 못 했으면 사람이 본다.
+    published_verified  = Column(Boolean, nullable=False, default=False)
 
     created_at = Column(DateTime(timezone=True), default=now_kst, index=True)
     updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)
@@ -179,5 +211,17 @@ class BlogHistory(Base):
     highlights   = Column(JSON, nullable=True)           # 그 글이 강조한 것
     summary      = Column(Text, nullable=True)
     photo_refs   = Column(JSON, nullable=True)           # 사진 주소·해시
-    collected_by = Column(String(20), nullable=False, default="manual")  # fetch | manual
+    collected_by = Column(String(20), nullable=False, default="manual")  # fetch | manual | publisher
+    # 이 시스템이 올린 글이면 그 초안. 손으로 등록한 옛 글은 비어 있다.
+    draft_id     = Column(String, nullable=True, index=True)
     created_at   = Column(DateTime(timezone=True), default=now_kst)
+
+
+class BlogPublisher(Base):
+    """발행기(Mac)의 마지막 신호 — 관리자 화면의 '발행기 연결됨' 표시가 여기서 나온다."""
+
+    __tablename__ = "blog_publishers"
+
+    worker  = Column(String(100), primary_key=True)
+    seen_at = Column(DateTime(timezone=True), nullable=True)
+    info    = Column(JSON, nullable=True)     # aside_version · naver_blog_id · host

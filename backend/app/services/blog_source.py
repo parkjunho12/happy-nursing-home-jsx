@@ -148,7 +148,9 @@ def cluster(cands: Sequence[Candidate]) -> List[Dict[str, Any]]:
     for title, items in by_title.items():
         items = sorted(items, key=lambda x: (x.date, x.photo_id))
         groups.append({
-            "kind": "program", "title": title,
+            # 앨범 사진만으로 된 덩어리는 활동 기록이 없다 — 모델에 그렇게 알린다
+            "kind": "album" if all(i.source == "album" for i in items) else "program",
+            "title": title,
             "topic": next((i.topic for i in items if i.topic), None),
             "dates": sorted({i.date for i in items}),
             "items": items,

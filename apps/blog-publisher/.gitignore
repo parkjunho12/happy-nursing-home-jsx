@@ -1,0 +1,4 @@
+# 토큰이 들어 있다 — 절대 올리지 않는다
+config.json
+*.log
+__pycache__/

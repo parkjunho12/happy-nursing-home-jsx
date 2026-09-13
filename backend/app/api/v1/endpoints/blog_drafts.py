@@ -1,18 +1,22 @@
-"""블로그 초안 — 목록 · 생성 · 검토 · 사진 동의.
+"""블로그 초안 — 목록 · 생성 · 검토 · 사진 동의 · 발행.
 
-발행은 하지 않는다. 네이버는 공식 글쓰기 API 가 없어, 사람이 본문을 복사해
-붙여넣는다. 여기까지가 이 기능의 몫이다.
+네이버는 공식 글쓰기 API 가 없다. 그래서 발행은 사람이 네이버에 로그인해 둔
+Aside 브라우저(Mac)에서 브라우저 에이전트가 한다. 서버는 검토가 끝난 글을
+줄 세우고, Mac 의 발행기(apps/blog-publisher)가 여기 /publisher/* 로 와서
+한 편씩 가져가 올린 뒤 결과를 돌려준다. 규칙은 services/blog_publish 에 있다.
 """
 from __future__ import annotations
 
 import logging
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.blog_draft import (
@@ -21,6 +25,7 @@ from app.models.blog_draft import (
 )
 from app.models.user import User
 from app.schemas.response import ApiResponse
+from app.services import blog_publish as pub
 from app.services import blog_run, blog_writer
 
 logger = logging.getLogger(__name__)
@@ -52,6 +57,18 @@ def _draft(d: BlogDraft) -> dict:
         "created_by": d.created_by, "approved_by": d.approved_by,
         "approved_at": d.approved_at.isoformat() if d.approved_at else None,
         "created_at": d.created_at.isoformat() if d.created_at else None,
+        # 발행
+        "publish_requested_by": d.publish_requested_by,
+        "publish_requested_at": d.publish_requested_at.isoformat() if d.publish_requested_at else None,
+        "publish_worker": d.publish_worker,
+        "publish_lease_until": d.publish_lease_until.isoformat() if d.publish_lease_until else None,
+        "publish_attempts": d.publish_attempts or 0,
+        "publish_error": d.publish_error,
+        "publish_session": d.publish_session,
+        "published_url": d.published_url,
+        "published_log_no": d.published_log_no,
+        "published_at": d.published_at.isoformat() if d.published_at else None,
+        "published_verified": bool(d.published_verified),
         # 붙여넣을 본문 — 화면이 다시 만들지 않게 서버가 준다
         "body": blog_writer.body_text(
             d.blocks or [],
@@ -99,7 +116,10 @@ def pending_count(db: Session = Depends(get_db), _: User = Depends(_editor)):
     photos = (db.query(BlogPhotoUse)
               .filter(BlogPhotoUse.mask_status == MASK_MASKED,
                       BlogPhotoUse.publicity == USE_UNKNOWN).count())
-    return ApiResponse(success=True, data={"drafts": drafts, "photos_unconfirmed": photos})
+    # 발행에 실패해 사람이 봐야 하는 것 — 올라갔는지 모르는 글이 여기 있다
+    failed = db.query(BlogDraft).filter(BlogDraft.status == pub.ST_FAILED).count()
+    return ApiResponse(success=True, data={"drafts": drafts, "photos_unconfirmed": photos,
+                                           "publish_failed": failed})
 
 
 @router.post("/generate")
@@ -129,6 +149,9 @@ def set_status(draft_id: str, body: ApproveBody, db: Session = Depends(get_db),
         raise HTTPException(404, "그 초안을 찾을 수 없습니다.")
     if body.status not in ("approved", "held", "draft"):
         raise HTTPException(400, "status 는 approved · held · draft 중 하나여야 합니다.")
+    if d.status in (pub.ST_QUEUED, pub.ST_PUBLISHING, pub.ST_PUBLISHED):
+        raise HTTPException(409, "발행 대기·발행 중·발행된 초안은 검토 상태를 바꿀 수 없습니다. "
+                                 "발행 대기는 먼저 취소해 주세요.")
     d.status = body.status
     d.hold_reason = (body.hold_reason or "").strip() or None
     if body.status == "approved":
@@ -159,6 +182,9 @@ def edit(draft_id: str, body: EditBody, db: Session = Depends(get_db),
     d = db.query(BlogDraft).filter(BlogDraft.id == draft_id).first()
     if not d:
         raise HTTPException(404, "그 초안을 찾을 수 없습니다.")
+    if d.status in (pub.ST_QUEUED, pub.ST_PUBLISHING, pub.ST_PUBLISHED):
+        raise HTTPException(409, "발행 대기·발행 중·발행된 글은 고칠 수 없습니다. "
+                                 "발행 대기는 먼저 취소해 주세요.")
     changed = False
     if body.title is not None and body.title.strip() != (d.title or ""):
         d.title = body.title.strip()[:200]; changed = True
@@ -174,6 +200,121 @@ def edit(draft_id: str, body: EditBody, db: Session = Depends(get_db),
     db.commit()
     db.refresh(d)
     return ApiResponse(success=True, data=_draft(d))
+
+
+# ── 발행 (관리자) ─────────────────────────────────────────────────────────
+
+@router.post("/{draft_id}/publish")
+def request_publish(draft_id: str, db: Session = Depends(get_db),
+                    current_user: User = Depends(_editor)):
+    """검토가 끝난 글을 발행 줄에 세운다. Mac 의 발행기가 가져가 Aside 로 올린다.
+
+    되돌릴 수 없는 일이라 검토 완료(approved) 상태에서만 받는다. 발행에 실패한
+    글은 사람이 네이버를 확인한 뒤 여기로 다시 올린다.
+    """
+    d = db.query(BlogDraft).filter(BlogDraft.id == draft_id).first()
+    if not d:
+        raise HTTPException(404, "그 초안을 찾을 수 없습니다.")
+    try:
+        d = pub.request(db, d, getattr(current_user, "name", None))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return ApiResponse(success=True, data=_draft(d))
+
+
+@router.post("/{draft_id}/publish/cancel")
+def cancel_publish(draft_id: str, db: Session = Depends(get_db), _: User = Depends(_editor)):
+    d = db.query(BlogDraft).filter(BlogDraft.id == draft_id).first()
+    if not d:
+        raise HTTPException(404, "그 초안을 찾을 수 없습니다.")
+    try:
+        d = pub.cancel(db, d)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return ApiResponse(success=True, data=_draft(d))
+
+
+@router.get("/publishers")
+def list_publishers(db: Session = Depends(get_db), _: User = Depends(_editor)):
+    """발행기가 살아 있는가 — 마지막 신호 시각. 없으면 아직 설치·로그인이 안 된 것이다."""
+    return ApiResponse(success=True, data={
+        "configured": bool(settings.BLOG_PUBLISHER_TOKEN),
+        "publishers": pub.publishers(db),
+    })
+
+
+# ── 발행기 (Mac 의 apps/blog-publisher 가 부른다) ────────────────────────
+#
+# 사람 계정이 아니라 토큰으로 온다. 토큰은 서버 .env 의 BLOG_PUBLISHER_TOKEN 과
+# 발행기 config.json 에만 있다. 토큰이 비어 있으면 이 문은 닫혀 있다.
+
+def _publisher(x_publisher_token: Optional[str] = Header(None, alias="X-Publisher-Token"),
+               x_publisher_name: Optional[str] = Header(None, alias="X-Publisher-Name")) -> str:
+    expected = (settings.BLOG_PUBLISHER_TOKEN or "").strip()
+    if not expected:
+        raise HTTPException(503, "발행기 토큰(BLOG_PUBLISHER_TOKEN)이 서버에 설정되지 않았습니다.")
+    if not x_publisher_token or not secrets.compare_digest(
+            x_publisher_token.strip().encode("utf-8"), expected.encode("utf-8")):
+        raise HTTPException(401, "발행기 토큰이 맞지 않습니다.")
+    return (x_publisher_name or "publisher").strip()[:100]
+
+
+class HeartbeatBody(BaseModel):
+    aside_version: Optional[str] = None
+    naver_blog_id: Optional[str] = None
+    host: Optional[str] = None
+
+
+@router.post("/publisher/heartbeat")
+def publisher_heartbeat(body: HeartbeatBody, db: Session = Depends(get_db),
+                        worker: str = Depends(_publisher)):
+    pub.heartbeat(db, worker, body.model_dump(exclude_none=True))
+    return ApiResponse(success=True, data={"ok": True})
+
+
+@router.post("/publisher/next")
+def publisher_next(db: Session = Depends(get_db), worker: str = Depends(_publisher)):
+    """다음 한 편을 가져간다. 없으면 draft: null.
+
+    가져가는 순간 publishing 이 되고 임대 시한이 적힌다. 꾸러미를 만들지
+    못하면(사진을 쓸 수 없게 됐다 등) 그 자리에서 실패로 돌린다 — 발행기가
+    반쪽짜리 글을 올리지 않게.
+    """
+    pub.heartbeat(db, worker)
+    d = pub.lease_next(db, worker)
+    if not d:
+        return ApiResponse(success=True, data={"draft": None})
+    try:
+        pkg = pub.package(db, d)
+    except ValueError as e:
+        # 사람이 고쳐야 나갈 수 있는 글 — 재시도 없이 멈춘다. 다음 편은 나갈 수 있다
+        pub.abort(db, d, f"꾸러미를 만들지 못했습니다: {e}")
+        return ApiResponse(success=True, data={"draft": None, "skipped": d.id, "reason": str(e)})
+    return ApiResponse(success=True, data={"draft": pkg})
+
+
+class ResultBody(BaseModel):
+    result: str                      # ok | failed | uncertain
+    url: Optional[str] = None        # ok 일 때 글 주소
+    error: Optional[str] = None
+    session_id: Optional[str] = None # Aside 세션 id
+    verified: bool = False           # 올라간 글을 실제로 열어 봤는가
+    blog_id: Optional[str] = None    # 발행기가 아는 우리 블로그 아이디 — 주소가 이것과 다르면 받지 않는다
+
+
+@router.post("/publisher/{draft_id}/result")
+def publisher_result(draft_id: str, body: ResultBody, db: Session = Depends(get_db),
+                     worker: str = Depends(_publisher)):
+    d = db.query(BlogDraft).filter(BlogDraft.id == draft_id).first()
+    if not d:
+        raise HTTPException(404, "그 초안을 찾을 수 없습니다.")
+    try:
+        d = pub.complete(db, d, result=body.result, url=body.url, error=body.error,
+                         session_id=body.session_id, verified=body.verified, worker=worker,
+                         expected_blog_id=(body.blog_id or "").strip() or None)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return ApiResponse(success=True, data={"status": d.status, "published_url": d.published_url})
 
 
 # ── 사진 (공개 사용 확인 · 가림 확인) ─────────────────────────────────────
