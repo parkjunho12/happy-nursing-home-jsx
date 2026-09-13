@@ -240,6 +240,29 @@ def upload_notice_image(file: UploadFile = File(...), _: User = Depends(_can_wri
     return ApiResponse(success=True, data={"url": url})
 
 
+@router.post("/summarize-chat")
+async def summarize_chat(file: UploadFile = File(...), _: User = Depends(_can_write)):
+    """카카오톡 대화 내보내기(txt) → AI 회의록 초안 {title, content}.
+
+    등록은 하지 않는다 — 작성 화면에 채워주고 사람이 다듬어 등록한다.
+    """
+    if not (file.filename or "").lower().endswith(".txt"):
+        raise HTTPException(400, "카카오톡 '대화 내용 내보내기(텍스트만)'로 저장한 .txt 파일을 올려주세요.")
+    data = await file.read()
+    if len(data) > 5 * 1024 * 1024:
+        raise HTTPException(400, "파일이 너무 큽니다(최대 5MB). 최근 대화만 내보내 주세요.")
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        text = data.decode("cp949", errors="replace")   # 윈도우 PC 내보내기 대비
+
+    from app.services.meeting_ai import summarize_meeting_chat
+    result, err = summarize_meeting_chat(text)
+    if not result:
+        raise HTTPException(502, f"회의록 정리에 실패했습니다. ({err})")
+    return ApiResponse(success=True, data=result)
+
+
 @router.get("/push-status")
 def push_status(db: Session = Depends(get_db), _: User = Depends(_can_write)):
     """푸시가 왜 안 가는지 한 번에 진단.
