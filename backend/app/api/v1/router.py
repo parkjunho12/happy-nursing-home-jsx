@@ -49,6 +49,7 @@ from app.api.v1.endpoints.notice_templates import router as notice_templates_rou
 from app.api.v1.endpoints.work_schedule import router as work_schedule_router
 from app.api.v1.endpoints.leave import router as leave_router
 from app.api.v1.endpoints.handover import router as handover_router
+from app.api.v1.endpoints.meeting_prep import router as meeting_prep_router
 from app.api.v1.endpoints.resident_docs import router as resident_docs_router
 from app.api.v1.endpoints.staff_education import router as staff_education_router
 api_router = APIRouter()
@@ -185,6 +186,7 @@ api_router.include_router(notice_templates_router, prefix="/admin/notice-templat
 api_router.include_router(work_schedule_router, prefix="/admin/work-schedule", tags=["admin-work-schedule"])
 api_router.include_router(leave_router, prefix="/admin/leave", tags=["admin-leave"])
 api_router.include_router(handover_router, prefix="/admin/handover", tags=["admin-handover"])
+api_router.include_router(meeting_prep_router, prefix="/admin/meeting-prep", tags=["admin-meeting-prep"])
 api_router.include_router(resident_docs_router, prefix="/admin/resident-docs", tags=["admin-resident-docs"])
 api_router.include_router(staff_education_router, prefix="/admin/educations", tags=["admin-educations"])
 

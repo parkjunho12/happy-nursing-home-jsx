@@ -3,7 +3,7 @@ import {
   Star, Settings, ClipboardList, ClipboardCheck, CalendarDays,
   UserRound, ShieldCheck, Sparkles, FileSearch,
   Image as ImageIcon, Users, BookOpen, PenLine, Megaphone, Bell, CalendarClock, CalendarCheck, HeartHandshake, Briefcase, Soup, Receipt, GraduationCap,
-  type LucideIcon, AlertTriangle, BarChart3, ChefHat, Landmark, Radio, Wand2, UserCheck, BellRing, UtensilsCrossed, Ambulance
+  type LucideIcon, AlertTriangle, BarChart3, ChefHat, Landmark, Radio, Wand2, UserCheck, BellRing, UtensilsCrossed, Ambulance, NotebookPen
 } from 'lucide-react'
 
 /**
@@ -208,6 +208,7 @@ export function getNavConfig(
             // 화면을 보며 말로 고친다 — ADMIN 블록에만 둔다
             { to: '/ai-editor', icon: Wand2, label: 'AI 페이지 편집기' },
             { to: '/broadcast', icon: Radio, label: '방송 관리' },
+            { to: '/meeting-prep', icon: NotebookPen, label: '회의 준비' },
             { to: '/notices', icon: Bell, label: '내부 공지 관리' },
             { to: '/facility-news', icon: Megaphone, label: '시설소식' },
             { to: '/contacts', icon: MessageSquare, label: '상담 관리' },

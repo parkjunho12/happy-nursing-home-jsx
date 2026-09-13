@@ -1,11 +1,10 @@
-import { useState, useEffect, useRef } from 'react'
-import { X, Send, LayoutTemplate, BookmarkPlus, MessageSquareText, Loader2 } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { X, Send, LayoutTemplate, BookmarkPlus } from 'lucide-react'
 import { noticeAPI, NOTICE_LEVEL, type InternalNotice, type NoticeLevel } from '@/api/noticeClient'
 import { templateAPI, type NoticeTemplate } from '@/api/templateClient'
 import ImageUploader from '@/components/notices/ImageUploader'
 import ContentImagesUploader from '@/components/notices/ContentImagesUploader'
 import { isKakaoShareEnabled } from '@/lib/kakaoShare'
-import { useAuthStore } from '@/store/auth'
 
 export default function NoticeModal({ notice, onClose, onSaved }: { notice: InternalNotice | null; onClose: () => void; onSaved: () => void }) {
   const isEdit = !!notice
@@ -39,25 +38,6 @@ export default function NoticeModal({ notice, onClose, onSaved }: { notice: Inte
       setTemplates(await templateAPI.list())
       alert('템플릿으로 저장했습니다.')
     } catch (e: any) { alert(e?.message ?? '템플릿 저장 실패') }
-  }
-
-  const isAdmin = useAuthStore(s => s.user?.role === 'ADMIN')
-  const [summarizing, setSummarizing] = useState(false)
-  const chatFileRef = useRef<HTMLInputElement>(null)
-
-  const importChat = async (f: File) => {
-    if ((title.trim() || content.trim()) && !confirm('AI가 정리한 회의록으로 현재 제목·내용을 덮어쓸까요?')) return
-    setSummarizing(true); setErr('')
-    try {
-      const r = await noticeAPI.summarizeChat(f)
-      setTitle(r.title ?? '')
-      setContent(r.content ?? '')
-    } catch (e: any) {
-      setErr(e?.response?.data?.detail ?? e?.message ?? '회의록 정리에 실패했습니다.')
-    } finally {
-      setSummarizing(false)
-      if (chatFileRef.current) chatFileRef.current.value = ''
-    }
   }
 
   const inp = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-orange/40'
@@ -116,25 +96,6 @@ export default function NoticeModal({ notice, onClose, onSaved }: { notice: Inte
               </div>
             )}
           </div>
-
-          {isAdmin && (
-          <div className="rounded-xl border border-gray-100 bg-yellow-50/60 p-2.5">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-semibold text-gray-600 flex items-center gap-1">
-                <MessageSquareText size={13} /> 카카오톡 회의록
-              </span>
-              <button type="button" disabled={summarizing} onClick={() => chatFileRef.current?.click()}
-                className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 hover:bg-amber-100 px-2 py-1 rounded disabled:opacity-50">
-                {summarizing ? <><Loader2 size={13} className="animate-spin" /> AI 정리 중… (1~2분)</> : '대화 파일(.txt) 불러오기'}
-              </button>
-              <input ref={chatFileRef} type="file" accept=".txt,text/plain" className="hidden"
-                onChange={e => { const f = e.target.files?.[0]; if (f) importChat(f) }} />
-            </div>
-            <p className="text-[11px] text-gray-400 mt-1">
-              채팅방 메뉴 → 대화 내용 → 내보내기(텍스트만)로 저장한 파일을 올리면 AI가 회의록으로 정리해 제목·내용을 채워줍니다. 사진은 아래 '본문 이미지'에 첨부하세요.
-            </p>
-          </div>
-          )}
 
           <div>
             <label className="text-xs font-semibold text-gray-500 mb-1 block">중요도</label>

@@ -58,6 +58,7 @@ const IncidentsPage = lazy(() => import('./pages/admin/IncidentsPage'))
 const MonthlyReportPage = lazy(() => import('./pages/admin/MonthlyReportPage'))
 const ResidentAssignPage = lazy(() => import('./pages/admin/ResidentAssignPage'))
 const CaregiverDayPage = lazy(() => import('./pages/admin/CaregiverDayPage'))
+const MeetingPrepPage = lazy(() => import('./pages/admin/MeetingPrepPage'))
 const OutgoingDocsPage = lazy(() => import('./pages/admin/OutgoingDocsPage'))
 const BlogDraftsPage = lazy(() => import('./pages/admin/BlogDraftsPage'))
 const DietPage = lazy(() => import('./pages/admin/DietPage'))
@@ -393,6 +394,7 @@ function App() {
             {/* 병원동행 — 간호·복지·재활팀이 올린다. 치료사는 치료 중에 병원 갈 일을 먼저 안다 */}
             <Route path="hospital-escort"          element={<EscortRoute><HospitalEscortPage /></EscortRoute>} />
             <Route path="operations"               element={<AdminRoute><OperationsPage /></AdminRoute>} />
+            <Route path="meeting-prep"             element={<AdminRoute><MeetingPrepPage /></AdminRoute>} />
             {/* AI 페이지 편집기 — 소스를 고치고 배포까지 가는 화면이라 ADMIN 전용 */}
             <Route path="ai-editor"                element={<AdminRoute><AiEditorPage /></AdminRoute>} />
             {/* 월간 업무 — 전 직원. 각자 자기 것만 보고 관리한다(서버가 주인으로 거른다) */}

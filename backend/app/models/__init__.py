@@ -124,3 +124,6 @@ from app.models.assign_note import AssignNote
 
 # 담당 어르신 명단의 그날 모습
 from app.models.assign_snapshot import AssignSnapshot
+
+# 회의 준비 — 카카오톡 대화로 만든 회의 준비 문서 (ADMIN 전용)
+from app.models.meeting import MeetingPrep  # noqa: F401

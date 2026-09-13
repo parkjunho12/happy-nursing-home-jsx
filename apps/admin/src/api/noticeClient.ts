@@ -70,12 +70,6 @@ export const noticeAPI = {
     const fd = new FormData(); fd.append('file', file)
     return apiClient.post(`${BASE}/upload-image`, fd, formHeaders).then(unwrap<{ url: string }>)
   },
-  /** 카카오톡 대화 내보내기(txt) → AI 회의록 초안. 정리에 시간이 걸려 타임아웃을 넉넉히 둔다. */
-  summarizeChat: (file: File) => {
-    const fd = new FormData(); fd.append('file', file)
-    return apiClient.post(`${BASE}/summarize-chat`, fd, { ...formHeaders, timeout: 200_000 })
-      .then(unwrap<{ title: string; content: string }>)
-  },
 }
 
 /** 저장 경로(/uploads/..)를 절대 URL로 — 없으면 null */
