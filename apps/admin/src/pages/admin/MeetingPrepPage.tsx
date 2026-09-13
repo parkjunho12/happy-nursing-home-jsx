@@ -65,12 +65,12 @@ export default function MeetingPrepPage() {
           className="w-full bg-primary-orange hover:bg-primary-orange/90 text-white rounded-xl py-3.5 text-sm font-bold disabled:opacity-60 flex items-center justify-center gap-2">
           {creating
             ? <><Loader2 size={16} className="animate-spin" /> AI가 회의 준비 문서를 만드는 중… (1~2분)</>
-            : <><FileText size={16} /> 카카오톡 대화(.txt)로 회의 준비 만들기</>}
+            : <><FileText size={16} /> 카카오톡 대화(.txt/.csv)로 회의 준비 만들기</>}
         </button>
-        <input ref={fileRef} type="file" accept=".txt,text/plain" className="hidden"
+        <input ref={fileRef} type="file" accept=".txt,.csv,text/plain,text/csv" className="hidden"
           onChange={e => { const f = e.target.files?.[0]; if (f) create(f) }} />
         <p className="text-[11px] text-gray-400 mt-2 text-center">
-          채팅방 메뉴 → 대화 내용 → 내보내기(텍스트만)로 저장한 파일을 선택하면,
+          채팅방 메뉴 → 대화 내용 → 내보내기로 저장한 텍스트(.txt)나 CSV(.csv) 파일을 선택하면,
           회의 안건 · 결정할 것 · 챙길 것 · 미결사항을 정리해 줍니다. 관리자만 볼 수 있습니다.
         </p>
         {err && <p className="text-xs text-red-500 mt-2 text-center">{err}</p>}

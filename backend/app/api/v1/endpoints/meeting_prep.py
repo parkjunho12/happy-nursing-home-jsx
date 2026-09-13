@@ -1,7 +1,10 @@
-"""회의 준비 — 카카오톡 대화(txt) → 회의 준비 문서. ADMIN 전용.
+"""회의 준비 — 카카오톡 대화(txt·csv) → 회의 준비 문서. ADMIN 전용.
 
 대화 원문과 준비 문서 모두 관리자만 볼 수 있다.
 """
+import csv
+import io
+
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
@@ -38,13 +41,28 @@ def _view(p: MeetingPrep, with_source: bool = False) -> dict:
     return d
 
 
+def _csv_to_text(raw: str) -> str:
+    """카카오톡 CSV 내보내기(날짜,이름,메시지) → 모바일 txt 와 같은 줄 형식."""
+    lines = []
+    for row in csv.reader(io.StringIO(raw)):
+        cells = [c.strip() for c in row]
+        if not any(cells):
+            continue
+        if len(cells) >= 3:
+            lines.append(f"{cells[0]}, {cells[1]} : {','.join(cells[2:])}")
+        else:
+            lines.append(" ".join(cells))
+    return "\n".join(lines)
+
+
 @router.post("", status_code=201)
 async def create_prep(file: UploadFile = File(...),
                       db: Session = Depends(get_db),
                       current_user: User = Depends(_admin_only)):
-    """카카오톡 대화 내보내기(txt) 하나로 회의 준비 문서를 만든다 — 버튼 하나."""
-    if not (file.filename or "").lower().endswith(".txt"):
-        raise HTTPException(400, "카카오톡 '대화 내용 내보내기(텍스트만)'로 저장한 .txt 파일을 올려주세요.")
+    """카카오톡 대화 내보내기(txt·csv) 하나로 회의 준비 문서를 만든다 — 버튼 하나."""
+    name = (file.filename or "").lower()
+    if not name.endswith((".txt", ".csv")):
+        raise HTTPException(400, "카카오톡 '대화 내용 내보내기'로 저장한 .txt 또는 .csv 파일을 올려주세요.")
     data = await file.read()
     if len(data) > MAX_FILE:
         raise HTTPException(400, "파일이 너무 큽니다(최대 5MB). 최근 대화만 내보내 주세요.")
@@ -52,6 +70,8 @@ async def create_prep(file: UploadFile = File(...),
         text = data.decode("utf-8")
     except UnicodeDecodeError:
         text = data.decode("cp949", errors="replace")   # 윈도우 PC 내보내기 대비
+    if name.endswith(".csv"):
+        text = _csv_to_text(text)
 
     result, err = prepare_meeting_chat(text)
     if not result:
