@@ -241,11 +241,15 @@ def upload_notice_image(file: UploadFile = File(...), _: User = Depends(_can_wri
 
 
 @router.post("/summarize-chat")
-async def summarize_chat(file: UploadFile = File(...), _: User = Depends(_can_write)):
-    """카카오톡 대화 내보내기(txt) → AI 회의록 초안 {title, content}.
+async def summarize_chat(file: UploadFile = File(...),
+                         current_user: User = Depends(get_current_user)):
+    """카카오톡 대화 내보내기(txt) → AI 회의록 초안 {title, content}. ADMIN 전용.
 
     등록은 하지 않는다 — 작성 화면에 채워주고 사람이 다듬어 등록한다.
     """
+    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    if role != "ADMIN":
+        raise HTTPException(403, "회의록 AI 정리는 관리자만 사용할 수 있습니다.")
     if not (file.filename or "").lower().endswith(".txt"):
         raise HTTPException(400, "카카오톡 '대화 내용 내보내기(텍스트만)'로 저장한 .txt 파일을 올려주세요.")
     data = await file.read()

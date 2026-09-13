@@ -5,6 +5,7 @@ import { templateAPI, type NoticeTemplate } from '@/api/templateClient'
 import ImageUploader from '@/components/notices/ImageUploader'
 import ContentImagesUploader from '@/components/notices/ContentImagesUploader'
 import { isKakaoShareEnabled } from '@/lib/kakaoShare'
+import { useAuthStore } from '@/store/auth'
 
 export default function NoticeModal({ notice, onClose, onSaved }: { notice: InternalNotice | null; onClose: () => void; onSaved: () => void }) {
   const isEdit = !!notice
@@ -40,6 +41,7 @@ export default function NoticeModal({ notice, onClose, onSaved }: { notice: Inte
     } catch (e: any) { alert(e?.message ?? '템플릿 저장 실패') }
   }
 
+  const isAdmin = useAuthStore(s => s.user?.role === 'ADMIN')
   const [summarizing, setSummarizing] = useState(false)
   const chatFileRef = useRef<HTMLInputElement>(null)
 
@@ -115,6 +117,7 @@ export default function NoticeModal({ notice, onClose, onSaved }: { notice: Inte
             )}
           </div>
 
+          {isAdmin && (
           <div className="rounded-xl border border-gray-100 bg-yellow-50/60 p-2.5">
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-semibold text-gray-600 flex items-center gap-1">
@@ -131,6 +134,7 @@ export default function NoticeModal({ notice, onClose, onSaved }: { notice: Inte
               채팅방 메뉴 → 대화 내용 → 내보내기(텍스트만)로 저장한 파일을 올리면 AI가 회의록으로 정리해 제목·내용을 채워줍니다. 사진은 아래 '본문 이미지'에 첨부하세요.
             </p>
           </div>
+          )}
 
           <div>
             <label className="text-xs font-semibold text-gray-500 mb-1 block">중요도</label>
