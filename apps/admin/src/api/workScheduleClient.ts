@@ -28,6 +28,9 @@ export interface WorkScheduleDoc {
   as_of?: string | null
   team_offsets?: Record<string, number> | null
   rows_from?: string | null   // 조 편성을 물려받은 달 (없으면 이번 달 것)
+  /** 저장 응답에만 — 조 편성을 함께 적은 뒤 달들 · 따라오던 달인데 잠겨서 못 적은 달들 */
+  rows_followed?: string[]
+  rows_follow_locked?: string[]
   updated_by?: string | null
   updated_at?: string | null
   /** 확정 잠금 — 켜져 있으면 이 달은 아무도 못 고친다 */
@@ -58,6 +61,8 @@ export interface SavePayload {
   base_days?: string
   as_of?: string
   team_offsets?: Record<string, number>
+  /** 조 편성을 바꿨을 때 이 달을 따라오던 뒤 달에도 적을지 — 저장 전에 묻고 넘긴다 */
+  follow_rows?: boolean
 }
 
 /** 근무표 저장 이력 */

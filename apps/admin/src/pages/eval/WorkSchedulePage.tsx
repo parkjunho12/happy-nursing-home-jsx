@@ -21,6 +21,7 @@ import { calcBase as calcBaseFor } from '@/utils/baseHours'
 import { SHIFT_CODES, extraHoursOf, countAsOf, meta, isAutoManaged, splitTimeRange, shortOf, TEAMS, DEFAULT_TEAM_OFFSET, rotationFor } from '@/utils/shiftCodes'
 import { auditSchedule, type Issue } from '@/utils/scheduleAudit'
 import { filterByFloor, countHiddenNoFloor } from '@/utils/floorFilter'
+import { assignmentChanged } from '@/utils/scheduleRows'
 import { withFloorSubtotals } from '@/utils/floorSubtotals'
 import { printHasCaregiver, printHasAnyOf, printFloorRow } from '@/utils/printRows'
 import { monthTotals } from '@/utils/monthHours'
@@ -73,6 +74,9 @@ export default function WorkSchedulePage() {
   useEffect(() => { useHoursFor(ym) }, [ym, useHoursFor])
   const [data, setData] = useState<ScheduleData>({})
   const [rows, setRows] = useState<ScheduleRow[]>([])
+  // 서버에서 받은 그대로의 편성 — 저장 전에 '조 편성이 바뀌었는가' 를 이것과 비교한다.
+  // rows 는 조 패널에서 고치는 순간 바뀌므로 기준이 될 수 없다.
+  const loadedRows = useRef<ScheduleRow[]>([])
   const [baseHours, setBaseHours] = useState('')
   const [baseDays, setBaseDays] = useState('')
   const [asOf, setAsOf] = useState(todayISO())
@@ -173,7 +177,7 @@ export default function WorkSchedulePage() {
     workScheduleAPI.get(ym)
       .then(doc => {
         if (seq !== loadSeq.current) return          // 더 최신 요청이 있으면 이 응답은 버린다
-        setData(doc.data || {}); setRows(doc.rows || [])
+        setData(doc.data || {}); setRows(doc.rows || []); loadedRows.current = doc.rows || []
         setRowsFrom(doc.rows_from ?? null)
         // 저장된 기준시간이 있으면 그 값을 쓰고(수동), 없으면 자동 계산에 맡긴다.
         // 예전에는 여기서 '160'을 넣어 자동 계산값을 덮어썼다.
@@ -191,7 +195,7 @@ export default function WorkSchedulePage() {
       })
       .catch(() => {
         if (seq !== loadSeq.current) return
-        setData({}); setRows([]); setUpdatedBy(null); setLock({ locked: false })
+        setData({}); setRows([]); loadedRows.current = []; setUpdatedBy(null); setLock({ locked: false })
       })
       .finally(() => { if (seq === loadSeq.current) setLoading(false) })
   }, [ym])
@@ -721,13 +725,33 @@ export default function WorkSchedulePage() {
       // 총시간을 함께 담는다. 엑셀은 백엔드가 만드는데, 파이썬에 같은 계산을
       // 다시 쓰면 언젠가 두 숫자가 갈라진다. 여기서 한 번 계산해 보낸다.
       const payload = buildScheduleRows(staff, calc)
-      const doc = await workScheduleAPI.save({ year_month: ym, data, rows: payload, base_hours: baseHours, base_days: baseDays, as_of: asOf, team_offsets: offsets })
+
+      // 조 편성(직종·조·층)이 바뀌었으면, 이 달을 따라오던 다음 달에도 적을지 먼저 묻는다.
+      // 한 달만 임시로 바꾼 것(병가 대체 등)을 조용히 다음 달까지 굳히면 되돌리기 어렵다.
+      let followRows: boolean | undefined
+      if (assignmentChanged(loadedRows.current, payload)) {
+        followRows = confirm(
+          '조 편성(조·층·직종)이 바뀌었습니다.\n\n' +
+          '이 달 편성을 그대로 따라오던 다음 달 근무표에도 함께 적을까요?\n' +
+          '(따로 손본 달과 확정된 달은 건드리지 않습니다)\n\n' +
+          '확인 = 다음 달에도 적기 · 취소 = 이번 달만')
+      }
+      const doc = await workScheduleAPI.save({ year_month: ym, data, rows: payload, base_hours: baseHours, base_days: baseDays, as_of: asOf, team_offsets: offsets, follow_rows: followRows })
       setUpdatedBy(doc.updated_by ?? null); setDirty(false)
       setLock({ locked: !!doc.locked, by: doc.locked_by, at: doc.locked_at })
+      setRowsFrom(null)   // 이제 이 달 자기 편성이다
+      setRows(doc.rows ?? payload); loadedRows.current = doc.rows ?? payload
+
+      // 어느 달에 함께 적혔는지 알린다. 잠긴 달은 못 적으니 따로 말한다
+      // (그 달은 잠금을 풀고 다시 저장해야 한다). 해가 바뀌는 달은 해까지 적는다.
+      const fm = (l: string[]) => l.map(x => x.slice(0, 4) === ym.slice(0, 4)
+        ? `${parseInt(x.slice(5), 10)}월` : `${x.slice(0, 4)}년 ${parseInt(x.slice(5), 10)}월`).join('·')
+      const followed = doc.rows_followed?.length ? `\n조 편성을 ${fm(doc.rows_followed)} 근무표에도 함께 적었습니다.` : ''
+      const lockedNote = doc.rows_follow_locked?.length ? `\n${fm(doc.rows_follow_locked)}은 확정 잠금이라 조 편성을 바꾸지 못했습니다.` : ''
 
       // 근무표가 나와도 아무도 모르면 소용없다 — 저장 직후 알림을 제안한다.
       // 편집 중간 저장도 있으니 자동 발송은 하지 않고 매번 물어본다.
-      if (confirm(`${m}월 근무표를 저장했습니다.\n\n직원들에게 "근무표가 나왔습니다" 알림을 보낼까요?\n(직원앱에서 누르면 본인 근무표가 바로 열립니다)`)) {
+      if (confirm(`${m}월 근무표를 저장했습니다.${followed}${lockedNote}\n\n직원들에게 "근무표가 나왔습니다" 알림을 보낼까요?\n(직원앱에서 누르면 본인 근무표가 바로 열립니다)`)) {
         try {
           const r = await workScheduleAPI.notify(ym)
           alert(r.tokens === 0
@@ -984,6 +1008,7 @@ export default function WorkSchedulePage() {
             <Users size={13} className="text-teal-600 shrink-0" />
             <span className="text-[12px] text-teal-800">
               <b>{rowsFrom.replace('-', '년 ')}월</b> 조 편성을 그대로 가져왔습니다 — 바꿀 게 없으면 그대로 쓰시면 됩니다.
+              조를 바꿔 저장하면 그 뒤 달에도 함께 적힙니다.
             </span>
             <button onClick={() => setRowsFrom(null)} className="ml-auto text-[11px] text-teal-600 hover:underline">확인</button>
           </div>
@@ -1411,7 +1436,7 @@ export default function WorkSchedulePage() {
 
       {printPickOpen && (
         <GeneratePickModal
-          staff={staff} title="인쇄할 직원" verb="인쇄"
+          staff={staff} title="인쇄할 직원" verb="인쇄" floorStrict
           hint="뺀 사람은 이번 인쇄물에서만 빠집니다 (화면·데이터는 그대로)"
           onClose={() => setPrintPickOpen(false)}
           onConfirm={printPicked}
