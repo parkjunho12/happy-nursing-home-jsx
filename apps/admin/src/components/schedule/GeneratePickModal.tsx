@@ -21,12 +21,13 @@ export default function GeneratePickModal({ staff, onClose, onConfirm, title = '
 }) {
   const [picked, setPicked] = useState<Set<string>>(() => new Set(staff.map(s => s.id)))
 
-  /** 표에 실제로 쓰인 층 — 아무도 없는 층은 버튼을 내지 않는다 */
+  /** 표에 실제로 쓰인 층 — 아무도 없는 층은 버튼을 내지 않는다.
+   *  인쇄(floorStrict)에서는 층이 붙은 주간 근무자(사회복지사·물리치료사·간호팀장 등)의 층도 센다. */
   const floors = useMemo(() => {
     const set = new Set<string>()
-    staff.forEach(s => { if (canJoinTeam(s.pos) && s.floor) set.add(s.floor) })
+    staff.forEach(s => { if ((floorStrict || canJoinTeam(s.pos)) && s.floor) set.add(s.floor) })
     return [...set].sort((a, b) => a.localeCompare(b, 'ko', { numeric: true }))
-  }, [staff])
+  }, [staff, floorStrict])
 
   const [floorNote, setFloorNote] = useState<{ floor: string; hidden: number; others: number } | null>(null)
 
@@ -34,25 +35,26 @@ export default function GeneratePickModal({ staff, onClose, onConfirm, title = '
    *
    *  · 기본(자동 생성): 화면 층 필터(utils/floorFilter)와 같은 규칙. 그 층
    *    요양보호사에 더해 층이 없는 직종(간호·사회복지·치료)도 남긴다.
-   *  · floorStrict(인쇄): 그 층으로 나뉜 조(요양보호사)만 고른다. 2층 벽보에는
-   *    2층 조만 올라간다 — 층 없는 직종은 따로 뽑거나 전체로 뽑는다.
+   *  · floorStrict(인쇄): 조 편성에서 그 층을 맡은 사람만 고른다 — 그 층으로
+   *    나뉜 조(요양보호사)와, 그 층이 지정된 주간 근무자(사회복지사·물리치료사·
+   *    간호팀장 등). 층이 없는 사람은 어느 층 벽보에도 자동으로 들어가지 않는다.
    *
-   *  인쇄만 다른 이유: 벽보는 그 층 조를 위한 것이다. 간호·사회복지 줄이 층마다
-   *  반복해 붙으면 층 조가 몇 명인지 한눈에 안 들어온다. 화면(shownStaff)은
+   *  인쇄만 다른 이유: 벽보는 그 층 사람들을 위한 것이다. 층이 없는 직종 줄이
+   *  층마다 반복해 붙으면 그 층 인원이 한눈에 안 들어온다. 화면(shownStaff)은
    *  여전히 filterByFloor 를 쓰므로 화면과 인쇄가 일부러 다르다.
    */
   const pickFloor = (f: string) => {
     const ids = floorStrict
-      ? staff.filter(s => canJoinTeam(s.pos) && (s.floor || '') === f).map(s => s.id)
+      ? staff.filter(s => (s.floor || '') === f).map(s => s.id)
       : filterByFloor(staff, f, canJoinTeam).map(s => s.id)
     setPicked(new Set(ids))
     // 층을 지정 안 한 요양보호사는 어느 층 벽보에도 안 나온다.
     // 조용히 빠지면 그 선생님만 근무표가 없는 채로 한 달을 보낸다.
-    // 인쇄(floorStrict)에서는 층 없는 직종도 빠지므로 그 수까지 보여준다.
+    // 인쇄(floorStrict)에서는 층 없는 주간 근무자도 빠지므로 그 수까지 보여준다.
     setFloorNote({
       floor: f,
       hidden: countHiddenNoFloor(staff, f, canJoinTeam),
-      others: floorStrict ? staff.filter(s => !canJoinTeam(s.pos)).length : 0,
+      others: floorStrict ? staff.filter(s => !canJoinTeam(s.pos) && !s.floor).length : 0,
     })
   }
 
@@ -62,9 +64,10 @@ export default function GeneratePickModal({ staff, onClose, onConfirm, title = '
     const g = new Map<string, StaffRow[]>()
     for (const s of staff) {
       const cg = canJoinTeam(s.pos)
+      // 인쇄에서는 층이 붙은 주간 근무자도 그 층 아래 보인다 — '2층 주간 · 사회복지사'
       const key = cg && s.team && s.team !== '주간'
         ? (floorStrict ? `${s.floor || '층 미지정'} ${s.team}` : s.team)
-        : `주간 · ${s.pos || '기타'}`
+        : (floorStrict && s.floor ? `${s.floor} 주간 · ${s.pos || '기타'}` : `주간 · ${s.pos || '기타'}`)
       if (!g.has(key)) g.set(key, [])
       g.get(key)!.push(s)
     }
@@ -110,7 +113,7 @@ export default function GeneratePickModal({ staff, onClose, onConfirm, title = '
               {floors.map(f => (
                 <button key={f} onClick={() => pickFloor(f)}
                   title={floorStrict
-                    ? `${f}로 나뉜 조(요양보호사)만 고릅니다 — 층 없는 직종은 빠집니다`
+                    ? `조 편성에서 ${f}를 맡은 사람만 고릅니다 — 그 층 조와 그 층이 지정된 주간 근무자`
                     : `${f} 요양보호사 + 층 없는 직종(간호·사회복지 등)만 고릅니다`}
                   className="text-[11px] font-bold text-teal-700 bg-teal-50 border border-teal-200 hover:bg-teal-100 px-2 py-1 rounded">
                   {f}만
@@ -128,8 +131,8 @@ export default function GeneratePickModal({ staff, onClose, onConfirm, title = '
               어느 층 인쇄물에도 나오지 않으니, 근무표에서 층을 넣어주세요.{' '}
             </>}
             {floorNote.others > 0 && <>
-              층 없는 직종(간호·사회복지 등) <b>{floorNote.others}명</b>은 {floorNote.floor} 인쇄물에서 빠집니다 —
-              필요하면 아래에서 체크해 넣으세요.
+              층이 지정되지 않은 주간 근무자 <b>{floorNote.others}명</b>은 {floorNote.floor} 인쇄물에서 빠집니다 —
+              조 편성에서 층을 넣으면 함께 고르고, 지금은 아래에서 체크해 넣을 수 있습니다.
             </>}
           </p>
         )}
