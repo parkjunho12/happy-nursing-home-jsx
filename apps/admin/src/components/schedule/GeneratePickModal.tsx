@@ -8,13 +8,16 @@ import { filterByFloor, countHiddenNoFloor } from '@/utils/floorFilter'
  * (장기 병가, 이번 달만 다른 스케줄, 수습 중이라 따로 짜는 경우 등)
  * 뺀 사람의 칸은 자동 생성이 전혀 건드리지 않는다.
  */
-export default function GeneratePickModal({ staff, onClose, onConfirm, title = '자동 생성 대상', verb = '생성', hint = '뺀 사람의 근무 칸은 그대로 둡니다' }: {
+export default function GeneratePickModal({ staff, onClose, onConfirm, title = '자동 생성 대상', verb = '생성', hint = '뺀 사람의 근무 칸은 그대로 둡니다', floorStrict = false }: {
   staff: StaffRow[]
   onClose: () => void
   onConfirm: (ids: Set<string>) => void
   title?: string
   verb?: string
   hint?: string
+  /** 「N층만」이 그 층으로 나뉜 조(요양보호사)만 고른다 — 층 없는 직종은 빼고.
+   *  인쇄에서 쓴다: 2층 벽보에는 2층 조만 올라간다. */
+  floorStrict?: boolean
 }) {
   const [picked, setPicked] = useState<Set<string>>(() => new Set(staff.map(s => s.id)))
 
@@ -25,34 +28,48 @@ export default function GeneratePickModal({ staff, onClose, onConfirm, title = '
     return [...set].sort((a, b) => a.localeCompare(b, 'ko', { numeric: true }))
   }, [staff])
 
-  /** 층 하나만 고른다.
-   *
-   *  화면 층 필터(utils/floorFilter)와 같은 규칙을 쓴다 — 그 층 요양보호사에
-   *  더해, 층이 없는 직종(간호·사회복지·치료)은 함께 남긴다. 그분들은 층을
-   *  가리지 않고 일하니 어느 층 벽보에도 있어야 한다.
-   *
-   *  두 곳이 다른 규칙을 쓰면, 화면에서 2층을 보고 인쇄했더니 다른 사람이
-   *  나오는 일이 생긴다.
-   */
-  const [floorNote, setFloorNote] = useState<{ floor: string; hidden: number } | null>(null)
+  const [floorNote, setFloorNote] = useState<{ floor: string; hidden: number; others: number } | null>(null)
 
+  /** 층 하나만 고른다 — 두 가지 규칙이 있다.
+   *
+   *  · 기본(자동 생성): 화면 층 필터(utils/floorFilter)와 같은 규칙. 그 층
+   *    요양보호사에 더해 층이 없는 직종(간호·사회복지·치료)도 남긴다.
+   *  · floorStrict(인쇄): 그 층으로 나뉜 조(요양보호사)만 고른다. 2층 벽보에는
+   *    2층 조만 올라간다 — 층 없는 직종은 따로 뽑거나 전체로 뽑는다.
+   *
+   *  인쇄만 다른 이유: 벽보는 그 층 조를 위한 것이다. 간호·사회복지 줄이 층마다
+   *  반복해 붙으면 층 조가 몇 명인지 한눈에 안 들어온다. 화면(shownStaff)은
+   *  여전히 filterByFloor 를 쓰므로 화면과 인쇄가 일부러 다르다.
+   */
   const pickFloor = (f: string) => {
-    setPicked(new Set(filterByFloor(staff, f, canJoinTeam).map(s => s.id)))
+    const ids = floorStrict
+      ? staff.filter(s => canJoinTeam(s.pos) && (s.floor || '') === f).map(s => s.id)
+      : filterByFloor(staff, f, canJoinTeam).map(s => s.id)
+    setPicked(new Set(ids))
     // 층을 지정 안 한 요양보호사는 어느 층 벽보에도 안 나온다.
     // 조용히 빠지면 그 선생님만 근무표가 없는 채로 한 달을 보낸다.
-    setFloorNote({ floor: f, hidden: countHiddenNoFloor(staff, f, canJoinTeam) })
+    // 인쇄(floorStrict)에서는 층 없는 직종도 빠지므로 그 수까지 보여준다.
+    setFloorNote({
+      floor: f,
+      hidden: countHiddenNoFloor(staff, f, canJoinTeam),
+      others: floorStrict ? staff.filter(s => !canJoinTeam(s.pos)).length : 0,
+    })
   }
 
-  // 조별 → 주간 순으로 묶어서 보여준다 (근무표와 같은 눈높이)
+  // 조별 → 주간 순으로 묶어서 보여준다 (근무표와 같은 눈높이).
+  // 층으로 나뉜 조는 층까지 붙여 따로 묶는다 — '2층 A조' 와 '3층 A조' 는 다른 조다.
   const groups = useMemo(() => {
     const g = new Map<string, StaffRow[]>()
     for (const s of staff) {
-      const key = canJoinTeam(s.pos) && s.team && s.team !== '주간' ? s.team : `주간 · ${s.pos || '기타'}`
+      const cg = canJoinTeam(s.pos)
+      const key = cg && s.team && s.team !== '주간'
+        ? (floorStrict ? `${s.floor || '층 미지정'} ${s.team}` : s.team)
+        : `주간 · ${s.pos || '기타'}`
       if (!g.has(key)) g.set(key, [])
       g.get(key)!.push(s)
     }
-    return [...g.entries()].sort((a, b) => a[0].localeCompare(b[0]))
-  }, [staff])
+    return [...g.entries()].sort((a, b) => a[0].localeCompare(b[0], 'ko', { numeric: true }))
+  }, [staff, floorStrict])
 
   const toggle = (id: string) => setPicked(prev => {
     const n = new Set(prev)
@@ -92,7 +109,9 @@ export default function GeneratePickModal({ staff, onClose, onConfirm, title = '
               <span className="text-gray-200">|</span>
               {floors.map(f => (
                 <button key={f} onClick={() => pickFloor(f)}
-                  title={`${f} 요양보호사 + 층 없는 직종(간호·사회복지 등)만 고릅니다`}
+                  title={floorStrict
+                    ? `${f}로 나뉜 조(요양보호사)만 고릅니다 — 층 없는 직종은 빠집니다`
+                    : `${f} 요양보호사 + 층 없는 직종(간호·사회복지 등)만 고릅니다`}
                   className="text-[11px] font-bold text-teal-700 bg-teal-50 border border-teal-200 hover:bg-teal-100 px-2 py-1 rounded">
                   {f}만
                 </button>
@@ -102,10 +121,16 @@ export default function GeneratePickModal({ staff, onClose, onConfirm, title = '
           <span className="ml-auto text-[11px] text-gray-400">{hint}</span>
         </div>
 
-        {floorNote && floorNote.hidden > 0 && (
+        {floorNote && (floorNote.hidden > 0 || floorNote.others > 0) && (
           <p className="px-5 py-2 text-[11px] text-amber-800 bg-amber-50 border-b border-amber-200 shrink-0">
-            층을 지정하지 않은 요양보호사 <b>{floorNote.hidden}명</b>은 빠졌습니다 —
-            어느 층 인쇄물에도 나오지 않으니, 근무표에서 층을 넣어주세요.
+            {floorNote.hidden > 0 && <>
+              층을 지정하지 않은 요양보호사 <b>{floorNote.hidden}명</b>은 빠졌습니다 —
+              어느 층 인쇄물에도 나오지 않으니, 근무표에서 층을 넣어주세요.{' '}
+            </>}
+            {floorNote.others > 0 && <>
+              층 없는 직종(간호·사회복지 등) <b>{floorNote.others}명</b>은 {floorNote.floor} 인쇄물에서 빠집니다 —
+              필요하면 아래에서 체크해 넣으세요.
+            </>}
           </p>
         )}
 
@@ -117,7 +142,7 @@ export default function GeneratePickModal({ staff, onClose, onConfirm, title = '
                 <button onClick={() => toggleGroup(rows)}
                   className="flex items-center gap-1.5 mb-1.5 text-xs font-bold text-gray-600 hover:text-indigo-600">
                   {allOn ? <CheckSquare size={14} className="text-indigo-600" /> : <Square size={14} className="text-gray-300" />}
-                  {TEAM_BAND[label.split(' ')[0]] && <span className={`w-1.5 h-3.5 rounded-sm ${TEAM_BAND[label.split(' ')[0]]}`} />}
+                  {(() => { const t = label.split(' ').find(w => TEAM_BAND[w]); return t ? <span className={`w-1.5 h-3.5 rounded-sm ${TEAM_BAND[t]}`} /> : null })()}
                   {label} <span className="font-normal text-gray-400">{rows.length}명</span>
                 </button>
                 <div className="grid grid-cols-2 gap-1">

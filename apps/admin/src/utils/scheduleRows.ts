@@ -60,3 +60,25 @@ export function buildScheduleRows(
 export function canSaveRows(staffCount: number): boolean {
   return staffCount > 0
 }
+
+
+/**
+ * 조 편성(직종·조·층)이 바뀌었는가 — 서버의 work_schedule_rows.same_assignment 와 같은 기준.
+ *
+ * 순서·비고·집계는 보지 않는다. 순서는 화면 정렬에 따라 매번 달라지고, 비고는
+ * 그 달의 이야기다. 서버가 뒤 달에 이월할지 판단하는 기준과 여기가 다르면
+ * 화면은 안 물었는데 서버는 이월하는(또는 그 반대) 일이 생긴다.
+ */
+export function assignmentChanged(
+  before: { staff_id: string; position?: string | null; team?: string | null; floor?: string | null }[],
+  after: { staff_id: string; position?: string | null; team?: string | null; floor?: string | null }[],
+): boolean {
+  const key = (rows: typeof before) => rows
+    .filter(r => r.staff_id)
+    .map(r => [r.staff_id, (r.position ?? '').trim(), (r.team ?? '').trim(), (r.floor ?? '').trim()].join('\u0001'))
+    .sort()
+    .join('\u0002')
+  // 저장 직전 편성이 없었으면(첫 저장) 따라오던 달도 없다 — 묻지 않는다
+  if (before.filter(r => r.staff_id).length === 0) return false
+  return key(before) !== key(after)
+}

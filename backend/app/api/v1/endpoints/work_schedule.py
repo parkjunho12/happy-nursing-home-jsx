@@ -21,6 +21,7 @@ from app.services.staff_notify import notify_all_staff
 from app.models.staffing import HolidayCalendar
 from app.schemas.response import ApiResponse
 from app.services import shift_hours as _shift_hours_mod
+from app.services import work_schedule_rows as _rows_mod
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -85,7 +86,10 @@ def _prev_ym(ym: str) -> str:
 
 def _inherit_rows(db: Session, ym: str, back: int = 6) -> tuple:
     """이번 달에 조 편성이 없으면 가장 가까운 이전 달 것을 물려준다.
-    매달 조를 다시 짜는 건 낭비이고, 조 구성은 잘 바뀌지 않기 때문."""
+    매달 조를 다시 짜는 건 낭비이고, 조 구성은 잘 바뀌지 않기 때문.
+
+    이미 저장된 뒤 달에는 이것만으로 안 따라간다 — 그쪽은 저장할 때
+    _follow_rows 가 같은 편성을 적어 준다(services/work_schedule_rows)."""
     cur = ym
     for _ in range(back):
         cur = _prev_ym(cur)
@@ -151,6 +155,9 @@ class ScheduleBody(BaseModel):
     year_month: str
     data: Dict[str, Any] = {}
     rows: Optional[List[Dict[str, Any]]] = None
+    # 조 편성을 바꿨을 때 이 달을 따라오던 뒤 달에도 적을지. 화면이 저장 전에
+    # 묻고 넘긴다. None 이면 적는다(옛 화면·스크립트).
+    follow_rows: Optional[bool] = None
     base_hours: Optional[str] = None
     base_days: Optional[str] = None
     as_of: Optional[str] = None
@@ -730,7 +737,15 @@ def save_schedule(body: ScheduleBody, db: Session = Depends(get_db), current_use
         w = WorkSchedule(year_month=body.year_month)
         db.add(w)
     w.data = body.data or {}
-    if body.rows is not None: w.rows = body.rows
+    followed: List[str] = []
+    follow_locked: List[str] = []
+    if body.rows is not None:
+        # 저장 직전 편성 — 이 달 것이 없으면 조회 때 물려받던 그 편성이다
+        old_rows = w.rows or _inherit_rows(db, body.year_month)[0]
+        w.rows = body.rows
+        if _rows_mod.should_follow(body.rows, old_rows, body.follow_rows):
+            followed, follow_locked = _follow_rows(db, body.year_month, old_rows, body.rows,
+                                                   getattr(current_user, "name", None))
     if body.base_hours is not None: w.base_hours = body.base_hours
     if body.base_days is not None: w.base_days = body.base_days
     if body.as_of is not None: w.as_of = body.as_of
@@ -764,7 +779,67 @@ def save_schedule(body: ScheduleBody, db: Session = Depends(get_db), current_use
         logger.warning("근무표 이력 기록 실패(저장은 계속): %s", e)
 
     db.commit(); db.refresh(w)
-    return ApiResponse(success=True, data=_view(w, body.year_month))
+    out = _view(w, body.year_month)
+    out["rows_followed"] = followed            # 같은 편성을 함께 적은 뒤 달들
+    out["rows_follow_locked"] = follow_locked  # 따라오던 달인데 잠겨서 못 적은 달들
+    return ApiResponse(success=True, data=out)
+
+
+# 조 편성 이월이 미치는 범위(개월). 근무표는 한두 달 앞서 만든다.
+# _inherit_rows 가 뒤로 6달을 보듯 앞으로도 6달까지만 본다.
+FOLLOW_MONTHS = 6
+
+
+def _add_months(ym: str, n: int) -> str:
+    y, m = int(ym[:4]), int(ym[5:7]) + n
+    y += (m - 1) // 12
+    m = (m - 1) % 12 + 1
+    return f"{y}-{m:02d}"
+
+
+def _follow_rows(db: Session, ym: str, old_rows, new_rows, by: Optional[str]) -> tuple:
+    """조 편성을 바꾸면, 이 달을 따라오던 뒤 달에도 같은 편성을 적는다.
+
+    근무표는 한 달 앞서 만든다. 10월 표를 저장해 둔 뒤 9월에서 조를 바꾸면
+    10월은 옛 편성으로 남는다 — 저장은 달마다 자기 복사본이라서다. 그래서
+    '저장 직전 이 달 편성과 같았던' 뒤 달들에 새 편성을 입힌다. 따로 손본 달과
+    잠긴 달은 건드리지 않는다. 규칙은 services/work_schedule_rows 에 있다.
+
+    적기 전에 그 달의 스냅샷(WorkScheduleVersion)을 남긴다 — 되돌리기는
+    이력에서 하는데, 남이 저장한 김에 바뀐 달에 이력이 없으면 되돌릴 길이 없다.
+    그 달의 updated_by 는 건드리지 않는다. 이력의 saved_by 에 누가 어느 달
+    편성을 이월했는지 적는다.
+    돌려주는 것: (적은 달들, 따라오던 달인데 잠겨서 못 적은 달들)
+    """
+    until = _add_months(ym, FOLLOW_MONTHS)
+    later = (db.query(WorkSchedule.year_month, WorkSchedule.rows, WorkSchedule.locked_at)
+             .filter(WorkSchedule.year_month > ym, WorkSchedule.year_month <= until)
+             .order_by(WorkSchedule.year_month.asc()).all())
+    todo, locked = _rows_mod.follow_targets(
+        old_rows, [(r.year_month, r.rows, bool(r.locked_at)) for r in later])
+    for t in todo:
+        x = db.query(WorkSchedule).filter(WorkSchedule.year_month == t).first()
+        if not x:
+            continue
+        db.add(WorkScheduleVersion(
+            year_month=t, data=x.data, rows=x.rows,
+            base_hours=x.base_hours, base_days=x.base_days,
+            as_of=x.as_of, team_offsets=x.team_offsets,
+            cells=_count_cells(x.data or {}), changed=0,
+            saved_by=f"{by or ''} · {int(ym[5:7])}월 조 편성 이월 전".strip(" ·"),
+        ))
+        x.rows = _rows_mod.apply_assignment(x.rows, new_rows)
+    if todo:
+        db.flush()
+        for t in todo:
+            olds = (db.query(WorkScheduleVersion)
+                    .filter(WorkScheduleVersion.year_month == t)
+                    .order_by(WorkScheduleVersion.saved_at.desc())
+                    .offset(KEEP_VERSIONS).all())
+            for o in olds:
+                db.delete(o)
+        logger.info("조 편성 이월: %s → %s", ym, ", ".join(todo))
+    return todo, locked
 
 
 # ── 확정 잠금 ──────────────────────────────────────────────────────────────
