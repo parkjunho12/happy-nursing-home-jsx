@@ -6,11 +6,12 @@
   3일·4일로 고르고, 금요일 글은 그 주에 있었던 일을 다 담을 수 있다.
   요일은 BLOG_AUTO_DAYS 로 바꿀 수 있다(0=월 … 6=일).
 
-■ 왜 발행하지 않는가
+■ 여기서는 발행하지 않는다
 
-  네이버는 공식 글쓰기 API 가 없다. 있다고 가정하고 만들 수도 없고, 로그인
-  화면을 흉내 내 우회할 생각도 없다. 그래서 여기까지가 자동이고, 마지막
-  '복사해서 붙여넣기' 는 사람이 한다.
+  예약이 하는 일은 초안을 만들어 '검토 대기' 에 올리는 것까지다. 사람이
+  검토해 '발행' 을 누르면 발행 줄(blog_publish)에 서고, Mac 에서 도는 발행기가
+  사람이 네이버에 로그인해 둔 Aside 브라우저로 올린다. 검토 없이 나가는 글은
+  없다 — 공개로 나가는 사진은 되돌릴 수 없다.
 
 ■ 자료가 모자란 날
 
@@ -72,6 +73,14 @@ def tick(db: "Session", *, now: Optional[datetime] = None,
     from app.services import blog_run
 
     now = now or datetime.now(KST)
+
+    # 발행기가 가져간 채 소식이 없는 글을 정리한다 — 발행기가 영영 안 올 수도 있다
+    try:
+        from app.services.blog_publish import expire_leases
+        expire_leases(db, now)
+    except Exception as e:
+        logger.warning("블로그 발행 임대 정리 오류: %s", type(e).__name__)
+
     if not ENABLED and not force:
         return None
     if not force and not due(now):

@@ -1,19 +1,25 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   PenLine, Copy, Check, Loader2, RefreshCw, AlertTriangle, Image as ImageIcon,
-  CalendarClock, ShieldCheck, ShieldX, Eye, Info, CircleDollarSign,
+  CalendarClock, ShieldCheck, ShieldX, Eye, Info, CircleDollarSign, Send, ExternalLink,
+  XCircle, Radio,
 } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
-import { blogDraftAPI, type BlogDraft, type BlogPhoto } from '@/api/blogDraftClient'
+import { blogDraftAPI, type BlogDraft, type BlogPhoto, type PublisherInfo, type DraftStatus } from '@/api/blogDraftClient'
 
 /**
- * 블로그 자동 초안 — 화·금 오전 10시에 한 편씩 만들어 두는 자리.
+ * 블로그 자동 초안 — 화·금 오전 10시에 한 편씩 만들어 두고, 검토가 끝나면 발행한다.
  *
- * ■ 여기서 끝난다
+ * ■ 발행은 Aside 가 한다
  *
- *   네이버는 공식 글쓰기 API 가 없다. 그래서 발행은 사람이 한다 — 본문을
- *   복사해 네이버 글쓰기에 붙여넣고, 사진은 순서대로 올린다. 이 페이지는
- *   그 붙여넣기 직전까지를 준비해 둔다.
+ *   네이버는 공식 글쓰기 API 가 없다. 그래서 사람이 네이버에 로그인해 둔
+ *   Aside 브라우저(Mac)에서 브라우저 에이전트가 글쓰기 화면에 제목·본문·사진을
+ *   넣고 발행한다. 여기서 「네이버에 발행」을 누르면 발행 줄에 서고, Mac 의
+ *   발행기가 가져가 올린 뒤 글 주소를 돌려준다. 발행기가 꺼져 있으면 켜질
+ *   때까지 줄에 서 있는다.
+ *
+ *   검토 없이 나가는 글은 없다. 「검토 완료」 → 「네이버에 발행」 두 번을 눌러야
+ *   한다 — 공개로 나가는 사진은 되돌릴 수 없다.
  *
  * ■ 사진 확인이 먼저다
  *
@@ -29,34 +35,74 @@ const DUP_TONE: Record<string, { t: string; c: string }> = {
   incomplete: { t: '기존 글 미확보',   c: 'bg-gray-100 text-gray-600 border-gray-200' },
 }
 
+const STATUS_TONE: Record<DraftStatus, { t: string; c: string }> = {
+  draft:          { t: '검토 대기', c: 'bg-orange-50 text-orange-700 border-orange-200' },
+  approved:       { t: '검토 완료', c: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  held:           { t: '보류',      c: 'bg-gray-100 text-gray-500 border-gray-200' },
+  queued:         { t: '발행 대기', c: 'bg-violet-50 text-violet-700 border-violet-200' },
+  publishing:     { t: '발행 중',   c: 'bg-blue-50 text-blue-700 border-blue-200' },
+  published:      { t: '발행됨',    c: 'bg-emerald-600 text-white border-emerald-600' },
+  publish_failed: { t: '발행 실패', c: 'bg-rose-50 text-rose-700 border-rose-200' },
+}
+
+/** 발행기 신호가 이 시간 안이면 '살아 있다' 고 본다(발행기는 5분마다 신호를 보낸다) */
+const ALIVE_MS = 15 * 60 * 1000
+
+function ago(iso: string): string {
+  const s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000))
+  if (s < 90) return '방금'
+  if (s < 3600) return `${Math.round(s / 60)}분 전`
+  if (s < 86400) return `${Math.round(s / 3600)}시간 전`
+  return `${Math.round(s / 86400)}일 전`
+}
+
 export default function BlogDraftsPage() {
   // 대시보드의 '사진 공개 사용 확인' 을 누르면 바로 그 탭으로 온다
   const [sp] = useSearchParams()
   const [tab, setTab] = useState<'drafts' | 'photos'>(sp.get('tab') === 'photos' ? 'photos' : 'drafts')
   const [drafts, setDrafts] = useState<BlogDraft[]>([])
   const [photos, setPhotos] = useState<BlogPhoto[]>([])
+  const [pubs, setPubs] = useState<{ configured: boolean; publishers: PublisherInfo[] } | null>(null)
   const [sel, setSel] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
-  const load = async () => {
-    setLoading(true)
+  const load = async (silent = false) => {
+    if (!silent) setLoading(true)
     try {
-      const [d, p] = await Promise.all([
+      const [d, p, pb] = await Promise.all([
         blogDraftAPI.list().catch(() => [] as BlogDraft[]),
         blogDraftAPI.photos().catch(() => [] as BlogPhoto[]),
+        blogDraftAPI.publishers().catch(() => null),
       ])
-      setDrafts(d); setPhotos(p)
+      setDrafts(d); setPhotos(p); setPubs(pb)
       setSel(s => s && d.some(x => x.id === s) ? s : (d.find(x => x.status !== 'held')?.id ?? null))
     } finally { setLoading(false) }
   }
   useEffect(() => { load() }, [])
 
+  // 발행 중인 글이 있으면 결과가 오는지 1분마다 본다
+  const inFlight = drafts.some(d => d.status === 'queued' || d.status === 'publishing')
+  useEffect(() => {
+    if (!inFlight) return
+    const t = setInterval(() => { load(true) }, 60_000)
+    return () => clearInterval(t)
+  }, [inFlight])
+
   const cur = useMemo(() => drafts.find(d => d.id === sel) ?? null, [drafts, sel])
   const unconfirmed = photos.filter(p => p.mask_status === 'masked' && p.publicity === 'unknown').length
   const ready = photos.filter(p => p.usable).length
+
+  const alive = useMemo(() => {
+    const p = pubs?.publishers?.[0]
+    if (!p) return null
+    return { ...p, alive: Date.now() - new Date(p.at).getTime() < ALIVE_MS }
+  }, [pubs])
+
+  const replace = (r: BlogDraft) => setDrafts(ds => ds.map(x => x.id === r.id ? r : x))
+  const fail = (e: any, fallback: string) => alert(e?.response?.data?.detail ?? fallback)
 
   const generate = async () => {
     setBusy('gen'); setMsg(null)
@@ -71,14 +117,33 @@ export default function BlogDraftsPage() {
 
   const setStatus = async (d: BlogDraft, status: 'approved' | 'draft') => {
     setBusy(d.id)
-    try {
-      const r = await blogDraftAPI.setStatus(d.id, status)
-      setDrafts(ds => ds.map(x => x.id === d.id ? r : x))
-    } catch (e: any) { alert(e?.response?.data?.detail ?? '저장하지 못했습니다.') }
+    try { replace(await blogDraftAPI.setStatus(d.id, status)) }
+    catch (e: any) { fail(e, '저장하지 못했습니다.') }
     finally { setBusy(null) }
   }
 
-  /** 본문 + 시설 안내를 한 번에 — 네이버 글쓰기에 그대로 붙여넣는다 */
+  const publish = async (d: BlogDraft) => {
+    const n = d.blocks.filter(b => b.type === 'photo').length
+    const retry = d.status === 'publish_failed'
+    const ok = confirm(
+      (retry ? '네이버에 이 글이 올라가 있지 않은 것을 확인하셨나요?\n\n' : '') +
+      `「${d.title}」 을(를) 네이버 블로그에 발행합니다.\n사진 ${n}장 · 전체공개\n\n` +
+      '발행된 글은 되돌릴 수 없습니다. 진행할까요?')
+    if (!ok) return
+    setBusy(d.id)
+    try { replace(await blogDraftAPI.publish(d.id)) }
+    catch (e: any) { fail(e, '발행 요청을 넣지 못했습니다.') }
+    finally { setBusy(null) }
+  }
+
+  const cancelPublish = async (d: BlogDraft) => {
+    setBusy(d.id)
+    try { replace(await blogDraftAPI.cancelPublish(d.id)) }
+    catch (e: any) { fail(e, '취소하지 못했습니다.') }
+    finally { setBusy(null) }
+  }
+
+  /** 본문 + 시설 안내를 한 번에 — 발행기가 없을 때 직접 붙여넣는 길 */
   const copyBody = async (d: BlogDraft) => {
     const text = `${d.title ?? ''}\n\n${d.body}\n\n${d.facility}`.trim()
     try {
@@ -94,9 +159,11 @@ export default function BlogDraftsPage() {
     try {
       const r = await blogDraftAPI.setPhoto(p.id, b)
       setPhotos(ps => ps.map(x => x.id === p.id ? r : x))
-    } catch (e: any) { alert(e?.response?.data?.detail ?? '저장하지 못했습니다.') }
+    } catch (e: any) { fail(e, '저장하지 못했습니다.') }
     finally { setBusy(null) }
   }
+
+  const locked = (d: BlogDraft) => d.status === 'queued' || d.status === 'publishing' || d.status === 'published'
 
   return (
     <div className="p-4 md:p-6 max-w-[1400px] mx-auto">
@@ -108,11 +175,26 @@ export default function BlogDraftsPage() {
           </h1>
           <p className="text-xs text-gray-500 mt-1 flex items-center gap-1.5">
             <CalendarClock size={12} />
-            화요일·금요일 오전 10시에 한 편씩 자동으로 만들어 둡니다 · 발행은 직접 복사해 붙여넣습니다
+            화요일·금요일 오전 10시에 한 편씩 자동으로 만들어 둡니다 · 검토 후 「네이버에 발행」을 누르면 Aside 가 올립니다
+          </p>
+          {/* 발행기 상태 */}
+          <p className="text-[11px] mt-1 flex items-center gap-1.5">
+            <Radio size={11} className={alive?.alive ? 'text-emerald-500' : 'text-gray-300'} />
+            {pubs && !pubs.configured ? (
+              <span className="text-rose-600">서버에 발행기 토큰이 없습니다 — 발행할 수 없습니다 (BLOG_PUBLISHER_TOKEN)</span>
+            ) : alive?.alive ? (
+              <span className="text-emerald-700">
+                발행기 연결됨 · {alive.worker}{alive.naver_blog_id ? ` · blog.naver.com/${alive.naver_blog_id}` : ''} · {ago(alive.at)} 확인
+              </span>
+            ) : alive ? (
+              <span className="text-orange-600">발행기 신호 끊김 · {alive.worker} · 마지막 {ago(alive.at)} — 발행을 눌러도 켜질 때까지 기다립니다</span>
+            ) : (
+              <span className="text-gray-400">발행기가 아직 연결되지 않았습니다 — Mac 에서 apps/blog-publisher 를 켜고 네이버에 로그인해 두세요</span>
+            )}
           </p>
         </div>
         <div className="flex gap-2">
-          <button onClick={load} disabled={loading}
+          <button onClick={() => load()} disabled={loading}
             className="px-3 py-2 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 flex items-center gap-1.5">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> 새로고침
           </button>
@@ -161,13 +243,9 @@ export default function BlogDraftsPage() {
                 className={`w-full text-left rounded-xl border px-3 py-2.5 ${
                   sel === d.id ? 'border-violet-400 bg-violet-50' : 'border-gray-200 bg-white hover:bg-gray-50'}`}>
                 <div className="flex items-center gap-1.5 mb-1">
-                  {d.status === 'held' ? (
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 border border-gray-200">보류</span>
-                  ) : d.status === 'approved' ? (
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">검토 완료</span>
-                  ) : (
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 border border-orange-200">검토 대기</span>
-                  )}
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${STATUS_TONE[d.status]?.c ?? STATUS_TONE.held.c}`}>
+                    {STATUS_TONE[d.status]?.t ?? d.status}
+                  </span>
                   <span className="text-[10px] text-gray-400">{(d.created_at ?? '').slice(0, 10)}</span>
                   {d.created_by && <span className="text-[10px] text-gray-400">· {d.created_by}</span>}
                 </div>
@@ -175,6 +253,9 @@ export default function BlogDraftsPage() {
                   {d.title ?? (d.hold_reason ? '만들지 못했습니다' : '제목 없음')}
                 </p>
                 {d.hold_reason && <p className="text-[11px] text-gray-500 mt-1 line-clamp-3">{d.hold_reason}</p>}
+                {d.status === 'publish_failed' && d.publish_error && (
+                  <p className="text-[11px] text-rose-600 mt-1 line-clamp-3">{d.publish_error}</p>
+                )}
                 {d.activity_dates.length > 0 && (
                   <p className="text-[10px] text-gray-400 mt-1">
                     {d.activity_dates[0]} ~ {d.activity_dates[d.activity_dates.length - 1]} · 사진 {d.blocks.filter(b => b.type === 'photo').length}장
@@ -200,28 +281,87 @@ export default function BlogDraftsPage() {
                   <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
                     <div className="min-w-0">
                       <h2 className="text-lg font-bold text-gray-900">{cur.title}</h2>
-                      {cur.title_alts.length > 0 && (
+                      {cur.title_alts.length > 0 && !locked(cur) && (
                         <p className="text-[11px] text-gray-400 mt-1">다른 제목 후보 · {cur.title_alts.join(' / ')}</p>
                       )}
                     </div>
-                    <div className="flex gap-2 shrink-0">
+                    <div className="flex gap-2 shrink-0 flex-wrap">
                       <button onClick={() => copyBody(cur)}
-                        className="px-3 py-2 rounded-xl bg-gray-900 text-white text-sm font-bold flex items-center gap-1.5">
+                        className="px-3 py-2 rounded-xl border border-gray-200 text-gray-700 text-sm flex items-center gap-1.5 hover:bg-gray-50">
                         {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? '복사됨' : '본문 복사'}
                       </button>
-                      {cur.status === 'draft' ? (
+
+                      {cur.status === 'draft' && (
                         <button onClick={() => setStatus(cur, 'approved')} disabled={busy === cur.id}
                           className="px-3 py-2 rounded-xl border border-emerald-300 text-emerald-700 text-sm font-bold hover:bg-emerald-50">
                           검토 완료
                         </button>
-                      ) : (
-                        <button onClick={() => setStatus(cur, 'draft')} disabled={busy === cur.id}
-                          className="px-3 py-2 rounded-xl border border-gray-200 text-gray-500 text-sm hover:bg-gray-50">
-                          되돌리기
+                      )}
+                      {cur.status === 'approved' && (
+                        <>
+                          <button onClick={() => setStatus(cur, 'draft')} disabled={busy === cur.id}
+                            className="px-3 py-2 rounded-xl border border-gray-200 text-gray-500 text-sm hover:bg-gray-50">
+                            되돌리기
+                          </button>
+                          <button onClick={() => publish(cur)} disabled={busy === cur.id}
+                            className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1.5">
+                            {busy === cur.id ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                            네이버에 발행
+                          </button>
+                        </>
+                      )}
+                      {cur.status === 'queued' && (
+                        <button onClick={() => cancelPublish(cur)} disabled={busy === cur.id}
+                          className="px-3 py-2 rounded-xl border border-rose-200 text-rose-600 text-sm font-bold hover:bg-rose-50 flex items-center gap-1.5">
+                          <XCircle size={14} /> 발행 취소
+                        </button>
+                      )}
+                      {cur.status === 'publishing' && (
+                        <span className="px-3 py-2 rounded-xl bg-blue-50 text-blue-700 text-sm font-bold flex items-center gap-1.5">
+                          <Loader2 size={14} className="animate-spin" /> Aside 가 올리는 중{cur.publish_worker ? ` · ${cur.publish_worker}` : ''}
+                        </span>
+                      )}
+                      {cur.status === 'published' && cur.published_url && (
+                        <a href={cur.published_url} target="_blank" rel="noreferrer"
+                          className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-bold flex items-center gap-1.5 hover:bg-emerald-700">
+                          <ExternalLink size={14} /> 네이버에서 보기
+                        </a>
+                      )}
+                      {cur.status === 'publish_failed' && (
+                        <button onClick={() => publish(cur)} disabled={busy === cur.id}
+                          className="px-4 py-2 rounded-xl bg-rose-600 text-white text-sm font-bold hover:bg-rose-700 disabled:opacity-50 flex items-center gap-1.5">
+                          <Send size={14} /> 다시 발행
                         </button>
                       )}
                     </div>
                   </div>
+
+                  {/* 발행 상태 안내 */}
+                  {cur.status === 'queued' && (
+                    <div className="mb-4 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-[12px] text-violet-800">
+                      발행 줄에 섰습니다 · {cur.publish_requested_by} · {(cur.publish_requested_at ?? '').slice(0, 16).replace('T', ' ')}
+                      {alive?.alive ? ' — 발행기가 곧 가져갑니다.' : ' — 발행기가 켜지면 가져갑니다.'}
+                    </div>
+                  )}
+                  {cur.status === 'published' && (
+                    <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-800">
+                      {(cur.published_at ?? '').slice(0, 16).replace('T', ' ')} 발행 · 글 번호 {cur.published_log_no}
+                      {cur.published_verified
+                        ? ' · 발행기가 글 페이지를 열어 제목을 확인했습니다'
+                        : ' · 발행기가 글 페이지를 확인하지 못했습니다 — 한 번 열어 봐 주세요'}
+                      {cur.publish_error && <p className="mt-1 text-emerald-700/80">{cur.publish_error}</p>}
+                    </div>
+                  )}
+                  {cur.status === 'publish_failed' && (
+                    <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-800">
+                      <p className="font-bold flex items-center gap-1"><AlertTriangle size={12} />발행하지 못했습니다 ({cur.publish_attempts}회 시도)</p>
+                      <p className="mt-1 whitespace-pre-wrap">{cur.publish_error}</p>
+                      <p className="mt-1 text-rose-700/80">
+                        네이버 블로그에 이 글이 올라가 있지 않은지 먼저 확인한 뒤 「다시 발행」을 누르세요.
+                        이미 올라가 있다면 발행 이력에 글 주소를 등록해 주세요.
+                      </p>
+                    </div>
+                  )}
 
                   {/* 검사 결과 */}
                   <div className="flex flex-wrap gap-1.5 mb-4 text-[11px]">
@@ -236,16 +376,16 @@ export default function BlogDraftsPage() {
                     )}
                   </div>
 
-                  {cur.dup_status !== 'pass' && (
+                  {cur.dup_status !== 'pass' && !locked(cur) && (
                     <div className="mb-4 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-[12px] text-orange-800">
-                      <p className="font-bold flex items-center gap-1"><Info size={12} />붙여넣기 전에 봐 주세요</p>
+                      <p className="font-bold flex items-center gap-1"><Info size={12} />발행 전에 봐 주세요</p>
                       <pre className="mt-1 whitespace-pre-wrap font-sans">{
                         (cur.dup_report?.reasons ?? []).join('\n') || '기존 발행 글을 다 확보하지 못해 중복을 장담할 수 없습니다.'
                       }</pre>
                     </div>
                   )}
 
-                  {/* 붙여넣을 본문 그대로 */}
+                  {/* 올라갈 본문 그대로 */}
                   <textarea readOnly value={`${cur.body}\n\n${cur.facility}`}
                     rows={26}
                     className="w-full rounded-xl border border-gray-200 bg-gray-50 p-4 text-[13px] leading-7 font-sans resize-y" />
@@ -260,7 +400,7 @@ export default function BlogDraftsPage() {
                     </details>
                   )}
                   <p className="mt-3 text-[11px] text-gray-400">
-                    사진은 본문의 [사진 1] [사진 2] 자리에 순서대로 올려 주세요 — 얼굴이 가려진 사진입니다.
+                    [사진 1] [사진 2] 자리에는 얼굴을 가린 사진이 순서대로 들어갑니다 — 발행기가 올릴 때도, 직접 붙여넣을 때도 같습니다.
                   </p>
                 </>
               )}
@@ -279,21 +419,26 @@ export default function BlogDraftsPage() {
             <p className="mt-1">
               얼굴을 가렸더라도 그것만으로 블로그에 올려도 된다고 보지 않습니다. 보호자 앨범을 보시라고 받은
               동의는 공개 홍보 동의가 아닙니다. 한 장씩 보시고 「공개 사용 가능」을 눌러 주신 사진만 자동 생성에 쓰입니다.
+              프로그램 관리 사진과 보호자 앨범 사진이 함께 옵니다.
             </p>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-5 gap-3">
             {photos.length === 0 && !loading && (
               <p className="text-sm text-gray-400 col-span-full">
-                아직 처리된 사진이 없습니다. 「지금 한 편 만들기」를 누르면 최근 프로그램 사진의 얼굴을 가려 여기에 모읍니다.
+                아직 처리된 사진이 없습니다. 「지금 한 편 만들기」를 누르면 최근 프로그램·앨범 사진의 얼굴을 가려 여기에 모읍니다.
               </p>
             )}
             {photos.map(p => (
               <div key={p.id} className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-                <div className="aspect-square bg-gray-100 flex items-center justify-center">
+                <div className="aspect-square bg-gray-100 flex items-center justify-center relative">
                   {p.mask_url
                     ? <img src={p.mask_url} alt="" className="w-full h-full object-cover" loading="lazy" />
                     : <ImageIcon size={24} className="text-gray-300" />}
+                  <span className={`absolute top-1 left-1 text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                    p.source === 'album' ? 'bg-pink-100 text-pink-700' : 'bg-sky-100 text-sky-700'}`}>
+                    {p.source === 'album' ? '보호자 앨범' : '프로그램'}
+                  </span>
                 </div>
                 <div className="p-2">
                   <p className="text-[11px] font-bold text-gray-700 truncate">{p.program_title ?? '프로그램 미지정'}</p>

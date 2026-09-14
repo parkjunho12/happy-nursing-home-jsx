@@ -72,6 +72,10 @@ services:
       R2_BUCKET_NAME: ${R2_BUCKET_NAME:-happy-nursing-home-albums}
       R2_PUBLIC_URL: ${R2_PUBLIC_URL:-}
 
+      # ✅ 블로그 발행기 — Mac 의 apps/blog-publisher 가 서버에 올 때 내미는 토큰.
+      #    발행기 config.json 의 publisher_token 과 같은 값. 비워두면 발행기 API 가 닫힌다.
+      BLOG_PUBLISHER_TOKEN: ${BLOG_PUBLISHER_TOKEN:-}
+
       # ✅ AI 페이지 편집기 — 편집 에이전트가 등록할 때 쓰는 코드.
       #    ai-editor 서비스와 같은 값을 봐야 등록이 된다. infra/.env 한 곳만 고치면
       #    양쪽에 반영되도록 여기서 넘긴다(백엔드 이미지를 다시 굽지 않아도 된다).

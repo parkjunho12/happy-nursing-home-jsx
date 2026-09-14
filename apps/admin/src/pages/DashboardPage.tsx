@@ -68,7 +68,7 @@ export default function DashboardPage() {
   const canChecklist = can('/eval/checklist')
   const [siteStats, setSiteStats] = useState<DashboardStats | null>(null)
   const [loadingSite, setLoadingSite] = useState(true)
-  const [pending, setPending] = useState<{ expense: number; album: number; leave: number; swap: number; visit: number; refund: number; returning: number; blog: number; blogPhoto: number }>({ expense: 0, album: 0, leave: 0, swap: 0, visit: 0, refund: 0, returning: 0, blog: 0, blogPhoto: 0 })
+  const [pending, setPending] = useState<{ expense: number; album: number; leave: number; swap: number; visit: number; refund: number; returning: number; blog: number; blogPhoto: number; blogFailed: number }>({ expense: 0, album: 0, leave: 0, swap: 0, visit: 0, refund: 0, returning: 0, blog: 0, blogPhoto: 0, blogFailed: 0 })
   const [expiringContracts, setExpiringContracts] = useState(0)
   const [recentNews, setRecentNews] = useState<FacilityNews[]>([])
 
@@ -204,11 +204,11 @@ export default function DashboardPage() {
       // 블로그 자동 초안 — 검토를 기다리는 글, 그리고 공개 사용 확인을 기다리는 사진.
       // 사진 확인이 막혀 있으면 예약이 돌아도 글이 안 만들어지므로 그것도 할 일이다.
       can('/blog-drafts')
-        ? blogDraftAPI.pendingCount().catch(() => ({ drafts: 0, photos_unconfirmed: 0 }))
-        : Promise.resolve({ drafts: 0, photos_unconfirmed: 0 }),
+        ? blogDraftAPI.pendingCount().catch(() => ({ drafts: 0, photos_unconfirmed: 0, publish_failed: 0 }))
+        : Promise.resolve({ drafts: 0, photos_unconfirmed: 0, publish_failed: 0 }),
     ])
     setPending({ expense: exp, album: alb, leave: lv, swap: sw, visit: vs, refund: rf, returning: rt,
-                 blog: bg.drafts, blogPhoto: bg.photos_unconfirmed })
+                 blog: bg.drafts, blogPhoto: bg.photos_unconfirmed, blogFailed: bg.publish_failed ?? 0 })
     setRecentNews(news)
   }
 
@@ -457,6 +457,8 @@ export default function DashboardPage() {
     { show: can('/staff-hr') && pending.refund > 0, label: '카드키 보증금 이체 대기', value: pending.refund, unit: '건', to: '/staff-hr', icon: Receipt, tone: 'emerald' as const },
     { show: can('/blog-drafts') && pending.blog > 0, label: '블로그 초안 검토 대기', value: pending.blog, unit: '건', to: '/blog-drafts', icon: PenLine, tone: 'blue' as const },
     { show: can('/blog-drafts') && pending.blogPhoto > 0, label: '블로그 사진 공개 사용 확인', value: pending.blogPhoto, unit: '장', to: '/blog-drafts?tab=photos', icon: ImageIcon, tone: 'orange' as const },
+    // 올라갔는지 모르는 글이 여기 있다 — 네이버를 확인한 뒤 다시 발행하거나 이력에 넣는다
+    { show: can('/blog-drafts') && pending.blogFailed > 0, label: '블로그 발행 실패 — 네이버 확인 필요', value: pending.blogFailed, unit: '건', to: '/blog-drafts', icon: PenLine, tone: 'orange' as const },
     { show: expiringContracts > 0, label: '갱신 임박 계약 (45일 이내)', value: expiringContracts, unit: '건', to: '/operations', icon: Receipt, tone: 'orange' as const },
   ].filter(i => i.show)
 

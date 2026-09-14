@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str
     
     OPENAI_API_KEY: str = ""
+    # 블로그 발행기(apps/blog-publisher, Mac 에서 Aside 로 네이버에 올리는 것)가
+    # 서버에 올 때 내미는 토큰. 비어 있으면 발행기 API 가 닫힌다.
+    BLOG_PUBLISHER_TOKEN: str = ""
     OPENAI_MODEL: str = "gpt-4o-mini"
 
     # Claude (Anthropic) — 제공기록지 AI 검수에서 OpenAI보다 우선 사용
