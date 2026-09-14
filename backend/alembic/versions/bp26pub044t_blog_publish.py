@@ -13,14 +13,14 @@
 나온 글인지 잇기 위해 draft_id 를 둔다.
 
 Revision ID: bp26pub044t
-Revises: hg26grd043s
+Revises: hg27meetprep1
 """
 from alembic import op
 import sqlalchemy as sa
 
 
 revision = "bp26pub044t"
-down_revision = "hg26grd043s"
+down_revision = "hg27meetprep1"
 branch_labels = None
 depends_on = None
 
