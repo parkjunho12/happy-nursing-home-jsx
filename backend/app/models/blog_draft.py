@@ -107,6 +107,10 @@ class BlogPhotoUse(Base):
     width  = Column(Integer, nullable=True)
     height = Column(Integer, nullable=True)
     taken_on = Column(String(10), nullable=True)         # 'YYYY-MM-DD'
+
+    # 사진 점수(0~100) — 같은 활동 사진 중 선명하고 밝기가 알맞은 쪽부터 쓴다.
+    # 가릴 때 photo_quality 가 매긴다. None 이면 아직 안 잰 것 — 버리지 않는다.
+    quality = Column(Float, nullable=True)
     program_title = Column(String(200), nullable=True)
 
     created_at = Column(DateTime(timezone=True), default=now_kst)

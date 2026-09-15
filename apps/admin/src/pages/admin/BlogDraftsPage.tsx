@@ -591,7 +591,14 @@ export default function BlogDraftsPage() {
                 </div>
                 <div className="p-2">
                   <p className="text-[11px] font-bold text-gray-700 truncate">{p.program_title ?? '프로그램 미지정'}</p>
-                  <p className="text-[10px] text-gray-400">{p.taken_on} · 얼굴 {p.faces}곳 가림</p>
+                  <p className="text-[10px] text-gray-400">
+                    {p.taken_on} · 얼굴 {p.faces}곳 가림
+                    {p.quality != null && (
+                      <span className={p.quality >= 60 ? 'text-emerald-600' : p.quality >= 35 ? 'text-gray-400' : 'text-orange-500'}>
+                        {' '}· 점수 {Math.round(p.quality)}
+                      </span>
+                    )}
+                  </p>
                   {p.mask_status !== 'masked' && (
                     <p className="text-[10px] text-orange-600 mt-0.5">
                       {p.mask_status === 'no_face' ? '얼굴을 찾지 못했습니다' : (p.mask_reason ?? '가리지 못했습니다')}

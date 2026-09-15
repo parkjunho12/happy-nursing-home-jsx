@@ -90,6 +90,8 @@ def _photo(p: BlogPhotoUse) -> dict:
         "reviewed_at": p.mask_reviewed_at.isoformat() if p.mask_reviewed_at else None,
         "sensitive": bool(p.sensitive),
         "usable": p.usable,
+        # 사진 점수(0~100) — 같은 활동에서 선명하고 밝은 사진부터 쓰인다
+        "quality": p.quality,
     }
 
 

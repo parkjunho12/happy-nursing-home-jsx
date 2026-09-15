@@ -112,11 +112,12 @@ class Candidate:
     """사진 한 장 + 그 사진이 붙은 활동."""
 
     __slots__ = ("photo_id", "source", "date", "title", "group", "time",
-                 "topic", "sha256", "sensitive", "note")
+                 "topic", "sha256", "sensitive", "note", "quality")
 
     def __init__(self, photo_id: str, source: str, date_: str, title: Optional[str],
                  group: Optional[str], time_: Optional[str], sha256: Optional[str],
-                 sensitive: bool, note: Optional[str] = None):
+                 sensitive: bool, note: Optional[str] = None,
+                 quality: Optional[float] = None):
         self.photo_id = photo_id
         self.source = source
         self.date = date_
@@ -127,11 +128,23 @@ class Candidate:
         self.sha256 = sha256
         self.sensitive = sensitive
         self.note = note
+        # 사진 점수(photo_quality, 0~100). 없으면 0 으로 보고 뒤에 세운다 —
+        # 점수를 잰 사진이 하나라도 있으면 그쪽이 먼저다.
+        self.quality = quality
 
     def as_dict(self) -> dict:
         return {"id": self.photo_id, "source": self.source, "taken_on": self.date,
                 "program_title": self.title, "group": self.group, "time": self.time,
                 "topic": self.topic}
+
+
+def _order(items: Sequence[Candidate]) -> List[Candidate]:
+    """날짜순, 같은 날짜 안에서는 사진 점수가 높은 것부터.
+
+    연달아 찍은 사진 중 흔들리거나 어두운 것이 섞여 있다. 상한(cap)에 걸려
+    일부만 뽑을 때 좋은 쪽이 먼저 잡히도록 여기서 세워 둔다.
+    """
+    return sorted(items, key=lambda x: (x.date, -(x.quality or 0.0), x.photo_id))
 
 
 def cluster(cands: Sequence[Candidate]) -> List[Dict[str, Any]]:
@@ -146,7 +159,7 @@ def cluster(cands: Sequence[Candidate]) -> List[Dict[str, Any]]:
 
     groups: List[Dict[str, Any]] = []
     for title, items in by_title.items():
-        items = sorted(items, key=lambda x: (x.date, x.photo_id))
+        items = _order(items)
         groups.append({
             # 앨범 사진만으로 된 덩어리는 활동 기록이 없다 — 모델에 그렇게 알린다
             "kind": "album" if all(i.source == "album" for i in items) else "program",
@@ -174,7 +187,7 @@ def cluster(cands: Sequence[Candidate]) -> List[Dict[str, Any]]:
             "kind": "topic", "title": " · ".join(g["title"] for g in gs),
             "topic": topic,
             "dates": sorted({i.date for i in items}),
-            "items": sorted(items, key=lambda x: (x.date, x.photo_id)),
+            "items": _order(items),
         })
 
     merged.sort(key=lambda g: (-len(g["items"]), g["dates"][0] if g["dates"] else ""))
@@ -209,7 +222,8 @@ def _spread(items: Sequence[Candidate], cap: int) -> List[Candidate]:
     """비슷한 장면이 몰리지 않게 날짜별로 고르게 나눠 뽑는다.
 
     같은 순간에 연달아 찍은 사진 여덟 장을 넣으면 흐름이 안 보인다.
-    날짜를 돌아가며 한 장씩 집는다.
+    날짜를 돌아가며 한 장씩 집는다. items 는 날짜 안에서 점수순으로 들어
+    오므로(_order) 각 날짜에서 가장 좋은 사진부터 잡힌다.
     """
     if len(items) <= cap:
         return list(items)

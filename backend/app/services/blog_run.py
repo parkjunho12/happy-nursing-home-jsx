@@ -49,6 +49,7 @@ from app.services import blog_dedup as dd
 from app.services import blog_source as bs
 from app.services import blog_writer as bw
 from app.services import face_mask as fm
+from app.services import photo_quality as pq
 
 logger = logging.getLogger(__name__)
 KST = timezone(timedelta(hours=9))
@@ -138,6 +139,15 @@ def ensure_masked(db: Session, photo) -> BlogPhotoUse:
            .filter(BlogPhotoUse.source == src.source,
                    BlogPhotoUse.source_id == src.source_id).first())
     if row and row.mask_status in (MASK_MASKED, MASK_NO_FACE, MASK_FAILED):
+        # 점수 없이 가려진 옛 사진 — 이번에 재 둔다. 한 번 재면 남는다.
+        if row.mask_status == MASK_MASKED and row.quality is None and row.mask_url:
+            from app.services.r2_storage import R2Storage
+            try:
+                row.quality = pq.score_bytes(R2Storage().read_bytes(row.mask_url),
+                                             row.mask_boxes)
+                db.commit()
+            except Exception:
+                pass
         return row
     if not row:
         row = BlogPhotoUse(source=src.source, source_id=src.source_id,
@@ -180,6 +190,9 @@ def ensure_masked(db: Session, photo) -> BlogPhotoUse:
                     res.image_bytes, f"{src.source}-{src.source_id}.jpg", "blog-masked")
                 if not row.mask_url:
                     raise RuntimeError("저장소가 설정되지 않았습니다")
+                # 나갈 그림(가린 것) 기준으로 점수를 잰다 — 가림 상자가 화면을
+                # 덮으면 그만큼 낮아진다
+                row.quality = pq.score_bytes(res.image_bytes, row.mask_boxes)
             except Exception as e:
                 row.mask_status = MASK_FAILED
                 row.mask_reason = f"가린 사진을 저장하지 못했습니다({type(e).__name__})"
@@ -222,7 +235,7 @@ def build(db: Session, *, run_key: Optional[str] = None,
         if use.sensitive or bs.looks_sensitive(p.title):
             continue
         cands.append(bs.Candidate(use.id, p.source, p.taken_on, p.title, p.group, None,
-                                  use.origin_sha256, False))
+                                  use.origin_sha256, False, quality=use.quality))
 
     if not cands:
         raise NotEnough(

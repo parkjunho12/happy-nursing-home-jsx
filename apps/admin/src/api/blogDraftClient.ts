@@ -84,6 +84,8 @@ export interface BlogPhoto {
   reviewed_at?: string | null
   sensitive: boolean
   usable: boolean
+  /** 사진 점수(0~100) — 같은 활동에서 선명하고 밝은 사진부터 쓰인다. null 이면 아직 안 잼 */
+  quality?: number | null
 }
 
 export interface PublisherInfo {
