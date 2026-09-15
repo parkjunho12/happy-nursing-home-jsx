@@ -35,7 +35,8 @@ ALL_POSITIONS = [
 ]
 
 # 전체 근무표를 볼 수 있는 사람. 여기 없는 직종은 제 근무표(/my-schedule)만 본다.
-CAN_VIEW = {"시설장", "대표", "이사", "사회복지사"}
+# 치료사(물리·작업)가 있는 이유 — 치료 일정을 잡으려면 그날 누가 나오는지 봐야 한다.
+CAN_VIEW = {"시설장", "대표", "이사", "사회복지사", "물리치료사", "작업치료사"}
 # 편성·메모·잠금 — 급여와 연차로 이어지므로 좁게 둔다
 CAN_EDIT = {"시설장"}
 
@@ -62,7 +63,7 @@ def check() -> int:
     # 보기와 편성이 한 덩어리가 되면 안 된다 — 볼 수 있지만 못 고치는 사람이 있어야
     only_view = [p for p in ALL_POSITIONS
                  if view("STAFF", p) and not edit("STAFF", p)]
-    if sorted(x for x in only_view if x) != ["대표", "사회복지사", "이사"]:
+    if sorted(x for x in only_view if x) != ["대표", "물리치료사", "사회복지사", "이사", "작업치료사"]:
         bad.append(f"보기만 되는 직종이 어긋납니다: {only_view}")
 
     # 고칠 수 있으면 볼 수도 있어야 한다 — 그 반대는 아니다

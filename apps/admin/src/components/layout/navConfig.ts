@@ -369,7 +369,8 @@ export function getNavConfig(
   // — ADMIN·시설장과 같은 소분류(어르신/직원·근무/일정·소통/기록·안전/평가)를 권한만큼만 보여준다
   const isNurse = ['간호팀장', '간호사', '간호조무사'].includes(user?.position ?? '')
   // 물리치료사·작업치료사는 하는 일이 같아 권한도 같이 간다
-  const isCareTeam = isNurse || ['물리치료사', '작업치료사'].includes(user?.position ?? '')
+  const isTherapist = ['물리치료사', '작업치료사'].includes(user?.position ?? '')
+  const isCareTeam = isNurse || isTherapist
   const canEnteral = isSocialWorker || isNurse || isManager
   const canHandover = isSocialWorker || isNurse || user?.position === '시설장'
   const canMeal = isSocialWorker || isManager
@@ -382,8 +383,10 @@ export function getNavConfig(
     { to: '/monthly-routines', icon: CalendarCheck, label: '월간 업무' },
   ]
   // 사회복지사도 본다 — 프로그램·면회 일정을 잡으려면 그날 누가 나오는지 알아야 한다.
-  // 보기만 한다. 편성은 근무표 페이지(시설장)에 그대로 있다.
-  if (isManager || isSocialWorker)
+  // 치료사(물리·작업)도 같다 — 치료 일정을 잡으려면 그날 어느 손이 나오는지 봐야 한다.
+  // 간호팀은 아니다(isCareTeam 을 쓰면 간호팀까지 열린다). 보기만 한다.
+  // 편성은 근무표 페이지(시설장)에 그대로 있다.
+  if (isManager || isSocialWorker || isTherapist)
     operItems.push({ to: '/work-schedule-view', icon: CalendarClock, label: '전체 근무표 보기' })
 
   // 어르신 — 수급자·명단·경관식·프로그램·식단

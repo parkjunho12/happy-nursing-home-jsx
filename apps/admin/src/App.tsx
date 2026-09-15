@@ -178,11 +178,13 @@ function BroadcastRoute({ children }: { children: React.ReactNode }) {
 // 전체 근무표 '보기' — 편성은 못 하고 보기만 한다.
 // StaffAdminRoute 를 넓히지 않은 이유: 그 문에는 직원 상세(주민번호·계좌·급여)와
 // 퇴직연금이 함께 걸려 있다. 근무표를 보여주자고 인사기록까지 열 수는 없다.
+// 치료사(물리·작업)도 본다 — 치료 일정을 잡으려면 그날 누가 나오는지 봐야 한다.
+// 백엔드 work_schedule.py 의 VIEW_POSITIONS 와 같아야 한다.
 function ScheduleViewRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
   const ok = user?.role === 'ADMIN'
-    || ['시설장', '대표', '이사', '사회복지사'].includes(user?.position ?? '')
+    || ['시설장', '대표', '이사', '사회복지사', '물리치료사', '작업치료사'].includes(user?.position ?? '')
   if (!ok) return <Navigate to="/eval/checklist" replace />
   return <>{children}</>
 }
