@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   PenLine, Copy, Check, Loader2, RefreshCw, AlertTriangle, Image as ImageIcon,
   CalendarClock, ShieldCheck, ShieldX, Eye, Info, CircleDollarSign, Send, ExternalLink,
-  XCircle, Radio,
+  XCircle, Radio, Pencil, X, Link2,
 } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
-import { blogDraftAPI, type BlogDraft, type BlogPhoto, type PublisherInfo, type DraftStatus } from '@/api/blogDraftClient'
+import { blogDraftAPI, type Block, type BlogDraft, type BlogPhoto, type PublisherInfo, type DraftStatus } from '@/api/blogDraftClient'
 
 /**
  * 블로그 자동 초안 — 화·금 오전 10시에 한 편씩 만들어 두고, 검토가 끝나면 발행한다.
@@ -68,6 +68,14 @@ export default function BlogDraftsPage() {
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  // 수정 모드 — 제목·본문 블록·해시태그를 고쳐 저장한다. 사진 자리는 못 움직인다.
+  const [editing, setEditing] = useState(false)
+  const [eTitle, setETitle] = useState('')
+  const [eBlocks, setEBlocks] = useState<Block[]>([])
+  const [eTags, setETags] = useState('')
+  // 발행 실패인데 네이버에는 이미 올라가 있을 때 — 글 주소를 이력으로 등록한다
+  const [histOpen, setHistOpen] = useState(false)
+  const [histUrl, setHistUrl] = useState('')
 
   const load = async (silent = false) => {
     if (!silent) setLoading(true)
@@ -103,6 +111,59 @@ export default function BlogDraftsPage() {
 
   const replace = (r: BlogDraft) => setDrafts(ds => ds.map(x => x.id === r.id ? r : x))
   const fail = (e: any, fallback: string) => alert(e?.response?.data?.detail ?? fallback)
+
+  // 다른 초안으로 옮기면 고치던 것을 접는다 — 열어 둔 채 옮기면 엉뚱한 글에 저장된다
+  useEffect(() => { setEditing(false); setHistOpen(false); setHistUrl('') }, [sel])
+
+  const startEdit = (d: BlogDraft) => {
+    setETitle(d.title ?? '')
+    setEBlocks(d.blocks.map(b => ({ ...b })))
+    setETags(d.hashtags.join(' '))
+    setEditing(true)
+  }
+
+  const saveEdit = async (d: BlogDraft) => {
+    if (!eTitle.trim()) return alert('제목을 적어 주세요.')
+    if (eBlocks.some(b => b.type !== 'photo' && !(b.text ?? '').trim()))
+      return alert('빈 문단이 있습니다. 지울 문단이면 앞뒤 문단에 합쳐 주세요.')
+    const tags = eTags.split(/[\s,]+/).map(t => t.replace(/^#/, '')).filter(Boolean)
+    setBusy(d.id)
+    try {
+      replace(await blogDraftAPI.edit(d.id, { title: eTitle.trim(), blocks: eBlocks, hashtags: tags }))
+      setEditing(false)
+    } catch (e: any) { fail(e, '저장하지 못했습니다.') }
+    finally { setBusy(null) }
+  }
+
+  /** 제목 후보를 누르면 그 제목으로 바꾼다 */
+  const pickTitle = async (d: BlogDraft, t: string) => {
+    setBusy(d.id)
+    try { replace(await blogDraftAPI.edit(d.id, { title: t })) }
+    catch (e: any) { fail(e, '제목을 바꾸지 못했습니다.') }
+    finally { setBusy(null) }
+  }
+
+  /** 발행 실패인데 네이버에는 올라가 있는 글 — 주소를 이력에 등록하고 보류로 접는다.
+   *  이력에 넣어야 다음 초안의 중복 검사가 이 글을 안다. */
+  const registerHistory = async (d: BlogDraft) => {
+    const url = histUrl.trim()
+    if (!url) return alert('네이버 글 주소를 붙여넣어 주세요.')
+    const m = url.match(/logNo=(\d+)/) ?? url.match(/\/(\d{8,})(?:[/?#]|$)/)
+    if (!m) return alert('주소에서 글 번호를 찾지 못했습니다.\nblog.naver.com/아이디/글번호 형태의 주소를 넣어 주세요.')
+    setBusy(d.id)
+    try {
+      await blogDraftAPI.addHistory({
+        log_no: m[1], url, title: d.title ?? undefined,
+        body: `${d.body}\n\n${d.facility}`,
+        published_on: new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10),
+        topic: d.topic ?? undefined,
+      })
+      replace(await blogDraftAPI.setStatus(d.id, 'held',
+        `이미 네이버에 올라가 있어 발행 이력으로 등록했습니다. (${url})`))
+      setHistOpen(false); setHistUrl('')
+    } catch (e: any) { fail(e, '이력을 등록하지 못했습니다.') }
+    finally { setBusy(null) }
+  }
 
   const generate = async () => {
     setBusy('gen'); setMsg(null)
@@ -279,17 +340,51 @@ export default function BlogDraftsPage() {
               ) : (
                 <>
                   <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
-                    <div className="min-w-0">
-                      <h2 className="text-lg font-bold text-gray-900">{cur.title}</h2>
-                      {cur.title_alts.length > 0 && !locked(cur) && (
-                        <p className="text-[11px] text-gray-400 mt-1">다른 제목 후보 · {cur.title_alts.join(' / ')}</p>
+                    <div className="min-w-0 flex-1">
+                      {editing ? (
+                        <input value={eTitle} onChange={e => setETitle(e.target.value)}
+                          className="w-full text-lg font-bold text-gray-900 rounded-xl border border-violet-300 px-3 py-2 focus:outline-none focus:border-violet-500"
+                          placeholder="제목" />
+                      ) : (
+                        <h2 className="text-lg font-bold text-gray-900">{cur.title}</h2>
+                      )}
+                      {cur.title_alts.length > 0 && !locked(cur) && !editing && (
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                          <span className="text-[11px] text-gray-400">다른 제목 후보 — 누르면 바뀝니다 ·</span>
+                          {cur.title_alts.map((t, i) => (
+                            <button key={i} onClick={() => pickTitle(cur, t)} disabled={busy === cur.id}
+                              className="text-[11px] px-2 py-0.5 rounded-full border border-gray-200 text-gray-500 hover:border-violet-300 hover:text-violet-700 hover:bg-violet-50 disabled:opacity-40">
+                              {t}
+                            </button>
+                          ))}
+                        </div>
                       )}
                     </div>
                     <div className="flex gap-2 shrink-0 flex-wrap">
+                      {editing ? (
+                        <>
+                          <button onClick={() => setEditing(false)} disabled={busy === cur.id}
+                            className="px-3 py-2 rounded-xl border border-gray-200 text-gray-500 text-sm hover:bg-gray-50 flex items-center gap-1.5">
+                            <X size={14} /> 취소
+                          </button>
+                          <button onClick={() => saveEdit(cur)} disabled={busy === cur.id}
+                            className="px-4 py-2 rounded-xl bg-violet-600 text-white text-sm font-bold hover:bg-violet-700 disabled:opacity-50 flex items-center gap-1.5">
+                            {busy === cur.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                            저장
+                          </button>
+                        </>
+                      ) : (
+                      <>
                       <button onClick={() => copyBody(cur)}
                         className="px-3 py-2 rounded-xl border border-gray-200 text-gray-700 text-sm flex items-center gap-1.5 hover:bg-gray-50">
                         {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? '복사됨' : '본문 복사'}
                       </button>
+                      {!locked(cur) && (
+                        <button onClick={() => startEdit(cur)} disabled={busy === cur.id}
+                          className="px-3 py-2 rounded-xl border border-violet-200 text-violet-700 text-sm font-bold hover:bg-violet-50 flex items-center gap-1.5">
+                          <Pencil size={14} /> 수정
+                        </button>
+                      )}
 
                       {cur.status === 'draft' && (
                         <button onClick={() => setStatus(cur, 'approved')} disabled={busy === cur.id}
@@ -333,8 +428,17 @@ export default function BlogDraftsPage() {
                           <Send size={14} /> 다시 발행
                         </button>
                       )}
+                      </>
+                      )}
                     </div>
                   </div>
+
+                  {/* 승인된 글을 고치면 검토가 무효가 된다 — 저장 전에 알린다 */}
+                  {editing && cur.status === 'approved' && (
+                    <div className="mb-4 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-[12px] text-orange-800">
+                      저장하면 「검토 대기」로 되돌아갑니다 — 승인된 것과 다른 글이 나가면 승인이 의미가 없기 때문입니다.
+                    </div>
+                  )}
 
                   {/* 발행 상태 안내 */}
                   {cur.status === 'queued' && (
@@ -358,8 +462,28 @@ export default function BlogDraftsPage() {
                       <p className="mt-1 whitespace-pre-wrap">{cur.publish_error}</p>
                       <p className="mt-1 text-rose-700/80">
                         네이버 블로그에 이 글이 올라가 있지 않은지 먼저 확인한 뒤 「다시 발행」을 누르세요.
-                        이미 올라가 있다면 발행 이력에 글 주소를 등록해 주세요.
+                        이미 올라가 있다면 아래에 글 주소를 등록해 주세요 — 다음 초안의 중복 검사가 이 글을 알게 됩니다.
                       </p>
+                      {histOpen ? (
+                        <div className="mt-2 flex gap-1.5 flex-wrap">
+                          <input value={histUrl} onChange={e => setHistUrl(e.target.value)}
+                            placeholder="https://blog.naver.com/아이디/글번호"
+                            className="flex-1 min-w-[240px] px-2.5 py-1.5 rounded-lg border border-rose-200 bg-white text-[12px] text-gray-800 focus:outline-none focus:border-rose-400" />
+                          <button onClick={() => registerHistory(cur)} disabled={busy === cur.id}
+                            className="px-3 py-1.5 rounded-lg bg-rose-600 text-white text-[12px] font-bold hover:bg-rose-700 disabled:opacity-50">
+                            {busy === cur.id ? '등록 중…' : '이력으로 등록'}
+                          </button>
+                          <button onClick={() => { setHistOpen(false); setHistUrl('') }}
+                            className="px-2.5 py-1.5 rounded-lg border border-rose-200 text-rose-600 text-[12px] hover:bg-rose-100">
+                            닫기
+                          </button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setHistOpen(true)}
+                          className="mt-2 px-3 py-1.5 rounded-lg border border-rose-300 text-rose-700 text-[12px] font-bold hover:bg-rose-100 flex items-center gap-1">
+                          <Link2 size={12} /> 이미 올라가 있습니다 — 글 주소 등록
+                        </button>
+                      )}
                     </div>
                   )}
 
@@ -385,12 +509,37 @@ export default function BlogDraftsPage() {
                     </div>
                   )}
 
-                  {/* 올라갈 본문 그대로 */}
-                  <textarea readOnly value={`${cur.body}\n\n${cur.facility}`}
-                    rows={26}
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 p-4 text-[13px] leading-7 font-sans resize-y" />
+                  {/* 올라갈 본문 그대로 · 수정 모드에서는 문단별로 고친다 */}
+                  {editing ? (
+                    <div className="space-y-2">
+                      {eBlocks.map((b, i) => b.type === 'photo' ? (
+                        <div key={i} className="px-3 py-2 rounded-lg bg-gray-100 border border-gray-200 text-[12px] text-gray-500 flex items-center gap-1.5">
+                          <ImageIcon size={12} />
+                          [사진 {eBlocks.slice(0, i + 1).filter(x => x.type === 'photo').length}] — 사진 자리는 그대로 둡니다
+                        </div>
+                      ) : (
+                        <textarea key={i} value={b.text ?? ''}
+                          onChange={ev => setEBlocks(bs => bs.map((x, j) => j === i ? { ...x, text: ev.target.value } : x))}
+                          rows={Math.max(2, Math.ceil((b.text ?? '').length / 55) + 1)}
+                          className="w-full rounded-lg border border-violet-200 bg-white p-3 text-[13px] leading-6 font-sans resize-y focus:outline-none focus:border-violet-400" />
+                      ))}
+                      <div className="mt-1">
+                        <p className="text-[11px] font-bold text-gray-500 mb-1">해시태그 — 띄어쓰기로 구분합니다 (# 은 붙여도 되고 안 붙여도 됩니다)</p>
+                        <input value={eTags} onChange={e => setETags(e.target.value)}
+                          placeholder="예) 요양원일상 어르신프로그램"
+                          className="w-full px-3 py-2 rounded-lg border border-violet-200 text-[13px] focus:outline-none focus:border-violet-400" />
+                      </div>
+                      <p className="text-[11px] text-gray-400">
+                        글 끝의 시설 안내는 발행할 때 자동으로 붙습니다 — 여기서 고칠 필요가 없습니다.
+                      </p>
+                    </div>
+                  ) : (
+                    <textarea readOnly value={`${cur.body}\n\n${cur.facility}`}
+                      rows={26}
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 p-4 text-[13px] leading-7 font-sans resize-y" />
+                  )}
 
-                  {cur.hashtags.length > 0 && (
+                  {!editing && cur.hashtags.length > 0 && (
                     <p className="mt-2 text-[12px] text-violet-600">{cur.hashtags.map(h => `#${h}`).join(' ')}</p>
                   )}
                   {cur.source_note && (
