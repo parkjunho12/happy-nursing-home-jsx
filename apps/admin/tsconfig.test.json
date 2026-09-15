@@ -36,6 +36,7 @@
     "src/utils/scheduleRows.ts",
     "src/components/schedule/shared.ts",
     "src/utils/floorSubtotals.ts",
+    "src/utils/suspiciousIPs.ts",
     "tests/**/*.ts"
   ]
 }
