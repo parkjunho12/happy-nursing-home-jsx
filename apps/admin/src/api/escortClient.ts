@@ -29,6 +29,8 @@ export interface Escort {
   guardian_name?: string | null
   guardian_relation?: string | null
   guardian_phone?: string | null
+  /** 주민등록번호 — 업체가 병원 접수를 대신할 때만. 복지팀 외에는 마스킹되어 온다 */
+  resident_rrn?: string | null
   status: EscortStatus
   vendor?: string | null
   transport?: string | null
@@ -86,6 +88,14 @@ export interface EscortInput {
   guardian_phone?: string | null
 }
 
+/** 업체로 나가는 정보 — 복지팀이 전달 시점(또는 전달 뒤)에 고친다 */
+export interface VendorInfoInput {
+  resident_rrn?: string
+  guardian_name?: string
+  guardian_relation?: string
+  guardian_phone?: string
+}
+
 /** 어르신에게 등록된 보호자 */
 export interface GuardianOption {
   name: string
@@ -101,9 +111,12 @@ export const escortAPI = {
   /** 부서 톡방에 올렸다고 표시 */
   share: (id: string, memo?: string) =>
     apiClient.post(`${BASE}/${id}/share`, { memo }).then(unwrap<Escort>),
-  /** 업체에 전달했다고 표시 */
-  send: (id: string, b: { vendor?: string; memo?: string }) =>
+  /** 업체에 전달했다고 표시 — 보호자·주민번호도 이때 함께 고칠 수 있다(복지팀) */
+  send: (id: string, b: { vendor?: string; memo?: string } & VendorInfoInput) =>
     apiClient.post(`${BASE}/${id}/send`, b).then(unwrap<Escort>),
+  /** 업체로 나가는 정보(보호자·주민번호)를 고친다 — 전달한 뒤에도, 상태를 되돌리지 않는다 */
+  vendorInfo: (id: string, b: VendorInfoInput) =>
+    apiClient.patch(`${BASE}/${id}/vendor-info`, b).then(unwrap<Escort>),
   /** 보호자·업체가 협의해 정한 이동수단을 적는다 */
   decide: (id: string, b: { transport: string; transport_note?: string }) =>
     apiClient.post(`${BASE}/${id}/decide`, b).then(unwrap<Escort>),

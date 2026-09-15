@@ -100,6 +100,15 @@ def _stamp(dt: Optional[datetime]) -> str:
     return f"{d.month}/{d.day} {d:%H:%M}"
 
 
+def _mask_rrn(v: Optional[str]) -> Optional[str]:
+    """뒷자리를 가린다 — 생년월일까지만 남긴다. 들어오는 자료에서 주민번호를
+    지우는 다른 화면들과 같은 기준이다."""
+    v = (v or "").strip()
+    if not v:
+        return None
+    return f"{v[:6]}-*******"
+
+
 def _dict(e: HospitalEscort) -> Dict[str, Any]:
     return {
         "id": e.id, "resident_id": e.resident_id, "resident_name": e.resident_name,
@@ -109,6 +118,7 @@ def _dict(e: HospitalEscort) -> Dict[str, Any]:
         "visit_date": e.visit_date, "visit_time": e.visit_time,
         "guardian_name": e.guardian_name, "guardian_relation": e.guardian_relation,
         "guardian_phone": e.guardian_phone,
+        "resident_rrn": e.resident_rrn,
         "status": e.status,
         "vendor": e.vendor, "transport": e.transport, "transport_note": e.transport_note,
         "cancel_reason": e.cancel_reason,
@@ -123,6 +133,10 @@ def _dict(e: HospitalEscort) -> Dict[str, Any]:
 
 def _view(e: HospitalEscort, u: User) -> Dict[str, Any]:
     d = _dict(e)
+    # 주민번호는 업체에 전달하는 사람(복지팀)만 온전히 본다. 다른 자리는
+    # 적혀 있다는 것만 알면 된다 — 마스킹한 값으로 글까지 만든다.
+    if not can_write_welfare(_role(u), _pos(u)):
+        d["resident_rrn"] = _mask_rrn(d["resident_rrn"])
     # 붙여넣을 글은 서버가 만든다 — 화면마다 다른 글이 나가지 않게
     d["request_text"] = et.request_text(d, writer=e.created_by, stamp=_stamp(e.created_at))
     # 업체로 나가는 글에만 보호자 연락처가 들어간다 — 톡방 글에는 넣지 않는다
@@ -265,6 +279,44 @@ class StepBody(BaseModel):
     reason: Optional[str] = None
 
 
+# 업체로 나가는 정보 — 복지팀이 전달 시점에 고치거나 채운다.
+#
+# 간호팀이 적어 둔 보호자가 그새 바뀌었거나, 업체가 병원 접수 대행에
+# 주민번호를 요구하는 경우가 있다. 그때마다 간호팀 수정 화면으로 돌아가면
+# 상태가 draft 로 돌아가 톡방 재공유부터 다시 해야 한다 — 이 값들은 톡방
+# 글에 안 들어가므로 재공유가 필요 없다. 그래서 따로 받는다.
+_VENDOR_INFO_LABELS = {
+    "resident_rrn": "주민등록번호",
+    "guardian_name": "보호자 성함",
+    "guardian_relation": "보호자 관계",
+    "guardian_phone": "보호자 연락처",
+}
+
+
+class VendorInfoBody(BaseModel):
+    resident_rrn: Optional[str] = None
+    guardian_name: Optional[str] = None
+    guardian_relation: Optional[str] = None
+    guardian_phone: Optional[str] = None
+
+
+class SendBody(StepBody, VendorInfoBody):
+    pass
+
+
+def _apply_vendor_info(e: HospitalEscort, body: VendorInfoBody) -> List[str]:
+    """보내온 칸만 고친다(None 은 '그대로 둔다'). 고친 칸의 이름을 돌려준다."""
+    changed = []
+    for k in body.model_dump(exclude_unset=True):
+        if k not in _VENDOR_INFO_LABELS:
+            continue
+        v = (getattr(body, k) or "").strip() or None
+        if getattr(e, k) != v:
+            setattr(e, k, v)
+            changed.append(_VENDOR_INFO_LABELS[k])
+    return changed
+
+
 @router.post("/{eid}/share")
 def mark_shared(eid: str, body: StepBody, db: Session = Depends(get_db),
                 u: User = Depends(_nursing)):
@@ -282,16 +334,18 @@ def mark_shared(eid: str, body: StepBody, db: Session = Depends(get_db),
 
 
 @router.post("/{eid}/send")
-def mark_sent(eid: str, body: StepBody, db: Session = Depends(get_db),
+def mark_sent(eid: str, body: SendBody, db: Session = Depends(get_db),
               u: User = Depends(_welfare)):
     """업체에 전달했다고 표시한다.
 
-    이동수단을 정하는 근거가 비어 있으면 막는다 — 업체가 어르신을 보지
-    않고 차를 잡게 된다.
+    보호자·주민번호는 여기서 함께 받는다 — 업체에 보내는 순간이 그 값이
+    맞는지 마지막으로 확인하는 자리다. 이동수단을 정하는 근거가 비어
+    있으면 막는다 — 업체가 어르신을 보지 않고 차를 잡게 된다.
     """
     e = db.query(HospitalEscort).filter(HospitalEscort.id == eid).first()
     if not e:
         raise HTTPException(404, "그 요청을 찾을 수 없습니다.")
+    changed = _apply_vendor_info(e, body)
     miss = et.missing_fields(_dict(e))
     if miss:
         raise HTTPException(400, f"간호팀 확인이 먼저 필요합니다 — {' · '.join(miss)}")
@@ -300,7 +354,29 @@ def mark_sent(eid: str, body: StepBody, db: Session = Depends(get_db),
     if e.status in (ST_DRAFT, ST_SHARED):
         e.status = ST_SENT
     _log(db, e, "send", getattr(u, "name", None),
-         " · ".join(x for x in [e.vendor, (body.memo or "").strip()] if x))
+         " · ".join(x for x in [e.vendor, (body.memo or "").strip(),
+                                f"{', '.join(changed)} 고침" if changed else ""] if x))
+    db.commit()
+    db.refresh(e)
+    return ApiResponse(success=True, data=_view(e, u))
+
+
+@router.patch("/{eid}/vendor-info")
+def edit_vendor_info(eid: str, body: VendorInfoBody, db: Session = Depends(get_db),
+                     u: User = Depends(_welfare)):
+    """업체로 나가는 정보(보호자·주민번호)를 고친다 — 복지팀.
+
+    전달한 뒤에 보호자 연락처가 틀린 걸 알게 되는 경우다. 간호팀 수정과
+    달리 상태를 draft 로 되돌리지 않는다 — 이 값들은 톡방 글에 들어가지
+    않아 재공유할 것이 없고, 되돌리면 업체에 이미 넘긴 기록이 흐려진다.
+    """
+    e = db.query(HospitalEscort).filter(HospitalEscort.id == eid).first()
+    if not e:
+        raise HTTPException(404, "그 요청을 찾을 수 없습니다.")
+    changed = _apply_vendor_info(e, body)
+    if changed:
+        _log(db, e, "edit", getattr(u, "name", None),
+             f"업체 전달 정보 고침 — {', '.join(changed)}")
     db.commit()
     db.refresh(e)
     return ApiResponse(success=True, data=_view(e, u))

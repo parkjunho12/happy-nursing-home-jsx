@@ -104,6 +104,13 @@ def vendor_text(e: Dict[str, Any], *, writer: Optional[str] = None,
     lines = [
         "[병원동행 의뢰]",
         f"· 어르신: {_val(e.get('resident_name'))}{f' ({where})' if where else ''}",
+    ]
+    # 주민등록번호 — 업체가 병원 접수를 대신할 때만 요구한다. 늘 필요한 값이
+    # 아니라서 빈 칸을 '확인 필요' 로 되묻지 않고, 적힌 경우에만 내보낸다.
+    rrn = (e.get("resident_rrn") or "").strip()
+    if rrn:
+        lines.append(f"· 주민등록번호: {rrn}")
+    lines += [
         f"· 진료: {_val(e.get('hospital'))}{f' {dept}' if dept else ''} · {when}{f' {time}' if time else ''}",
         f"· 보행: {_val(e.get('walking'))}",
         f"· 편마비: {_val(e.get('hemiplegia'))}",

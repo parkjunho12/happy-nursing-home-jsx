@@ -84,6 +84,14 @@ class HospitalEscort(Base):
     guardian_relation = Column(String(20), nullable=True)   # 자녀·배우자 등
     guardian_phone = Column(String(30), nullable=True)
 
+    # 주민등록번호 — 업체가 병원 접수를 대신할 때 요구하는 경우에만 적는다.
+    #
+    # 어르신 기록에는 주민번호를 두지 않는다(들어오는 자료에서도 지운다).
+    # 여기만 예외인 이유: 접수 대행에 실제로 필요하고, 나가는 곳이 업체에
+    # 보내는 글 하나뿐이라 좁게 잡을 수 있다. 복지팀이 업체 전달 시점에
+    # 적고, 복지팀이 아닌 화면에는 마스킹해서 내려간다.
+    resident_rrn = Column(String(20), nullable=True)
+
     status = Column(String(12), nullable=False, default=ST_DRAFT, index=True)
 
     # 부서 톡방 공유

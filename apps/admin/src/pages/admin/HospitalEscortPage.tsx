@@ -153,6 +153,7 @@ function EscortCard({ e, onChanged, onEdit, onLogs }: {
   const [busy, setBusy] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
   const [sendOpen, setSendOpen] = useState(false)
+  const [infoOpen, setInfoOpen] = useState(false)
   const [decideOpen, setDecideOpen] = useState(false)
 
   const step = STEP_INDEX[e.status] ?? 0
@@ -236,6 +237,8 @@ function EscortCard({ e, onChanged, onEdit, onLogs }: {
                 보호자 {e.guardian_name}{e.guardian_relation ? `(${e.guardian_relation})` : ''} {e.guardian_phone}
               </span>
             : <span className="px-2 py-0.5 rounded-full bg-white text-rose-500 border border-red-300 border-dashed">보호자 연락처 확인 필요</span>}
+          {/* 번호 자체는 카드에 안 띄운다 — 적혀 있다는 것만 보이면 된다 */}
+          {e.resident_rrn && <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">주민번호 등록됨</span>}
           {e.vendor && <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">업체 {e.vendor}</span>}
           {e.transport && (
             <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">
@@ -289,6 +292,14 @@ function EscortCard({ e, onChanged, onEdit, onLogs }: {
               <Send size={13} /> 업체에 전달했습니다
             </button>
           )}
+          {/* 전달한 뒤 보호자 연락처가 틀린 걸 알게 되는 경우 — 간호팀 수정으로
+              돌아가면 상태가 draft 로 되돌아가므로, 업체로 나가는 정보만 고친다 */}
+          {e.can_welfare && !!e.sent_at && (
+            <button onClick={() => setInfoOpen(true)}
+              className="px-3 py-2 rounded-xl border border-sky-200 text-sky-600 text-xs font-bold hover:bg-sky-50 flex items-center gap-1.5">
+              <UserRound size={13} /> 보호자·주민번호 수정
+            </button>
+          )}
           {e.can_welfare && (
             <button onClick={() => setDecideOpen(true)}
               className="px-3 py-2 rounded-xl border border-emerald-300 text-emerald-700 text-xs font-bold hover:bg-emerald-50 flex items-center gap-1.5">
@@ -327,13 +338,42 @@ function EscortCard({ e, onChanged, onEdit, onLogs }: {
         </div>
       )}
 
+      {/* 업체에 보내는 순간이 보호자·주민번호가 맞는지 마지막으로 확인하는
+          자리다 — 그래서 전달 표시와 한 모달에서 같이 고친다 */}
       {sendOpen && (
         <StepModal title="업체에 전달했습니다" icon={<Send size={15} className="text-sky-600" />}
           fields={[{ key: 'vendor', label: '병원동행업체', value: e.vendor ?? '', ph: '예) 행복동행케어' },
+                   { key: 'guardian_name', label: '보호자 성함', value: e.guardian_name ?? '', ph: '성함' },
+                   { key: 'guardian_relation', label: '보호자 관계', value: e.guardian_relation ?? '', ph: '예) 딸' },
+                   { key: 'guardian_phone', label: '보호자 연락처', value: e.guardian_phone ?? '', ph: '전화번호' },
+                   { key: 'resident_rrn', label: '어르신 주민등록번호', value: e.resident_rrn ?? '', ph: '업체가 병원 접수를 대신할 때만' },
                    { key: 'memo', label: '전달 방법·메모', value: '', ph: '예) 전화로 상태 전달, 보호자 연락처 안내' }]}
-          hint="이동수단은 여기서 정하지 않습니다. 어르신 상태를 정확히 전달하고, 보호자와 업체가 협의하도록 안내해 주세요."
+          hint="보호자·주민등록번호는 업체에 보내는 글에만 들어갑니다(톡방 글에는 안 들어갑니다). 이동수단은 여기서 정하지 않습니다 — 보호자와 업체가 협의하도록 안내해 주세요."
           onClose={() => setSendOpen(false)}
-          onSubmit={async v => { await escortAPI.send(e.id, { vendor: v.vendor, memo: v.memo }); setSendOpen(false); onChanged() }} />
+          onSubmit={async v => {
+            await escortAPI.send(e.id, {
+              vendor: v.vendor, memo: v.memo, resident_rrn: v.resident_rrn,
+              guardian_name: v.guardian_name, guardian_relation: v.guardian_relation,
+              guardian_phone: v.guardian_phone,
+            })
+            setSendOpen(false); onChanged()
+          }} />
+      )}
+      {infoOpen && (
+        <StepModal title="보호자·주민번호 수정" icon={<UserRound size={15} className="text-sky-600" />}
+          fields={[{ key: 'guardian_name', label: '보호자 성함', value: e.guardian_name ?? '', ph: '성함' },
+                   { key: 'guardian_relation', label: '보호자 관계', value: e.guardian_relation ?? '', ph: '예) 딸' },
+                   { key: 'guardian_phone', label: '보호자 연락처', value: e.guardian_phone ?? '', ph: '전화번호' },
+                   { key: 'resident_rrn', label: '어르신 주민등록번호', value: e.resident_rrn ?? '', ph: '업체가 병원 접수를 대신할 때만' }]}
+          hint="업체로 나가는 정보만 고칩니다 — 톡방 글에는 안 들어가므로 진행 상태는 그대로 둡니다. 고친 뒤 「업체에 보낼 내용 복사」로 다시 전달해 주세요."
+          onClose={() => setInfoOpen(false)}
+          onSubmit={async v => {
+            await escortAPI.vendorInfo(e.id, {
+              resident_rrn: v.resident_rrn, guardian_name: v.guardian_name,
+              guardian_relation: v.guardian_relation, guardian_phone: v.guardian_phone,
+            })
+            setInfoOpen(false); onChanged()
+          }} />
       )}
       {decideOpen && (
         <StepModal title="이동수단 확정" icon={<CarFront size={15} className="text-emerald-600" />}
@@ -376,6 +416,9 @@ function EscortForm({ existing, options, onClose, onSaved }: {
     walking: existing.walking, hemiplegia: existing.hemiplegia, wheelchair: existing.wheelchair,
     notes: existing.notes ?? '', hospital: existing.hospital, department: existing.department ?? '',
     visit_date: existing.visit_date, visit_time: existing.visit_time ?? '',
+    // 보호자를 빼먹으면 수정 저장 때 이미 적힌 보호자가 지워진다
+    guardian_name: existing.guardian_name ?? '', guardian_relation: existing.guardian_relation ?? '',
+    guardian_phone: existing.guardian_phone ?? '',
   } : { ...EMPTY })
   const [pick, setPick] = useState(false)
   const [busy, setBusy] = useState(false)
