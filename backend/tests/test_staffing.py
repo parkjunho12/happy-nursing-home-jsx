@@ -131,6 +131,73 @@ def test_14_placement_ratio_21():
     assert S.calculate_required_worker_count(21.01, 2.1) == 11
 
 
+def test_15_fte_from_hours_rule():
+    """정규환산인원(FTE) — 월기준시간 채운 사람 1명 + 못 채운 사람은 시간 합산 ÷ 월기준시간."""
+    fte = S.calculate_fte_from_hours([200, 80, 80], 160)
+    assert fte["full_time_count"] == 1
+    assert fte["partial_worker_count"] == 2
+    assert fte["partial_hours_total"] == 160
+    assert fte["partial_fte"] == 1.0
+    assert fte["fte_total"] == 2.0
+    # 경계값: 정확히 기준시간이면 '넘은' 쪽(1명)으로 센다
+    assert S.calculate_fte_from_hours([160.0], 160)["full_time_count"] == 1
+    assert S.calculate_fte_from_hours([159.9], 160)["full_time_count"] == 0
+    # 0시간(퇴사 등)은 부분근무에도 안 들어간다 — 아예 없는 사람 취급
+    fte0 = S.calculate_fte_from_hours([160, 0, 0], 160)
+    assert fte0["partial_worker_count"] == 0 and fte0["fte_total"] == 1.0
+    # 기준시간 0이면 계산이 죽지 않고 전부 0
+    assert S.calculate_fte_from_hours([100, 200], 0)["fte_total"] == 0.0
+
+
+def test_16_hours_priority_manual_over_schedule():
+    """관리자가 직접 고친 값(recognized_work_hours)이 실제 근무표(schedule_hours)보다 항상 이긴다."""
+    hol = set(S.get_korean_holidays(2026).keys())
+    std = S.calculate_monthly_standard_hours(2026, 7, hol, 8)["hours"]
+    w = {"hire_date": "2020-01-01", "schedule_hours": 140.0, "recognized_work_hours": 99.0}
+    assert S.worker_expected_hours(w, 2026, 7, hol, 8, std) == 99.0
+    # 수동 조정이 없으면 실제 근무표 값을 쓴다 (달력일수 추정치보다 우선)
+    w2 = {"hire_date": "2020-01-01", "schedule_hours": 140.0}
+    assert S.worker_expected_hours(w2, 2026, 7, hol, 8, std) == 140.0
+    # 근무표도 없으면 그제서야 재직일수 비례 추정치
+    w3 = {"hire_date": "2020-01-01"}
+    assert S.worker_expected_hours(w3, 2026, 7, hol, 8, std) == std
+
+
+def test_17_next_month_projection_ceils_fractional_fte():
+    """FTE(소수)가 필요인원보다 모자라면 부족분을 사람 단위로 올림한다."""
+    hol = set(S.get_korean_holidays(2026).keys())
+    proj = S.calculate_next_month_projection(
+        residents=[{"admission_date": "2026-06-01"} for _ in range(10)],
+        planned=[], year=2026, month=6,
+        current_worker_count=3.4, config=S.DEFAULT_CONFIG, holidays_next=hol)
+    # 필요 = ceil(10/2.1) = 5, 확보 3.4 → 부족 1.6 → 올림 2명
+    assert proj["required_worker_count"] == 5
+    assert proj["additional_full_time_workers"] == 2
+    # 충분하면 0
+    proj2 = S.calculate_next_month_projection(
+        residents=[{"admission_date": "2026-06-01"} for _ in range(4)],
+        planned=[], year=2026, month=6,
+        current_worker_count=3.0, config=S.DEFAULT_CONFIG, holidays_next=hol)
+    assert proj2["additional_full_time_workers"] == 0
+
+
+def test_18_additional_admittable_residents():
+    """지금 인력만으로 어르신을 몇 분 더 받을 수 있는지 — simulate() 출력."""
+    from datetime import date
+    y, m = date.today().year, date.today().month
+    # 요양보호사 2명이 각각 기준시간을 꽉 채워 근무 중(실제 근무표 값으로 가정)
+    std_probe = S.simulate({"year": y, "month": m, "residents": [], "workers": [],
+                            "planned_admissions": [], "candidates": []})["monthly_standard_hours"]
+    workers = [{"name": "A", "schedule_hours": std_probe}, {"name": "B", "schedule_hours": std_probe}]
+    residents = [{"admission_date": f"{y}-{m:02d}-01"} for _ in range(2)]  # 월평균 2명
+    out = S.simulate({"year": y, "month": m, "residents": residents, "workers": workers,
+                      "planned_admissions": [], "candidates": []})
+    # FTE 2.0 × 배치비율 2.1 = 관리가능 4.2명, 현재 2명 → 더 받을 수 있는 어르신은 floor(2.2)=2명
+    assert out["current_worker_count"] == 2.0
+    assert out["additional_admittable_residents"] == 2
+    assert "더 받을 수 있을 것으로 예상됩니다" in out["recommendation"]
+
+
 def test_11_integration_simulate():
     # 통합: 실제 simulate 호출 (현재월)
     from datetime import date

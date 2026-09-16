@@ -242,21 +242,29 @@ def worker_expected_hours(worker: dict, year: int, month: int, holidays: set,
                           full_month_hire_day: int = 3) -> float:
     """당월 확보 예상 인정시간.
 
-    산식 (달력일수 비례):
+    산식 (달력일수 비례, 실측치가 없을 때의 최후 수단):
         확보시간 = 월 기준시간 ÷ 월 총일수(28~31) × 재직일수
         재직일수 = max(입사일, 월초) ~ min(퇴사일, 월말)  (양끝 포함) − 휴직일수
 
     - 월초(기본 1~3일) 입사자는 만근 처리 → 재직일수 = 월 총일수
-    - 재직 중이면 '풀근무' 전제 (근무표 시스템 없음)
-    - 실제/예정 시간이 입력돼 있으면 그 값을 우선 사용
+    - 재직 중이면 '풀근무' 전제 (근무표가 아직 없는 미래 달)
+
+    우선순위 — 사람이 직접 적은 값이 언제나 이긴다:
+      1. recognized_work_hours — 관리자가 화면에서 직접 고친 값
+      2. actual_work_hours / expected_work_hours — 시뮬레이터 입력값
+      3. schedule_hours — 그 달 실제 근무표(확정된 근무 코드)에서 뽑은 실측 시간
+      4. 위 셋이 다 없을 때만 달력일수 비례 추정치
     """
+    rec = worker.get("recognized_work_hours")
+    if rec is not None:
+        return float(rec)
     actual = worker.get("actual_work_hours")
     expected = worker.get("expected_work_hours")
     if actual is not None or expected is not None:
         return float(actual or 0) + float(expected or 0)
-    rec = worker.get("recognized_work_hours")
-    if rec is not None:
-        return float(rec)
+    sched = worker.get("schedule_hours")
+    if sched is not None:
+        return float(sched)
 
     start, end = month_bounds(year, month)
     days_in_month = (end - start).days + 1
@@ -288,6 +296,17 @@ def worker_expected_hours(worker: dict, year: int, month: int, holidays: set,
     return round(standard_hours * employed_days / days_in_month, 1)
 
 
+def _hours_source(w: dict) -> str:
+    """이 시간이 어디서 왔는가 — 화면에 '실제 근무표 기준'인지 '추정치'인지 보여준다."""
+    if w.get("recognized_work_hours") is not None:
+        return "manual"
+    if w.get("actual_work_hours") is not None or w.get("expected_work_hours") is not None:
+        return "input"
+    if w.get("schedule_hours") is not None:
+        return "schedule"
+    return "estimate"
+
+
 def calculate_expected_recognized_hours(workers: list, year: int, month: int, holidays: set,
                                         daily_hours: float, standard_hours: float,
                                         full_month_hire_day: int = 3) -> dict:
@@ -305,6 +324,7 @@ def calculate_expected_recognized_hours(workers: list, year: int, month: int, ho
             "name": w.get("employee_name") or w.get("name"),
             "hire_date": _iso(_d(w.get("hire_date"))),
             "overridden": overridden,
+            "hours_source": _hours_source(w),
             "is_expected_hire": bool(w.get("is_expected_hire")),
             "actual_work_hours": w.get("actual_work_hours"),
             "expected_work_hours": w.get("expected_work_hours"),
@@ -318,6 +338,37 @@ def calculate_expected_recognized_hours(workers: list, year: int, month: int, ho
 
 def calculate_shortage_hours(required_total: float, secured: float) -> float:
     return max(0.0, required_total - secured)
+
+
+# ── 정규환산인원(FTE) — 파트타임을 머릿수로 안 세고 시간으로 센다 ─────────
+def calculate_fte_from_hours(hours: list, standard_hours: float) -> dict:
+    """확보(또는 실측) 근무시간 목록 → 정규환산인원(FTE).
+
+    규칙: 월기준시간을 채운 사람은 1명으로 센다. 못 채운 사람들은 시간을
+    모두 합쳐 월기준시간으로 나눠 그만큼만 인정한다.
+
+    예) 월기준시간 160h, 직원 셋이 각각 200h·80h·80h 근무
+        → 1명(200h 충족) + (80+80)/160 = 1 + 1.0 = 2.0 FTE
+
+    왜 머릿수로 세지 않는가: 파트타임이 여럿이면 머릿수는 실제 감당 가능한
+    입소자 수보다 부풀려진다. '관리 가능 인원 = FTE × 배치비율' 을 구하려면
+    시간으로 세야 머릿수와 확보시간(secured_hours)이 같은 잣대를 쓰게 된다.
+    """
+    if standard_hours <= 0:
+        return {"full_time_count": 0, "partial_worker_count": 0,
+                "partial_hours_total": 0.0, "partial_fte": 0.0, "fte_total": 0.0}
+    hs = [max(0.0, float(h)) for h in hours]
+    full = [h for h in hs if h + EPS >= standard_hours]
+    partial = [h for h in hs if h > 0 and h + EPS < standard_hours]
+    partial_hours = sum(partial)
+    partial_fte = partial_hours / standard_hours
+    return {
+        "full_time_count": len(full),
+        "partial_worker_count": len(partial),
+        "partial_hours_total": round(partial_hours, 1),
+        "partial_fte": round(partial_fte, 2),
+        "fte_total": round(len(full) + partial_fte, 2),
+    }
 
 
 # ── 신규 1인 근무 가능시간 ──────────────────────────────────
@@ -483,7 +534,7 @@ def find_earliest_safe_admission_date(base_residents: list, planned: list, curre
 
 # ── 다음 달 필요 정규직 ─────────────────────────────────────
 def calculate_next_month_projection(residents: list, planned: list, year: int, month: int,
-                                    current_worker_count: int, config: dict,
+                                    current_worker_count: float, config: dict,
                                     holidays_next: set) -> dict:
     nxt = add_months(date(year, month, 1), 1)
     ny, nm = nxt.year, nxt.month
@@ -494,7 +545,9 @@ def calculate_next_month_projection(residents: list, planned: list, year: int, m
         res.append(rr)
     avg = calculate_average_resident_count(res, ny, nm)
     req = calculate_required_worker_count(avg, config["placement_ratio"])
-    additional = max(0, req - current_worker_count)
+    # current_worker_count 는 이제 정규환산인원(FTE, 소수)이다 — 부족분은
+    # 사람 단위라 올림한다(0.4명을 채용할 수는 없다)
+    additional = max(0, math.ceil(req - current_worker_count - EPS))
     return {
         "year": ny, "month": nm,
         "avg": round(avg, 2),
@@ -512,8 +565,12 @@ def generate_staffing_explanation(ctx: dict) -> str:
     single = ctx.get("single_worker_recommended_max_hours") or 0
     latest = ctx.get("latest_safe_hire_dates") or {}
     earliest = ctx.get("earliest_safe_admission_date")
+    room = ctx.get("additional_admittable_residents") or 0
     if status == "SAFE":
-        return "현재 인력으로 이번 달과 다음 달 인력기준을 충족할 수 있습니다. 추가 채용 없이 입소가 가능합니다."
+        base = "현재 인력으로 이번 달과 다음 달 인력기준을 충족할 수 있습니다. 추가 채용 없이 입소가 가능합니다."
+        if room > 0:
+            return base + f" 지금 인력만으로 어르신 {room}명까지 더 받을 수 있을 것으로 예상됩니다."
+        return base + " 다만 지금 인력은 이미 다 찼습니다 — 더 받으려면 근무시간을 더 확보해야 합니다."
     if level == "FEASIBLE_SINGLE":
         hire_by = latest.get("1")
         by = f" {hire_by}까지" if hire_by else ""
@@ -569,12 +626,21 @@ def simulate(payload: dict, holiday_table: Optional[list] = None) -> dict:
     after_req = calculate_required_worker_count(after_avg, cfg["placement_ratio"])
     worker_increased = after_req > before_req
 
-    # 확보 예상시간 (기존 직원 풀근무/월중입사 비율)
+    # 확보 예상시간 — 실제 근무표가 있으면 그 실측 시간을, 없으면(미래 달)
+    # 재직일수 비례 추정치를 쓴다 (worker_expected_hours 우선순위 참고)
     sec = calculate_expected_recognized_hours(workers, year, month, holset, cfg["daily_hours"], std,
                                               cfg.get("full_month_hire_day", 3))
     secured = sec["total"]
-    current_worker_count = len([w for w in sec["per"] if not w["is_expected_hire"] and w["hours"] > 0])
-    max_allowed_avg = current_worker_count * cfg["placement_ratio"]
+
+    # 현재 인력을 정규환산인원(FTE)으로 — 머릿수가 아니라 시간으로 센다.
+    # 월기준시간을 채운 사람은 1명, 못 채운 사람은 시간을 합쳐 월기준시간으로
+    # 나눈다. 파트타임이 많을 때 머릿수만 세면 실제 감당 가능한 인원보다
+    # 부풀려진다 — '관리 가능 인원 = FTE × 배치비율' 의 FTE 가 이것이다.
+    existing_hours = [w["hours"] for w in sec["per"] if not w["is_expected_hire"]]
+    fte = calculate_fte_from_hours(existing_hours, std)
+    current_worker_count = fte["fte_total"]
+    current_worker_headcount = len([h for h in existing_hours if h > 0])
+    max_allowed_avg = round(current_worker_count * cfg["placement_ratio"], 2)
 
     req_total_before = calculate_required_hours(before_req, std)
     req_total_after = calculate_required_hours(after_req, std)
@@ -634,6 +700,11 @@ def simulate(payload: dict, holiday_table: Optional[list] = None) -> dict:
 
     applied_holidays = [{"date": d, "name": hol[d]} for d in std_info["applied_holiday_dates"]]
 
+    # 지금 있는 인력만으로(입소 예정·후보 채용 반영 전) 어르신을 몇 분 더
+    # 받을 수 있는가 — 관리 가능 인원(FTE × 배치비율)에서 현재 재원 평균을
+    # 뺀 것. 사람 단위라 내림한다(넘치는 쪽으로 어림잡지 않는다).
+    additional_admittable = math.floor(max(0.0, max_allowed_avg - before_avg) + EPS)
+
     ctx = {
         "year": year, "month": month, "as_of": _iso(as_of),
         "config": cfg,
@@ -645,6 +716,9 @@ def simulate(payload: dict, holiday_table: Optional[list] = None) -> dict:
         "after_required_worker_count": after_req,
         "worker_count_increased": worker_increased,
         "current_worker_count": current_worker_count,
+        "current_worker_headcount": current_worker_headcount,
+        "current_worker_fte_detail": fte,
+        "additional_admittable_residents": additional_admittable,
         "max_allowed_avg_resident_count": round(max_allowed_avg, 2),
         "monthly_standard_hours": std,
         "monthly_standard_detail": std_info,

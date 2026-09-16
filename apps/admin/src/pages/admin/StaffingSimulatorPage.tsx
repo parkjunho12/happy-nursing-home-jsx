@@ -176,7 +176,7 @@ export default function StaffingSimulatorPage() {
                     <div className="text-sm text-red-700">
                       <p className="font-bold">당월 인력기준 충족 위험 — 근무시간 부족</p>
                       {overCapacity ? (
-                        <p className="mt-1">예상 월평균 입소자 <b>{res.after_avg_resident_count}명</b>이 현재 요양보호사 {res.current_worker_count}명이 관리 가능한 <b>{res.max_allowed_avg_resident_count}명</b>을 초과합니다.</p>
+                        <p className="mt-1">예상 월평균 입소자 <b>{res.after_avg_resident_count}명</b>이 현재 요양보호사 정규환산인원(FTE) {res.current_worker_count}명이 관리 가능한 <b>{res.max_allowed_avg_resident_count}명</b>을 초과합니다.</p>
                       ) : (
                         <p className="mt-1">인원수는 충족하나 <b>확보 근무시간이 부족</b>합니다 (확보 {res.secured_hours}h / 필요 {res.required_hours_after.toLocaleString()}h).</p>
                       )}
@@ -201,7 +201,7 @@ export default function StaffingSimulatorPage() {
                       <p className="font-bold">필요 요양보호사가 늘어나지만 현재 인력으로 충족됩니다</p>
                       <p className="mt-1">
                         예상 월평균 입소자 <b>{res.after_avg_resident_count}명</b> → 필요 <b>{res.before_required_worker_count}명 → {res.after_required_worker_count}명</b>.
-                        현재 요양보호사 <b>{res.current_worker_count}명</b>이 관리 가능한 범위는 <b>{res.max_allowed_avg_resident_count}명</b>이며,
+                        현재 요양보호사 정규환산인원(FTE) <b>{res.current_worker_count}명</b>이 관리 가능한 범위는 <b>{res.max_allowed_avg_resident_count}명</b>이며,
                         확보 근무시간 <b>{res.secured_hours}h</b> ≥ 필요 <b>{res.required_hours_after.toLocaleString()}h</b> 이므로 <b>부족시간 0</b>입니다.
                       </p>
                       <p className="mt-0.5 text-blue-500">추가 채용 없이 입소 가능합니다.</p>
@@ -212,6 +212,24 @@ export default function StaffingSimulatorPage() {
             }
             return null
           })()}
+
+          {/* 지금 인력만으로 더 받을 수 있는 어르신 — 입소예정·후보채용 반영 전, 실제 근무시간 기반 예상 */}
+          <div className={`rounded-2xl border p-4 ${res.additional_admittable_residents > 0 ? 'border-teal-200 bg-teal-50' : 'border-gray-200 bg-gray-50'}`}>
+            <div className="flex items-start gap-3">
+              <Users className={`w-6 h-6 shrink-0 ${res.additional_admittable_residents > 0 ? 'text-teal-600' : 'text-gray-400'}`} />
+              <div className={`text-sm ${res.additional_admittable_residents > 0 ? 'text-teal-800' : 'text-gray-600'}`}>
+                <p className="font-bold flex items-center gap-1">
+                  지금 인력만으로 더 받을 수 있는 어르신
+                  <Tip text={'현재 요양보호사의 실제 근무시간을 정규환산인원(FTE)으로 바꿔 배치비율을 곱한 값에서, 지금 재원 평균을 뺀 것입니다.\nFTE 규칙: 월기준시간을 채운 사람 1명 + 못 채운 사람은 시간을 합쳐 월기준시간으로 나눔.\n입소예정·신규채용 입력은 반영하지 않은, 지금 이 순간 인력 기준의 여유입니다.'} />
+                </p>
+                <p className="mt-1 text-2xl font-extrabold">{res.additional_admittable_residents}명</p>
+                <p className="mt-0.5 text-xs opacity-80">
+                  정규환산인원 <b>{res.current_worker_count}명(FTE)</b> × 배치비율 {res.config.placement_ratio} = 관리 가능 <b>{res.max_allowed_avg_resident_count}명</b>
+                  {' '}− 현재 재원 평균 <b>{res.before_avg_resident_count}명</b>
+                </p>
+              </div>
+            </div>
+          </div>
 
           {/* 핵심 카드 6종 */}
           <div className="grid grid-cols-2 lg:grid-cols-6 gap-2 sm:gap-3">
@@ -300,8 +318,10 @@ export default function StaffingSimulatorPage() {
           {showWorkers && (
             <div className="mt-3">
               <p className="text-[11px] text-gray-400 mb-2 bg-gray-50 rounded-lg px-2.5 py-1.5">
-                기본은 <b>월 기준시간 {res.monthly_standard_hours}h ÷ 월 {res.resident_days.days_in_month}일 × 재직일수</b>로 자동 계산됩니다.
-                실제 근무시간이 다르면 아래에서 <b>직접 입력</b>하세요. 입력값은 <b>{year}년 {month}월 기준으로 저장</b>되어 다음에 열어도 유지됩니다. "자동"을 누르면 자동 계산으로 되돌아갑니다.
+                <b>{year}년 {month}월 근무표가 저장돼 있으면 그 실제 근무시간</b>을 그대로 씁니다. 근무표가 아직 없는 달(미래 달)은
+                {' '}<b>월 기준시간 {res.monthly_standard_hours}h ÷ 월 {res.resident_days.days_in_month}일 × 재직일수</b>로 추정합니다.
+                그래도 다르면 아래에서 <b>직접 입력</b>하세요 — 직접 입력한 값이 항상 최우선입니다.
+                입력값은 <b>{year}년 {month}월 기준으로 저장</b>되어 다음에 열어도 유지됩니다. "자동"을 누르면 자동 계산으로 되돌아갑니다.
               </p>
 
               <div className="space-y-1.5">
@@ -315,6 +335,12 @@ export default function StaffingSimulatorPage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-gray-800 truncate">
                           {w.name || `직원${i + 1}`}
+                          {w.hours_source === 'schedule' && !isOv && (
+                            <span className="ml-1.5 text-[10px] font-bold text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded">실제 근무표</span>
+                          )}
+                          {w.hours_source === 'estimate' && !isOv && (
+                            <span className="ml-1.5 text-[10px] font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">추정치</span>
+                          )}
                           {w.on_leave && <span className="ml-1.5 text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">휴직 {w.leave_days}일</span>}
                         </p>
                         <p className="text-[11px] text-gray-400">
@@ -470,16 +496,36 @@ export default function StaffingSimulatorPage() {
               <div className="bg-gray-50 rounded-lg p-3">
                 <p className="font-semibold text-gray-700 mb-1">월평균 입소자</p>
                 <p>재원일수 합계 {res.resident_days.total_days}일 ÷ {res.resident_days.days_in_month}일 = <b>{res.after_avg_resident_count}명</b></p>
-                <p className="text-xs text-gray-400 mt-0.5">현재 요양보호사 {res.current_worker_count}명 × {res.config.placement_ratio} = 최대 {res.max_allowed_avg_resident_count}명까지 관리 가능</p>
+                <p className="text-xs text-gray-400 mt-0.5">현재 요양보호사 정규환산인원(FTE) {res.current_worker_count}명 × {res.config.placement_ratio} = 최대 {res.max_allowed_avg_resident_count}명까지 관리 가능</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="font-semibold text-gray-700 mb-1">정규환산인원(FTE) 계산</p>
+                <p className="text-[11px] text-gray-400 mb-1.5 bg-white rounded px-2 py-1 border border-gray-100">
+                  월기준시간({res.monthly_standard_hours}h)을 채운 사람은 <b>1명</b> · 못 채운 사람은 시간을 모두 합쳐 <b>월기준시간으로 나눈다</b>
+                </p>
+                <p>
+                  기준 충족 <b>{res.current_worker_fte_detail.full_time_count}명</b>
+                  {res.current_worker_fte_detail.partial_worker_count > 0 && (
+                    <> + 미달 {res.current_worker_fte_detail.partial_worker_count}명 합산 {res.current_worker_fte_detail.partial_hours_total}h ÷ {res.monthly_standard_hours}h = {res.current_worker_fte_detail.partial_fte}</>
+                  )}
+                  {' '}= <b className="text-gray-800">{res.current_worker_fte_detail.fte_total}명(FTE)</b>
+                  <span className="text-gray-400"> (머릿수로는 {res.current_worker_headcount}명)</span>
+                </p>
               </div>
               <div className="bg-gray-50 rounded-lg p-3">
                 <p className="font-semibold text-gray-700 mb-1">인식된 요양보호사 {res.worker_hours_detail.length}명 · 직원별 인정시간</p>
                 <p className="text-[11px] text-gray-400 mb-1.5 bg-white rounded px-2 py-1 border border-gray-100">
-                  산식: <b>월 기준시간 {res.monthly_standard_hours}h ÷ 월 {res.resident_days.days_in_month}일 × 재직일수</b>
+                  실제 근무표가 있으면 그 시간, 없으면 <b>월 기준시간 {res.monthly_standard_hours}h ÷ 월 {res.resident_days.days_in_month}일 × 재직일수</b>로 추정
                   &nbsp;· 월초 <b>1~{res.config.full_month_hire_day}일</b> 입사자는 <b>만근</b> · 휴직일수는 재직일수에서 차감
                 </p>
                 {res.worker_hours_detail.length === 0 ? <p className="text-gray-400 text-xs">등록된 요양보호사 없음</p> : res.worker_hours_detail.map((w, i) => (
-                  <p key={i} className="text-xs">· {w.name || `직원${i + 1}`} {w.hours}시간 {w.meets_standard ? <span className="text-green-600">충족</span> : <span className="text-amber-600">미달</span>}{w.on_leave ? <span className="text-amber-600 font-semibold"> · 휴직 {w.leave_days}일 제외</span> : null}{w.is_expected_hire ? ' (예정)' : ''}</p>
+                  <p key={i} className="text-xs">
+                    · {w.name || `직원${i + 1}`} {w.hours}시간 {w.meets_standard ? <span className="text-green-600">충족</span> : <span className="text-amber-600">미달</span>}
+                    {w.hours_source === 'schedule' && <span className="text-teal-600"> · 실제 근무표</span>}
+                    {w.hours_source === 'manual' && <span className="text-indigo-500"> · 수동조정</span>}
+                    {w.hours_source === 'estimate' && <span className="text-gray-400"> · 추정치</span>}
+                    {w.on_leave ? <span className="text-amber-600 font-semibold"> · 휴직 {w.leave_days}일 제외</span> : null}{w.is_expected_hire ? ' (예정)' : ''}
+                  </p>
                 ))}
                 <p className="mt-1 font-semibold text-gray-800">확보 예상시간 {res.secured_hours}시간 · 필요 {res.required_hours_after.toLocaleString()}시간 · 부족 {res.shortage_hours}시간</p>
               </div>
@@ -515,6 +561,7 @@ function ManualModal({ onClose }: { onClose: () => void }) {
             ['2. 입소예정자를 등록하세요', '입소 예정 인원과 입소 예정일을 입력합니다. 여러 명의 입소일이 다르면 각각 입력하세요.'],
             ['3. 신규 직원 정보를 입력하세요', '채용 예정인 요양보호사의 입사 가능일과 근무 가능시간을 입력합니다. 미확정이면 후보로 두면 됩니다. (비워두면 자동 산정)'],
             ['4. 입소 가능성을 확인하세요', '입소 가능 / 조건부 가능 / 당월 충족 불가 예상 / 다음 달 입소 권장 중 하나로 판단합니다.'],
+            ['· 더 받을 수 있는 어르신', '지금 요양보호사의 실제 근무표 시간을 정규환산인원(FTE)으로 바꿔 계산합니다. 월기준시간을 채운 사람은 1명, 못 채운 사람은 시간을 합쳐 월기준시간으로 나눕니다 — 파트타임이 많으면 머릿수보다 낮게 나옵니다. 그 달 근무표가 아직 없으면(미래 달) 재직일수 비례로 추정합니다.'],
             ['5. 부족시간을 확인하세요', '부족 인정시간은 추가로 확보해야 하는 요양보호사 근무시간입니다. 예: 176시간 = 요양보호사 1명의 월 기준시간.'],
             ['6. 최소 신규인원을 확인하세요', '신규 1명이 월말까지 기준시간을 못 채우면 여러 명의 시간을 합산합니다.'],
             ['7. 최종 안전 채용일을 확인하세요', '그 날짜까지 채용해야 월말까지 필요한 근무시간을 확보할 수 있습니다.'],

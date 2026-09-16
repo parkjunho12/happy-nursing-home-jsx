@@ -3,6 +3,7 @@
 권한: ADMIN · 시설장
 """
 from __future__ import annotations
+import calendar
 from datetime import date
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -14,8 +15,10 @@ from app.core.security import get_current_user
 from app.models.user import User
 from app.models.eval import LtcResident, LtcStaffMember
 from app.models.staffing import HolidayCalendar, StaffMonthlyHours
+from app.models.work_schedule import WorkSchedule, WorkScheduleConfig
 from app.schemas.response import ApiResponse
 from app.services import staffing as S
+from app.services import shift_hours as SH
 
 router = APIRouter()
 
@@ -78,15 +81,40 @@ def _apply_overrides(workers: list, ov: dict) -> list:
     return out
 
 
-def _current_caregivers(db: Session) -> list:
+def _actual_schedule_hours(db: Session, year: Optional[int], month: Optional[int]) -> dict:
+    """그 달 실제 근무표(확정된 근무 코드)에서 직원별 총 근무시간을 뽑는다.
+
+    근무표가 아직 없으면(미래 달이라 아직 편성 전) 빈 dict를 돌려준다 —
+    호출부의 worker_expected_hours 가 그때는 재직일수 비례 추정치를 쓴다.
+    엑셀 내보내기(work_schedule.py)와 같은 계산(shift_hours.month_total)을
+    쓴다 — 근무표·인력배치 시뮬레이터·급여가 서로 다른 숫자를 말하면 안 된다.
+    """
+    if not year or not month:
+        return {}
+    ym = f"{year:04d}-{month:02d}"
+    ws = db.query(WorkSchedule).filter(WorkSchedule.year_month == ym).first()
+    if not ws or not ws.data:
+        return {}
+    cfg = db.query(WorkScheduleConfig).first()
+    code_hours = SH.resolve_for_month(
+        ym, (cfg.code_hours if cfg else None) or {}, (cfg.code_hours_rules if cfg else None) or [])
+    days = range(1, calendar.monthrange(year, month)[1] + 1)
+    return {sid: SH.month_total(codes, days, code_hours) for sid, codes in (ws.data or {}).items()}
+
+
+def _current_caregivers(db: Session, year: Optional[int] = None, month: Optional[int] = None) -> list:
     rows = db.query(LtcStaffMember).filter(LtcStaffMember.status == "active").all()
+    sched = _actual_schedule_hours(db, year, month)
     out = []
     for s in rows:
         if not _is_caregiver(s.position):
             continue
-        out.append({"employee_id": s.id, "name": s.name, "hire_date": s.hire_date,
-                    "resign_date": s.resign_date, "is_expected_hire": False,
-                    "position": s.position, "leaves": s.leaves or []})
+        w = {"employee_id": s.id, "name": s.name, "hire_date": s.hire_date,
+             "resign_date": s.resign_date, "is_expected_hire": False,
+             "position": s.position, "leaves": s.leaves or []}
+        if s.id in sched:
+            w["schedule_hours"] = sched[s.id]
+        out.append(w)
     return out
 
 
@@ -97,7 +125,7 @@ def context(year: Optional[int] = Query(None), month: Optional[int] = Query(None
     y = year or today.year
     m = month or today.month
     residents = [r for r in _current_residents(db) if r["status"] == "active"]
-    workers = _current_caregivers(db)
+    workers = _current_caregivers(db, y, m)
     overrides = _hour_overrides(db, y, m)
     hol = S.get_korean_holidays(y, None, _holiday_table(db))
     std = S.calculate_monthly_standard_hours(y, m, set(hol.keys()), S.DEFAULT_CONFIG["daily_hours"])
@@ -135,7 +163,8 @@ def simulate(body: SimBody, db: Session = Depends(get_db), _: User = Depends(_re
         residents = [r for r in _current_residents(db) if r["status"] == "active"]
     workers = body.workers
     if workers is None and body.use_db_workers:
-        workers = _apply_overrides(_current_caregivers(db), _hour_overrides(db, body.year, body.month))
+        workers = _apply_overrides(_current_caregivers(db, body.year, body.month),
+                                   _hour_overrides(db, body.year, body.month))
 
     payload = {
         "year": body.year, "month": body.month, "as_of": body.as_of,

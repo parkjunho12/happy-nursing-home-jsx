@@ -48,7 +48,13 @@ export interface StaffingResult {
   before_required_worker_count: number
   after_required_worker_count: number
   worker_count_increased: boolean
+  /** 정규환산인원(FTE) — 월기준시간 채운 사람 1명 + 못 채운 사람은 시간 합산 ÷ 월기준시간 */
   current_worker_count: number
+  /** 참고용 raw 머릿수(시간 0 초과인 사람 수) — 관리 가능 인원 계산에는 FTE(current_worker_count)를 쓴다 */
+  current_worker_headcount: number
+  current_worker_fte_detail: { full_time_count: number; partial_worker_count: number; partial_hours_total: number; partial_fte: number; fte_total: number }
+  /** 지금 인력만으로(입소예정·후보채용 반영 전) 더 받을 수 있는 어르신 수 */
+  additional_admittable_residents: number
   max_allowed_avg_resident_count: number
   monthly_standard_hours: number
   monthly_standard_detail: MonthlyStandard
@@ -75,7 +81,10 @@ export interface StaffingResult {
   next_month_required_worker_count: number
   next_month_additional_full_time_workers: number
   next_month_projection: { year: number; month: number; avg: number; required_worker_count: number; additional_full_time_workers: number }
-  worker_hours_detail: { employee_id?: string; name?: string; hire_date?: string | null; is_expected_hire: boolean; overridden?: boolean; hours: number; meets_standard: boolean; leave_days?: number; on_leave?: boolean }[]
+  worker_hours_detail: { employee_id?: string; name?: string; hire_date?: string | null; is_expected_hire: boolean; overridden?: boolean
+                         /** manual=관리자 수동조정 · schedule=실제 근무표 실측 · input=시뮬레이터 입력값 · estimate=재직일수 비례 추정 */
+                         hours_source?: 'manual' | 'schedule' | 'input' | 'estimate'
+                         hours: number; meets_standard: boolean; leave_days?: number; on_leave?: boolean }[]
   resident_days: { total_days: number; days_in_month: number; per: { admission_date?: string; discharge_date?: string | null; days: number; planned: boolean }[] }
   is_estimate: boolean
   recommendation: string
