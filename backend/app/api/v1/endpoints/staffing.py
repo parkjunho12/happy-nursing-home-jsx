@@ -103,18 +103,33 @@ def _actual_schedule_hours(db: Session, year: Optional[int], month: Optional[int
 
 
 def _current_caregivers(db: Session, year: Optional[int] = None, month: Optional[int] = None) -> list:
-    rows = db.query(LtcStaffMember).filter(LtcStaffMember.status == "active").all()
     sched = _actual_schedule_hours(db, year, month)
     out = []
-    for s in rows:
+    seen_ids = set()
+    for s in db.query(LtcStaffMember).filter(LtcStaffMember.status == "active").all():
         if not _is_caregiver(s.position):
             continue
+        seen_ids.add(s.id)
         w = {"employee_id": s.id, "name": s.name, "hire_date": s.hire_date,
              "resign_date": s.resign_date, "is_expected_hire": False,
              "position": s.position, "leaves": s.leaves or []}
         if s.id in sched:
             w["schedule_hours"] = sched[s.id]
         out.append(w)
+
+    # 그 달 안에 퇴사했어도 실제로 그 달 근무표에서 일한 시간이 있으면
+    # 인정한다. 재직 상태만 보면 월중 퇴사자의 근무시간이 통째로 빠져,
+    # 실제로 일한 시간보다 그 달 확보 인력이 적게 잡힌다.
+    resigned_ids = set(sched.keys()) - seen_ids
+    if resigned_ids:
+        for s in db.query(LtcStaffMember).filter(LtcStaffMember.id.in_(resigned_ids)).all():
+            hours = sched.get(s.id, 0)
+            if not _is_caregiver(s.position) or hours <= 0:
+                continue
+            out.append({"employee_id": s.id, "name": s.name, "hire_date": s.hire_date,
+                        "resign_date": s.resign_date, "is_expected_hire": False,
+                        "position": s.position, "leaves": s.leaves or [],
+                        "schedule_hours": hours})
     return out
 
 

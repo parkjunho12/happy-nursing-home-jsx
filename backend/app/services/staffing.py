@@ -323,6 +323,9 @@ def calculate_expected_recognized_hours(workers: list, year: int, month: int, ho
             "employee_id": w.get("employee_id"),
             "name": w.get("employee_name") or w.get("name"),
             "hire_date": _iso(_d(w.get("hire_date"))),
+            # 월중 퇴사했어도 그 달 근무표에 실제 근무시간이 있으면 목록에
+            # 들어온다 — 화면에서 '퇴사자인데 왜 있지' 를 설명하기 위해 남긴다.
+            "resign_date": _iso(_d(w.get("resign_date") or w.get("resignation_date"))),
             "overridden": overridden,
             "hours_source": _hours_source(w),
             "is_expected_hire": bool(w.get("is_expected_hire")),

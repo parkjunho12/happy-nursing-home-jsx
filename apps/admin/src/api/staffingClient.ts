@@ -81,7 +81,10 @@ export interface StaffingResult {
   next_month_required_worker_count: number
   next_month_additional_full_time_workers: number
   next_month_projection: { year: number; month: number; avg: number; required_worker_count: number; additional_full_time_workers: number }
-  worker_hours_detail: { employee_id?: string; name?: string; hire_date?: string | null; is_expected_hire: boolean; overridden?: boolean
+  worker_hours_detail: { employee_id?: string; name?: string; hire_date?: string | null
+                         /** 월중 퇴사했어도 그 달 근무표에 실제 근무시간이 있으면 인정되어 목록에 남는다 */
+                         resign_date?: string | null
+                         is_expected_hire: boolean; overridden?: boolean
                          /** manual=관리자 수동조정 · schedule=실제 근무표 실측 · input=시뮬레이터 입력값 · estimate=재직일수 비례 추정 */
                          hours_source?: 'manual' | 'schedule' | 'input' | 'estimate'
                          hours: number; meets_standard: boolean; leave_days?: number; on_leave?: boolean }[]

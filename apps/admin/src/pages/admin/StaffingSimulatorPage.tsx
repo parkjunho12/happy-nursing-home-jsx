@@ -342,6 +342,11 @@ export default function StaffingSimulatorPage() {
                             <span className="ml-1.5 text-[10px] font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">추정치</span>
                           )}
                           {w.on_leave && <span className="ml-1.5 text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">휴직 {w.leave_days}일</span>}
+                          {w.resign_date && (
+                            <span className="ml-1.5 text-[10px] font-bold text-rose-500 bg-rose-50 px-1.5 py-0.5 rounded" title="퇴사했지만 그 달 근무표에 실제 근무시간이 있어 인정됩니다">
+                              퇴사 {fmtD(w.resign_date)}
+                            </span>
+                          )}
                         </p>
                         <p className="text-[11px] text-gray-400">
                           입사 {w.hire_date ? fmtD(w.hire_date) : '-'}
@@ -524,7 +529,9 @@ export default function StaffingSimulatorPage() {
                     {w.hours_source === 'schedule' && <span className="text-teal-600"> · 실제 근무표</span>}
                     {w.hours_source === 'manual' && <span className="text-indigo-500"> · 수동조정</span>}
                     {w.hours_source === 'estimate' && <span className="text-gray-400"> · 추정치</span>}
-                    {w.on_leave ? <span className="text-amber-600 font-semibold"> · 휴직 {w.leave_days}일 제외</span> : null}{w.is_expected_hire ? ' (예정)' : ''}
+                    {w.on_leave ? <span className="text-amber-600 font-semibold"> · 휴직 {w.leave_days}일 제외</span> : null}
+                    {w.resign_date ? <span className="text-rose-500 font-semibold"> · 퇴사({fmtD(w.resign_date)}, 근무표 실적 인정)</span> : null}
+                    {w.is_expected_hire ? ' (예정)' : ''}
                   </p>
                 ))}
                 <p className="mt-1 font-semibold text-gray-800">확보 예상시간 {res.secured_hours}시간 · 필요 {res.required_hours_after.toLocaleString()}시간 · 부족 {res.shortage_hours}시간</p>
