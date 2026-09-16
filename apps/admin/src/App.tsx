@@ -261,6 +261,19 @@ function SocialWorkerRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+// 어르신 서류현황 — 사회복지사급 + 물리·작업치료사.
+// SocialWorkerRoute 를 넓히지 않은 이유: 그 문은 자원봉사·시설소식·프로그램
+// 관리에도 같이 쓰인다. 치료사에게 열 것은 서류현황 하나뿐이다.
+// 백엔드 resident_docs.py 의 _require 와 같아야 한다.
+function ResidentDocsRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, user } = useAuthStore()
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  const ok = user?.role === 'ADMIN'
+    || ['사회복지사', '시설장', '대표', '이사', '물리치료사', '작업치료사'].includes(user?.position ?? '')
+  if (!ok) return <Navigate to="/eval/checklist" replace />
+  return <>{children}</>
+}
+
 // 담당 명단·내부 공지·낙상 보고서 — 사회복지사 라인 + 간호팀장
 function NurseLeadRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuthStore()
@@ -428,7 +441,7 @@ function App() {
             {/* 블로그 자동 초안 — 공개로 나가는 글이라 사회복지사 라인까지 */}
             <Route path="blog-drafts"              element={<SocialWorkerRoute><BlogDraftsPage /></SocialWorkerRoute>} />
             <Route path="handover/:id"             element={<HandoverDetailPage />} />
-            <Route path="resident-docs"            element={<SocialWorkerRoute><ResidentDocsPage /></SocialWorkerRoute>} />
+            <Route path="resident-docs"            element={<ResidentDocsRoute><ResidentDocsPage /></ResidentDocsRoute>} />
             <Route path="education"                element={<StaffEducationPage />} />
             <Route path="enteral"                  element={<CareInventoryRoute><EnteralPage /></CareInventoryRoute>} />
 

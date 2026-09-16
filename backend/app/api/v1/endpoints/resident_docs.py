@@ -1,6 +1,9 @@
 """
 어르신 서류 현황(인정서·계약서·급여제공계획서·평가) API.
-권한: ADMIN · 사회복지사 · 시설장
+권한: ADMIN · 사회복지사 · 시설장 · 대표 · 이사 · 물리치료사 · 작업치료사
+
+치료사도 넣는 이유 — 급여제공계획서·평가 주기를 놓치면 치료 계획에도
+영향이 온다. 사회복지사와 같은 수준으로 열어 둔다.
 """
 from __future__ import annotations
 from typing import Optional, List
@@ -105,8 +108,8 @@ def _require(current_user: User = Depends(get_current_user)) -> User:
     role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
     pos = getattr(current_user, "position", None)
     pos = pos.value if hasattr(pos, "value") else str(pos or "")
-    if role != "ADMIN" and pos not in ("사회복지사", "시설장", "대표", "이사"):
-        raise HTTPException(403, "어르신 서류 현황 권한이 없습니다. (관리자·사회복지사·시설장·대표·이사)")
+    if role != "ADMIN" and pos not in ("사회복지사", "시설장", "대표", "이사", "물리치료사", "작업치료사"):
+        raise HTTPException(403, "어르신 서류 현황 권한이 없습니다. (관리자·사회복지사·시설장·대표·이사·물리치료사·작업치료사)")
     return current_user
 
 

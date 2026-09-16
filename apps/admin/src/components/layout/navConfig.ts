@@ -393,7 +393,9 @@ export function getNavConfig(
   const residentItems: NavItem[] = []
   if (isSocialWorker || isCareTeam || isManager)
     residentItems.push({ to: '/eval/residents', icon: UserRound, label: '수급자 관리', badge: activeResidents > 0 ? `${activeResidents}명` : undefined })
-  if (isSocialWorker || isManager)
+  // 치료사도 본다 — 급여제공계획서·평가 주기를 놓치면 치료 계획에도 영향이 온다.
+  // 백엔드 resident_docs.py 의 권한과 같아야 한다.
+  if (isSocialWorker || isManager || isTherapist)
     residentItems.push({ to: '/resident-docs', icon: ClipboardList, label: '어르신 서류현황' })
   if (isSocialWorker || isNurse || isManager)
     residentItems.push({ to: '/outgoing-docs', icon: FileText, label: '내보내야 할 문서' })
