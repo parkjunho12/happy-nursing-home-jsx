@@ -1021,10 +1021,11 @@ export default function WorkSchedulePage() {
           minStaff={minStaff} setMinStaff={setMinStaff} onFocus={setFocus} />
       </div>
 
-      {/* 인쇄 머리말 — 결재란은 인쇄물에만 */}
+      {/* 인쇄 머리말 — 결재란은 인쇄물에만, 그것도 관리·보관용일 때만.
+          게시용은 벽에 붙여 여러 명이 보는 문서라 결재란이 필요 없다. */}
       <div className="hidden print:flex items-start justify-between mb-1">
         <div />
-        <table className={`print-approve ${attPick ? 'print:hidden' : ''}`}>
+        <table className={`print-approve ${(attPick || !fullPrint) ? 'print:hidden' : ''}`}>
           <tbody>
             <tr>
               <td rowSpan={2} className="pa-label">결<br />재</td>
