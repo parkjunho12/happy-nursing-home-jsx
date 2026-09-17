@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Printer, Save, Eraser, Loader2, CalendarDays, Wand2, Users, History, Sparkles, Inbox, Trash2, FileSpreadsheet, X, Lock, Unlock, StickyNote } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
 import { useAuthStore } from '@/store/auth'
@@ -1172,7 +1172,7 @@ export default function WorkSchedulePage() {
               </tr>
             </thead>
             <tbody>
-              {bodyRows.map(row => {
+              {bodyRows.map((row, idx) => {
                 // ── 층 소계 두 줄 — 그 층 요양보호사가 끝나는 자리에 낀다 ──
                 if (row.kind === 'subtotal') {
                   const isDay = row.shift === 'D'
@@ -1210,8 +1210,30 @@ export default function WorkSchedulePage() {
                 const bh = Number(baseHours) || 0
                 const short = bh > 0 && c.total < bh        // 미달 — 급여가 깎이는 쪽이라 빨갛게
                 const over = bh > 0 && c.total > bh
+
+                // 주간 고정 직종(시설장·치료사 등)에서 교대근무 요양보호사로
+                // 넘어가는 첫 줄에 굵은 선을 긋는다 — 소계 줄은 건너뛰고 직전
+                // '사람' 줄의 직종을 찾는다. 이름순·입사순 정렬에서는 직종이
+                // 뒤섞여 아무 데서나 선이 그어지므로, 직종별로 묶이는
+                // 기본(직종) 정렬일 때만 긋는다.
+                let prevPos: string | null = null
+                if (sortMode === 'basic') {
+                  for (let j = idx - 1; j >= 0; j--) {
+                    const r = bodyRows[j]
+                    if (r.kind === 'person') { prevPos = r.p.pos; break }
+                  }
+                }
+                const groupStart = canJoinTeam(s.pos) && prevPos != null && !canJoinTeam(prevPos)
+
                 return (
-                  <tr key={s.id} className={`hover:bg-indigo-50/20 ${focus?.staffId === s.id ? 'bg-amber-50' : ''} ${printPick && !printPick.has(s.id) ? 'print:hidden' : ''}`}>
+                  <Fragment key={s.id}>
+                  {groupStart && (
+                    <tr className={`ws-group-divider ${printPick && !printPick.has(s.id) ? 'print:hidden' : ''}`} aria-hidden>
+                      <td colSpan={(showFloor ? 4 : 3) + days.length + 8}
+                        className="h-0 p-0 border-0 border-t-2 border-t-gray-400" />
+                    </tr>
+                  )}
+                  <tr className={`hover:bg-indigo-50/20 ${focus?.staffId === s.id ? 'bg-amber-50' : ''} ${printPick && !printPick.has(s.id) ? 'print:hidden' : ''}`}>
                     <td className={`${td} sticky left-0 z-10 bg-white font-semibold text-gray-600 relative`}>
                       {s.team && TEAM_BAND[s.team] && <span className={`absolute left-0 top-0 bottom-0 w-1 ${TEAM_BAND[s.team]}`} />}
                       {s.pos || '-'}
@@ -1312,6 +1334,7 @@ export default function WorkSchedulePage() {
                     <td className={`${td} ws-agg text-sky-700`}>{c.extra || ''}</td>
                     <td className={`${td} ws-agg text-gray-400 text-[10px]`}>{s.note}</td>
                   </tr>
+                  </Fragment>
                 )
               })}
               {/* 요양보호사를 한 명도 안 뽑았으면 인쇄에서 뺀다 */}
