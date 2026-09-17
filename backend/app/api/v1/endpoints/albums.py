@@ -148,12 +148,29 @@ def _uploader_names(db: Session, media_list) -> dict:
 
 
 def _require_can_manage_guardians(current_user: User):
-    """보호자 계정 관리 — ADMIN · 사회복지사 · 시설장"""
+    """보호자 계정 관리 — ADMIN · 사회복지사 · 시설장.
+
+    보호자 로그인 정보(전화번호·비밀번호)를 만들고 지우는 자리라 좁게 둔다.
+    '이번 달 앨범 만들기' 처럼 계정을 건드리지 않는 일은
+    _require_can_manage_albums 를 쓴다."""
     if current_user.role == 'ADMIN':
         return
     if getattr(current_user, 'position', None) in ('사회복지사', '시설장'):
         return
     raise HTTPException(403, "보호자 계정 관리 권한이 없습니다. (ADMIN·사회복지사·시설장)")
+
+
+def _require_can_manage_albums(current_user: User):
+    """앨범 일괄 생성 — ADMIN · 사회복지사 · 시설장 · 물리치료사 · 작업치료사.
+
+    보호자 계정을 만들거나 지우는 일이 아니라 그 달 앨범 껍데기를 만드는
+    일이다. 치료사도 프로그램·재활 사진을 앨범에 올리는 손이라 넣는다.
+    """
+    if current_user.role == 'ADMIN':
+        return
+    if getattr(current_user, 'position', None) in ('사회복지사', '시설장', '물리치료사', '작업치료사'):
+        return
+    raise HTTPException(403, "앨범 만들기 권한이 없습니다. (ADMIN·사회복지사·시설장·물리치료사·작업치료사)")
 
 @admin_router.get("/guardians")
 def list_guardians(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -368,8 +385,8 @@ def generate_monthly(month: Optional[str] = None, db: Session = Depends(get_db),
     """월별 앨범 일괄 생성 — 재원 어르신 전원, 퇴소자 제외, 멱등.
 
     앨범이 만들어지는 유일한 경로다. 자동 생성(매월 1일 루프·수급자 등록 시)은
-    모두 없앴고, 관리자가 이 버튼을 누를 때만 생긴다."""
-    _require_can_manage_guardians(current_user)   # ADMIN·사회복지사
+    모두 없앴고, 이 버튼을 누를 때만 생긴다."""
+    _require_can_manage_albums(current_user)   # ADMIN·사회복지사·시설장·물리치료사·작업치료사
     from datetime import datetime
     from app.services.monthly_albums import ensure_monthly_albums
     if month:
