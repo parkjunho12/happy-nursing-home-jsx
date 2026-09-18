@@ -58,6 +58,7 @@ const IncidentsPage = lazy(() => import('./pages/admin/IncidentsPage'))
 const MonthlyReportPage = lazy(() => import('./pages/admin/MonthlyReportPage'))
 const ResidentAssignPage = lazy(() => import('./pages/admin/ResidentAssignPage'))
 const CaregiverDayPage = lazy(() => import('./pages/admin/CaregiverDayPage'))
+const VitalSheetPage = lazy(() => import('./pages/admin/VitalSheetPage'))
 const MeetingPrepPage = lazy(() => import('./pages/admin/MeetingPrepPage'))
 const OutgoingDocsPage = lazy(() => import('./pages/admin/OutgoingDocsPage'))
 const BlogDraftsPage = lazy(() => import('./pages/admin/BlogDraftsPage'))
@@ -433,6 +434,8 @@ function App() {
             <Route path="incidents"                element={<NurseLeadRoute><IncidentsPage /></NurseLeadRoute>} />
             <Route path="monthly-report"           element={<StaffAdminRoute><MonthlyReportPage /></StaffAdminRoute>} />
             <Route path="assignments"              element={<NurseLeadRoute><ResidentAssignPage /></NurseLeadRoute>} />
+            {/* 바이탈·체온 점검표 — 명단을 보는 사람이 뽑는다(같은 문) */}
+            <Route path="vital-sheets"             element={<NurseLeadRoute><VitalSheetPage /></NurseLeadRoute>} />
             {/* 요양보호사 하루 일정 — 정하는 것은 관리자·시설장까지 */}
             <Route path="caregiver-day"            element={<ManagerRoute><CaregiverDayPage /></ManagerRoute>} />
             {/* 내보내야 할 문서 — 서류를 다루는 사람들이 함께 본다 */}

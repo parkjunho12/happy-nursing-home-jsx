@@ -2,7 +2,7 @@ import {
   LayoutDashboard, UserCog, MessageSquare, FileText,
   Star, Settings, ClipboardList, ClipboardCheck, CalendarDays,
   UserRound, ShieldCheck, Sparkles, FileSearch,
-  Image as ImageIcon, Users, BookOpen, PenLine, Megaphone, Bell, CalendarClock, CalendarCheck, HeartHandshake, Briefcase, Soup, Receipt, GraduationCap,
+  Image as ImageIcon, Users, Activity, BookOpen, PenLine, Megaphone, Bell, CalendarClock, CalendarCheck, HeartHandshake, Briefcase, Soup, Receipt, GraduationCap,
   type LucideIcon, AlertTriangle, BarChart3, ChefHat, Landmark, Radio, Wand2, UserCheck, BellRing, UtensilsCrossed, Ambulance, NotebookPen
 } from 'lucide-react'
 
@@ -175,6 +175,7 @@ export function getNavConfig(
             { to: '/resident-docs', icon: ClipboardList, label: '어르신 서류현황' },
             { to: '/outgoing-docs', icon: FileText, label: '내보내야 할 문서' },
             { to: '/assignments', icon: Users, label: '담당 어르신 명단' },
+            { to: '/vital-sheets', icon: Activity, label: '바이탈 · 체온 점검표' },
             { to: '/enteral', icon: Soup, label: '경관식 관리' },
             { to: '/hospital-escort', icon: Ambulance, label: '병원동행 요청' },
             { to: '/programs', icon: CalendarDays, label: '프로그램 관리' },
@@ -285,6 +286,7 @@ export function getNavConfig(
             { to: '/resident-docs', icon: ClipboardList, label: '어르신 서류현황' },
             { to: '/outgoing-docs', icon: FileText, label: '내보내야 할 문서' },
             { to: '/assignments', icon: Users, label: '담당 어르신 명단' },
+            { to: '/vital-sheets', icon: Activity, label: '바이탈 · 체온 점검표' },
             { to: '/enteral', icon: Soup, label: '경관식 관리' },
             { to: '/hospital-escort', icon: Ambulance, label: '병원동행 요청' },
             { to: '/programs', icon: CalendarDays, label: '프로그램 관리' },
@@ -401,6 +403,8 @@ export function getNavConfig(
     residentItems.push({ to: '/outgoing-docs', icon: FileText, label: '내보내야 할 문서' })
   if (isSocialWorker || isNurse || isManager)
     residentItems.push({ to: '/assignments', icon: Users, label: '담당 어르신 명단' })
+  if (isSocialWorker || isNurse || isManager)
+    residentItems.push({ to: '/vital-sheets', icon: Activity, label: '바이탈 · 체온 점검표' })
   if (canEnteral)
     residentItems.push({ to: '/enteral', icon: Soup, label: '경관식 관리' })
   // 병원동행 — 간호팀·복지팀·재활팀이 올리고, 복지팀이 업체에 전한다.
