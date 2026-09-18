@@ -3,7 +3,7 @@ import RoomPicker from '@/components/eval/RoomPicker'
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/auth'
-import { UserPlus, LogOut, Edit2, AlertTriangle, RotateCcw, Trash2, BedDouble, Loader2, UtensilsCrossed } from 'lucide-react'
+import { UserPlus, LogOut, Edit2, AlertTriangle, RotateCcw, Trash2, BedDouble, Loader2, UtensilsCrossed, Search, X, ArrowDownWideNarrow, ArrowDownAZ } from 'lucide-react'
 import DateField from '@/components/ui/DateField'
 import CertificationEditor from '@/components/eval/CertificationEditor'
 import { genderLabel, genderAvatarClass } from '@/utils/gender'
@@ -19,6 +19,7 @@ import { residentDocAPI } from '@/api/residentDocClient'
 import { dietAPI, type DietRow } from '@/api/dietClient'
 import DietEditModal from '@/components/diet/DietEditModal'
 import { RICE_TONE, SIDE_TONE, TUBE_TONE, UNSET_TONE, dietLabel } from '@/utils/dietTone'
+import { matchResident, sortResidents, type ResidentSort } from '@/utils/residentSort'
 
 type Tab = 'active' | 'pending' | 'discharged' | 'all'
 
@@ -27,6 +28,12 @@ export default function EvalResidentsPage() {
   const [tab, setTab] = useState<Tab>('active')
   const [quickOpen, setQuickOpen] = useState(false)
   const [floorF, setFloorF] = useState('')
+  // 순서 — 기본은 최근 입소 순. 새로 오신 분에게 할 일이 가장 많다.
+  // 고른 순서는 기억해 둔다. 매번 다시 누르게 하면 버튼을 안 쓰게 된다.
+  const [sort, setSort] = useState<ResidentSort>(
+    () => (localStorage.getItem('res.sort') === 'name' ? 'name' : 'admission'))
+  useEffect(() => { localStorage.setItem('res.sort', sort) }, [sort])
+  const [q, setQ] = useState('')
   const [showAdd, setShowAdd] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const navigate = useNavigate()
@@ -51,9 +58,11 @@ export default function EvalResidentsPage() {
   }
 
   const floors = Array.from(new Set(residents.map(r => r.floor).filter(Boolean))).sort() as string[]
-  const filtered = residents
+  const filtered = useMemo(() => sortResidents(residents
     .filter(r => tab === 'all' ? true : r.status === tab)
     .filter(r => !floorF || r.floor === floorF)
+    .filter(r => matchResident(r, q)), sort),
+    [residents, tab, floorF, q, sort])
   const resCls = useMemo(() => {
     const map: Record<string, ChecklistItem[]> = {}
     checklists.filter(c => c.personType === 'resident' && c.active).forEach(c => {
@@ -109,7 +118,7 @@ export default function EvalResidentsPage() {
 
       {/* 탭 (상단 고정) */}
       <StickyToolbar>
-      <div className="flex gap-1.5">
+      <div className="flex gap-1.5 flex-wrap items-center">
         {(['active','pending','discharged','all'] as Tab[]).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${tab===t?'bg-primary-orange text-white':'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
@@ -123,13 +132,45 @@ export default function EvalResidentsPage() {
             {floors.map(f => <option key={f} value={f}>{f}</option>)}
           </select>
         )}
+
+        {/* 찾기 — 성함으로도 호실로도. 직원들은 어르신을 호실로 부를 때가 많다 */}
+        <div className="relative">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none" />
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="성함 · 호실 검색"
+            className="w-44 pl-8 pr-7 py-2 rounded-xl text-sm border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-orange/40" />
+          {q && (
+            <button onClick={() => setQ('')} title="검색어 지우기"
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded-lg text-gray-300 hover:text-gray-500 hover:bg-gray-100">
+              <X size={13} />
+            </button>
+          )}
+        </div>
+
+        {/* 순서 — 최근 입소 순이 기본, 성함을 알고 찾을 때는 ㄱㄴㄷ 순 */}
+        <div className="inline-flex rounded-xl border border-gray-200 overflow-hidden bg-white text-xs font-bold">
+          <button onClick={() => setSort('admission')} title="최근 입소하신 분이 위로"
+            className={`inline-flex items-center gap-1 px-2.5 py-2 transition-colors ${sort === 'admission' ? 'bg-primary-orange text-white' : 'text-gray-500 hover:bg-gray-50'}`}>
+            <ArrowDownWideNarrow size={13} /> 최근 입소순
+          </button>
+          <button onClick={() => setSort('name')} title="성함 ㄱㄴㄷ 순"
+            className={`inline-flex items-center gap-1 px-2.5 py-2 transition-colors ${sort === 'name' ? 'bg-primary-orange text-white' : 'text-gray-500 hover:bg-gray-50'}`}>
+            <ArrowDownAZ size={13} /> ㄱㄴㄷ순
+          </button>
+        </div>
       </div>
       </StickyToolbar>
 
       {/* 목록 */}
       {filtered.length === 0 ? (
         <div className="text-center py-16 text-gray-400 bg-white rounded-xl border border-gray-100">
-          <p className="text-sm">등록된 수급자가 없습니다.</p>
+          {/* 찾아서 없는 것과 아예 없는 것은 다르다 — 같은 문구면 등록이 안 된 줄 안다 */}
+          {q ? (
+            <p className="text-sm">「{q}」으로 찾은 어르신이 없습니다.
+              <button onClick={() => setQ('')} className="ml-2 text-primary-orange font-semibold hover:underline">검색어 지우기</button>
+            </p>
+          ) : (
+            <p className="text-sm">등록된 수급자가 없습니다.</p>
+          )}
         </div>
       ) : (
         <div className="space-y-2.5">

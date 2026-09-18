@@ -37,6 +37,7 @@
     "src/components/schedule/shared.ts",
     "src/utils/floorSubtotals.ts",
     "src/utils/vitalSheet.ts",
+    "src/utils/residentSort.ts",
     "tests/**/*.ts"
   ]
 }
