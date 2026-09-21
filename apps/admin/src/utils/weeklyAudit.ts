@@ -30,7 +30,8 @@ export const KIND_LABEL: Record<'error' | 'blank' | 'check', string> = {
 export function formatRange(weekStart: string, weekEnd: string): string {
   const one = (d: string) => {
     const [, m, dd] = d.split('-')
-    const wd = '일월화수목금토'[new Date(`${d}T00:00:00+09:00`).getDay()]
+    // 실행 환경 시간대(CI 는 UTC)와 무관하게 날짜 문자열만으로 요일을 센다
+    const wd = '일월화수목금토'[new Date(`${d}T12:00:00Z`).getUTCDay()]
     return `${Number(m)}/${Number(dd)}(${wd})`
   }
   if (!weekStart || !weekEnd) return ''
