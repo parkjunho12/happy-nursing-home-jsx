@@ -8,7 +8,7 @@ import { dietAPI, type DietRow, type DietToday, type DietChange, type ImportResu
 import { RICE_TONE, SIDE_TONE, TUBE_TONE, UNSET_TONE, dietLabel, fmtStamp, stampedOnAnotherDay } from '@/utils/dietTone'
 import DietEditModal from '@/components/diet/DietEditModal'
 import AwayModal from '@/components/diet/AwayModal'
-import { absencePeriod } from '@/utils/dietAbsence'
+import { absencePeriod, absenceLabel } from '@/utils/dietAbsence'
 
 /**
  * 식이 현황 — 어느 어르신이 무엇을 드시는가.
@@ -146,7 +146,7 @@ export default function DietPage() {
       {data && <CountStrip data={data} />}
       {careforAway.length > 0 && (
         <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900" role="status">
-          <p className="font-bold">케어포 기준 외박중 {careforAway.length}명 · {careforAway.map(r => r.name).join(', ')}</p>
+          <p className="font-bold">외박중 {careforAway.length}명 · {careforAway.map(r => r.name).join(', ')}</p>
           <p className="mt-1">가져온 외출·외박 기록 기준입니다. 기존 식이는 유지하며, 복귀 내역을 갱신하면 표시가 바뀝니다. 실시간 연동은 아닙니다.</p>
           {careforConflicts.length > 0 && <p className="mt-1 font-bold text-red-700">귀원기록 확인 필요 {careforConflicts.length}명: admin 귀원 완료와 케어포 외박 기록이 다릅니다. 기존 일정 기준 식수 집계는 유지하므로 실제 배식 전 확인해주세요.</p>}
         </div>
@@ -414,7 +414,7 @@ function ResidentLine({ r, canEdit, onClick, onAway }: {
           {a.label}
         </span>
       )}
-      {r.absence && <span className="text-[11px] font-bold px-1.5 py-0.5 rounded border bg-amber-100 text-amber-900 border-amber-300">케어포 {r.absence.label}</span>}
+      {r.absence && <span className="text-[11px] font-bold px-1.5 py-0.5 rounded border bg-amber-100 text-amber-900 border-amber-300">{absenceLabel(r.absence.label)}</span>}
       {/* 기록은 있는데 밥·반찬이 비어 있는 경우도 '미정' 이다 —
           경관식을 풀면 그렇게 된다. 빈칸으로 두면 아무도 못 알아챈다. */}
       {r.tube ? chip('경관식', TUBE_TONE.chip)
@@ -431,7 +431,7 @@ function ResidentLine({ r, canEdit, onClick, onAway }: {
           <CalendarClock size={9} />{fmtMD(r.upcoming.date)}부터 {dietLabel(r.upcoming.rice, r.upcoming.side, r.upcoming.tube)}
         </span>
       )}
-      {r.absence && <span className="w-full text-[10px] text-amber-800">케어포 · {absencePeriod(r.absence)}</span>}
+      {r.absence && <span className="w-full text-[10px] text-amber-800">{absencePeriod(r.absence)}</span>}
       {r.absence?.conflict && <span className="w-full text-[10px] font-bold text-red-700">귀원기록 확인 필요 · {r.absence.conflict_message || 'admin 귀원 완료와 케어포 외박 기록이 다릅니다.'}</span>}
       {r.note && <span className="w-full text-[10px] text-gray-400 truncate print:hidden">· {r.note}</span>}
     </button>

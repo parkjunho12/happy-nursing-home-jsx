@@ -3,3 +3,8 @@ export function absencePeriod(a: { start_date: string; start_time?: string | nul
   const stamp = (date: string, time?: string | null) => date + (time ? ' ' + time.slice(0, 5) : '')
   return stamp(a.start_date, a.start_time) + ' ~ ' + (a.end_date ? stamp(a.end_date, a.end_time) : '복귀 미처리')
 }
+
+/** 상태 배지는 출처 접두어 없이 짧게 표시한다. */
+export function absenceLabel(label: string): string {
+  return label === '외박·복귀' ? '복귀완료' : label
+}
