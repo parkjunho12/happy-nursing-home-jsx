@@ -58,12 +58,18 @@ export default function AwayModal({ r, onClose, onDone }: {
   const [startTime, setStartTime] = useState('18:00')
   const [endDate, setEndDate] = useState(addDays(today, 1))
   const [endTime, setEndTime] = useState('12:00')
+  /**
+   * 언제 오실지 모르는 경우가 실제로 있다 — 병원에 들르신다거나, 가족이
+   * '일단 모시고 간다' 고만 하신다거나. 그때 아무 날짜나 찍어 넣으면 그날이
+   * 지나 저절로 '돌아오신 것' 이 되어 상이 차려진다. 모르면 모른다고 적는다.
+   */
+  const [unknownEnd, setUnknownEnd] = useState(false)
   const [memo, setMemo] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
   const create = async () => {
-    if (`${endDate}T${endTime}` <= `${startDate}T${startTime}`) {
+    if (!unknownEnd && `${endDate}T${endTime}` <= `${startDate}T${startTime}`) {
       setErr('귀원 예정이 출발보다 빠릅니다.'); return
     }
     setBusy(true); setErr('')
@@ -72,7 +78,7 @@ export default function AwayModal({ r, onClose, onDone }: {
         category: '외박',
         title: `[외박] ${r.name} 어르신`,
         start_at: `${startDate}T${startTime}`,
-        end_at: `${endDate}T${endTime}`,
+        end_at: unknownEnd ? null : `${endDate}T${endTime}`,
         memo: memo.trim() || undefined,
       })
       onDone()
@@ -128,15 +134,19 @@ export default function AwayModal({ r, onClose, onDone }: {
         <div className="p-4 space-y-3">
           {a ? (
             <>
-              <div className="rounded-xl border border-green-200 bg-green-50 px-3 py-2.5">
-                <p className="text-[14px] font-bold text-green-900">{a.label}</p>
-                <p className="text-[12.5px] text-green-800 mt-0.5">
-                  {fmt(a.start)} 출발 · {a.end ? `${fmt(a.end)} ${a.returned ? '귀원' : '귀원 예정'}` : '귀원 미정'}
+              <div className={`rounded-xl border px-3 py-2.5 ${
+                a.unknown_return ? 'border-amber-300 bg-amber-50' : 'border-green-200 bg-green-50'}`}>
+                <p className={`text-[14px] font-bold ${a.unknown_return ? 'text-amber-900' : 'text-green-900'}`}>
+                  {a.label}
                 </p>
-                <p className="text-[11.5px] text-green-700/80 mt-1">
+                <p className={`text-[12.5px] mt-0.5 ${a.unknown_return ? 'text-amber-800' : 'text-green-800'}`}>
+                  {fmt(a.start)} 출발 · {a.end ? `${fmt(a.end)} ${a.returned ? '귀원' : '귀원 예정'}` : '귀원 예정 미정'}
+                </p>
+                <p className={`text-[11.5px] mt-1 ${a.unknown_return ? 'text-amber-700' : 'text-green-700/80'}`}>
                   {a.full_day
                     ? '오늘은 하루 종일 안 계셔서 주방 숫자에서 빠집니다.'
                     : '오늘은 한 끼 이상 드셔서 주방 숫자에는 그대로 듭니다.'}
+                  {a.unknown_return && ' 돌아오시면 아래를 눌러 마무리해 주세요.'}
                 </p>
               </div>
               <div className="flex gap-2 flex-wrap">
@@ -165,8 +175,21 @@ export default function AwayModal({ r, onClose, onDone }: {
                 </div>
                 <div>
                   <label className="block text-[12px] font-bold text-gray-500 mb-1">귀원 예정</label>
-                  <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={field} />
-                  <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className={field + ' mt-1.5'} />
+                  {unknownEnd ? (
+                    <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-[13px] font-bold text-amber-900">
+                      아직 모름
+                    </div>
+                  ) : (
+                    <>
+                      <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={field} />
+                      <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className={field + ' mt-1.5'} />
+                    </>
+                  )}
+                  <label className="mt-2 flex items-start gap-2 cursor-pointer">
+                    <input type="checkbox" checked={unknownEnd} className="mt-0.5 w-4 h-4 accent-amber-600"
+                      onChange={e => setUnknownEnd(e.target.checked)} />
+                    <span className="text-[12.5px] font-bold text-gray-700">귀원 예정을 아직 모릅니다</span>
+                  </label>
                 </div>
               </div>
               <div>
@@ -176,7 +199,9 @@ export default function AwayModal({ r, onClose, onDone }: {
               </div>
               <p className="text-[11.5px] text-gray-400 leading-relaxed">
                 「일정 캘린더」에 <b>[외박] {r.name} 어르신</b> 으로 한 줄이 생깁니다.
-                가운데 날은 주방 숫자에서 빠지고, 떠나는 날·돌아오는 날은 그대로 듭니다.
+                {unknownEnd
+                  ? ' 귀원을 적어 주실 때까지 계속 안 계신 것으로 봅니다 — 돌아오시면 이 자리에서 「지금 귀원하셨습니다」를 눌러 주세요.'
+                  : ' 가운데 날은 주방 숫자에서 빠지고, 떠나는 날·돌아오는 날은 그대로 듭니다.'}
               </p>
             </>
           )}

@@ -288,6 +288,12 @@ function CountStrip({ data }: { data: DietToday }) {
             오늘 출발·귀원 {data.away_today - data.away_count}명은 드십니다
           </span>
         )}
+        {/* 귀원을 안 적으면 끝이 없다 — 날마다 여기 떠 있어야 누군가 마무리한다 */}
+        {data.away_unknown > 0 && (
+          <span className="text-[11px] font-bold px-2 py-1 rounded-lg border bg-amber-100 text-amber-900 border-amber-300">
+            귀원 미정 {data.away_unknown}명 — 돌아오셨으면 「외박」에서 마무리해 주세요
+          </span>
+        )}
       </div>
 
       {/* 밥·반찬·그 외를 갈라 둔다 — 주방은 솥과 찬을 따로 잡는다.
@@ -394,12 +400,17 @@ function ResidentLine({ r, canEdit, onClick, onAway }: {
   return (
     /* 단추 안에 단추를 넣을 수 없어 줄을 감싸는 상자를 둔다 —
        왼쪽은 식이를 고치는 자리, 오른쪽은 외박을 여는 자리다. */
-    <div className={`diet-line flex items-stretch ${a?.full_day ? 'bg-green-50/60' : ''}`}>
+    <div className={`diet-line flex items-stretch ${
+      a?.unknown_return ? 'bg-amber-50/70' : a?.full_day ? 'bg-green-50/60' : ''}`}>
     <button onClick={onClick} disabled={!canEdit}
       className={`flex-1 min-w-0 text-left px-2.5 py-2 print:py-1 flex items-center gap-1.5 flex-wrap ${canEdit ? 'hover:bg-orange-50/50 cursor-pointer' : 'cursor-default'}`}>
-      <span className={`text-[13px] font-bold w-[3.6rem] shrink-0 ${a?.full_day ? 'text-green-900' : 'text-gray-800'}`}>{r.name}</span>
+      <span className={`text-[13px] font-bold w-[3.6rem] shrink-0 ${
+        a?.unknown_return ? 'text-amber-900' : a?.full_day ? 'text-green-900' : 'text-gray-800'}`}>{r.name}</span>
       {a && (
-        <span className="text-[11px] font-bold px-1.5 py-0.5 rounded border bg-green-100 text-green-900 border-green-300">
+        // 귀원을 모르는 외박은 노란색 — 끝이 없어서 누군가 마무리해야 하는 줄이다
+        <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded border ${
+          a.unknown_return ? 'bg-amber-100 text-amber-900 border-amber-300'
+            : 'bg-green-100 text-green-900 border-green-300'}`}>
           {a.label}
         </span>
       )}
@@ -427,7 +438,9 @@ function ResidentLine({ r, canEdit, onClick, onAway }: {
     {canEdit && (
       <button onClick={onAway} title={a ? '외박 · 귀원 기록' : '외박으로 등록'}
         className={`shrink-0 px-2 print:hidden border-l border-gray-100 text-[10.5px] font-bold transition-colors ${
-          a ? 'text-green-700 hover:bg-green-100' : 'text-gray-300 hover:text-green-700 hover:bg-green-50'}`}>
+          a?.unknown_return ? 'text-amber-700 hover:bg-amber-100'
+            : a ? 'text-green-700 hover:bg-green-100'
+            : 'text-gray-300 hover:text-green-700 hover:bg-green-50'}`}>
         외박
       </button>
     )}

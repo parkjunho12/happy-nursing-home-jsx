@@ -247,7 +247,9 @@ def current(date: Optional[str] = Query(None), floor: Optional[str] = Query(None
     events = (db.query(ScheduleEvent)
               .filter(ScheduleEvent.category.in_(list(aw.AWAY_CATEGORIES)),
                       ScheduleEvent.status != "canceled",
-                      ScheduleEvent.start_at >= (_d0 - timedelta(days=60)).replace(tzinfo=aw.KST),
+                      # 넉넉히 본다 — 귀원 예정을 모르는 외박은 끝이 없어서,
+                      # 창이 좁으면 오래 나가 계신 분이 조용히 빠진다
+                      ScheduleEvent.start_at >= (_d0 - timedelta(days=365)).replace(tzinfo=aw.KST),
                       ScheduleEvent.start_at <= (_d0 + timedelta(days=1)).replace(tzinfo=aw.KST))
               .all())
     away = aw.away_map(events, on)
@@ -293,6 +295,8 @@ def current(date: Optional[str] = Query(None), floor: Optional[str] = Query(None
         # 숫자에서 빠진 분 수 — 주방이 '왜 어제보다 적지' 를 묻지 않게
         "away_count": sum(1 for p in people if (p["away"] or {}).get("full_day")),
         "away_today": sum(1 for p in people if p["away"]),
+        # 귀원을 안 적어 끝이 없는 외박 — 날마다 눈에 걸려야 누군가 마무리한다
+        "away_unknown": sum(1 for p in people if (p["away"] or {}).get("unknown_return")),
         "rice_types": ds.RICE_TYPES,
         "side_types": ds.SIDE_TYPES,
         "can_edit": can_edit_diet(_role(current_user), _pos(current_user)),

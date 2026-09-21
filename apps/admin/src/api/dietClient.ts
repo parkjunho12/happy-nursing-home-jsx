@@ -54,6 +54,10 @@ export interface DietRow {
     returning_today: boolean
     /** 실제 귀원이 기록되었는가 */
     returned: boolean
+    /** 귀원 예정을 아직 모른다 — 적을 때까지 계속 자리를 비운 것으로 본다 */
+    unknown_return: boolean
+    /** 귀원 미정일 때 며칠째인가 (출발일이 1일째) */
+    days: number
     /** 화면·종이에 같은 말이 나가게 서버가 만든 한 줄 */
     label: string
   } | null
@@ -86,6 +90,8 @@ export interface DietToday {
   away_count: number
   /** 오늘 외박에 걸린 분 수 (떠나는 날·돌아오는 날 포함) */
   away_today: number
+  /** 그중 귀원을 아직 안 적은 분 수 */
+  away_unknown: number
 }
 
 export interface DietChange {

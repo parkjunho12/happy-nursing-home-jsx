@@ -57,3 +57,37 @@ test('내일은 내일이다 — 한국 자정이 전날 UTC 여도', () => {
   assert.equal(addDays('2026-03-01', -1), '2026-02-28')
   assert.equal(addDays('2026-09-21', 0), '2026-09-21')
 })
+
+
+/* 귀원 예정을 모를 때 — 아무 날짜나 찍어 넣으면 그날이 지나 저절로
+   '돌아오신 것' 이 되어 상이 차려진다. 모르면 모른다고 적고, 적을 때까지
+   계속 자리를 비운 것으로 본다. */
+
+const START2 = '2026-09-20'
+const awayOpen = (d: string) => START2 <= d
+const fullOpen = (d: string) => START2 < d
+const daysFrom = (a: string, b: string) =>
+  Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000) + 1
+
+test('귀원을 모르면 출발일부터 계속 자리 비움이다', () => {
+  assert.equal(awayOpen('2026-09-19'), false)
+  for (const d of ['2026-09-20', '2026-09-21', '2026-10-15']) assert.equal(awayOpen(d), true, d)
+})
+
+test('출발 다음 날부터 주방 숫자에서 뺀다 — 출발일은 아침·점심 드셨다', () => {
+  assert.equal(fullOpen('2026-09-20'), false)
+  assert.equal(fullOpen('2026-09-21'), true)
+})
+
+test('며칠째인지 센다 — 출발일이 1일째', () => {
+  assert.equal(daysFrom(START2, '2026-09-20'), 1)
+  assert.equal(daysFrom(START2, '2026-09-21'), 2)
+  assert.equal(daysFrom(START2, '2026-09-25'), 6)
+})
+
+test('귀원을 적으면 그날로 끝난다 — 끝이 없던 외박이 닫힌다', () => {
+  const ret = '2026-09-22'
+  const away = (d: string) => START2 <= d && d <= ret
+  assert.equal(away('2026-09-22'), true)
+  assert.equal(away('2026-09-23'), false, '귀원 다음 날은 자리 비움이 아니다')
+})
