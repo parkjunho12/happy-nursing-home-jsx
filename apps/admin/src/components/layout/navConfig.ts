@@ -2,7 +2,7 @@ import {
   LayoutDashboard, UserCog, MessageSquare, FileText,
   Star, Settings, ClipboardList, ClipboardCheck, CalendarDays,
   UserRound, ShieldCheck, Sparkles, FileSearch,
-  Image as ImageIcon, Users, Activity, BookOpen, PenLine, Megaphone, Bell, CalendarClock, CalendarCheck, HeartHandshake, Briefcase, Soup, Receipt, GraduationCap,
+  Image as ImageIcon, Users, Activity, Phone, BookOpen, PenLine, Megaphone, Bell, CalendarClock, CalendarCheck, HeartHandshake, Briefcase, Soup, Receipt, GraduationCap,
   type LucideIcon, AlertTriangle, BarChart3, ChefHat, Landmark, Radio, Wand2, UserCheck, BellRing, UtensilsCrossed, Ambulance, NotebookPen
 } from 'lucide-react'
 
@@ -212,6 +212,7 @@ export function getNavConfig(
             { to: '/meeting-prep', icon: NotebookPen, label: '회의 준비' },
             { to: '/notices', icon: Bell, label: '내부 공지 관리' },
             { to: '/facility-news', icon: Megaphone, label: '시설소식' },
+            { to: '/consults', icon: Phone, label: '입소 상담' },
             { to: '/contacts', icon: MessageSquare, label: '상담 관리' },
             { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
           ],
@@ -318,6 +319,7 @@ export function getNavConfig(
             { to: '/broadcast', icon: Radio, label: '방송 관리' },
             { to: '/notices', icon: Bell, label: '내부 공지 관리' },
             { to: '/facility-news', icon: Megaphone, label: '시설소식' },
+            { to: '/consults', icon: Phone, label: '입소 상담' },
             { to: '/contacts', icon: MessageSquare, label: '상담 관리' },
             { to: '/volunteers', icon: HeartHandshake, label: '자원봉사 관리' },
           ],
@@ -384,6 +386,11 @@ export function getNavConfig(
     // 매달 반복되는 내 업무 — 자기 것만 보인다
     { to: '/monthly-routines', icon: CalendarCheck, label: '월간 업무' },
   ]
+  // 입소 상담 — 전화를 받는 자리만. 치료사에게 넣으면 눌러도 튕긴다
+  // (백엔드 consults.py 의 WRITERS 와 같아야 한다).
+  if (isSocialWorker || isNurse || isManager)
+    operItems.unshift({ to: '/consults', icon: Phone, label: '입소 상담' })
+
   // 사회복지사도 본다 — 프로그램·면회 일정을 잡으려면 그날 누가 나오는지 알아야 한다.
   // 치료사(물리·작업)도 같다 — 치료 일정을 잡으려면 그날 어느 손이 나오는지 봐야 한다.
   // 간호팀은 아니다(isCareTeam 을 쓰면 간호팀까지 열린다). 보기만 한다.

@@ -127,3 +127,6 @@ from app.models.assign_snapshot import AssignSnapshot
 
 # 회의 준비 — 카카오톡 대화로 만든 회의 준비 문서 (ADMIN 전용)
 from app.models.meeting import MeetingPrep  # noqa: F401
+
+# 입소 상담 — 전화를 받으면서 채우는 한 장
+from app.models.consult import Consult  # noqa: F401,E402

@@ -38,6 +38,7 @@
     "src/utils/floorSubtotals.ts",
     "src/utils/vitalSheet.ts",
     "src/utils/residentSort.ts",
+    "src/utils/consultForm.ts",
     "tests/**/*.ts"
   ]
 }
