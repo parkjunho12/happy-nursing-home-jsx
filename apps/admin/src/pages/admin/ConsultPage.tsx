@@ -1,35 +1,42 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Phone, Plus, Printer, Search, ArrowLeft, Trash2, Loader2, X,
-  AlertCircle, CalendarClock, MessageSquareQuote, Check,
+  AlertCircle, CalendarClock, MessageSquareQuote, Check, Users, Unlink, CornerDownLeft,
 } from 'lucide-react'
 import { consultAPI, type ConsultRow, type ConsultPatch } from '@/api/consultClient'
 import { useAuthStore } from '@/store/auth'
 import {
-  CONSULT_SECTIONS, CONSULT_STATUS, STATUS_LABEL,
-  consultMissing, consultTitle, hasChip, showValue, toggleChip,
+  CONSULT_STATUS, STATUS_LABEL,
+  appendNote, consultMissing, consultTitle, firstMissingKey, hasChip,
+  isRequiredKey, sectionProgress, showValue, toggleChip, visibleSections,
   type ConsultField,
 } from '@/utils/consultForm'
 
 /**
  * 입소 상담 — 전화를 받으면서 그대로 채우는 한 장.
  *
- *  ■ 왜 자동으로 저장하는가
+ *  ■ 통화 중에 쓰는 화면이라는 것이 모든 결정의 근거다
  *
- *    통화하면서 적는 화면이다. 전화가 끊기거나 창을 닫아 한 통화분을 잃으면
- *    다시 여쭐 수가 없다 — 보호자에게 또 전화해 같은 것을 묻게 된다.
- *    그래서 「새 상담」을 누르는 순간 서버에 한 줄을 만들고, 그 뒤로는
- *    손을 멈출 때마다 알아서 저장한다.
+ *    ① 저장을 누를 손이 없다 → 손을 멈추면 알아서 저장한다.
+ *    ② 보호자는 표 순서대로 말씀하지 않는다 → 아무 대목이나 한 번에 가고,
+ *       맨 아래 '빠르게 적기' 에 들리는 대로 쌓았다가 나중에 옮긴다.
+ *    ③ 끊고 나서 다시 전화하는 것이 가장 나쁘다 → 성함·등급·급여·본인부담·
+ *       연락처를 맨 위에 붙박이로 두고, 안 여쭌 것 개수를 늘 띄운다.
+ *       누르면 그 칸으로 데려간다.
+ *    ④ 통화 중에 알림창이 뜨면 대화가 끊긴다 → 저장 실패도 조용히 다시 보낸다.
  *
- *  ■ 왜 멘트를 함께 두는가
+ *  ■ 부부
  *
- *    상담 전화는 복지 선생님만 받지 않는다. 사무실에 있는 사람이 받는다.
- *    처음 받는 사람도 순서대로 읽으면 통화가 굴러가야 한다.
+ *    한 통화에서 두 분을 상담하지만 기록은 한 분에 한 장이다. 등급·건강
+ *    상태가 사람마다 다르고, 한 분만 입소하게 되는 경우가 잦아 한 장에 섞어
+ *    적으면 그때 쪼갤 수 없다. 위에서 두 분을 한 번에 오가고, 인쇄하면
+ *    두 장이 함께 나온다.
  */
 
 const todayISO = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10)
 const nowHM = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(11, 16)
 const hm = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+const mmdd = (iso?: string | null) => (iso ? iso.slice(5).replace('-', '/') : '')
 
 type Scope = 'open' | 'done' | 'all'
 
@@ -43,10 +50,12 @@ export default function ConsultPage() {
   const [loading, setLoading] = useState(true)
   const [openId, setOpenId] = useState<string | null>(null)
   const [row, setRow] = useState<ConsultRow | null>(null)
+  /** 부부일 때 짝의 전체 기록 — 인쇄에 두 장을 함께 내려고 들고 있는다 */
+  const [mate, setMate] = useState<ConsultRow | null>(null)
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<string | null>(null)
-  const [creating, setCreating] = useState(false)
-  // 멘트를 접어둘 수 있다 — 익숙해지면 표만 보고 적는다. 고른 대로 기억한다.
+  const [busy, setBusy] = useState(false)
+  const [quick, setQuick] = useState('')
   const [showScript, setShowScript] = useState(() => localStorage.getItem('cs.script') !== '0')
   useEffect(() => { localStorage.setItem('cs.script', showScript ? '1' : '0') }, [showScript])
 
@@ -67,25 +76,31 @@ export default function ConsultPage() {
   /** 아직 서버에 안 보낸 변경 — 자동 저장이 이걸 비운다 */
   const pending = useRef<ConsultPatch>({})
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // 저장 대상이 바뀌어도 같은 함수를 쓴다 — 부부를 오갈 때 옛 id 로 보내면 안 된다
+  const openIdRef = useRef<string | null>(null)
+  openIdRef.current = openId
 
   const flush = useCallback(async () => {
-    const id = openId
-    const patch = pending.current
-    if (!id || Object.keys(patch).length === 0) return
+    const id = openIdRef.current
+    const p = pending.current
+    if (!id || Object.keys(p).length === 0) return
     pending.current = {}
     setSaving(true)
     try {
-      const saved = await consultAPI.update(id, patch)
+      const saved = await consultAPI.update(id, p)
       setRow(cur => (cur && cur.id === saved.id ? { ...cur, ...saved } : cur))
       setItems(list => list.map(x => (x.id === saved.id ? { ...x, ...saved } : x)))
       setSavedAt(hm(new Date()))
-    } catch (e: any) {
-      // 저장에 실패하면 되돌려 담는다 — 다음 기회에 다시 보낸다.
-      // 통화 중에 알림창을 띄우면 그 순간 대화가 끊긴다.
-      pending.current = { ...patch, ...pending.current }
+      // 부부 공통 칸은 서버가 짝에도 적는다 — 손에 든 짝도 같이 맞춘다
+      if (saved.partner_id && ('couple_room' in p || 'cost_guided' in p)) {
+        setMate(m => (m ? { ...m, couple_room: saved.couple_room, cost_guided: saved.cost_guided } : m))
+      }
+    } catch {
+      // 통화 중에 알림창을 띄우면 그 순간 대화가 끊긴다. 되돌려 담고 다음에 보낸다.
+      pending.current = { ...p, ...pending.current }
       setSavedAt(null)
     } finally { setSaving(false) }
-  }, [openId])
+  }, [])
 
   /** 칸 하나가 바뀌었다 — 화면은 즉시, 서버는 손을 멈춘 뒤 */
   const patch = (key: string, value: any) => {
@@ -95,7 +110,6 @@ export default function ConsultPage() {
     timer.current = setTimeout(() => { void flush() }, 1200)
   }
 
-  // 화면을 닫기 전에 한 번 더 — 남은 것이 있으면 보낸다
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
   useEffect(() => {
     const before = (e: BeforeUnloadEvent) => {
@@ -107,32 +121,62 @@ export default function ConsultPage() {
 
   const open = async (id: string) => {
     await flush()
-    setOpenId(id); setSavedAt(null)
+    setOpenId(id); setSavedAt(null); setMate(null); setQuick('')
     const found = items.find(x => x.id === id)
     if (found) setRow(found)
-    try { setRow(await consultAPI.get(id)) } catch { /* 목록 값으로라도 연다 */ }
+    try {
+      const full = await consultAPI.get(id)
+      setRow(full)
+      if (full.partner_id) consultAPI.get(full.partner_id).then(setMate).catch(() => setMate(null))
+    } catch { /* 목록 값으로라도 연다 */ }
   }
 
   const back = async () => {
     await flush()
-    setOpenId(null); setRow(null); setSavedAt(null)
+    setOpenId(null); setRow(null); setMate(null); setSavedAt(null)
     load()
   }
 
   const create = async () => {
-    setCreating(true)
+    setBusy(true)
     try {
-      // 누르는 순간 서버에 한 줄을 만든다 — 그래야 통화 중에 적는 것이
-      // 곧바로 저장된다. 빈 줄이 남는 것보다 한 통화를 잃는 쪽이 훨씬 나쁘다.
+      // 누르는 순간 서버에 한 줄을 만든다 — 그래야 통화 중에 적는 것이 곧바로 저장된다
       const made = await consultAPI.create({
         consulted_on: todayISO(), consulted_at: nowHM(),
         counselor: me?.name ?? '', method: '전화', route: '전화',
       })
       setItems(list => [made, ...list])
-      setOpenId(made.id); setRow(made); setSavedAt(null)
+      setOpenId(made.id); setRow(made); setMate(null); setSavedAt(null); setQuick('')
     } catch (e: any) {
       alert(e?.response?.data?.detail ?? e?.message ?? '상담을 시작하지 못했습니다.')
-    } finally { setCreating(false) }
+    } finally { setBusy(false) }
+  }
+
+  const addPartner = async () => {
+    if (!row) return
+    await flush()
+    setBusy(true)
+    try {
+      const made = await consultAPI.addPartner(row.id)
+      const mine = await consultAPI.get(row.id)   // 이쪽에도 짝이 생겼다
+      setRow(mine); setMate(made)
+      setItems(list => [made, ...list.map(x => (x.id === mine.id ? mine : x))])
+    } catch (e: any) {
+      alert(e?.response?.data?.detail ?? e?.message ?? '배우자 상담을 만들지 못했습니다.')
+    } finally { setBusy(false) }
+  }
+
+  const unlink = async () => {
+    if (!row) return
+    if (!confirm('부부 묶음을 풀까요?\n\n두 장 모두 그대로 남고, 서로 연결만 끊어집니다.')) return
+    await flush()
+    setBusy(true)
+    try {
+      const mine = await consultAPI.unlink(row.id)
+      setRow(mine); setMate(null); load()
+    } catch (e: any) {
+      alert(e?.response?.data?.detail ?? e?.message ?? '묶음을 풀지 못했습니다.')
+    } finally { setBusy(false) }
   }
 
   const remove = async () => {
@@ -141,13 +185,42 @@ export default function ConsultPage() {
     try {
       await consultAPI.remove(row.id)
       pending.current = {}
-      setOpenId(null); setRow(null); load()
+      setOpenId(null); setRow(null); setMate(null); load()
     } catch (e: any) {
       alert(e?.response?.data?.detail ?? e?.message ?? '삭제에 실패했습니다.')
     }
   }
 
-  const missing = useMemo(() => consultMissing(row), [row])
+  const isCouple = !!row?.partner_id
+  const sections = useMemo(() => visibleSections(isCouple), [isCouple])
+  const missing = useMemo(() => consultMissing(row, isCouple), [row, isCouple])
+
+  /** 안 여쭌 첫 칸으로 데려간다 — 목록만 보여주면 찾으러 스크롤해야 한다 */
+  const jumpToMissing = () => {
+    const key = firstMissingKey(row, isCouple)
+    if (!key) return
+    const el = document.getElementById(`cs-${key}`)
+    if (!el) return
+    // 부드럽게 굴리지 않는다. 이 화면은 스크롤되는 상자 안에 들어 있어
+    // smooth 가 중간에 취소되는 일이 있었고(아무 데도 못 감), 통화 중에는
+    // 기다릴 시간도 없다. 바로 데려다 놓고 노란 불로 어디인지 알린다.
+    el.scrollIntoView({ block: 'center' })
+    const first = el.querySelector('input, textarea, button') as HTMLElement | null
+    first?.focus({ preventScroll: true })
+    el.classList.add('cs-flash')
+    setTimeout(() => el.classList.remove('cs-flash'), 1600)
+  }
+
+  const goSection = (key: string) =>
+    document.getElementById(`cs-sec-${key}`)?.scrollIntoView({ block: 'start' })
+
+  /** 들리는 대로 한 줄 — 특이사항 맨 뒤에 쌓는다 */
+  const addQuick = () => {
+    const line = quick.trim()
+    if (!line || !row) return
+    patch('notes', appendNote(row.notes, line))
+    setQuick('')
+  }
 
   // ── 목록 ──
   if (!openId || !row) {
@@ -159,13 +232,14 @@ export default function ConsultPage() {
           <span className="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 text-sm font-bold border border-indigo-100">
             {items.length}건
           </span>
-          <button onClick={create} disabled={creating}
+          <button onClick={create} disabled={busy}
             className="ml-auto inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold disabled:opacity-50">
-            {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} 새 상담
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} 새 상담
           </button>
         </div>
         <p className="text-xs text-gray-500 mb-3">
           전화를 받으면서 그대로 채우는 한 장입니다. 적는 대로 자동 저장되고, 통화가 끝나면 그대로 인쇄할 수 있습니다.
+          부부를 함께 상담하실 때는 상담을 연 뒤 「배우자 상담 추가」를 누르세요.
         </p>
 
         <div className="flex items-center gap-2 flex-wrap mb-3">
@@ -199,7 +273,7 @@ export default function ConsultPage() {
         ) : (
           <div className="space-y-2">
             {items.map(c => {
-              const miss = consultMissing(c).length
+              const miss = consultMissing(c, !!c.partner_id).length
               const st = CONSULT_STATUS.find(s => s.key === c.status)
               const soon = c.followup_on && c.followup_on <= todayISO()
               return (
@@ -207,6 +281,11 @@ export default function ConsultPage() {
                   className="w-full text-left bg-white rounded-2xl border border-gray-200 hover:border-indigo-300 hover:shadow-sm transition-all px-4 py-3">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-bold text-gray-900">{consultTitle(c)}</span>
+                    {c.partner && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-pink-50 text-pink-700 border border-pink-200">
+                        <Users size={10} /> 부부 · 배우자 {c.partner.resident_name || '성함 미상'}
+                      </span>
+                    )}
                     {st && <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${st.cls}`}>{st.label}</span>}
                     {miss > 0 && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
@@ -216,17 +295,17 @@ export default function ConsultPage() {
                     {c.followup_on && (
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                         soon ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
-                        <CalendarClock size={10} /> 연락 {c.followup_on.slice(5).replace('-', '/')}
+                        <CalendarClock size={10} /> 연락 {mmdd(c.followup_on)}
                       </span>
                     )}
                     <span className="ml-auto text-[11px] text-gray-400">
-                      {c.consulted_on.slice(5).replace('-', '/')}{c.consulted_at ? ` ${c.consulted_at}` : ''} · {c.counselor || '상담자 미상'}
+                      {mmdd(c.consulted_on)}{c.consulted_at ? ` ${c.consulted_at}` : ''} · {c.counselor || '상담자 미상'}
                     </span>
                   </div>
                   <div className="mt-1 text-[11px] text-gray-500 flex items-center gap-2 flex-wrap">
                     {[c.grade, c.benefit, c.copay].filter(Boolean).join(' · ') || <span className="text-gray-300">등급 미확인</span>}
                     {c.guardian_name && <span className="text-gray-400">· 보호자 {c.guardian_name}{c.guardian_relation ? `(${c.guardian_relation})` : ''} {c.guardian_phone ?? ''}</span>}
-                    {c.wish_date && <span className="text-gray-400">· 희망 {c.wish_date.slice(5).replace('-', '/')}</span>}
+                    {c.wish_date && <span className="text-gray-400">· 희망 {mmdd(c.wish_date)}</span>}
                   </div>
                 </button>
               )
@@ -238,158 +317,343 @@ export default function ConsultPage() {
   }
 
   // ── 상담 한 건 ──
+  const sheets = mate ? [row, mate] : [row]
+
   return (
-    <div className="p-4 md:p-6 max-w-4xl mx-auto print:p-0 print:max-w-none">
+    <div className="print:p-0">
       <div className="print:hidden" data-print="off">
-        <div className="flex items-center gap-2 flex-wrap mb-2">
-          <button onClick={back} className="inline-flex items-center gap-1 px-2.5 py-2 rounded-xl border border-gray-200 text-gray-500 text-sm font-semibold hover:bg-gray-50">
-            <ArrowLeft size={14} /> 목록
-          </button>
-          <h1 className="text-lg font-bold text-gray-900">{consultTitle(row)}</h1>
-          <span className="text-[11px] text-gray-400">
-            {saving ? '저장 중…' : savedAt ? `자동 저장됨 ${savedAt}` : '적는 대로 저장됩니다'}
-          </span>
-          <div className="ml-auto flex items-center gap-1.5">
-            <button onClick={() => setShowScript(v => !v)}
-              title="통화에서 여쭐 말을 함께 보여줍니다"
-              className={`inline-flex items-center gap-1 px-2.5 py-2 rounded-xl border text-xs font-bold transition-colors ${
-                showScript ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-gray-400 border-gray-200'}`}>
-              <MessageSquareQuote size={13} /> 멘트
-            </button>
-            <button onClick={async () => { await flush(); window.print() }}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gray-800 hover:bg-gray-900 text-white text-sm font-bold">
-              <Printer size={13} /> 인쇄
-            </button>
-            {canDelete && (
-              <button onClick={remove} title="상담 기록 삭제"
-                className="p-2 rounded-xl border border-gray-200 text-gray-300 hover:text-rose-600 hover:border-rose-200">
-                <Trash2 size={14} />
+        {/* ── 붙박이 통화 바 ──
+            통화 중에는 이 줄만 보고도 어디까지 왔는지 알아야 한다. 성함·등급·
+            급여·본인부담·연락처는 못 여쭈면 다시 전화해야 하는 것들이라 늘 띄워둔다. */}
+        <div className="sticky top-14 md:top-0 z-30 -mx-3 md:-mx-6 px-3 md:px-6 py-2 bg-white/95 backdrop-blur border-b border-gray-200">
+          <div className="max-w-5xl mx-auto">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button onClick={back} className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg border border-gray-200 text-gray-500 text-xs font-bold hover:bg-gray-50">
+                <ArrowLeft size={13} /> 목록
               </button>
-            )}
-          </div>
-        </div>
 
-        {/* 진행 상태 */}
-        <div className="flex items-center gap-1.5 flex-wrap mb-3">
-          <span className="text-[11px] font-bold text-gray-400 mr-1">진행</span>
-          {CONSULT_STATUS.map(s => (
-            <button key={s.key} onClick={() => patch('status', s.key)}
-              className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold border transition-colors ${
-                row.status === s.key ? s.cls : 'bg-white text-gray-400 border-gray-200 hover:bg-gray-50'}`}>
-              {s.label}
-            </button>
-          ))}
-        </div>
-
-        {/* 끊기 전에 여쭐 것 */}
-        {missing.length > 0 && (
-          <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50/70 px-3 py-2.5">
-            <div className="flex items-start gap-2">
-              <AlertCircle size={14} className="text-amber-600 shrink-0 mt-0.5" />
-              <div className="min-w-0">
-                <p className="text-[12px] font-bold text-amber-900">끊기 전에 여쭐 것 {missing.length}가지</p>
-                <p className="text-[11px] text-amber-800 mt-0.5">{missing.map(f => f.label).join(' · ')}</p>
-                <p className="text-[10.5px] text-amber-700/80 mt-1">
-                  비어 있어도 저장됩니다. 다만 등급·본인부담금을 안 여쭈면 입소 직전에 다시 연락드려야 합니다.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="space-y-3">
-          {CONSULT_SECTIONS.map(sec => (
-            <section key={sec.key} className="bg-white rounded-2xl border border-gray-200 px-4 py-3">
-              <h2 className="text-sm font-bold text-gray-900 mb-1.5">{sec.title}</h2>
-              {showScript && (
-                <p className="mb-3 rounded-xl bg-indigo-50/70 border border-indigo-100 px-3 py-2 text-[12px] text-indigo-900 leading-relaxed">
-                  <span className="font-bold text-indigo-600 mr-1">멘트</span>“{sec.script}”
-                </p>
+              {/* 부부 — 두 분을 한 번에 오간다 */}
+              {mate ? (
+                <div className="inline-flex items-center rounded-xl border border-pink-200 bg-pink-50 overflow-hidden">
+                  <span className="inline-flex items-center gap-1 px-2 py-1.5 text-[10px] font-extrabold text-pink-700">
+                    <Users size={11} /> 부부
+                  </span>
+                  <span className="px-2.5 py-1.5 text-xs font-bold bg-white text-gray-900 border-x border-pink-200">
+                    {row.resident_name || '성함 미상'}
+                  </span>
+                  <button onClick={() => open(mate.id)}
+                    title="배우자 상담으로 넘어갑니다 (적던 것은 저장됩니다)"
+                    className="px-2.5 py-1.5 text-xs font-bold text-pink-700 hover:bg-pink-100">
+                    {mate.resident_name || '배우자'} →
+                  </button>
+                </div>
+              ) : (
+                <h1 className="text-sm font-bold text-gray-900">{consultTitle(row)}</h1>
               )}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-3 gap-y-3">
-                {sec.fields.map(f => (
-                  <Field key={f.key} f={f} value={(row as any)[f.key]} onChange={v => patch(f.key, v)} />
-                ))}
+
+              <span className={`text-[11px] ${saving ? 'text-indigo-600' : savedAt ? 'text-emerald-600' : 'text-gray-400'}`}>
+                {saving ? '저장 중…' : savedAt ? `저장됨 ${savedAt}` : '적는 대로 저장됩니다'}
+              </span>
+
+              <div className="ml-auto flex items-center gap-1.5">
+                {!mate && (
+                  <button onClick={addPartner} disabled={busy}
+                    title="부부를 함께 상담할 때 — 상담 개요·보호자·주소를 옮겨 적은 두 번째 장을 만듭니다"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-pink-200 bg-pink-50 text-pink-700 text-[11px] font-bold hover:bg-pink-100 disabled:opacity-50">
+                    {busy ? <Loader2 size={11} className="animate-spin" /> : <Users size={12} />} 배우자 상담 추가
+                  </button>
+                )}
+                {mate && (
+                  <button onClick={unlink} disabled={busy} title="부부 묶음 풀기"
+                    className="p-1.5 rounded-lg border border-gray-200 text-gray-300 hover:text-rose-600 hover:border-rose-200">
+                    <Unlink size={13} />
+                  </button>
+                )}
+                <button onClick={() => setShowScript(v => !v)} title="통화에서 여쭐 말"
+                  className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-lg border text-[11px] font-bold ${
+                    showScript ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-gray-400 border-gray-200'}`}>
+                  <MessageSquareQuote size={12} /> 멘트
+                </button>
+                <button onClick={async () => { await flush(); window.print() }}
+                  title={mate ? '두 분 기록지를 함께 인쇄합니다' : undefined}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-900 text-white text-[11px] font-bold">
+                  <Printer size={12} /> 인쇄{mate ? ' 2장' : ''}
+                </button>
+                {canDelete && (
+                  <button onClick={remove} title="상담 기록 삭제"
+                    className="p-1.5 rounded-lg border border-gray-200 text-gray-300 hover:text-rose-600 hover:border-rose-200">
+                    <Trash2 size={13} />
+                  </button>
+                )}
               </div>
-            </section>
-          ))}
-        </div>
-
-        <p className="text-[11px] text-gray-400 mt-3">
-          적은 사람 {row.created_by ?? '—'}
-          {row.updated_by && row.updated_by !== row.created_by && ` · 마지막 수정 ${row.updated_by}`}
-        </p>
-      </div>
-
-      {/* ── 인쇄 — 상담 기록지 한 장 ── */}
-      <div className="hidden print:block cs-print">
-        <div style={{ borderBottom: '2.5px solid #4338ca', paddingBottom: 6, marginBottom: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
-            <div>
-              <p style={{ fontSize: 9, fontWeight: 800, color: '#4338ca', letterSpacing: '0.2em', margin: 0 }}>
-                행복한요양원 · 정성으로 모시겠습니다
-              </p>
-              <h1 style={{ fontSize: 22, fontWeight: 900, color: '#111827', margin: '2px 0 0', letterSpacing: '0.06em' }}>
-                입소 상담 기록지
-              </h1>
             </div>
-            <div style={{ textAlign: 'right', fontSize: 10, color: '#6b7280' }}>
-              <div style={{ fontSize: 13, fontWeight: 900, color: '#111827' }}>{consultTitle(row)}</div>
-              <div>
-                {row.consulted_on}{row.consulted_at ? ` ${row.consulted_at}` : ''} · 상담자 {row.counselor || '—'}
-                {' · '}{STATUS_LABEL[row.status] ?? row.status}
-              </div>
+
+            {/* 핵심 다섯 — 못 여쭈면 다시 전화해야 하는 것들 */}
+            <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+              <KeyChip label="성함" value={row.resident_name} />
+              <KeyChip label="등급" value={row.grade} />
+              <KeyChip label="급여" value={row.benefit} />
+              <KeyChip label="부담" value={row.copay} />
+              <KeyChip label="☎" value={row.guardian_phone} />
+              {missing.length > 0 ? (
+                <button onClick={jumpToMissing}
+                  className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200">
+                  <AlertCircle size={11} /> 끊기 전에 {missing.length}가지 — {missing[0].label}부터 ▸
+                </button>
+              ) : (
+                <span className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <Check size={11} /> 여쭐 것 다 여쭸습니다
+                </span>
+              )}
             </div>
           </div>
         </div>
 
-        {CONSULT_SECTIONS.map(sec => (
-          <div key={sec.key} style={{ marginBottom: 6, breakInside: 'avoid' }}>
-            <div style={{
-              background: '#eef2ff', border: '1px solid #c7d2fe', color: '#3730a3',
-              fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 4, marginBottom: 3,
-            }}>{sec.title}</div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-              {/* 여섯 칸 — 이름칸·값칸이 세 쌍. 모든 줄이 정확히 여섯 칸을 채워야
-                  줄마다 칸 너비가 달라지지 않는다. */}
-              <colgroup>
-                {['l0', 'v0', 'l1', 'v1', 'l2', 'v2'].map(k => (
-                  <col key={k} style={{ width: k[0] === 'l' ? '13%' : '20.33%' }} />
-                ))}
-              </colgroup>
-              <tbody>
-                {rowsOf(sec.fields).map((line, li) => {
-                  const used = line.reduce((n, f) => n + (f.span ?? 1), 0)
+        <div className="max-w-5xl mx-auto px-3 md:px-6 py-3 pb-40 md:pb-24">
+          <div className="flex gap-4 items-start">
+            {/* 대목 이동 — 보호자는 표 순서대로 말씀하지 않는다 */}
+            <nav className="hidden lg:block w-44 shrink-0 sticky top-32">
+              <p className="text-[10px] font-bold text-gray-400 mb-1.5 px-1">대목</p>
+              <div className="space-y-0.5">
+                {sections.map((sec, i) => {
+                  const p = sectionProgress(row, sec)
                   return (
-                    <tr key={li}>
-                      {line.map((f, fi) => (
-                        <PrintCell key={f.key} f={f} row={row}
-                          // 마지막 칸이 남은 자리를 메운다 — 안 그러면 줄이 짧게 끝나 표가 어긋난다
-                          span={(f.span ?? 1) + (fi === line.length - 1 ? 3 - used : 0)} />
-                      ))}
-                    </tr>
+                    <button key={sec.key} onClick={() => goSection(sec.key)}
+                      className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-gray-100">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`w-4 h-4 rounded-full text-[9px] font-extrabold flex items-center justify-center shrink-0 ${
+                          p.done === p.total ? 'bg-emerald-500 text-white'
+                            : p.done > 0 ? 'bg-amber-400 text-white' : 'bg-gray-200 text-gray-500'}`}>
+                          {i + 1}
+                        </span>
+                        <span className={`text-[11.5px] font-bold truncate ${sec.key_point ? 'text-indigo-700' : 'text-gray-600'}`}>
+                          {sec.title}
+                        </span>
+                      </div>
+                      <div className="mt-1 h-1 rounded-full bg-gray-100 overflow-hidden" style={{ marginLeft: 22 }}>
+                        <div className={`h-full rounded-full transition-all ${p.done === p.total ? 'bg-emerald-400' : 'bg-amber-300'}`}
+                          style={{ width: `${Math.round((p.done / p.total) * 100)}%` }} />
+                      </div>
+                    </button>
                   )
                 })}
-              </tbody>
-            </table>
+              </div>
+              <div className="mt-3 px-1">
+                <p className="text-[10px] font-bold text-gray-400 mb-1">진행</p>
+                <div className="flex flex-wrap gap-1">
+                  {CONSULT_STATUS.map(s => (
+                    <button key={s.key} onClick={() => patch('status', s.key)}
+                      className={`px-1.5 py-1 rounded text-[10px] font-bold border ${
+                        row.status === s.key ? s.cls : 'bg-white text-gray-400 border-gray-200 hover:bg-gray-50'}`}>
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </nav>
+
+            <div className="flex-1 min-w-0 space-y-3">
+              {/* 좁은 화면 — 대목을 가로로 */}
+              <div className="lg:hidden flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+                {sections.map((sec, i) => {
+                  const p = sectionProgress(row, sec)
+                  return (
+                    <button key={sec.key} onClick={() => goSection(sec.key)}
+                      className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] font-bold border ${
+                        p.done === p.total ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : p.done > 0 ? 'bg-amber-50 text-amber-800 border-amber-200'
+                          : 'bg-white text-gray-400 border-gray-200'}`}>
+                      {i + 1}. {sec.title}
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="lg:hidden flex gap-1 flex-wrap">
+                {CONSULT_STATUS.map(s => (
+                  <button key={s.key} onClick={() => patch('status', s.key)}
+                    className={`px-2 py-1 rounded-lg text-[11px] font-bold border ${
+                      row.status === s.key ? s.cls : 'bg-white text-gray-400 border-gray-200'}`}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+
+              {mate && (
+                <div className="rounded-2xl border border-pink-200 bg-pink-50/70 px-3 py-2.5 text-[12px] text-pink-900 leading-relaxed">
+                  <b>부부 상담입니다.</b> 지금은 <b>{row.resident_name || '이분'}</b> 기록지를 적고 있습니다.
+                  등급과 건강 상태는 두 분이 다르니 각각 여쭤 적어 주세요.
+                  상담 개요·보호자·주소·같은 방 희망은 두 장에 함께 적힙니다.
+                </div>
+              )}
+
+              {sections.map((sec, i) => {
+                const p = sectionProgress(row, sec)
+                return (
+                  <section key={sec.key} id={`cs-sec-${sec.key}`}
+                    className={`bg-white rounded-2xl border px-4 py-3 scroll-mt-32 ${
+                      sec.coupleOnly ? 'border-pink-200 ring-1 ring-pink-100'
+                        : sec.key_point ? 'border-indigo-200 ring-1 ring-indigo-100' : 'border-gray-200'}`}>
+                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                      <span className={`w-5 h-5 rounded-full text-[10px] font-extrabold flex items-center justify-center ${
+                        sec.coupleOnly ? 'bg-pink-600 text-white'
+                          : sec.key_point ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-600'}`}>{i + 1}</span>
+                      <h2 className="text-sm font-bold text-gray-900">{sec.title}</h2>
+                      {sec.key_point && (
+                        <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded">
+                          비용이 걸린 대목
+                        </span>
+                      )}
+                      <span className="ml-auto text-[10.5px] text-gray-400">{p.done}/{p.total}</span>
+                    </div>
+                    {showScript && (
+                      <p className="mb-3 rounded-xl bg-indigo-50/70 border border-indigo-100 px-3 py-2 text-[12.5px] text-indigo-900 leading-relaxed">
+                        <span className="font-bold text-indigo-600 mr-1">멘트</span>“{sec.script}”
+                      </p>
+                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-3 gap-y-3">
+                      {sec.fields.map(f => (
+                        <Field key={f.key} f={f} value={(row as any)[f.key]}
+                          required={isRequiredKey(f.key, isCouple)}
+                          onChange={v => patch(f.key, v)} />
+                      ))}
+                    </div>
+                  </section>
+                )
+              })}
+
+              <p className="text-[11px] text-gray-400">
+                적은 사람 {row.created_by ?? '—'}
+                {row.updated_by && row.updated_by !== row.created_by && ` · 마지막 수정 ${row.updated_by}`}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* ── 빠르게 적기 ──
+            보호자는 표 순서대로 말씀하지 않는다. 들리는 대로 한 줄씩 쌓아두었다가
+            통화가 끝난 뒤 제자리로 옮긴다. 못 옮겨도 특이사항으로 종이에 나간다. */}
+        <div className="cs-quick fixed left-0 right-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur px-3 md:px-6 py-2">
+          <div className="max-w-5xl mx-auto flex items-center gap-2">
+            <span className="hidden sm:inline text-[11px] font-bold text-gray-400 shrink-0">빠르게 적기</span>
+            <input value={quick} onChange={e => setQuick(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addQuick() } }}
+              placeholder="들리는 대로 한 줄 — Enter 를 누르면 특이사항에 쌓입니다"
+              className="flex-1 min-w-0 px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-200" />
+            <button onClick={addQuick} disabled={!quick.trim()}
+              className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-gray-800 text-white text-xs font-bold disabled:opacity-30">
+              <CornerDownLeft size={13} /> 담기
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 인쇄 — 부부면 두 장이 함께 나간다 ── */}
+      <div className="hidden print:block">
+        {sheets.map((sheet, si) => (
+          <div key={sheet.id} className="cs-print cs-sheet">
+            <div style={{ borderBottom: '2.5px solid #4338ca', paddingBottom: 6, marginBottom: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                <div>
+                  <p style={{ fontSize: 9, fontWeight: 800, color: '#4338ca', letterSpacing: '0.2em', margin: 0 }}>
+                    행복한요양원 · 정성으로 모시겠습니다
+                  </p>
+                  <h1 style={{ fontSize: 22, fontWeight: 900, color: '#111827', margin: '2px 0 0', letterSpacing: '0.06em' }}>
+                    입소 상담 기록지
+                    {sheets.length > 1 && (
+                      <span style={{ fontSize: 12, fontWeight: 800, color: '#be185d', marginLeft: 8 }}>
+                        부부 상담 {si + 1}/{sheets.length}
+                      </span>
+                    )}
+                  </h1>
+                </div>
+                <div style={{ textAlign: 'right', fontSize: 10, color: '#6b7280' }}>
+                  <div style={{ fontSize: 13, fontWeight: 900, color: '#111827' }}>{consultTitle(sheet)}</div>
+                  <div>
+                    {sheet.consulted_on}{sheet.consulted_at ? ` ${sheet.consulted_at}` : ''} · 상담자 {sheet.counselor || '—'}
+                    {' · '}{STATUS_LABEL[sheet.status] ?? sheet.status}
+                  </div>
+                  {sheets.length > 1 && (
+                    <div style={{ color: '#be185d', fontWeight: 700 }}>
+                      배우자 {(si === 0 ? sheets[1] : sheets[0]).resident_name || '성함 미상'} 님과 함께 상담
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {visibleSections(!!sheet.partner_id).map(sec => (
+              <div key={sec.key} style={{ marginBottom: 6, breakInside: 'avoid' }}>
+                <div style={{
+                  background: sec.coupleOnly ? '#fdf2f8' : '#eef2ff',
+                  border: `1px solid ${sec.coupleOnly ? '#fbcfe8' : '#c7d2fe'}`,
+                  color: sec.coupleOnly ? '#9d174d' : '#3730a3',
+                  fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 4, marginBottom: 3,
+                }}>{sec.title}</div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                  {/* 여섯 칸 — 이름칸·값칸이 세 쌍. 모든 줄이 정확히 여섯 칸을 채워야
+                      줄마다 칸 너비가 달라지지 않는다. */}
+                  <colgroup>
+                    {['l0', 'v0', 'l1', 'v1', 'l2', 'v2'].map(k => (
+                      <col key={k} style={{ width: k[0] === 'l' ? '13%' : '20.33%' }} />
+                    ))}
+                  </colgroup>
+                  <tbody>
+                    {rowsOf(sec.fields).map((line, li) => {
+                      const used = line.reduce((n, f) => n + (f.span ?? 1), 0)
+                      return (
+                        <tr key={li}>
+                          {line.map((f, fi) => (
+                            <PrintCell key={f.key} f={f} row={sheet}
+                              // 마지막 칸이 남은 자리를 메운다 — 안 그러면 줄이 짧게 끝나 표가 어긋난다
+                              span={(f.span ?? 1) + (fi === line.length - 1 ? 3 - used : 0)} />
+                          ))}
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+
+            <p style={{ fontSize: 8.5, color: '#9ca3af', textAlign: 'right', margin: '6px 2px 0' }}>
+              출력 {new Date().toLocaleDateString('ko-KR')} · 어르신 건강 상태와 보호자 연락처가 적힌 문서입니다 — 보관·폐기에 주의해 주세요.
+            </p>
           </div>
         ))}
-
-        <p style={{ fontSize: 8.5, color: '#9ca3af', textAlign: 'right', margin: '6px 2px 0' }}>
-          출력 {new Date().toLocaleDateString('ko-KR')} · 어르신 건강 상태와 보호자 연락처가 적힌 문서입니다 — 보관·폐기에 주의해 주세요.
-        </p>
       </div>
 
       <style>{`
+        /* 폰에서는 아래 탭바(56px) 위에 올린다 — 겹치면 가려져 못 쓴다.
+           넓은 화면에는 탭바가 없으니 바닥에 붙인다. */
+        .cs-quick { bottom: calc(56px + env(safe-area-inset-bottom, 0px)); }
+        @media (min-width: 768px) { .cs-quick { bottom: 0; } }
+        .cs-flash { animation: csFlash 1.6s ease-out; border-radius: 12px; }
+        @keyframes csFlash {
+          0%, 40% { background: #fef3c7; box-shadow: 0 0 0 6px #fef3c7; }
+          100% { background: transparent; box-shadow: 0 0 0 6px transparent; }
+        }
         @media print {
           @page { size: A4 portrait; margin: 10mm 12mm; }
           .cs-print { font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; color: #111; }
           .cs-print * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .cs-print table { break-inside: auto; }
+          .cs-sheet { page-break-after: always; }
+          .cs-sheet:last-child { page-break-after: auto; }
           .cs-print tr { break-inside: avoid; }
         }
       `}</style>
     </div>
+  )
+}
+
+/** 붙박이 줄의 핵심 칸 — 비어 있으면 빨갛게 남는다 */
+function KeyChip({ label, value }: { label: string; value?: string | null }) {
+  const v = String(value ?? '').trim()
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border ${
+      v ? 'bg-gray-50 text-gray-800 border-gray-200' : 'bg-rose-50 text-rose-600 border-rose-200'}`}>
+      <span className={`font-semibold ${v ? 'text-gray-400' : 'text-rose-400'}`}>{label}</span>
+      <span>{v || '미확인'}</span>
+    </span>
   )
 }
 
@@ -407,11 +671,7 @@ function rowsOf(fields: ConsultField[]): ConsultField[][] {
   return out
 }
 
-/** 이름칸 + 값칸 한 쌍.
- *
- *  값칸에 높이를 준다. 빈 기록지를 뽑아 통화하면서 손으로 적는 일이 실제로
- *  있어서, 칸이 눌려 있으면 적을 자리가 없다. 긴 칸은 더 높게.
- */
+/** 이름칸 + 값칸 한 쌍. 값칸에 높이를 주어 빈 기록지에 손으로 적을 수 있게 한다. */
 function PrintCell({ f, row, span }: { f: ConsultField; row: ConsultRow; span: number }) {
   const b = '1px solid #cbd5e1'
   const tall = f.type === 'textarea' || f.type === 'chips'
@@ -431,32 +691,41 @@ function PrintCell({ f, row, span }: { f: ConsultField; row: ConsultRow; span: n
 }
 
 /** 칸 하나 — 종류에 따라 다르게 그린다 */
-function Field({ f, value, onChange }: {
+function Field({ f, value, onChange, required }: {
   f: ConsultField
   value: any
   onChange: (v: any) => void
+  required?: boolean
 }) {
   const span = f.span ?? 1
   const colCls = span === 3 ? 'sm:col-span-3' : span === 2 ? 'sm:col-span-2' : ''
   const v = value === null || value === undefined ? '' : String(value)
-  const inputCls = 'w-full px-2.5 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-200'
+  const empty = !v.trim()
+  const inputCls = `w-full px-2.5 py-2 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-200 ${
+    required && empty ? 'border-amber-300 bg-amber-50/40' : 'border-gray-200'}`
+  // 통화 중에 누르는 단추다 — 작으면 두 번 누르게 된다
+  const chipCls = (on: boolean) =>
+    `px-2.5 py-2 rounded-lg text-[12px] font-bold border transition-colors ${
+      on ? 'bg-indigo-600 text-white border-indigo-600'
+         : 'bg-white text-gray-600 border-gray-200 hover:bg-indigo-50 hover:border-indigo-200'}`
 
   return (
-    <div className={colCls}>
-      <label className="block text-[11px] font-bold text-gray-500 mb-1">
+    <div className={colCls} id={`cs-${f.key}`}>
+      <label className="flex items-center gap-1 text-[11px] font-bold text-gray-500 mb-1">
         {f.label}
-        {f.unit && <span className="font-normal text-gray-300 ml-1">({f.unit})</span>}
+        {f.unit && <span className="font-normal text-gray-300">({f.unit})</span>}
+        {required && (
+          <span className={`ml-0.5 w-1.5 h-1.5 rounded-full ${empty ? 'bg-amber-400' : 'bg-emerald-400'}`}
+            title={empty ? '꼭 여쭐 것 — 아직 비어 있습니다' : '꼭 여쭐 것 — 적혔습니다'} />
+        )}
       </label>
 
       {f.type === 'choice' && (
         <div className="flex flex-wrap gap-1">
           {f.options!.map(o => (
-            <button key={o} type="button"
-              // 고른 것을 다시 누르면 지운다 — 잘못 누른 것을 되돌릴 길이 있어야 한다
-              onClick={() => onChange(v === o ? '' : o)}
-              className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition-colors ${
-                v === o ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}>
-              {v === o && <Check size={10} className="inline mr-0.5 -mt-0.5" />}{o}
+            // 고른 것을 다시 누르면 지운다 — 잘못 누른 것을 되돌릴 길이 있어야 한다
+            <button key={o} type="button" onClick={() => onChange(v === o ? '' : o)} className={chipCls(v === o)}>
+              {v === o && <Check size={11} className="inline mr-0.5 -mt-0.5" />}{o}
             </button>
           ))}
         </div>
@@ -465,20 +734,15 @@ function Field({ f, value, onChange }: {
       {f.type === 'chips' && (
         <>
           <div className="flex flex-wrap gap-1 mb-1">
-            {f.options!.map(o => {
-              const on = hasChip(v, o)
-              return (
-                <button key={o} type="button" onClick={() => onChange(toggleChip(v, o))}
-                  className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition-colors ${
-                    on ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}>
-                  {on && <Check size={10} className="inline mr-0.5 -mt-0.5" />}{o}
-                </button>
-              )
-            })}
+            {f.options!.map(o => (
+              <button key={o} type="button" onClick={() => onChange(toggleChip(v, o))} className={chipCls(hasChip(v, o))}>
+                {hasChip(v, o) && <Check size={11} className="inline mr-0.5 -mt-0.5" />}{o}
+              </button>
+            ))}
           </div>
           {/* 고른 것과 손으로 덧붙인 말이 한 줄에 함께 담긴다 — 종이에도 이대로 찍힌다 */}
-          <input value={v} onChange={e => onChange(e.target.value)} placeholder="누르거나, 들으신 그대로 적으셔도 됩니다"
-            className={inputCls} />
+          <input value={v} onChange={e => onChange(e.target.value)}
+            placeholder="누르거나, 들으신 그대로 적으셔도 됩니다" className={inputCls} />
         </>
       )}
 

@@ -63,7 +63,12 @@ TEXT_FIELDS = (
     "speech", "mobility", "toileting", "eating", "diet", "health_note",
     "children", "guardian_name", "guardian_relation", "guardian_phone", "address",
     "checkup", "checkup_note", "notes", "guided",
+    "couple_room", "cost_guided",
 )
+
+# 부부 두 분에게 공통인 사실 — 한쪽에 적으면 짝에도 같이 적는다.
+# 따로 두면 두 장에 서로 다른 답이 남고, 그러면 어느 쪽이 맞는지 알 수 없다.
+COUPLE_SHARED = ("couple_room", "cost_guided")
 
 
 class ConsultBody(BaseModel):
@@ -113,6 +118,9 @@ class ConsultBody(BaseModel):
     notes: Optional[str] = None
     guided: Optional[str] = None
 
+    couple_room: Optional[str] = None
+    cost_guided: Optional[str] = None
+
     status: Optional[str] = None
     followup_on: Optional[str] = None
 
@@ -126,12 +134,41 @@ def _dict(c: Consult) -> Dict[str, Any]:
         "wish_date": c.wish_date,
         "status": c.status,
         "followup_on": c.followup_on,
+        "partner_id": c.partner_id,
         "created_by": c.created_by,
         "created_at": c.created_at.isoformat() if c.created_at else None,
         "updated_by": c.updated_by,
         "updated_at": c.updated_at.isoformat() if c.updated_at else None,
     })
     return d
+
+
+def _with_partner(db: Session, c: Consult) -> Dict[str, Any]:
+    """한 건 + 짝의 요약.
+
+    목록에서 '부부 · 배우자 ○○○' 이 보여야 두 장이 한 통화에서 나온 것임을
+    안다. 짝 전체를 담지는 않는다 — 목록 한 줄에 필요한 만큼만.
+    """
+    d = _dict(c)
+    p = db.query(Consult).filter(Consult.id == c.partner_id).first() if c.partner_id else None
+    d["partner"] = ({"id": p.id, "resident_name": p.resident_name, "gender": p.gender,
+                     "age": p.age, "status": p.status} if p else None)
+    return d
+
+
+def _sync_couple(db: Session, c: Consult) -> None:
+    """부부 공통 칸을 짝에도 적는다.
+
+    같은 방을 원하시는지, 합산 금액을 안내했는지는 두 분에게 하나의 사실이다.
+    한쪽에만 적히면 다른 장을 인쇄했을 때 빈칸으로 나간다.
+    """
+    if not c.partner_id:
+        return
+    p = db.query(Consult).filter(Consult.id == c.partner_id).first()
+    if not p:
+        return
+    for f in COUPLE_SHARED:
+        setattr(p, f, getattr(c, f))
 
 
 def _clean(v: Optional[str], limit: int) -> Optional[str]:
@@ -213,7 +250,7 @@ def list_consults(scope: str = Query("open", description="open | all | done"),
                         Consult.consulted_at.desc().nullslast(),
                         Consult.created_at.desc())
             .limit(500).all())
-    return ApiResponse(success=True, data={"items": [_dict(r) for r in rows]})
+    return ApiResponse(success=True, data={"items": [_with_partner(db, r) for r in rows]})
 
 
 @router.post("")
@@ -224,7 +261,54 @@ def create_consult(body: ConsultBody, db: Session = Depends(get_db), u: User = D
     _apply(c, body, getattr(u, "name", None))
     c.created_by = getattr(u, "name", None)
     db.add(c); db.commit(); db.refresh(c)
-    return ApiResponse(success=True, data=_dict(c))
+    return ApiResponse(success=True, data=_with_partner(db, c))
+
+
+# 부부 상담 — 한 통화에서 두 분. 상담 개요·보호자·주소는 같으므로 옮겨 적는다.
+# 손으로 두 번 적게 하면 연락처가 한 자리 틀리고, 그러면 다시 연락할 길이 없다.
+CARRY_OVER = ("consulted_on", "consulted_at", "counselor", "route", "method", "caller",
+              "living", "living_note", "children", "guardian_name", "guardian_relation",
+              "guardian_phone", "address", "wish_date", "checkup", "checkup_note",
+              "couple_room", "cost_guided", "followup_on")
+
+
+@router.post("/{consult_id}/partner")
+def add_partner(consult_id: str, db: Session = Depends(get_db), u: User = Depends(_writer)):
+    """배우자 상담을 한 장 더 만들어 두 장을 묶는다.
+
+    건강 상태·등급은 옮기지 않는다. 사람마다 다른 것을 미리 채워두면
+    확인하지 않고 그대로 두게 된다 — 빈칸이 낫다.
+    """
+    c = db.query(Consult).filter(Consult.id == consult_id).first()
+    if not c:
+        raise HTTPException(404, "상담 기록을 찾을 수 없습니다.")
+    if c.partner_id:
+        raise HTTPException(400, "이미 배우자 상담이 묶여 있습니다.")
+    p = Consult(consulted_on=c.consulted_on, status=c.status,
+                created_by=getattr(u, "name", None), updated_by=getattr(u, "name", None))
+    for f in CARRY_OVER:
+        setattr(p, f, getattr(c, f))
+    # 성별은 반대로 미리 둔다 — 부부라 대개 맞고, 틀리면 한 번 눌러 고친다.
+    p.gender = "여" if (c.gender or "") == "남" else "남" if (c.gender or "") == "여" else None
+    db.add(p); db.flush()
+    c.partner_id = p.id
+    p.partner_id = c.id
+    db.commit(); db.refresh(p)
+    return ApiResponse(success=True, data=_with_partner(db, p))
+
+
+@router.post("/{consult_id}/unlink")
+def unlink_partner(consult_id: str, db: Session = Depends(get_db), _: User = Depends(_writer)):
+    """부부 묶음을 푼다. 두 장은 그대로 남는다 — 지우지 않는다."""
+    c = db.query(Consult).filter(Consult.id == consult_id).first()
+    if not c:
+        raise HTTPException(404, "상담 기록을 찾을 수 없습니다.")
+    p = db.query(Consult).filter(Consult.id == c.partner_id).first() if c.partner_id else None
+    c.partner_id = None
+    if p:
+        p.partner_id = None
+    db.commit(); db.refresh(c)
+    return ApiResponse(success=True, data=_with_partner(db, c))
 
 
 @router.get("/{consult_id}")
@@ -232,7 +316,7 @@ def get_consult(consult_id: str, db: Session = Depends(get_db), _: User = Depend
     c = db.query(Consult).filter(Consult.id == consult_id).first()
     if not c:
         raise HTTPException(404, "상담 기록을 찾을 수 없습니다.")
-    return ApiResponse(success=True, data=_dict(c))
+    return ApiResponse(success=True, data=_with_partner(db, c))
 
 
 @router.put("/{consult_id}")
@@ -242,8 +326,9 @@ def update_consult(consult_id: str, body: ConsultBody,
     if not c:
         raise HTTPException(404, "상담 기록을 찾을 수 없습니다.")
     _apply(c, body, getattr(u, "name", None))
+    _sync_couple(db, c)
     db.commit(); db.refresh(c)
-    return ApiResponse(success=True, data=_dict(c))
+    return ApiResponse(success=True, data=_with_partner(db, c))
 
 
 @router.delete("/{consult_id}")
@@ -255,5 +340,9 @@ def delete_consult(consult_id: str, db: Session = Depends(get_db), u: User = Dep
     c = db.query(Consult).filter(Consult.id == consult_id).first()
     if not c:
         raise HTTPException(404, "상담 기록을 찾을 수 없습니다.")
+    if c.partner_id:
+        p = db.query(Consult).filter(Consult.id == c.partner_id).first()
+        if p:
+            p.partner_id = None
     db.delete(c); db.commit()
     return ApiResponse(success=True, data={"deleted": consult_id})

@@ -56,6 +56,12 @@ export interface ConsultRow {
   notes?: string | null
   guided?: string | null
 
+  /** 부부 상담 — 두 장이 서로를 가리킨다 */
+  partner_id?: string | null
+  partner?: { id: string; resident_name?: string | null; gender?: string | null; age?: number | null; status?: string } | null
+  couple_room?: string | null
+  cost_guided?: string | null
+
   status: string
   followup_on?: string | null
   created_by?: string | null
@@ -64,7 +70,8 @@ export interface ConsultRow {
   updated_at?: string | null
 }
 
-export type ConsultPatch = Partial<Omit<ConsultRow, 'id' | 'created_at' | 'created_by' | 'updated_at' | 'updated_by'>>
+export type ConsultPatch = Partial<Omit<ConsultRow,
+  'id' | 'created_at' | 'created_by' | 'updated_at' | 'updated_by' | 'partner' | 'partner_id'>>
 
 export const consultAPI = {
   /** scope: open(진행 중) · done(끝난 것) · all */
@@ -75,4 +82,8 @@ export const consultAPI = {
   create: (b: ConsultPatch) => apiClient.post(BASE, b).then(unwrap<ConsultRow>),
   update: (id: string, b: ConsultPatch) => apiClient.put(`${BASE}/${id}`, b).then(unwrap<ConsultRow>),
   remove: (id: string) => apiClient.delete(`${BASE}/${id}`).then(unwrap<{ deleted: string }>),
+  /** 배우자 상담을 한 장 더 만들어 묶는다 — 상담 개요·보호자·주소를 옮겨 적는다 */
+  addPartner: (id: string) => apiClient.post(`${BASE}/${id}/partner`).then(unwrap<ConsultRow>),
+  /** 부부 묶음 풀기 — 두 장은 남는다 */
+  unlink: (id: string) => apiClient.post(`${BASE}/${id}/unlink`).then(unwrap<ConsultRow>),
 }

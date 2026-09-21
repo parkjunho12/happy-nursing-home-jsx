@@ -29,6 +29,10 @@ export interface ConsultSection {
   /** 멘트 — 이 대목에서 여쭙는 말 */
   script: string
   fields: ConsultField[]
+  /** 부부 상담일 때만 나오는 대목 */
+  coupleOnly?: boolean
+  /** 비용이 걸린 대목 — 화면에서 먼저 눈에 띄게 한다 */
+  key_point?: boolean
 }
 
 /** 여러 개를 고르는 칸의 구분자 — 종이에도 이대로 찍힌다 */
@@ -73,6 +77,7 @@ export const CONSULT_SECTIONS: ConsultSection[] = [
   {
     key: 'grade',
     title: '요양등급 · 비용',
+    key_point: true,
     script: '장기요양등급은 받으셨을까요? 등급에 따라 비용이 달라져서, 본인부담률도 함께 확인해 드리겠습니다.',
     fields: [
       {
@@ -133,6 +138,24 @@ export const CONSULT_SECTIONS: ConsultSection[] = [
       { key: 'guardian_relation', label: '관계', type: 'choice', options: ['자녀', '배우자', '며느리·사위', '형제자매', '손자녀', '조카', '기타'] },
       { key: 'guardian_phone', label: '연락처', type: 'text', placeholder: '010-0000-0000' },
       { key: 'address', label: '주소', type: 'text', span: 2 },
+    ],
+  },
+  {
+    key: 'couple',
+    title: '부부 상담',
+    coupleOnly: true,
+    script: '두 분 다 모시는 것으로 상담드리겠습니다. 같은 방을 쓰시길 원하시는지요? 비용은 두 분 합산으로 말씀드릴게요.',
+    fields: [
+      {
+        key: 'couple_room', label: '같은 방 희망', type: 'choice',
+        options: ['같은 방 희망', '같은 층이면 됨', '상관없음', '미정'],
+        hint: '방은 남녀를 나눠 쓰는 것이 보통이라 같은 방은 2인실이 있어야 한다 — 「담당 어르신 명단」에서 호실 정원을 보고 말씀드린다',
+      },
+      {
+        key: 'cost_guided', label: '합산 비용 안내', type: 'choice',
+        options: ['두 분 합산 금액 안내함', '아직 안내 못 함'],
+        hint: '한 분 기준으로만 말씀드리면 나중에 금액을 보고 놀라신다',
+      },
     ],
   },
   {
@@ -209,15 +232,68 @@ export const REQUIRED_KEYS = [
   'guardian_name', 'guardian_phone',
 ] as const
 
-export function consultMissing(row: Record<string, any> | null | undefined): ConsultField[] {
-  const r = row ?? {}
-  return REQUIRED_KEYS
-    .filter(k => {
-      const v = r[k]
-      return v === null || v === undefined || String(v).trim() === ''
-    })
+/** 부부일 때 더 여쭤야 하는 것 — 같은 방과 합산 금액은 부부에게만 있는 질문이다 */
+export const COUPLE_REQUIRED_KEYS = ['couple_room', 'cost_guided'] as const
+
+/** 값이 들어 있는가. 숫자 0 은 빈칸이 아니다. */
+export function filled(row: Record<string, any> | null | undefined, key: string): boolean {
+  const v = (row ?? {})[key]
+  return !(v === null || v === undefined || String(v).trim() === '')
+}
+
+export function consultMissing(
+  row: Record<string, any> | null | undefined,
+  isCouple = false,
+): ConsultField[] {
+  const keys: string[] = [...REQUIRED_KEYS, ...(isCouple ? COUPLE_REQUIRED_KEYS : [])]
+  return keys
+    .filter(k => !filled(row, k))
     .map(k => FIELD_BY_KEY[k])
     .filter(Boolean)
+}
+
+/** 꼭 여쭐 칸인가 — 화면에서 살짝 다르게 그린다 */
+export function isRequiredKey(key: string, isCouple = false): boolean {
+  return (REQUIRED_KEYS as readonly string[]).includes(key)
+    || (isCouple && (COUPLE_REQUIRED_KEYS as readonly string[]).includes(key))
+}
+
+/** 이 대목에서 몇 칸이나 채워졌는가 — 옆 목록에 점으로 보여준다 */
+export function sectionProgress(
+  row: Record<string, any> | null | undefined,
+  sec: ConsultSection,
+): { done: number; total: number } {
+  return {
+    done: sec.fields.filter(f => filled(row, f.key)).length,
+    total: sec.fields.length,
+  }
+}
+
+/** 통화 중에 보이는 대목 — 부부가 아니면 부부 대목을 뺀다 */
+export function visibleSections(isCouple: boolean): ConsultSection[] {
+  return CONSULT_SECTIONS.filter(s => !s.coupleOnly || isCouple)
+}
+
+/** 아직 안 여쭌 것 중 첫 칸 — 눌렀을 때 그리로 데려간다 */
+export function firstMissingKey(
+  row: Record<string, any> | null | undefined,
+  isCouple = false,
+): string | null {
+  return consultMissing(row, isCouple)[0]?.key ?? null
+}
+
+/**
+ * 통화 중에 한 줄 받아 적기 — 특이사항 맨 뒤에 붙인다.
+ *
+ * 보호자는 표 순서대로 말씀하지 않는다. 듣는 대로 한 줄씩 쌓아두었다가
+ * 통화가 끝난 뒤 제자리에 옮긴다. 새 칸을 만들지 않고 특이사항에 쌓는 이유는,
+ * 옮기지 못한 채로 끝나도 종이에 그대로 나가기 때문이다.
+ */
+export function appendNote(cur: string | null | undefined, line: string): string {
+  const add = String(line ?? '').trim()
+  if (!add) return String(cur ?? '')
+  const base = String(cur ?? '').replace(/\s+$/, '')
+  return base ? `${base}\n${add}` : add
 }
 
 /** 목록에 한 줄로 — '홍길동 어르신 (여 · 85세)' */

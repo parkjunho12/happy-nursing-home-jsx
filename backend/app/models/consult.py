@@ -114,6 +114,19 @@ class Consult(Base):
     # 다음에 전화가 오면 '지난번에 어디까지 말씀드렸는지' 가 여기 있다.
     guided = Column(Text, nullable=True)
 
+    # ── 부부 상담 ──
+    #
+    # 부부는 한 통화에서 두 분을 상담한다. 그래도 기록은 한 분에 한 장이다.
+    # 등급·건강 상태가 사람마다 다르고 급여 청구도 사람 단위로 나간다.
+    # 무엇보다 한 분만 입소하게 되는 경우가 잦은데, 한 장에 섞어 적으면
+    # 그때 기록을 쪼갤 수가 없다.
+    #
+    # 두 장을 서로 가리키게 해서 묶는다(A.partner_id=B, B.partner_id=A).
+    partner_id = Column(String, nullable=True, index=True)
+    # 아래 둘은 두 분에게 공통인 사실이라 짝에도 같이 적는다(엔드포인트가 맞춘다).
+    couple_room = Column(String(30), nullable=True)      # 같은 방 희망 여부
+    cost_guided = Column(String(40), nullable=True)      # 두 분 합산 금액 안내 여부
+
     status = Column(String(12), nullable=False, default=ST_OPEN, index=True)
     followup_on = Column(String(10), nullable=True, index=True)     # 다음 연락 예정일
 
