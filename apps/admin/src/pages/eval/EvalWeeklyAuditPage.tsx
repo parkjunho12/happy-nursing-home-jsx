@@ -262,13 +262,17 @@ export default function EvalWeeklyAuditPage() {
                       {item.issue}
                       {item.evidence && <div className="text-[10px] text-gray-400 mt-0.5">근거: {item.evidence}</div>}
                     </td>
-                    <td className="px-4 py-2 align-top">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${KIND_BADGE[item.kind]}`}>
+                    <td className="px-4 py-2 align-top whitespace-nowrap">
+                      <span className={`inline-block whitespace-nowrap text-[10px] font-bold px-2 py-0.5 rounded-full ${KIND_BADGE[item.kind]}`}>
                         {KIND_LABEL[item.kind]}
                       </span>
                     </td>
                     <td className="px-4 py-2 align-top text-gray-600">
-                      {item.staff || (item.owner_candidates ?? []).join(', ') || '-'}
+                      {item.staff
+                        ? <>{item.staff}{item.staff_basis && <div className="text-[10px] text-gray-400 mt-0.5">{item.staff_basis}</div>}</>
+                        : (item.owner_candidates ?? []).length
+                          ? <><span className="text-[10px] font-bold text-amber-700 mr-1">후보</span>{(item.owner_candidates ?? []).join(', ')}{item.owner_basis && <div className="text-[10px] text-gray-400 mt-0.5">{item.owner_basis}</div>}</>
+                          : '-'}
                     </td>
                     <td className="px-4 py-2 align-top text-gray-500 whitespace-nowrap">{item.schedule_check || '-'}</td>
                   </tr>
