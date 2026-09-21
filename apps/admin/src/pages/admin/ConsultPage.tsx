@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Phone, Plus, Printer, Search, ArrowLeft, Trash2, Loader2, X,
-  AlertCircle, CalendarClock, MessageSquareQuote, Check, Users, Unlink, CornerDownLeft,
+  AlertCircle, CalendarClock, MessageSquareQuote, Check, Users, Unlink, CornerDownLeft, PenLine,
 } from 'lucide-react'
 import { consultAPI, type ConsultRow, type ConsultPatch } from '@/api/consultClient'
 import { useAuthStore } from '@/store/auth'
 import {
   CONSULT_STATUS, STATUS_LABEL,
-  appendNote, consultMissing, consultTitle, firstMissingKey, hasChip,
+  appendNote, consultMissing, consultTitle, hasChip,
   isRequiredKey, sectionProgress, showValue, toggleChip, visibleSections,
   type ConsultField,
 } from '@/utils/consultForm'
@@ -56,8 +56,20 @@ export default function ConsultPage() {
   const [savedAt, setSavedAt] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [quick, setQuick] = useState('')
+  const [quickOpen, setQuickOpen] = useState(false)
   const [showScript, setShowScript] = useState(() => localStorage.getItem('cs.script') !== '0')
   useEffect(() => { localStorage.setItem('cs.script', showScript ? '1' : '0') }, [showScript])
+  /**
+   * 보는 방식. 기본은 '한 대목씩'.
+   *
+   * 통화는 차례로 흘러간다. 마흔 몇 칸을 한 화면에 펼쳐두면 어디를 적는
+   * 중인지 놓치고, 그러면 같은 것을 두 번 여쭙게 된다. 지난 상담을 훑을
+   * 때는 한 번에 보는 편이 나아서 '전체 보기' 를 남겨둔다.
+   */
+  const [mode, setMode] = useState<'step' | 'all'>(
+    () => (localStorage.getItem('cs.mode') === 'all' ? 'all' : 'step'))
+  useEffect(() => { localStorage.setItem('cs.mode', mode) }, [mode])
+  const [step, setStep] = useState(0)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -121,7 +133,7 @@ export default function ConsultPage() {
 
   const open = async (id: string) => {
     await flush()
-    setOpenId(id); setSavedAt(null); setMate(null); setQuick('')
+    setOpenId(id); setSavedAt(null); setMate(null); setQuick(''); setStep(0)
     const found = items.find(x => x.id === id)
     if (found) setRow(found)
     try {
@@ -146,7 +158,7 @@ export default function ConsultPage() {
         counselor: me?.name ?? '', method: '전화', route: '전화',
       })
       setItems(list => [made, ...list])
-      setOpenId(made.id); setRow(made); setMate(null); setSavedAt(null); setQuick('')
+      setOpenId(made.id); setRow(made); setMate(null); setSavedAt(null); setQuick(''); setStep(0)
     } catch (e: any) {
       alert(e?.response?.data?.detail ?? e?.message ?? '상담을 시작하지 못했습니다.')
     } finally { setBusy(false) }
@@ -194,11 +206,21 @@ export default function ConsultPage() {
   const isCouple = !!row?.partner_id
   const sections = useMemo(() => visibleSections(isCouple), [isCouple])
   const missing = useMemo(() => consultMissing(row, isCouple), [row, isCouple])
+  // 부부 묶음을 풀면 대목이 하나 줄어든다 — 보던 자리가 목록 밖으로 나가지 않게
+  useEffect(() => { setStep(v => Math.min(v, sections.length)) }, [sections.length])
 
-  /** 안 여쭌 첫 칸으로 데려간다 — 목록만 보여주면 찾으러 스크롤해야 한다 */
-  const jumpToMissing = () => {
-    const key = firstMissingKey(row, isCouple)
-    if (!key) return
+  /** 그 칸으로 데려간다 — '무엇이 비었다' 만 알려주면 찾으러 헤매야 한다.
+   *  한 대목씩 보는 중이면 그 칸이 있는 대목으로 먼저 옮긴다. */
+  const gotoField = (key: string) => {
+    if (mode === 'step') {
+      const i = sections.findIndex(s2 => s2.fields.some(f => f.key === key))
+      if (i >= 0 && i !== step) {
+        setStep(i)
+        // 대목이 바뀌면 그 칸은 다음 그림에서야 생긴다
+        setTimeout(() => gotoField(key), 60)
+        return
+      }
+    }
     const el = document.getElementById(`cs-${key}`)
     if (!el) return
     // 부드럽게 굴리지 않는다. 이 화면은 스크롤되는 상자 안에 들어 있어
@@ -220,6 +242,7 @@ export default function ConsultPage() {
     if (!line || !row) return
     patch('notes', appendNote(row.notes, line))
     setQuick('')
+    setQuickOpen(false)
   }
 
   // ── 목록 ──
@@ -318,234 +341,265 @@ export default function ConsultPage() {
 
   // ── 상담 한 건 ──
   const sheets = mate ? [row, mate] : [row]
+  // 한 단계씩 볼 때의 자리. 마지막 자리는 '마무리' 다.
+  const lastStep = sections.length
+  const at = Math.min(step, lastStep)
+  const sec = sections[at]
 
   return (
     <div className="print:p-0">
       <div className="print:hidden" data-print="off">
-        {/* ── 붙박이 통화 바 ──
-            통화 중에는 이 줄만 보고도 어디까지 왔는지 알아야 한다. 성함·등급·
-            급여·본인부담·연락처는 못 여쭈면 다시 전화해야 하는 것들이라 늘 띄워둔다. */}
+        {/* ── 머리줄 ── 통화 중에 눈이 가는 곳은 적을 칸이지 단추가 아니다.
+            여기에는 '어디서 나가는지' 와 '저장됐는지' 만 둔다. */}
         <div className="sticky top-14 md:top-0 z-30 -mx-3 md:-mx-6 px-3 md:px-6 py-2 bg-white/95 backdrop-blur border-b border-gray-200">
-          <div className="max-w-5xl mx-auto">
-            <div className="flex items-center gap-2 flex-wrap">
-              <button onClick={back} className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg border border-gray-200 text-gray-500 text-xs font-bold hover:bg-gray-50">
-                <ArrowLeft size={13} /> 목록
-              </button>
+          <div className="max-w-3xl mx-auto flex items-center gap-2 flex-wrap">
+            <button onClick={back}
+              className="inline-flex items-center gap-1 px-3 py-2 rounded-xl border border-gray-200 text-gray-600 text-sm font-bold hover:bg-gray-50">
+              <ArrowLeft size={15} /> 목록
+            </button>
 
-              {/* 부부 — 두 분을 한 번에 오간다 */}
-              {mate ? (
-                <div className="inline-flex items-center rounded-xl border border-pink-200 bg-pink-50 overflow-hidden">
-                  <span className="inline-flex items-center gap-1 px-2 py-1.5 text-[10px] font-extrabold text-pink-700">
-                    <Users size={11} /> 부부
-                  </span>
-                  <span className="px-2.5 py-1.5 text-xs font-bold bg-white text-gray-900 border-x border-pink-200">
-                    {row.resident_name || '성함 미상'}
-                  </span>
-                  <button onClick={() => open(mate.id)}
-                    title="배우자 상담으로 넘어갑니다 (적던 것은 저장됩니다)"
-                    className="px-2.5 py-1.5 text-xs font-bold text-pink-700 hover:bg-pink-100">
-                    {mate.resident_name || '배우자'} →
-                  </button>
-                </div>
-              ) : (
-                <h1 className="text-sm font-bold text-gray-900">{consultTitle(row)}</h1>
-              )}
-
-              <span className={`text-[11px] ${saving ? 'text-indigo-600' : savedAt ? 'text-emerald-600' : 'text-gray-400'}`}>
-                {saving ? '저장 중…' : savedAt ? `저장됨 ${savedAt}` : '적는 대로 저장됩니다'}
-              </span>
-
-              <div className="ml-auto flex items-center gap-1.5">
-                {!mate && (
-                  <button onClick={addPartner} disabled={busy}
-                    title="부부를 함께 상담할 때 — 상담 개요·보호자·주소를 옮겨 적은 두 번째 장을 만듭니다"
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-pink-200 bg-pink-50 text-pink-700 text-[11px] font-bold hover:bg-pink-100 disabled:opacity-50">
-                    {busy ? <Loader2 size={11} className="animate-spin" /> : <Users size={12} />} 배우자 상담 추가
-                  </button>
-                )}
-                {mate && (
-                  <button onClick={unlink} disabled={busy} title="부부 묶음 풀기"
-                    className="p-1.5 rounded-lg border border-gray-200 text-gray-300 hover:text-rose-600 hover:border-rose-200">
-                    <Unlink size={13} />
-                  </button>
-                )}
-                <button onClick={() => setShowScript(v => !v)} title="통화에서 여쭐 말"
-                  className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-lg border text-[11px] font-bold ${
-                    showScript ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-gray-400 border-gray-200'}`}>
-                  <MessageSquareQuote size={12} /> 멘트
-                </button>
-                <button onClick={async () => { await flush(); window.print() }}
-                  title={mate ? '두 분 기록지를 함께 인쇄합니다' : undefined}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-900 text-white text-[11px] font-bold">
-                  <Printer size={12} /> 인쇄{mate ? ' 2장' : ''}
-                </button>
-                {canDelete && (
-                  <button onClick={remove} title="상담 기록 삭제"
-                    className="p-1.5 rounded-lg border border-gray-200 text-gray-300 hover:text-rose-600 hover:border-rose-200">
-                    <Trash2 size={13} />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* 핵심 다섯 — 못 여쭈면 다시 전화해야 하는 것들 */}
-            <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
-              <KeyChip label="성함" value={row.resident_name} />
-              <KeyChip label="등급" value={row.grade} />
-              <KeyChip label="급여" value={row.benefit} />
-              <KeyChip label="부담" value={row.copay} />
-              <KeyChip label="☎" value={row.guardian_phone} />
-              {missing.length > 0 ? (
-                <button onClick={jumpToMissing}
-                  className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200">
-                  <AlertCircle size={11} /> 끊기 전에 {missing.length}가지 — {missing[0].label}부터 ▸
-                </button>
-              ) : (
-                <span className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  <Check size={11} /> 여쭐 것 다 여쭸습니다
+            {mate ? (
+              <div className="inline-flex items-center rounded-xl border border-pink-200 bg-pink-50 overflow-hidden">
+                <span className="px-2 py-2 text-[11px] font-extrabold text-pink-700">부부</span>
+                <span className="px-3 py-2 text-sm font-bold bg-white text-gray-900 border-x border-pink-200">
+                  {row.resident_name || '성함 미상'}
                 </span>
+                <button onClick={() => open(mate.id)} title="배우자 상담으로 넘어갑니다"
+                  className="px-3 py-2 text-sm font-bold text-pink-700 hover:bg-pink-100">
+                  {mate.resident_name || '배우자'} →
+                </button>
+              </div>
+            ) : (
+              <h1 className="text-base font-bold text-gray-900">{consultTitle(row)}</h1>
+            )}
+
+            <span className={`text-xs ${saving ? 'text-indigo-600' : savedAt ? 'text-emerald-600' : 'text-gray-400'}`}>
+              {saving ? '저장 중…' : savedAt ? `저장됨 ${savedAt}` : '적는 대로 저장됩니다'}
+            </span>
+
+            <div className="ml-auto flex items-center gap-1.5">
+              <button onClick={() => setMode(m => (m === 'step' ? 'all' : 'step'))}
+                title={mode === 'step' ? '모든 항목을 한 화면에 펼칩니다' : '한 대목씩 차례로 봅니다'}
+                className="px-2.5 py-2 rounded-xl border border-gray-200 text-gray-500 text-xs font-bold hover:bg-gray-50">
+                {mode === 'step' ? '전체 보기' : '한 대목씩'}
+              </button>
+              <button onClick={async () => { await flush(); window.print() }}
+                className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-gray-800 hover:bg-gray-900 text-white text-xs font-bold">
+                <Printer size={13} /> 인쇄{mate ? ' 2장' : ''}
+              </button>
+              {canDelete && (
+                <button onClick={remove} title="상담 기록 삭제"
+                  className="p-2 rounded-xl border border-gray-200 text-gray-300 hover:text-rose-600 hover:border-rose-200">
+                  <Trash2 size={14} />
+                </button>
               )}
             </div>
           </div>
         </div>
 
-        <div className="max-w-5xl mx-auto px-3 md:px-6 py-3 pb-40 md:pb-24">
-          <div className="flex gap-4 items-start">
-            {/* 대목 이동 — 보호자는 표 순서대로 말씀하지 않는다 */}
-            <nav className="hidden lg:block w-44 shrink-0 sticky top-32">
-              <p className="text-[10px] font-bold text-gray-400 mb-1.5 px-1">대목</p>
-              <div className="space-y-0.5">
-                {sections.map((sec, i) => {
-                  const p = sectionProgress(row, sec)
-                  return (
-                    <button key={sec.key} onClick={() => goSection(sec.key)}
-                      className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-gray-100">
-                      <div className="flex items-center gap-1.5">
-                        <span className={`w-4 h-4 rounded-full text-[9px] font-extrabold flex items-center justify-center shrink-0 ${
-                          p.done === p.total ? 'bg-emerald-500 text-white'
-                            : p.done > 0 ? 'bg-amber-400 text-white' : 'bg-gray-200 text-gray-500'}`}>
-                          {i + 1}
-                        </span>
-                        <span className={`text-[11.5px] font-bold truncate ${sec.key_point ? 'text-indigo-700' : 'text-gray-600'}`}>
-                          {sec.title}
-                        </span>
-                      </div>
-                      <div className="mt-1 h-1 rounded-full bg-gray-100 overflow-hidden" style={{ marginLeft: 22 }}>
-                        <div className={`h-full rounded-full transition-all ${p.done === p.total ? 'bg-emerald-400' : 'bg-amber-300'}`}
-                          style={{ width: `${Math.round((p.done / p.total) * 100)}%` }} />
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
-              <div className="mt-3 px-1">
-                <p className="text-[10px] font-bold text-gray-400 mb-1">진행</p>
-                <div className="flex flex-wrap gap-1">
+        <div className="max-w-3xl mx-auto px-3 md:px-6 py-3 pb-40 md:pb-24">
+          {/* 대목 고르기 — 이름이 그대로 적혀 있어 따로 배울 것이 없다.
+              다 적은 대목에는 체크가 붙는다. */}
+          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 mb-3">
+            {sections.map((s, i) => {
+              const p = sectionProgress(row, s)
+              const here = mode === 'step' && i === at
+              return (
+                <button key={s.key} onClick={() => (mode === 'step' ? setStep(i) : goSection(s.key))}
+                  className={`shrink-0 inline-flex items-center gap-1 px-3 py-2 rounded-xl text-[13px] font-bold border transition-colors ${
+                    here ? 'bg-indigo-600 text-white border-indigo-600'
+                      : p.done === p.total ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}>
+                  {p.done === p.total && !here && <Check size={12} />}{s.title}
+                </button>
+              )
+            })}
+            {mode === 'step' && (
+              <button onClick={() => setStep(lastStep)}
+                className={`shrink-0 px-3 py-2 rounded-xl text-[13px] font-bold border ${
+                  at === lastStep ? 'bg-gray-800 text-white border-gray-800'
+                    : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}>
+                마무리
+              </button>
+            )}
+          </div>
+
+          {mate && (
+            <div className="rounded-2xl border border-pink-200 bg-pink-50/70 px-3 py-2.5 text-[13px] text-pink-900 leading-relaxed mb-3">
+              <b>부부 상담입니다.</b> 지금은 <b>{row.resident_name || '이분'}</b> 기록지를 적고 있습니다.
+              등급과 건강 상태는 두 분이 다르니 각각 여쭤 주세요.
+            </div>
+          )}
+
+          {/* ── 한 대목씩 ── 통화는 차례로 흘러간다. 한 화면에 한 대목만 두면
+              어디를 적는 중인지 헷갈리지 않는다. */}
+          {mode === 'step' ? (
+            at === lastStep ? (
+              <Wrap title="마무리">
+                {missing.length > 0 ? (
+                  <>
+                    <p className="text-[13.5px] font-bold text-amber-900 mb-2">
+                      끊기 전에 {missing.length}가지만 더 여쭤 주세요
+                    </p>
+                    <div className="space-y-1.5 mb-4">
+                      {missing.map(f => (
+                        <button key={f.key} onClick={() => gotoField(f.key)}
+                          className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border border-amber-200 bg-amber-50 hover:bg-amber-100 text-left">
+                          <AlertCircle size={14} className="text-amber-600 shrink-0" />
+                          <span className="text-[14px] font-bold text-amber-900">{f.label}</span>
+                          <span className="ml-auto text-[12px] font-bold text-amber-700">적기 ▸</span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p className="inline-flex items-center gap-1.5 text-[14px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5 mb-4">
+                    <Check size={16} /> 여쭐 것은 다 여쭸습니다
+                  </p>
+                )}
+
+                <p className="text-[12px] font-bold text-gray-500 mb-1.5">이 상담은 어떻게 되었나요?</p>
+                <div className="flex flex-wrap gap-1.5 mb-4">
                   {CONSULT_STATUS.map(s => (
                     <button key={s.key} onClick={() => patch('status', s.key)}
-                      className={`px-1.5 py-1 rounded text-[10px] font-bold border ${
-                        row.status === s.key ? s.cls : 'bg-white text-gray-400 border-gray-200 hover:bg-gray-50'}`}>
+                      className={`px-3 py-2 rounded-xl text-[13px] font-bold border ${
+                        row.status === s.key ? s.cls : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}>
                       {s.label}
                     </button>
                   ))}
                 </div>
-              </div>
-            </nav>
 
-            <div className="flex-1 min-w-0 space-y-3">
-              {/* 좁은 화면 — 대목을 가로로 */}
-              <div className="lg:hidden flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
-                {sections.map((sec, i) => {
-                  const p = sectionProgress(row, sec)
-                  return (
-                    <button key={sec.key} onClick={() => goSection(sec.key)}
-                      className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] font-bold border ${
-                        p.done === p.total ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : p.done > 0 ? 'bg-amber-50 text-amber-800 border-amber-200'
-                          : 'bg-white text-gray-400 border-gray-200'}`}>
-                      {i + 1}. {sec.title}
-                    </button>
-                  )
-                })}
-              </div>
-              <div className="lg:hidden flex gap-1 flex-wrap">
-                {CONSULT_STATUS.map(s => (
-                  <button key={s.key} onClick={() => patch('status', s.key)}
-                    className={`px-2 py-1 rounded-lg text-[11px] font-bold border ${
-                      row.status === s.key ? s.cls : 'bg-white text-gray-400 border-gray-200'}`}>
-                    {s.label}
+                <div className="flex gap-2 flex-wrap">
+                  <button onClick={async () => { await flush(); window.print() }}
+                    className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gray-800 text-white text-sm font-bold">
+                    <Printer size={14} /> 인쇄{mate ? ' 2장' : ''}
                   </button>
-                ))}
-              </div>
-
-              {mate && (
-                <div className="rounded-2xl border border-pink-200 bg-pink-50/70 px-3 py-2.5 text-[12px] text-pink-900 leading-relaxed">
-                  <b>부부 상담입니다.</b> 지금은 <b>{row.resident_name || '이분'}</b> 기록지를 적고 있습니다.
-                  등급과 건강 상태는 두 분이 다르니 각각 여쭤 적어 주세요.
-                  상담 개요·보호자·주소·같은 방 희망은 두 장에 함께 적힙니다.
+                  {!mate && (
+                    <button onClick={addPartner} disabled={busy}
+                      className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-pink-200 bg-pink-50 text-pink-700 text-sm font-bold hover:bg-pink-100 disabled:opacity-50">
+                      {busy ? <Loader2 size={13} className="animate-spin" /> : <Users size={14} />} 부부라서 한 장 더
+                    </button>
+                  )}
+                  {mate && (
+                    <button onClick={unlink} disabled={busy}
+                      className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-gray-200 text-gray-500 text-sm font-bold hover:bg-gray-50">
+                      <Unlink size={13} /> 부부 묶음 풀기
+                    </button>
+                  )}
+                  <button onClick={back}
+                    className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-bold hover:bg-gray-50">
+                    목록으로
+                  </button>
                 </div>
-              )}
+              </Wrap>
+            ) : (
+              <>
+                <Wrap title={sec.title} tone={sec.coupleOnly ? 'pink' : sec.key_point ? 'indigo' : 'plain'}
+                  badge={sec.key_point ? '비용이 걸린 대목' : undefined}
+                  step={`${at + 1} / ${sections.length}`}
+                  onScript={() => setShowScript(v => !v)} scriptOn={showScript}>
+                  {showScript && <Script text={sec.script} />}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
+                    {sec.fields.map(f => (
+                      <Field key={f.key} f={f} value={(row as any)[f.key]}
+                        required={isRequiredKey(f.key, isCouple)} onChange={v => patch(f.key, v)} />
+                    ))}
+                  </div>
+                </Wrap>
 
-              {sections.map((sec, i) => {
-                const p = sectionProgress(row, sec)
-                return (
-                  <section key={sec.key} id={`cs-sec-${sec.key}`}
-                    className={`bg-white rounded-2xl border px-4 py-3 scroll-mt-32 ${
-                      sec.coupleOnly ? 'border-pink-200 ring-1 ring-pink-100'
-                        : sec.key_point ? 'border-indigo-200 ring-1 ring-indigo-100' : 'border-gray-200'}`}>
-                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                      <span className={`w-5 h-5 rounded-full text-[10px] font-extrabold flex items-center justify-center ${
-                        sec.coupleOnly ? 'bg-pink-600 text-white'
-                          : sec.key_point ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-600'}`}>{i + 1}</span>
-                      <h2 className="text-sm font-bold text-gray-900">{sec.title}</h2>
-                      {sec.key_point && (
-                        <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded">
-                          비용이 걸린 대목
-                        </span>
-                      )}
-                      <span className="ml-auto text-[10.5px] text-gray-400">{p.done}/{p.total}</span>
-                    </div>
-                    {showScript && (
-                      <p className="mb-3 rounded-xl bg-indigo-50/70 border border-indigo-100 px-3 py-2 text-[12.5px] text-indigo-900 leading-relaxed">
-                        <span className="font-bold text-indigo-600 mr-1">멘트</span>“{sec.script}”
-                      </p>
-                    )}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-3 gap-y-3">
-                      {sec.fields.map(f => (
+              </>
+            )
+          ) : (
+            /* ── 전체 보기 ── 지난 상담을 훑어볼 때 */
+            <div className="space-y-3">
+              {sections.map(s => (
+                <div key={s.key} id={`cs-sec-${s.key}`} className="scroll-mt-32">
+                  <Wrap title={s.title} tone={s.coupleOnly ? 'pink' : s.key_point ? 'indigo' : 'plain'}
+                    badge={s.key_point ? '비용이 걸린 대목' : undefined}>
+                    {showScript && <Script text={s.script} />}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
+                      {s.fields.map(f => (
                         <Field key={f.key} f={f} value={(row as any)[f.key]}
-                          required={isRequiredKey(f.key, isCouple)}
-                          onChange={v => patch(f.key, v)} />
+                          required={isRequiredKey(f.key, isCouple)} onChange={v => patch(f.key, v)} />
                       ))}
                     </div>
-                  </section>
-                )
-              })}
-
-              <p className="text-[11px] text-gray-400">
+                  </Wrap>
+                </div>
+              ))}
+              <Wrap title="진행">
+                <div className="flex flex-wrap gap-1.5">
+                  {CONSULT_STATUS.map(s => (
+                    <button key={s.key} onClick={() => patch('status', s.key)}
+                      className={`px-3 py-2 rounded-xl text-[13px] font-bold border ${
+                        row.status === s.key ? s.cls : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}>
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </Wrap>
+              <p className="text-[12px] text-gray-400">
                 적은 사람 {row.created_by ?? '—'}
                 {row.updated_by && row.updated_by !== row.created_by && ` · 마지막 수정 ${row.updated_by}`}
               </p>
             </div>
-          </div>
+          )}
         </div>
 
-        {/* ── 빠르게 적기 ──
-            보호자는 표 순서대로 말씀하지 않는다. 들리는 대로 한 줄씩 쌓아두었다가
-            통화가 끝난 뒤 제자리로 옮긴다. 못 옮겨도 특이사항으로 종이에 나간다. */}
+        {/* ── 바닥에 붙은 줄 ──
+            「다음」은 통화 한 번에 예닐곱 번 누른다. 본문 끝에 두면 대목마다
+            스크롤해서 찾아야 하므로 자리를 고정한다. 통화 메모는 가끔 쓰니
+            평소에는 단추 하나로 접어 두고, 누르면 그 자리에서 펼쳐진다. */}
         <div className="cs-quick fixed left-0 right-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur px-3 md:px-6 py-2">
-          <div className="max-w-5xl mx-auto flex items-center gap-2">
-            <span className="hidden sm:inline text-[11px] font-bold text-gray-400 shrink-0">빠르게 적기</span>
-            <input value={quick} onChange={e => setQuick(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addQuick() } }}
-              placeholder="들리는 대로 한 줄 — Enter 를 누르면 특이사항에 쌓입니다"
-              className="flex-1 min-w-0 px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-200" />
-            <button onClick={addQuick} disabled={!quick.trim()}
-              className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-gray-800 text-white text-xs font-bold disabled:opacity-30">
-              <CornerDownLeft size={13} /> 담기
-            </button>
+          <div className="max-w-3xl mx-auto flex items-center gap-2">
+            {quickOpen ? (
+              <>
+                <input autoFocus value={quick} onChange={e => setQuick(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') { e.preventDefault(); addQuick() }
+                    if (e.key === 'Escape') { setQuick(''); setQuickOpen(false) }
+                  }}
+                  placeholder="들리는 대로 적고 Enter — 특이사항에 쌓입니다"
+                  className="flex-1 min-w-0 px-3 py-2.5 text-[16px] border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-200" />
+                <button onClick={addQuick} disabled={!quick.trim()}
+                  className="inline-flex items-center gap-1 px-3 py-2.5 rounded-xl bg-gray-800 text-white text-sm font-bold disabled:opacity-30">
+                  <CornerDownLeft size={14} /> 담기
+                </button>
+                <button onClick={() => { setQuick(''); setQuickOpen(false) }}
+                  className="p-2.5 rounded-xl border border-gray-200 text-gray-400 hover:bg-gray-50">
+                  <X size={15} />
+                </button>
+              </>
+            ) : (
+              <>
+                <button onClick={() => setQuickOpen(true)} title="들리는 대로 한 줄 적어두기"
+                  className="inline-flex items-center gap-1 px-3 py-3 rounded-2xl border border-gray-200 text-gray-600 text-sm font-bold hover:bg-gray-50 shrink-0">
+                  <PenLine size={15} /> 메모
+                </button>
+                {mode === 'step' && (
+                  <>
+                    <button onClick={() => setStep(Math.max(0, at - 1))} disabled={at === 0}
+                      className="px-3 sm:px-4 py-3 rounded-2xl border border-gray-200 text-gray-600 text-sm font-bold hover:bg-gray-50 disabled:opacity-30 shrink-0">
+                      ◂<span className="hidden sm:inline"> 이전</span>
+                    </button>
+                    {at < lastStep ? (
+                      <button onClick={() => setStep(at + 1)}
+                        className="flex-1 min-w-0 px-4 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-[15px] font-bold truncate">
+                        {at === sections.length - 1 ? '마무리 ▸' : `다음 — ${sections[at + 1].title} ▸`}
+                      </button>
+                    ) : (
+                      <button onClick={back}
+                        className="flex-1 min-w-0 px-4 py-3 rounded-2xl bg-gray-800 hover:bg-gray-900 text-white text-[15px] font-bold">
+                        상담 마치고 목록으로
+                      </button>
+                    )}
+                  </>
+                )}
+              </>
+            )}
           </div>
         </div>
       </div>
+
 
       {/* ── 인쇄 — 부부면 두 장이 함께 나간다 ── */}
       <div className="hidden print:block">
@@ -645,15 +699,51 @@ export default function ConsultPage() {
   )
 }
 
-/** 붙박이 줄의 핵심 칸 — 비어 있으면 빨갛게 남는다 */
-function KeyChip({ label, value }: { label: string; value?: string | null }) {
-  const v = String(value ?? '').trim()
+
+/** 흰 상자 하나 — 대목마다 같은 모양으로 */
+function Wrap({ title, children, tone = 'plain', badge, step, onScript, scriptOn }: {
+  title: string
+  children: React.ReactNode
+  tone?: 'plain' | 'indigo' | 'pink'
+  badge?: string
+  step?: string
+  onScript?: () => void
+  scriptOn?: boolean
+}) {
+  const border = tone === 'pink' ? 'border-pink-200 ring-1 ring-pink-100'
+    : tone === 'indigo' ? 'border-indigo-200 ring-1 ring-indigo-100' : 'border-gray-200'
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border ${
-      v ? 'bg-gray-50 text-gray-800 border-gray-200' : 'bg-rose-50 text-rose-600 border-rose-200'}`}>
-      <span className={`font-semibold ${v ? 'text-gray-400' : 'text-rose-400'}`}>{label}</span>
-      <span>{v || '미확인'}</span>
-    </span>
+    <section className={`bg-white rounded-2xl border px-4 py-3.5 ${border}`}>
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
+        <h2 className="text-[17px] font-bold text-gray-900">{title}</h2>
+        {badge && (
+          <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded">
+            {badge}
+          </span>
+        )}
+        <span className="ml-auto flex items-center gap-2">
+          {onScript && (
+            <button onClick={onScript} title="통화에서 여쭐 말"
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[11.5px] font-bold ${
+                scriptOn ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-white text-gray-400 border-gray-200'}`}>
+              <MessageSquareQuote size={12} /> 멘트
+            </button>
+          )}
+          {step && <span className="text-[12px] font-bold text-gray-400">{step}</span>}
+        </span>
+      </div>
+      {children}
+    </section>
+  )
+}
+
+/** 멘트 — 읽어야 하는 대본이 아니라 막혔을 때 보는 줄이다 */
+function Script({ text }: { text: string }) {
+  return (
+    <p className="mb-3.5 rounded-xl bg-indigo-50/70 border border-indigo-100 px-3 py-2.5 text-[14px] text-indigo-900 leading-relaxed">
+      <span className="font-bold text-indigo-600 mr-1">이렇게 여쭤보세요</span><br />
+      “{text}”
+    </p>
   )
 }
 
@@ -690,42 +780,40 @@ function PrintCell({ f, row, span }: { f: ConsultField; row: ConsultRow; span: n
   )
 }
 
-/** 칸 하나 — 종류에 따라 다르게 그린다 */
+/** 칸 하나 — 글자와 단추를 키웠다. 통화하면서 누르는 것이라 작으면 두 번 누르게 된다. */
 function Field({ f, value, onChange, required }: {
   f: ConsultField
   value: any
   onChange: (v: any) => void
   required?: boolean
 }) {
-  const span = f.span ?? 1
-  const colCls = span === 3 ? 'sm:col-span-3' : span === 2 ? 'sm:col-span-2' : ''
+  const colCls = (f.span ?? 1) >= 2 ? 'sm:col-span-2' : ''
   const v = value === null || value === undefined ? '' : String(value)
   const empty = !v.trim()
-  const inputCls = `w-full px-2.5 py-2 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-200 ${
+  // 16px — 폰에서 이보다 작으면 칸을 누를 때 화면이 확대된다
+  const inputCls = `w-full px-3 py-2.5 text-[16px] border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-200 ${
     required && empty ? 'border-amber-300 bg-amber-50/40' : 'border-gray-200'}`
-  // 통화 중에 누르는 단추다 — 작으면 두 번 누르게 된다
   const chipCls = (on: boolean) =>
-    `px-2.5 py-2 rounded-lg text-[12px] font-bold border transition-colors ${
+    `px-3 py-2.5 rounded-xl text-[14px] font-bold border transition-colors ${
       on ? 'bg-indigo-600 text-white border-indigo-600'
-         : 'bg-white text-gray-600 border-gray-200 hover:bg-indigo-50 hover:border-indigo-200'}`
+         : 'bg-white text-gray-700 border-gray-200 hover:bg-indigo-50 hover:border-indigo-200'}`
 
   return (
     <div className={colCls} id={`cs-${f.key}`}>
-      <label className="flex items-center gap-1 text-[11px] font-bold text-gray-500 mb-1">
+      <label className="flex items-center gap-1 text-[13px] font-bold text-gray-600 mb-1.5">
         {f.label}
         {f.unit && <span className="font-normal text-gray-300">({f.unit})</span>}
-        {required && (
-          <span className={`ml-0.5 w-1.5 h-1.5 rounded-full ${empty ? 'bg-amber-400' : 'bg-emerald-400'}`}
-            title={empty ? '꼭 여쭐 것 — 아직 비어 있습니다' : '꼭 여쭐 것 — 적혔습니다'} />
+        {required && empty && (
+          <span className="text-[11px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-1 rounded">꼭</span>
         )}
       </label>
 
       {f.type === 'choice' && (
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-1.5">
           {f.options!.map(o => (
             // 고른 것을 다시 누르면 지운다 — 잘못 누른 것을 되돌릴 길이 있어야 한다
             <button key={o} type="button" onClick={() => onChange(v === o ? '' : o)} className={chipCls(v === o)}>
-              {v === o && <Check size={11} className="inline mr-0.5 -mt-0.5" />}{o}
+              {v === o && <Check size={12} className="inline mr-0.5 -mt-0.5" />}{o}
             </button>
           ))}
         </div>
@@ -733,10 +821,10 @@ function Field({ f, value, onChange, required }: {
 
       {f.type === 'chips' && (
         <>
-          <div className="flex flex-wrap gap-1 mb-1">
+          <div className="flex flex-wrap gap-1.5 mb-1.5">
             {f.options!.map(o => (
               <button key={o} type="button" onClick={() => onChange(toggleChip(v, o))} className={chipCls(hasChip(v, o))}>
-                {hasChip(v, o) && <Check size={11} className="inline mr-0.5 -mt-0.5" />}{o}
+                {hasChip(v, o) && <Check size={12} className="inline mr-0.5 -mt-0.5" />}{o}
               </button>
             ))}
           </div>
@@ -748,7 +836,7 @@ function Field({ f, value, onChange, required }: {
 
       {f.type === 'textarea' && (
         <textarea value={v} onChange={e => onChange(e.target.value)} rows={2} placeholder={f.placeholder}
-          className={inputCls + ' resize-y min-h-[52px]'} />
+          className={inputCls + ' resize-y min-h-[58px]'} />
       )}
 
       {(f.type === 'text' || f.type === 'number' || f.type === 'date' || f.type === 'time') && (
@@ -760,7 +848,7 @@ function Field({ f, value, onChange, required }: {
           className={inputCls} />
       )}
 
-      {f.hint && <p className="text-[10.5px] text-gray-400 mt-1 leading-snug">{f.hint}</p>}
+      {f.hint && <p className="text-[12px] text-gray-400 mt-1.5 leading-snug">{f.hint}</p>}
     </div>
   )
 }
