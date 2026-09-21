@@ -31,8 +31,10 @@ export interface ConsultSection {
   fields: ConsultField[]
   /** 부부 상담일 때만 나오는 대목 */
   coupleOnly?: boolean
-  /** 비용이 걸린 대목 — 화면에서 먼저 눈에 띄게 한다 */
+  /** 놓치면 다시 전화해야 하는 대목 — 화면·종이에서 먼저 눈에 띄게 한다 */
   key_point?: boolean
+  /** 왜 중요한지 한마디 — key_point 대목에 달린다 */
+  emphasis?: string
 }
 
 /** 여러 개를 고르는 칸의 구분자 — 종이에도 이대로 찍힌다 */
@@ -78,6 +80,7 @@ export const CONSULT_SECTIONS: ConsultSection[] = [
     key: 'grade',
     title: '요양등급 · 비용',
     key_point: true,
+    emphasis: '비용이 걸린 대목',
     script: '장기요양등급은 받으셨을까요? 등급에 따라 비용이 달라져서, 본인부담률도 함께 확인해 드리겠습니다.',
     fields: [
       {
@@ -164,9 +167,17 @@ export const CONSULT_SECTIONS: ConsultSection[] = [
   },
   {
     key: 'next',
-    title: '진행 · 안내',
-    script: '입소 전에 건강검진(흉부 X-ray·결핵검사)이 필요합니다. 희망하시는 입소일이 언제쯤이신지요? 필요하신 것 더 있으시면 말씀해 주세요.',
+    title: '방문 권유 · 마무리',
+    key_point: true,
+    emphasis: '이 통화의 목적',
+    script: '전화로는 다 말씀드리기가 어렵습니다. 한번 오셔서 어르신 지내실 방하고 식사하시는 것까지 직접 보시는 게 좋습니다. 이번 주중에 편하신 날이 언제쯤이실까요? 오실 때 미리 말씀만 주시면 준비해 두겠습니다.',
     fields: [
+      {
+        key: 'visit_plan', label: '방문 상담', type: 'choice',
+        options: ['날짜 잡음', '권유함', '어려워하심', '아직'],
+        hint: '전화만으로 정하시는 분은 드뭅니다 — 오셔서 보시면 그 자리에서 정해지는 일이 많습니다',
+      },
+      { key: 'visit_date', label: '방문 예정일', type: 'date' },
       {
         key: 'checkup', label: '건강검진 안내', type: 'choice',
         options: ['안내함', '완료', '해당 없음'],
@@ -233,6 +244,9 @@ export const REQUIRED_KEYS = [
   'grade', 'benefit', 'copay',
   'mobility', 'eating',
   'guardian_name', 'guardian_phone',
+  // 방문 권유 — 전화만으로 정하시는 분은 드물다. 이 통화에서 반드시 짚어야
+  // 하는 것이라 '덜 여쭌 것' 에 함께 센다.
+  'visit_plan',
 ] as const
 
 /** 부부일 때 더 여쭤야 하는 것 — 같은 방과 합산 금액은 부부에게만 있는 질문이다 */
@@ -309,6 +323,15 @@ export function consultTitle(row: Record<string, any> | null | undefined): strin
   return sub ? `${name} 어르신 (${sub})` : `${name} 어르신`
 }
 
+/**
+ * 종이 맨 위에 크게 낼 것.
+ *
+ * 인쇄물을 집어 든 사람이 3초 안에 알아야 하는 것은 '모실 수 있나, 얼마인가,
+ * 언제 오시나, 누구에게 전화하나' 이다. 나머지 마흔 칸과 같은 크기로 두면
+ * 그 넷을 찾으려고 표를 훑어야 한다.
+ */
+export const PRINT_KEY_FIELDS = ['grade', 'benefit', 'copay', 'visit_date', 'guardian_phone'] as const
+
 /** 비어 있는 칸은 종이에 '—' 로 — 안 여쭌 것인지 없는 것인지는 통화한 사람만 안다 */
 export function showValue(row: Record<string, any> | null | undefined, f: ConsultField): string {
   const v = (row ?? {})[f.key]
@@ -351,6 +374,7 @@ export function consultShareText(
   if (care.length) lines.push(care.join(' · '))
 
   const tail = [
+    r.visit_date ? `방문 ${String(r.visit_date).slice(5).replace('-', '/')}` : '',
     r.wish_date ? `희망 입소 ${String(r.wish_date).slice(5).replace('-', '/')}` : '',
     STATUS_LABEL[String(r.status ?? '')] ?? '',
   ].filter(Boolean)

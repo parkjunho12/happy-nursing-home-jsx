@@ -106,7 +106,11 @@ class Consult(Base):
     address = Column(String(200), nullable=True)
 
     # ── 진행 ──
-    checkup = Column(String(40), nullable=True)                     # 건강검진 연계
+    # 방문 상담 — 전화만으로는 정하기 어렵다. 한번 오셔서 방과 식사를 보시면
+    # 그때 정해지는 일이 많아, 권유했는지와 날짜가 잡혔는지를 남긴다.
+    visit_plan = Column(String(30), nullable=True)                  # 날짜 잡음·권유함·어려워하심·아직
+    visit_date = Column(String(10), nullable=True)                  # 방문 예정일 'YYYY-MM-DD'
+    checkup = Column(String(40), nullable=True)                     # 건강검진 안내
     checkup_note = Column(String(200), nullable=True)               # 검진기관·일자
     wish_date = Column(String(10), nullable=True)                   # 희망 입소일 'YYYY-MM-DD'
     notes = Column(Text, nullable=True)                             # 특이사항

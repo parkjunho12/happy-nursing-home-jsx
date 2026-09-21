@@ -4,6 +4,7 @@ import {
   CONSULT_FIELDS, CONSULT_SECTIONS, REQUIRED_KEYS, COUPLE_REQUIRED_KEYS, FIELD_BY_KEY,
   appendNote, consultMissing, consultTitle, filled, firstMissingKey, hasChip,
   isRequiredKey, sectionProgress, showValue, toggleChip, visibleSections, consultShareText,
+  PRINT_KEY_FIELDS,
 } from '../src/utils/consultForm'
 
 /* 상담 기록지는 통화하면서 채우는 표다. 화면과 종이가 같은 목록을 읽어야
@@ -211,4 +212,36 @@ test('건강검진은 세 가지만 고른다 — 검진 메모 칸은 없앴다
   const f = FIELD_BY_KEY.checkup
   assert.deepEqual(f.options, ['안내함', '완료', '해당 없음'])
   assert.equal(FIELD_BY_KEY.checkup_note, undefined)
+})
+
+
+/* 방문 권유 — 전화만으로 정하시는 분은 드물다. 이 통화의 목적이다. */
+
+test('방문 권유 칸이 있고 꼭 여쭐 것에 든다', () => {
+  const f = FIELD_BY_KEY.visit_plan
+  assert.ok(f, '방문 상담 칸이 없다')
+  assert.deepEqual(f.options, ['날짜 잡음', '권유함', '어려워하심', '아직'])
+  assert.ok(FIELD_BY_KEY.visit_date, '방문 예정일 칸이 없다')
+  assert.equal(isRequiredKey('visit_plan'), true)
+})
+
+test('마무리 대목 멘트가 방문을 권한다', () => {
+  const sec = CONSULT_SECTIONS.find(s => s.key === 'next')!
+  assert.ok(sec.script.includes('오셔서'), '오시라는 말이 없다')
+  assert.ok(/언제|날|시간/.test(sec.script), '언제 오실지 묻지 않는다')
+  assert.equal(sec.key_point, true, '눈에 띄어야 하는 대목이다')
+})
+
+test('방문 날짜가 잡히면 공유 글에도 적힌다', () => {
+  const t = consultShareText({ ...FULL, visit_date: '2026-10-02' })
+  assert.ok(t.includes('방문 10/02'))
+})
+
+/* 종이 — 집어 든 사람이 3초 안에 읽어야 하는 것 */
+
+test('맨 위 띠에 낼 칸은 모두 실재하고, 결정에 필요한 것들이다', () => {
+  for (const k of PRINT_KEY_FIELDS) assert.ok(FIELD_BY_KEY[k], `${k} 가 표에 없다`)
+  for (const k of ['grade', 'benefit', 'copay', 'guardian_phone'])
+    assert.ok((PRINT_KEY_FIELDS as readonly string[]).includes(k), `${k} 가 띠에 없다`)
+  assert.equal(PRINT_KEY_FIELDS.length, 5, '띠가 길어지면 한 칸씩 좁아져 커 보이지 않는다')
 })

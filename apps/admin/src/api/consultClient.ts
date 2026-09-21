@@ -50,6 +50,8 @@ export interface ConsultRow {
   guardian_phone?: string | null
   address?: string | null
 
+  visit_plan?: string | null
+  visit_date?: string | null
   checkup?: string | null
   checkup_note?: string | null
   wish_date?: string | null

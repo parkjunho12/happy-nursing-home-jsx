@@ -63,7 +63,7 @@ TEXT_FIELDS = (
     "speech", "mobility", "toileting", "eating", "diet", "health_note",
     "children", "guardian_name", "guardian_relation", "guardian_phone", "address",
     "checkup", "checkup_note", "notes", "guided",
-    "couple_room", "cost_guided",
+    "couple_room", "cost_guided", "visit_plan",
 )
 
 # 부부 두 분에게 공통인 사실 — 한쪽에 적으면 짝에도 같이 적는다.
@@ -112,6 +112,8 @@ class ConsultBody(BaseModel):
     guardian_phone: Optional[str] = None
     address: Optional[str] = None
 
+    visit_plan: Optional[str] = None
+    visit_date: Optional[str] = None
     checkup: Optional[str] = None
     checkup_note: Optional[str] = None
     wish_date: Optional[str] = None
@@ -132,6 +134,7 @@ def _dict(c: Consult) -> Dict[str, Any]:
         "consulted_on": c.consulted_on,
         "age": c.age,
         "wish_date": c.wish_date,
+        "visit_date": c.visit_date,
         "status": c.status,
         "followup_on": c.followup_on,
         "partner_id": c.partner_id,
@@ -199,7 +202,7 @@ def _apply(c: Consult, b: ConsultBody, who: Optional[str]) -> None:
         if not _DATE.match(v):
             raise HTTPException(400, "상담일은 YYYY-MM-DD 형식이어야 합니다.")
         c.consulted_on = v
-    for f in ("wish_date", "followup_on"):
+    for f in ("wish_date", "followup_on", "visit_date"):
         if f in data:
             v = (getattr(b, f) or "").strip()
             if v and not _DATE.match(v):
@@ -269,7 +272,7 @@ def create_consult(body: ConsultBody, db: Session = Depends(get_db), u: User = D
 CARRY_OVER = ("consulted_on", "consulted_at", "counselor", "route", "method", "caller",
               "living", "living_note", "children", "guardian_name", "guardian_relation",
               "guardian_phone", "address", "wish_date", "checkup", "checkup_note",
-              "couple_room", "cost_guided", "followup_on")
+              "couple_room", "cost_guided", "followup_on", "visit_plan", "visit_date")
 
 
 @router.post("/{consult_id}/partner")

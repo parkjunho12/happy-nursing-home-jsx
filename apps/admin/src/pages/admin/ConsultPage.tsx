@@ -8,6 +8,7 @@ import { isKakaoShareEnabled, shareText } from '@/lib/kakaoShare'
 import { useAuthStore } from '@/store/auth'
 import {
   CONSULT_STATUS, STATUS_LABEL,
+  FIELD_BY_KEY, PRINT_KEY_FIELDS,
   appendNote, consultMissing, consultShareText, consultTitle, hasChip,
   isRequiredKey, sectionProgress, showValue, toggleChip, visibleSections,
   type ConsultField,
@@ -344,6 +345,11 @@ export default function ConsultPage() {
                         <AlertCircle size={10} /> 덜 여쭌 것 {miss}
                       </span>
                     )}
+                    {c.visit_date && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-50 text-violet-700 border border-violet-200">
+                        <CalendarClock size={10} /> 방문 {mmdd(c.visit_date)}
+                      </span>
+                    )}
                     {c.followup_on && (
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                         soon ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
@@ -545,7 +551,7 @@ export default function ConsultPage() {
             ) : (
               <>
                 <Wrap title={sec.title} tone={sec.coupleOnly ? 'pink' : sec.key_point ? 'indigo' : 'plain'}
-                  badge={sec.key_point ? '비용이 걸린 대목' : undefined}
+                  badge={sec.emphasis}
                   step={`${at + 1} / ${sections.length}`}
                   onScript={() => setShowScript(v => !v)} scriptOn={showScript}>
                   {showScript && <Script text={sec.script} />}
@@ -565,7 +571,7 @@ export default function ConsultPage() {
               {sections.map(s => (
                 <div key={s.key} id={`cs-sec-${s.key}`} className="scroll-mt-32">
                   <Wrap title={s.title} tone={s.coupleOnly ? 'pink' : s.key_point ? 'indigo' : 'plain'}
-                    badge={s.key_point ? '비용이 걸린 대목' : undefined}>
+                    badge={s.emphasis}>
                     {showScript && <Script text={s.script} />}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
                       {s.fields.map(f => (
@@ -651,55 +657,89 @@ export default function ConsultPage() {
       </div>
 
 
-      {/* ── 인쇄 — 부부면 두 장이 함께 나간다 ── */}
+      {/* ── 인쇄 — 집어 든 사람이 3초 안에 읽을 수 있게 ──
+          ① 맨 위 띠에 결정에 필요한 것(등급·급여·본인부담·방문·연락처)을 크게
+          ② 아래는 이름표를 값 위에 작게 올려, 눈이 값만 훑고 지나가게
+          ③ 대목은 왼쪽 굵은 선으로 — 띠를 칠하면 잉크만 먹고 구분은 덜 된다
+          부부면 두 장이 함께 나간다. */}
       <div className="hidden print:block">
         {sheets.map((sheet, si) => (
           <div key={sheet.id} className="cs-print cs-sheet">
-            <div style={{ borderBottom: '2.5px solid #4338ca', paddingBottom: 6, marginBottom: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
-                <div>
-                  <p style={{ fontSize: 9, fontWeight: 800, color: '#4338ca', letterSpacing: '0.2em', margin: 0 }}>
-                    행복한요양원 · 정성으로 모시겠습니다
-                  </p>
-                  <h1 style={{ fontSize: 22, fontWeight: 900, color: '#111827', margin: '2px 0 0', letterSpacing: '0.06em' }}>
-                    입소 상담 기록지
-                    {sheets.length > 1 && (
-                      <span style={{ fontSize: 12, fontWeight: 800, color: '#be185d', marginLeft: 8 }}>
-                        부부 상담 {si + 1}/{sheets.length}
-                      </span>
-                    )}
-                  </h1>
-                </div>
-                <div style={{ textAlign: 'right', fontSize: 10, color: '#6b7280' }}>
-                  <div style={{ fontSize: 13, fontWeight: 900, color: '#111827' }}>{consultTitle(sheet)}</div>
-                  <div>
-                    {sheet.consulted_on}{sheet.consulted_at ? ` ${sheet.consulted_at}` : ''} · 상담자 {sheet.counselor || '—'}
-                    {' · '}{STATUS_LABEL[sheet.status] ?? sheet.status}
-                  </div>
+            {/* 머리글 */}
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
+              borderBottom: '2.5px solid #312e81', paddingBottom: 5, marginBottom: 7 }}>
+              <div>
+                <p style={{ fontSize: 8.5, fontWeight: 800, color: '#4338ca', letterSpacing: '0.22em', margin: 0 }}>
+                  행복한요양원 · 정성으로 모시겠습니다
+                </p>
+                <h1 style={{ fontSize: 20, fontWeight: 900, color: '#111827', margin: '1px 0 0', letterSpacing: '0.04em' }}>
+                  입소 상담 기록지
                   {sheets.length > 1 && (
-                    <div style={{ color: '#be185d', fontWeight: 700 }}>
-                      배우자 {(si === 0 ? sheets[1] : sheets[0]).resident_name || '성함 미상'} 님과 함께 상담
-                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: '#be185d', marginLeft: 7 }}>
+                      부부 상담 {si + 1}/{sheets.length}
+                    </span>
                   )}
+                </h1>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 17, fontWeight: 900, color: '#111827', lineHeight: 1.1 }}>
+                  {String(sheet.resident_name ?? '').trim() || '성함 미상'}
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', marginLeft: 5 }}>
+                    {[sheet.gender, sheet.age ? `${sheet.age}세` : ''].filter(Boolean).join(' · ')}
+                  </span>
                 </div>
+                <div style={{ fontSize: 9.5, color: '#6b7280', marginTop: 1 }}>
+                  {sheet.consulted_on}{sheet.consulted_at ? ` ${sheet.consulted_at}` : ''} · 상담 {sheet.counselor || '—'}
+                  {' · '}<b style={{ color: '#3730a3' }}>{STATUS_LABEL[sheet.status] ?? sheet.status}</b>
+                </div>
+                {sheets.length > 1 && (
+                  <div style={{ fontSize: 9.5, color: '#be185d', fontWeight: 700 }}>
+                    배우자 {(si === 0 ? sheets[1] : sheets[0]).resident_name || '성함 미상'} 님과 함께 상담
+                  </div>
+                )}
               </div>
             </div>
 
+            {/* ── 한눈에 ── 모실 수 있나 · 얼마인가 · 언제 오시나 · 누구에게 전화하나 */}
+            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', marginBottom: 7 }}>
+              <tbody>
+                <tr>
+                  {PRINT_KEY_FIELDS.map(k => {
+                    const f = FIELD_BY_KEY[k]
+                    const v = showValue(sheet, f)
+                    const empty = v === '—'
+                    return (
+                      <td key={k} style={{
+                        border: '1px solid #a5b4fc', background: '#eef2ff',
+                        padding: '3px 7px', verticalAlign: 'top', height: '11mm',
+                      }}>
+                        <div style={{ fontSize: 8, fontWeight: 700, color: '#4f46e5', letterSpacing: '0.04em' }}>
+                          {f.label}
+                        </div>
+                        <div style={{
+                          fontSize: k === 'guardian_phone' ? 12.5 : 13.5, fontWeight: 900,
+                          color: empty ? '#c7d2fe' : '#1e1b4b', marginTop: 1, lineHeight: 1.15,
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                        }}>{v}</div>
+                      </td>
+                    )
+                  })}
+                </tr>
+              </tbody>
+            </table>
+
+            {/* ── 대목별 ── */}
             {visibleSections(!!sheet.partner_id).map(sec => (
-              <div key={sec.key} style={{ marginBottom: 6, breakInside: 'avoid' }}>
+              <div key={sec.key} style={{ marginBottom: 5, breakInside: 'avoid' }}>
                 <div style={{
-                  background: sec.coupleOnly ? '#fdf2f8' : '#eef2ff',
-                  border: `1px solid ${sec.coupleOnly ? '#fbcfe8' : '#c7d2fe'}`,
-                  color: sec.coupleOnly ? '#9d174d' : '#3730a3',
-                  fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 4, marginBottom: 3,
+                  borderLeft: `3px solid ${sec.coupleOnly ? '#db2777' : sec.key_point ? '#4f46e5' : '#94a3b8'}`,
+                  paddingLeft: 5, marginBottom: 2.5,
+                  fontSize: 11, fontWeight: 900,
+                  color: sec.coupleOnly ? '#9d174d' : sec.key_point ? '#3730a3' : '#334155',
                 }}>{sec.title}</div>
                 <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-                  {/* 여섯 칸 — 이름칸·값칸이 세 쌍. 모든 줄이 정확히 여섯 칸을 채워야
-                      줄마다 칸 너비가 달라지지 않는다. */}
                   <colgroup>
-                    {['l0', 'v0', 'l1', 'v1', 'l2', 'v2'].map(k => (
-                      <col key={k} style={{ width: k[0] === 'l' ? '13%' : '20.33%' }} />
-                    ))}
+                    {[0, 1, 2].map(i => <col key={i} style={{ width: '33.33%' }} />)}
                   </colgroup>
                   <tbody>
                     {rowsOf(sec.fields).map((line, li) => {
@@ -708,7 +748,7 @@ export default function ConsultPage() {
                         <tr key={li}>
                           {line.map((f, fi) => (
                             <PrintCell key={f.key} f={f} row={sheet}
-                              // 마지막 칸이 남은 자리를 메운다 — 안 그러면 줄이 짧게 끝나 표가 어긋난다
+                              // 마지막 칸이 남은 자리를 메운다 — 줄이 짧게 끝나면 표가 어긋난다
                               span={(f.span ?? 1) + (fi === line.length - 1 ? 3 - used : 0)} />
                           ))}
                         </tr>
@@ -719,7 +759,7 @@ export default function ConsultPage() {
               </div>
             ))}
 
-            <p style={{ fontSize: 8.5, color: '#9ca3af', textAlign: 'right', margin: '6px 2px 0' }}>
+            <p style={{ fontSize: 8, color: '#9ca3af', textAlign: 'right', margin: '5px 2px 0' }}>
               출력 {new Date().toLocaleDateString('ko-KR')} · 어르신 건강 상태와 보호자 연락처가 적힌 문서입니다 — 보관·폐기에 주의해 주세요.
             </p>
           </div>
@@ -811,22 +851,31 @@ function rowsOf(fields: ConsultField[]): ConsultField[][] {
   return out
 }
 
-/** 이름칸 + 값칸 한 쌍. 값칸에 높이를 주어 빈 기록지에 손으로 적을 수 있게 한다. */
+/**
+ * 칸 하나 — 이름표를 값 위에 작게 올린다.
+ *
+ *  이름|값 을 가로로 번갈아 놓으면 눈이 '이름·값·이름·값' 을 번갈아 읽어야
+ *  해서 표가 통째로 잿빛이 된다. 이름을 위로 올리면 값들이 한 줄에 나란히
+ *  서고, 눈은 값만 훑고 지나간다. 종이 서식이 대개 이렇게 생긴 이유다.
+ *
+ *  값칸에 높이를 주어 빈 기록지를 뽑아 손으로 적을 수도 있게 한다.
+ */
 function PrintCell({ f, row, span }: { f: ConsultField; row: ConsultRow; span: number }) {
-  const b = '1px solid #cbd5e1'
   const tall = f.type === 'textarea' || f.type === 'chips'
+  const v = showValue(row, f)
+  const empty = v === '—'
   return (
-    <>
-      <td style={{
-        border: b, background: '#f8fafc', fontSize: 9.5, fontWeight: 700, color: '#475569',
-        padding: '3px 5px', verticalAlign: 'top', wordBreak: 'keep-all', lineHeight: 1.25,
-      }}>{f.label}</td>
-      <td colSpan={span * 2 - 1} style={{
-        border: b, fontSize: 10.5, padding: '3px 6px', verticalAlign: 'top',
-        whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-        height: tall ? '10mm' : '6.5mm', lineHeight: 1.3,
-      }}>{showValue(row, f)}</td>
-    </>
+    <td colSpan={span} style={{
+      border: '1px solid #cbd5e1', padding: '2.5px 6px', verticalAlign: 'top',
+      height: tall ? '13mm' : '9mm',
+    }}>
+      <div style={{ fontSize: 7.8, fontWeight: 700, color: '#64748b', letterSpacing: '0.02em',
+        lineHeight: 1.2, wordBreak: 'keep-all' }}>{f.label}</div>
+      <div style={{
+        fontSize: 11.5, fontWeight: 600, color: empty ? '#cbd5e1' : '#111827',
+        marginTop: 1.5, lineHeight: 1.3, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+      }}>{v}</div>
+    </td>
   )
 }
 
