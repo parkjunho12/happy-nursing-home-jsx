@@ -4,7 +4,7 @@
 저장·조회·표시만 한다 — 판정 로직은 여기 없다. 같은 week_start 로 다시
 올리면 덮어쓴다(upsert).
 
-권한: 조회는 로그인 사용자 전원. 업로드·삭제는 ADMIN·시설장.
+권한: 조회·업로드·삭제 모두 role ADMIN 계정만(직원 개인별 오류 집계라 관리자 외에는 보이지 않는다).
 """
 from __future__ import annotations
 import re
@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_current_admin_user
 from app.models.user import User
 from app.models.care_log_audit import CareLogAudit, now_kst
 from app.schemas.response import ApiResponse
@@ -27,11 +27,8 @@ router = APIRouter()
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
-def _editor(current_user: User = Depends(get_current_user)) -> User:
-    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
-    pos = getattr(current_user, "position", None) or ""
-    if role != "ADMIN" and pos != "시설장":
-        raise HTTPException(403, "주간 기록지 점검 업로드 권한이 없습니다. (관리자·시설장)")
+def _editor(current_user: User = Depends(get_current_admin_user)) -> User:
+    """업로드·삭제 — ADMIN 만. 조회도 같은 문(get_current_admin_user)을 쓴다."""
     return current_user
 
 
@@ -71,7 +68,7 @@ def _week_detail(a: CareLogAudit) -> dict[str, Any]:
 
 
 @router.get("/weeks")
-def list_weeks(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def list_weeks(db: Session = Depends(get_db), _: User = Depends(get_current_admin_user)):
     """점검 주 목록 — 최신 우선."""
     rows = (db.query(CareLogAudit)
             .order_by(CareLogAudit.week_start.desc()).all())
@@ -79,7 +76,7 @@ def list_weeks(db: Session = Depends(get_db), _: User = Depends(get_current_user
 
 
 @router.get("/latest")
-def latest(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def latest(db: Session = Depends(get_db), _: User = Depends(get_current_admin_user)):
     """최신 주 요약 — 대시보드 카드용. 없으면 null."""
     row = (db.query(CareLogAudit)
            .order_by(CareLogAudit.week_start.desc()).first())
@@ -98,7 +95,7 @@ def latest(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
 
 
 @router.get("/weeks/{week_start}")
-def get_week(week_start: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def get_week(week_start: str, db: Session = Depends(get_db), _: User = Depends(get_current_admin_user)):
     row = db.query(CareLogAudit).filter(CareLogAudit.week_start == week_start).first()
     if not row:
         raise HTTPException(404, "그 주 점검 결과가 없습니다.")

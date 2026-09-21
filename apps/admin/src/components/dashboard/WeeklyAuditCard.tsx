@@ -3,24 +3,28 @@ import { useNavigate } from 'react-router-dom'
 import { ClipboardCheck, ChevronRight } from 'lucide-react'
 import { careLogAuditAPI, type WeeklyAuditLatest } from '@/api/careLogAuditClient'
 import { formatRange } from '@/utils/weeklyAudit'
+import { useAuthStore } from '@/store/auth'
 
 /**
  * 최신 주간 기록지 점검 결과 위젯.
- * - 점검 결과가 없거나 권한이 없으면(403) 아무것도 렌더하지 않는다(위젯 자체가 숨김).
+ * - ADMIN 계정에만 보인다(직원 개인별 오류 집계). 그 외에는 요청도 보내지 않는다.
+ * - 점검 결과가 없거나 403 이면 아무것도 렌더하지 않는다(위젯 자체가 숨김).
  */
 export default function WeeklyAuditCard() {
   const navigate = useNavigate()
+  const isAdmin = useAuthStore(s => s.user?.role === 'ADMIN')
   const [data, setData] = useState<WeeklyAuditLatest | null>(null)
 
   useEffect(() => {
+    if (!isAdmin) return
     let alive = true
     careLogAuditAPI.latest()
       .then(res => { if (alive) setData(res) })
       .catch(() => { if (alive) setData(null) })   // 403(권한없음) 포함 → 숨김
     return () => { alive = false }
-  }, [])
+  }, [isAdmin])
 
-  if (!data) return null
+  if (!isAdmin || !data) return null
 
   return (
     <section className="bg-white rounded-2xl border border-orange-100 shadow-sm overflow-hidden">

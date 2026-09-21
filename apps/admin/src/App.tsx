@@ -464,7 +464,7 @@ function App() {
             {/* 모든 STAFF 접근 가능 — 제공기록지 검수 */}
             <Route path="eval/record-audit" element={<EvalRecordAuditPage />} />
             <Route path="eval/record-guide" element={<EvalRecordGuidePage />} />
-            <Route path="eval/weekly-audit" element={<EvalWeeklyAuditPage />} />
+            <Route path="eval/weekly-audit" element={<AdminRoute><EvalWeeklyAuditPage /></AdminRoute>} />
             <Route path="eval/record-audit/:auditId/resident/:residentName" element={<EvalRecordAuditDetailPage />} />
 
             {/* 사회복지사 + ADMIN — 수급자/직원 관리 */}
