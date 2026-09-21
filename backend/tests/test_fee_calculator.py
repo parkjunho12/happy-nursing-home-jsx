@@ -47,6 +47,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from datetime import datetime
 
 # ── 이 모듈 안에서만 환경변수를 강제한다 ───────────────────────────────────
 # app.core.config.Settings 는 DATABASE_URL·SECRET_KEY·CORS_ORIGINS 가 필수라
@@ -78,7 +79,9 @@ from app.api.v1.endpoints.fee_calculator import (
 from app.core.database import Base, get_db
 from app.core.security import get_current_user
 from app.models.carefor import CareforResident
+from app.models.eval import LtcResident
 from app.models.fee_calculator import FeeCalculatorScenario, FeeCalculatorSource
+from app.models.resident_docs import ResidentDocStatus
 from app.models.user import User, UserRole
 from app.services.fee_calculator_validation import days_in_month
 
@@ -95,6 +98,10 @@ ISOLATED_TABLES = [
     User.__table__,
     FeeCalculatorSource.__table__,
     FeeCalculatorScenario.__table__,
+    LtcResident.__table__,
+    ResidentDocStatus.__table__,
+    # /context 가 이제 쓰지 않지만, '오래된 스냅샷이 결과에 영향을 주지 않아야 한다'를
+    # 직접 검증하려면 stale 기지를 넣을 곳이 필요하다.
     CareforResident.__table__,
 ]
 
@@ -619,16 +626,49 @@ class TestConcurrency(FeeCalculatorTestCase):
 # ══════════════════════════════════════════════════════════════════════
 # /context
 # ══════════════════════════════════════════════════════════════════════
+# 2026-09-21 운영 사고: /context 가 오래된 CareforResident 스냅샷을 읽어 29명을
+# 돌려줌 — 관리자 화면(LtcResident 기준)은 41명. '현재 재원'은 반드시
+# `LtcResident.status == 'active'` 로만 세야 하고(대시보드 `/dashboard/stats` 와 동일),
+# 등급은 `ResidentDocStatus` 에서 연결된(active) 서류로만 받아야 한다.
+def _ltc_resident(id_: str, status: str = "active", **overrides) -> LtcResident:
+    base = dict(
+        id=id_,
+        name=f"어르신-{id_}",  # 응답에는 절대 들어가면 안 된다 — 내부 피그스처용일 뿐
+        birth_date="1940-01-01",
+        gender="F",
+        admission_date="2020-01-01",
+        care_grade_start_date="2020-01-01",
+        status=status,
+    )
+    base.update(overrides)
+    return LtcResident(**base)
+
+
+def _doc(resident_id: str, grade: str, active: bool = True, **overrides) -> ResidentDocStatus:
+    base = dict(resident_id=resident_id, grade=grade, active=active)
+    base.update(overrides)
+    return ResidentDocStatus(**base)
+
+
 class TestContext(FeeCalculatorTestCase):
-    def test_grade_counts_no_names(self):
+    def test_grade_counts_strip_label_and_exclude_inactive_resident(self):
+        """'4/시설' 와 같은 라벨을 았자리 숫자로만 발라내고, 퇴소자(inactive)는 제외한다."""
         self._login_admin()
         with self.SessionLocal() as db:
             db.add_all(
                 [
-                    CareforResident(name="가나다", care_grade="1", status="active"),
-                    CareforResident(name="라마바", care_grade="1", status="active"),
-                    CareforResident(name="사아자", care_grade="2", status="active"),
-                    CareforResident(name="차카타", care_grade="3", status="discharged"),  # 제외돼야
+                    _ltc_resident("r1", status="active"),
+                    _ltc_resident("r2", status="active"),
+                    _ltc_resident("r3", status="active"),
+                    _ltc_resident("r4", status="discharged"),  # 제외돼야 함
+                ]
+            )
+            db.add_all(
+                [
+                    _doc("r1", "4/시설"),
+                    _doc("r2", "4/시설"),
+                    _doc("r3", "2/재가"),
+                    _doc("r4", "3/시설"),  # 퇴소자 서류 — 집계에 안 잡혀야 함
                 ]
             )
             db.commit()
@@ -637,9 +677,122 @@ class TestContext(FeeCalculatorTestCase):
         self.assertEqual(r.status_code, 200)
         data = r.json()
         self.assertEqual(data["total"], 3)
-        self.assertEqual(data["by_grade"], {"1": 2, "2": 1})
+        self.assertEqual(data["by_grade"], {"4": 2, "2": 1})
+
+    def test_missing_doc_returns_unknown(self):
+        """연결된 서류가 아예 없으면 '미상'."""
+        self._login_admin()
+        with self.SessionLocal() as db:
+            db.add(_ltc_resident("r1", status="active"))
+            db.commit()
+
+        data = self.client.get(f"{ADMIN}/context").json()
+        self.assertEqual(data["total"], 1)
+        self.assertEqual(data["by_grade"], {"미상": 1})
+
+    def test_unparseable_grade_returns_unknown(self):
+        """grade 값이 있어도 앞자리가 1~5 숫자가 아니면 '미상'."""
+        self._login_admin()
+        with self.SessionLocal() as db:
+            db.add(_ltc_resident("r1", status="active"))
+            db.add(_doc("r1", "미상정"))  # 1~5 숫자로 시작하지 않음
+            db.commit()
+
+        data = self.client.get(f"{ADMIN}/context").json()
+        self.assertEqual(data["by_grade"], {"미상": 1})
+
+    def test_duplicate_same_grade_not_double_counted(self):
+        """한 어르신에게 서류가 여러 건(중복) 있어도 같은 등급이면 한 명만 세야 한다."""
+        self._login_admin()
+        with self.SessionLocal() as db:
+            db.add(_ltc_resident("r1", status="active"))
+            db.add_all(
+                [
+                    _doc("r1", "3/시설", id=str(uuid.uuid4())),
+                    _doc("r1", "3", id=str(uuid.uuid4())),  # 같은 등급, 다른 라벨 표기
+                    _doc("r1", "3/재가", id=str(uuid.uuid4())),
+                ]
+            )
+            db.commit()
+
+        data = self.client.get(f"{ADMIN}/context").json()
+        self.assertEqual(data["total"], 1)
+        self.assertEqual(data["by_grade"], {"3": 1})  # 3명이 아니라 1명
+
+    def test_conflicting_grades_return_unknown(self):
+        """한 어르신에게 서로 다른 등급이 연결된 서류(충돌)가 있으면 '미상'."""
+        self._login_admin()
+        with self.SessionLocal() as db:
+            db.add(_ltc_resident("r1", status="active"))
+            db.add_all(
+                [
+                    _doc("r1", "2/시설", id=str(uuid.uuid4())),
+                    _doc("r1", "4/시설", id=str(uuid.uuid4())),  # 서로 다름 — 충돌
+                ]
+            )
+            db.commit()
+
+        data = self.client.get(f"{ADMIN}/context").json()
+        self.assertEqual(data["by_grade"], {"미상": 1})
+
+    def test_inactive_doc_ignored(self):
+        """active=False 인 서류는 연결으로 치지 않는다(퇴소로 숨겨진 서류)."""
+        self._login_admin()
+        with self.SessionLocal() as db:
+            db.add(_ltc_resident("r1", status="active"))
+            db.add_all(
+                [
+                    _doc("r1", "5/시설", active=False, id=str(uuid.uuid4())),  # 무시되어야 함
+                ]
+            )
+            db.commit()
+
+        data = self.client.get(f"{ADMIN}/context").json()
+        self.assertEqual(data["by_grade"], {"미상": 1})  # active 서류가 없는 것과 동일
+
+    def test_stale_carefor_snapshot_does_not_affect_counts(self):
+        """오래된 CareforResident 스냅샷(29명)이 있어도 /context 는 그것을 전혀
+        참조하지 않고 LtcResident 기준(이 테스트에서는 2명)으로만 집계해야 한다.
+        2026-09-21 운영 사고(context=29 vs 관리자 화면=41)의 재발 방지 회귀 테스트."""
+        self._login_admin()
+        with self.SessionLocal() as db:
+            # stale Carefor 스냅샷 29명 — /context 결과에 절대 섮여들면 안 된다
+            db.add_all(
+                [CareforResident(name=f"구수가-{i}", care_grade="1", status="active") for i in range(29)]
+            )
+            # 실제 기준(LtcResident)은 2명뿐
+            db.add_all([_ltc_resident("r1", status="active"), _ltc_resident("r2", status="active")])
+            db.add_all([_doc("r1", "1/시설"), _doc("r2", "2/시설")])
+            db.commit()
+
+            self.assertEqual(db.query(CareforResident).count(), 29)  # 전제 확인
+
+        data = self.client.get(f"{ADMIN}/context").json()
+        self.assertEqual(data["total"], 2)  # 29 가 아니라 2
+        self.assertEqual(data["by_grade"], {"1": 1, "2": 1})
+
+    def test_no_names_in_response(self):
+        self._login_admin()
+        with self.SessionLocal() as db:
+            db.add(_ltc_resident("r1", status="active", name="가나다"))
+            db.add(_doc("r1", "1/시설"))
+            db.commit()
+
+        r = self.client.get(f"{ADMIN}/context")
+        data = r.json()
         self.assertNotIn("가나다", r.text)
         self.assertNotIn("name", data)
+        self.assertNotIn("names", data)
+
+    def test_source_label_and_timezone_aware_as_of(self):
+        self._login_admin()
+        r = self.client.get(f"{ADMIN}/context")
+        data = r.json()
+        self.assertEqual(data["source"], "admin 재원 원장 + 연결된 서류현황 등급")
+        # ISO 8601 파싱 + timezone-aware 확인(offset 이 None 이 아니어야 함)
+        parsed = datetime.fromisoformat(data["as_of"])
+        self.assertIsNotNone(parsed.tzinfo)
+        self.assertIsNotNone(parsed.tzinfo.utcoffset(parsed))
 
 
 if __name__ == "__main__":

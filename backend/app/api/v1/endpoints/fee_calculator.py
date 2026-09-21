@@ -14,6 +14,14 @@
                              `FeeInputs`/`validateInputs()` 규칙을 그대로 서버에서도 검사한다
                              — 여기서 막지 않으면 나중에 다른 화면의 계산 엔진이 죽는다.
 - GET  /context (optional) : 현재 재원 중인 어르신의 등급별 인원수만 집계. 이름 등 개인정보 없음.
+                             '현재 재원'은 `LtcResident.status == 'active'` 기준이다 — 대시보드
+                             `/dashboard/stats` 의 activeResidents 와 같은 집계다. (이전에
+                             쓰던 `CareforResident`는 work.carefor 에서 가져온 오래된 스냅샷이라
+                             실제 운영 인원과 어긏나기 쉬워 버렸다 — 2026-09-21 운영 사고:
+                             /context=29 vs 관리자 화면=41.) 등급은 `ResidentDocStatus.grade`
+                             (예: '4/시설')에서 앞자리 [1-5] 한 글자만 발라낸다. 한 어르신에게
+                             연결된(active) 서류가 없거나, 등급을 못 읽거나, 서로 다른 등급이
+                             섞여 있으면(충돌) '미상'으로 합산한다.
 
 모든 엔드포인트는 `app/core/security.py::get_current_admin_user` 로만 보호한다.
 
@@ -29,12 +37,11 @@ from __future__ import annotations
 import json
 import math
 import re
-from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from datetime import datetime, timezone, timedelta
+from typing import Any, Dict, List, Optional, Set, Union
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -42,12 +49,20 @@ from app.core.database import get_db
 from app.core.security import get_current_admin_user
 from app.models.user import User
 from app.models.fee_calculator import FeeCalculatorSource, FeeCalculatorScenario
-from app.models.carefor import CareforResident
+from app.models.eval import LtcResident
+from app.models.resident_docs import ResidentDocStatus
 from app.services.fee_calculator_validation import validate_fee_inputs
 
 router = APIRouter()
 
 _MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+KST = timezone(timedelta(hours=9))
+
+# ResidentDocStatus.grade 는 '4/시설' 같은 자유 텍스트다 — 앞자리 [1-5] 한 글자만 발라낸다.
+_GRADE_RE = re.compile(r"^\s*([1-5])")
+# /context 응답에 고정으로 붙이는 출처 라벨 — CareforResident(work.carefor 스냅샷) 와
+# 헷갈리지 않게 'admin 재원 원장 + 연결된 서류현황 등급'이라고 명시한다.
+CONTEXT_SOURCE_LABEL = "admin 재원 원장 + 연결된 서류현황 등급"
 
 # 원본 스냅샷 행은 하나만 둔다(싱글턴) — 이 고정 id 로 upsert·동시성 처리를 단순하게 만든다.
 SOURCE_SINGLETON_ID = "fee_calculator_source_singleton"
@@ -217,10 +232,20 @@ class ContextResponse(BaseModel):
     total: int
     by_grade: Dict[str, int]
     as_of: str
+    source: Optional[str] = None
 
 
 def _iso(dt: Optional[datetime]) -> Optional[str]:
     return dt.isoformat() if dt else None
+
+
+def _parse_grade(raw: Optional[str]) -> Optional[str]:
+    """ResidentDocStatus.grade('4/시설' 등) 에서 앞자리 [1-5] 한 글자만 발라낸다.
+    비어있거나 형식이 맞지 않으면 None(= 미상 후보)을 돌려줌다."""
+    if not raw:
+        return None
+    m = _GRADE_RE.match(raw)
+    return m.group(1) if m else None
 
 
 def _source_view(row: FeeCalculatorSource) -> dict:
@@ -399,17 +424,48 @@ def get_context(
     _: User = Depends(get_current_admin_user),
 ):
     """수가 계산에 참고할 현재 재원 어르신의 '등급별 인원수'만 집계한다.
-    이름 등 개인 식별 정보는 절대 포함하지 않는다."""
-    rows = (
-        db.query(CareforResident.care_grade, func.count(CareforResident.id))
-        .filter(CareforResident.status == "active")
-        .group_by(CareforResident.care_grade)
-        .all()
-    )
+    이름 등 개인 식별 정보는 절대 포함하지 않는다.
+
+    현재 재원 = `LtcResident.status == 'active'` (대시보드 `/dashboard/stats` 의
+    activeResidents 와 동일한 기준). 등급은 각 재원자에 연결(active)된
+    `ResidentDocStatus` 에서 말을 발라낸다 — 연결된 서류가 없거나, 등급을 못
+    읽거나(형식 불일치), 서로 다른 등급이 여러 건 설여 있으면(충돌) 모두
+    '미상'으로 둔다 — 이름 폴백 없이 등급만 집계하므로 이렇게 해도 개인정보
+    노출이 아니다.
+    """
+    resident_ids: List[str] = [
+        rid
+        for (rid,) in db.query(LtcResident.id).filter(LtcResident.status == "active").all()
+    ]
+    total = len(resident_ids)
+
+    # 한 어르신당 하나만 세도록(중복 서류 묵음) — resident_id 별로 파싱된 등급 집합을 모은다.
+    grades_by_resident: Dict[str, Set[str]] = {}
+    if resident_ids:
+        doc_rows = (
+            db.query(ResidentDocStatus.resident_id, ResidentDocStatus.grade)
+            .filter(
+                ResidentDocStatus.resident_id.in_(resident_ids),
+                ResidentDocStatus.active == True,  # noqa: E712
+            )
+            .all()
+        )
+        for rid, grade_raw in doc_rows:
+            parsed = _parse_grade(grade_raw)
+            if parsed is None:
+                continue
+            grades_by_resident.setdefault(rid, set()).add(parsed)
+
     by_grade: Dict[str, int] = {}
-    total = 0
-    for grade, cnt in rows:
-        key = (grade or "미상").strip() or "미상"
-        by_grade[key] = by_grade.get(key, 0) + int(cnt)
-        total += int(cnt)
-    return {"total": total, "by_grade": by_grade, "as_of": datetime.now().isoformat()}
+    for rid in resident_ids:
+        grades = grades_by_resident.get(rid)
+        # 연결된 서류가 없거나(missing) 파싱된 등급이 둘 이상 서로 다르면(conflicting) '미상'
+        key = next(iter(grades)) if grades and len(grades) == 1 else "미상"
+        by_grade[key] = by_grade.get(key, 0) + 1
+
+    return {
+        "total": total,
+        "by_grade": by_grade,
+        "as_of": datetime.now(KST).isoformat(),
+        "source": CONTEXT_SOURCE_LABEL,
+    }
