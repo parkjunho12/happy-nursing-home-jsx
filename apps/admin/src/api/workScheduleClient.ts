@@ -110,6 +110,8 @@ export const workScheduleAPI = {
     code_hours_default?: Record<string, number>
     /** 시점 설정 — [{from:'2026-09', hours:{N:10}}] */
     code_hours_rules?: { from: string; hours: Record<string, number> }[]
+    /** 그 달만의 설정 — {'2026-09':{N:10}} */
+    code_hours_months?: Record<string, Record<string, number>>
   }>),
   saveConfig: (b: {
     settle_start?: string; rotation_anchor?: string
@@ -117,10 +119,13 @@ export const workScheduleAPI = {
     code_hours?: Record<string, number>
     /** [{from:'2026-09', hours:{N:10}}] — 그 달부터 적용 */
     code_hours_rules?: { from: string; hours: Record<string, number> }[]
+    /** {'2026-09':{N:10}} — 그 달 하나에만 적용. 통째로 덮어쓴다 */
+    code_hours_months?: Record<string, Record<string, number>>
   }) => apiClient.put(`${BASE}/config`, b).then(unwrap<{
     settle_start: string; rotation_anchor: string
     code_hours?: Record<string, number>
     code_hours_rules?: { from: string; hours: Record<string, number> }[]
+    code_hours_months?: Record<string, Record<string, number>>
   }>),
   /** 그 달 선생님별 메모 — 근무표를 고칠 수 있는 사람만 본다 */
   memos: (month: string) =>

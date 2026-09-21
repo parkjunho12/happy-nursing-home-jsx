@@ -172,6 +172,8 @@ class ConfigBody(BaseModel):
     code_hours: Optional[Dict[str, float]] = None
     # [{"from":"2026-09","hours":{"N":10}}] — 그 달부터 적용
     code_hours_rules: Optional[List[Dict[str, Any]]] = None
+    # {"2026-09":{"N":10}} — 그 달 하나에만 적용
+    code_hours_months: Optional[Dict[str, Dict[str, float]]] = None
 
 
 def _config_row(db: Session) -> WorkScheduleConfig:
@@ -237,6 +239,8 @@ def get_config(db: Session = Depends(get_db), _: User = Depends(_manager)):
         "code_hours": row.code_hours or {},
         # 시점 설정 — [{"from":"2026-09","hours":{"N":10}}]
         "code_hours_rules": row.code_hours_rules or [],
+        # 그 달만의 설정 — {"2026-09":{"N":10}}
+        "code_hours_months": row.code_hours_months or {},
         # 무엇을 고칠 수 있는지 화면이 알아야 목록을 그린다
         "code_hours_default": dict(_shift_hours_mod.CODE_HOURS),
     })
@@ -296,11 +300,37 @@ def save_config(body: ConfigBody, db: Session = Depends(get_db), current_user: U
             if hrs:      # 바꾸는 게 없는 시점은 담아둘 이유가 없다
                 rules.append({"from": frm, "hours": hrs})
         row.code_hours_rules = sorted(rules, key=lambda x: x["from"]) or None
+
+    if body.code_hours_months is not None:
+        # 그 달만의 설정. 시점 설정과 같은 잣대로 본다 — 여기 값이 가장
+        # 나중에 덮으므로 오타가 그대로 그 달 급여 숫자가 된다.
+        months = {}
+        for mth, hours in body.code_hours_months.items():
+            frm = str(mth or "").strip()
+            if not re.match(r"^\d{4}-\d{2}$", frm):
+                raise HTTPException(400, f"달 형식이 올바르지 않습니다 (YYYY-MM): {frm or '(빈값)'}")
+            hrs = {}
+            for k, v in (hours or {}).items():
+                if k not in _shift_hours_mod.CODE_HOURS:
+                    raise HTTPException(400, f"알 수 없는 근무 코드입니다: {k}")
+                try:
+                    fv = float(v)
+                except (TypeError, ValueError):
+                    raise HTTPException(400, f"{k} 시간이 숫자가 아닙니다.")
+                if not (0 <= fv <= 24):
+                    raise HTTPException(400, f"{k} 시간은 0~24 사이여야 합니다.")
+                hrs[k] = fv
+            # 바꾸는 게 없는 달은 담아두지 않는다 — 지워진 것과 같다
+            if hrs:
+                months[frm] = hrs
+        row.code_hours_months = months or None
+
     row.updated_by = getattr(current_user, "name", None)
     db.commit(); db.refresh(row)
     return ApiResponse(success=True, data={
         "code_hours": row.code_hours or {},
         "code_hours_rules": row.code_hours_rules or [],
+        "code_hours_months": row.code_hours_months or {},
         "settle_start": row.settle_start, "rotation_anchor": row.rotation_anchor,
     })
 
@@ -336,7 +366,8 @@ def export_schedule(month: str = Query(...), db: Session = Depends(get_db), _: U
     # 이미 지급한 급여와 숫자가 달라진다.
     _cfg_row = _config_row(db)
     _code_hours = _shift_hours.resolve_for_month(
-        month, _cfg_row.code_hours or {}, _cfg_row.code_hours_rules or [])
+        month, _cfg_row.code_hours or {}, _cfg_row.code_hours_rules or [],
+        _cfg_row.code_hours_months or {})
 
     y, m = int(month[:4]), int(month[5:7])
     total = _cal.monthrange(y, m)[1]

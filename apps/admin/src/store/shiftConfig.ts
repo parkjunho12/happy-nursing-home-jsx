@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { workScheduleAPI } from '@/api/workScheduleClient'
-import { setCodeHours, codeHoursNow, resolveCodeHours, type CodeHourRule } from '@/utils/shiftCodes'
+import { setCodeHours, codeHoursNow, resolveCodeHours, type CodeHourRule, type CodeHourMonths } from '@/utils/shiftCodes'
 
 /**
  * 근무 코드별 시간 설정.
@@ -23,6 +23,8 @@ interface ShiftConfigState {
   base: Record<string, number>
   /** 시점 설정 — 그 달부터 적용 */
   rules: CodeHourRule[]
+  /** 그 달만의 설정 — 그 달 하나에만 적용. 가장 나중에 덮는다 */
+  months: CodeHourMonths
   /** 지금 어느 달로 풀어놨는지 */
   month: string
   load: () => Promise<void>
@@ -30,6 +32,13 @@ interface ShiftConfigState {
   useFor: (month: string) => void
   /** 설정을 저장한 뒤 화면에 곧바로 반영한다 */
   apply: (base: Record<string, number>, rules: CodeHourRule[]) => void
+  /**
+   * 그 달만의 시간을 저장하고 곧바로 반영한다.
+   *
+   * 빈 객체를 주면 그 달 설정을 지운다 — 원래 규칙으로 돌아간다.
+   * 다른 달의 설정은 건드리지 않는다.
+   */
+  saveMonth: (month: string, hours: Record<string, number>) => Promise<void>
 }
 
 export const useShiftConfig = create<ShiftConfigState>((set, get) => ({
@@ -39,6 +48,7 @@ export const useShiftConfig = create<ShiftConfigState>((set, get) => ({
   defaults: {},
   base: {},
   rules: [],
+  months: {},
   month: '',
 
   load: async () => {
@@ -48,11 +58,12 @@ export const useShiftConfig = create<ShiftConfigState>((set, get) => ({
       const c = await workScheduleAPI.config()
       const base = c.code_hours ?? {}
       const rules = (c.code_hours_rules ?? []) as CodeHourRule[]
+      const months = (c.code_hours_months ?? {}) as CodeHourMonths
       const month = get().month
-      setCodeHours(resolveCodeHours(month, base, rules))
+      setCodeHours(resolveCodeHours(month, base, rules, months))
       set({
         loaded: true, loading: false,
-        base, rules,
+        base, rules, months,
         hours: codeHoursNow(),
         defaults: c.code_hours_default ?? {},
       })
@@ -65,13 +76,24 @@ export const useShiftConfig = create<ShiftConfigState>((set, get) => ({
   useFor: (month) => {
     const st = get()
     if (st.month === month) return
-    setCodeHours(resolveCodeHours(month, st.base, st.rules))
+    setCodeHours(resolveCodeHours(month, st.base, st.rules, st.months))
     set({ month, hours: codeHoursNow() })
   },
 
   apply: (base, rules) => {
-    const month = get().month
-    setCodeHours(resolveCodeHours(month, base, rules))
+    const st = get()
+    setCodeHours(resolveCodeHours(st.month, base, rules, st.months))
     set({ base, rules, hours: codeHoursNow() })
+  },
+
+  saveMonth: async (month, hours) => {
+    const st = get()
+    // 보내는 값은 전체 지도다 — 서버가 통째로 덮어쓴다. 이 달 것만 갈아끼운다.
+    const next: CodeHourMonths = { ...st.months }
+    if (Object.keys(hours).length) next[month] = hours
+    else delete next[month]
+    await workScheduleAPI.saveConfig({ code_hours_months: next })
+    setCodeHours(resolveCodeHours(st.month, st.base, st.rules, next))
+    set({ months: next, hours: codeHoursNow() })
   },
 }))

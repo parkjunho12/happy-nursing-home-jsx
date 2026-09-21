@@ -119,5 +119,13 @@ class WorkScheduleConfig(Base):
     # 하나의 값으로 두면 이미 급여를 지급한 지난달 숫자까지 함께 달라진다.
     # 'from' 이 그 달 이하인 것을 오래된 순서로 덮는다.
     code_hours_rules = Column(JSON, nullable=True)
+    # 그 달만의 코드 시간 {"2026-09": {"N": 10, "D": 8}, …}
+    #
+    # 시점 설정과 다르다. 시점은 그 달부터 쭉 이어지고, 이것은 그 달 하나에만
+    # 적용된다. 그 달만 실제 근무시간이 달랐던 경우 — 시점으로 적으면 다음
+    # 달까지 함께 끌려가 그 달만 되돌리려고 또 시점을 하나 더 적어야 한다.
+    #
+    # 가장 좁은 범위라 가장 나중에 덮는다.
+    code_hours_months = Column(JSON, nullable=True)
     updated_by = Column(String(100), nullable=True)
     updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)

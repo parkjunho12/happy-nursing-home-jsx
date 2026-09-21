@@ -91,25 +91,33 @@ def _put(table: Dict[str, float], o) -> None:
 
 def resolve_for_month(month: Optional[str],
                       base: Optional[Dict[str, float]] = None,
-                      rules: Optional[list] = None) -> Dict[str, float]:
+                      rules: Optional[list] = None,
+                      months: Optional[Dict[str, Dict[str, float]]] = None) -> Dict[str, float]:
     """그 달에 쓸 코드별 시간.
 
-    기본값 → 전체 기간 설정(base) → 시점 설정(rules) 순서로 덮는다.
-    시점 설정은 [{"from": "2026-09", "hours": {"N": 10}}, …] 모양이고,
-    'from' 이 그 달 이하인 것만 오래된 순서로 적용한다.
+    기본값 → 전체 기간 설정(base) → 시점 설정(rules) → 그 달 설정(months)
+    순서로 덮는다. 시점 설정은 [{"from": "2026-09", "hours": {"N": 10}}, …]
+    모양이고, 'from' 이 그 달 이하인 것만 오래된 순서로 적용한다.
+    그 달 설정은 {"2026-09": {"N": 10}} 모양이고 그 달 하나에만 적용된다.
 
     왜 시점이 필요한가: 야간이 9시간에서 10시간으로 바뀌면 바뀐 달부터
     그렇게 세야 한다. 하나의 값으로 두면 이미 급여를 지급한 지난달 숫자까지
     함께 달라진다.
 
-    month 가 없으면 시점 설정은 건너뛴다 — 어느 달인지 모르면서 특정 달의
-    규칙을 적용할 수는 없다.
+    왜 그 달 설정이 따로 필요한가: 그 달만 실제 근무시간이 달랐던 경우가
+    있다. 시점으로 적으면 다음 달까지 함께 끌려간다.
+
+    그 달 설정이 가장 나중에 덮는다 — 가장 좁은 범위를 정한 사람이 그 달
+    사정을 알고 적은 값이다.
+
+    month 가 없으면 달에 딸린 설정은 건너뛴다 — 어느 달인지 모르면서 특정
+    달의 규칙을 적용할 수는 없다.
     """
     table = resolve_hours(base)
-    if not month or not rules:
+    if not month:
         return table
     picked = []
-    for r in rules:
+    for r in rules or []:
         if not isinstance(r, dict):
             continue
         frm = str(r.get("from") or "")
@@ -117,6 +125,8 @@ def resolve_for_month(month: Optional[str],
             picked.append((frm, r.get("hours") or {}))
     for _frm, hrs in sorted(picked, key=lambda x: x[0]):
         _put(table, hrs)
+    if isinstance(months, dict):
+        _put(table, months.get(month) or {})
     return table
 
 

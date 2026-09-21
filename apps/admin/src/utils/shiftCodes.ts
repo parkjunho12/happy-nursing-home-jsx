@@ -62,14 +62,26 @@ export interface CodeHourRule {
 }
 
 /**
+ * 그 달만의 코드 시간 — { '2026-09': { N: 10, D: 8 }, … }
+ *
+ * 시점 설정(from)과 다르다. 시점은 그 달부터 쭉 이어지고, 이것은 그 달
+ * 하나에만 적용된다. 폭설로 야간을 한 시간 늘려 돈 달처럼, 그 달만 실제
+ * 근무시간이 달랐던 경우에 쓴다. 다음 달은 원래대로 돌아간다.
+ */
+export type CodeHourMonths = Record<string, Record<string, number>>
+
+/**
  * 그 달에 쓸 코드별 시간.
  *
- * 기본값 → 전체 기간 설정 → 시점 설정 순서로 덮는다. 시점 설정은 'from' 이
- * 그 달 이하인 것만 오래된 순서로 적용한다.
+ * 기본값 → 전체 기간 설정 → 시점 설정 → 그 달 설정 순서로 덮는다.
+ * 시점 설정은 'from' 이 그 달 이하인 것만 오래된 순서로 적용한다.
  *
  * 왜 달을 따지는가: 야간이 9시간에서 10시간으로 바뀌면 바뀐 달부터 그렇게
  * 세야 한다. 하나의 값으로 두면 이미 급여를 지급한 지난달 숫자까지 함께
  * 달라진다.
+ *
+ * 그 달 설정이 가장 나중에 덮는다 — 가장 좁은 범위를 정한 사람이 그 달
+ * 사정을 알고 적은 값이다. 넓은 규칙이 그것을 덮으면 적은 뜻이 사라진다.
  *
  * 백엔드도 같은 규칙으로 푼다(shift_hours.resolve_for_month).
  */
@@ -77,6 +89,7 @@ export function resolveCodeHours(
   month?: string | null,
   base?: Record<string, number> | null,
   rules?: CodeHourRule[] | null,
+  months?: CodeHourMonths | null,
 ): Record<string, number> {
   const out: Record<string, number> = {}
   for (const c of SHIFT_CODES) out[c.code] = c.hours
@@ -93,6 +106,7 @@ export function resolveCodeHours(
       put(r.hours)
     }
   }
+  if (month) put(months?.[month])
   return out
 }
 

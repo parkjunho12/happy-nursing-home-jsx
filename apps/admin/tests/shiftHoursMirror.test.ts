@@ -133,3 +133,33 @@ test('말이 안 되는 시점 규칙은 무시한다', () => {
   ])
   assert.equal(t.N, 9, '범위 밖은 무시')
 })
+
+/**
+ * 그 달만의 설정 — 시점과 달리 그 달 하나에만 적용된다.
+ *
+ * 그 달만 실제 근무시간이 달랐던 경우에 쓴다. 시점으로 적으면 다음 달까지
+ * 함께 끌려가 그 달만 되돌리려고 시점을 하나 더 적어야 한다.
+ * backend/tests/test_shift_hours.py 가 같은 사례를 본다.
+ */
+const MONTHS = { '2026-10': { N: 11, D: 7.5 } }
+
+test('그 달만 바뀌고 다음 달은 되돌아온다', () => {
+  assert.equal(resolveCodeHours('2026-09', null, RULES, MONTHS).N, 10, '시점 그대로')
+  assert.equal(resolveCodeHours('2026-10', null, RULES, MONTHS).N, 11, '그 달만')
+  assert.equal(resolveCodeHours('2026-10', null, RULES, MONTHS).D, 7.5)
+  assert.equal(resolveCodeHours('2026-11', null, RULES, MONTHS).N, 10, '다음 달은 되돌아온다')
+})
+
+test('그 달 설정이 시점·전체 기간을 이긴다 — 가장 좁은 범위가 이긴다', () => {
+  const t = resolveCodeHours('2026-09', { N: 9.5 }, RULES, { '2026-09': { N: 12 } })
+  assert.equal(t.N, 12)
+})
+
+test('달을 모르면 그 달 설정을 쓰지 않는다', () => {
+  assert.equal(resolveCodeHours(null, null, RULES, MONTHS).N, 9)
+})
+
+test('말이 안 되는 그 달 설정은 무시한다', () => {
+  const t = resolveCodeHours('2026-10', null, null, { '2026-10': { 없는코드: 3, N: 99 } } as any)
+  assert.equal(t.N, 9, '범위 밖은 무시')
+})

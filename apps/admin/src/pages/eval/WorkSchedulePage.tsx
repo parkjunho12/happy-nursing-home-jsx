@@ -10,6 +10,7 @@ import StaffMemoPanel from '@/components/schedule/StaffMemoPanel'
 import TeamPanel from '@/components/schedule/TeamPanel'
 import SettlementPanel from '@/components/schedule/SettlementPanel'
 import AuditPanel from '@/components/schedule/AuditPanel'
+import MonthHoursPanel from '@/components/schedule/MonthHoursPanel'
 import GeneratePickModal from '@/components/schedule/GeneratePickModal'
 import AttendanceSheets from '@/components/schedule/AttendanceSheets'
 import LeaveInboxPanel from '@/components/schedule/LeaveInboxPanel'
@@ -102,7 +103,18 @@ export default function WorkSchedulePage() {
   // 걸러둔 채로 저장했다가 사람이 빠지면 그건 근무표가 아니라 사고다.
   const [floorPick, setFloorPick] = useState(() => localStorage.getItem('ws.floorPick') ?? '')
   useEffect(() => { localStorage.setItem('ws.floorPick', floorPick) }, [floorPick])
-  const [auditOpen, setAuditOpen] = useState(true)
+  // 점검 패널 — 접어둔 채로 둔다. 매번 펼쳐진 채로 열리면 표가 한 화면
+  // 아래로 밀려, 접는 일을 달마다 다시 하게 된다. 접든 펼치든 고른 대로
+  // 이 브라우저에 기억한다. 건수·위험은 접힌 머리줄에도 그대로 보인다.
+  const [auditOpen, setAuditOpen] = useState(() => localStorage.getItem('ws.audit') === '1')
+  /** 사람이 누른 것만 기억한다.
+   *
+   *  자동 생성 직후처럼 화면이 스스로 펼치는 경우까지 기억하면, 한 번
+   *  생성한 뒤로는 계속 펼쳐진 채로 열린다. 그러면 접어둔 뜻이 사라진다. */
+  const toggleAudit = () => setAuditOpen(v => {
+    localStorage.setItem('ws.audit', v ? '0' : '1')
+    return !v
+  })
   const [histOpen, setHistOpen] = useState(false)
   const [pickOpen, setPickOpen] = useState(false)   // 자동 생성 대상 선택
   // 인쇄 대상 선택 — 층별로 나눠 붙이거나 특정 인원만 뽑을 때
@@ -540,6 +552,9 @@ export default function WorkSchedulePage() {
       (p.compDays > 0 ? ` · 초과휴 ${p.compDays}일` : '') +
       ` · 이월 ${p.closing >= 0 ? '+' : ''}${p.closing}h`
     ).join('\n')
+    // 안내문이 '아래 점검 결과를 확인하라' 고 하는데 패널이 접혀 있으면
+    // 가리킬 곳이 없다. 이번만 펼친다 — 기억하지는 않는다.
+    setAuditOpen(true)
     alert(
       `근무표를 만들었습니다.\n\n` +
       `· 교대조 ${shiftStaff.length}명 — 주주야야휴휴 ${shiftCells}칸\n${summary}\n\n` +
@@ -954,6 +969,10 @@ export default function WorkSchedulePage() {
           )}
         </div>
 
+        {/* 이 달만의 실 근무시간 — 주간·야간. 총시간이 이 값으로 계산된다 */}
+        {/* key={ym} — 달을 넘기면 고치던 값을 버린다. 남겨두면 다른 달 칸에 적힌다 */}
+        <MonthHoursPanel key={ym} ym={ym} locked={lock.locked} onChanged={() => setDirty(true)} />
+
         {/* 근무 코드 팔레트 */}
         <div className="flex items-center gap-1 mb-2 flex-wrap">
           <span className="text-[11px] font-semibold text-gray-400 mr-1">칠할 근무</span>
@@ -1017,7 +1036,7 @@ export default function WorkSchedulePage() {
         <SettlementPanel plans={lastPlans} onClose={() => setLastPlans([])} settleStart={settleStart}
           wage={wage} setWage={setWage} rate={rate} setRate={setRate} />
 
-        <AuditPanel issues={issues} danger={danger} open={auditOpen} onToggle={() => setAuditOpen(v => !v)}
+        <AuditPanel issues={issues} danger={danger} open={auditOpen} onToggle={toggleAudit}
           minStaff={minStaff} setMinStaff={setMinStaff} onFocus={setFocus} />
       </div>
 

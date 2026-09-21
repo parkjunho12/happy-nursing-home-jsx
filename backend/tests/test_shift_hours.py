@@ -110,6 +110,29 @@ def check() -> int:
     if abs(junk["N"] - 9) > 1e-9:
         bad.append("말이 안 되는 시점 규칙을 무시하지 않는다")
 
+    # 그 달만의 설정 — 시점과 달리 그 달 하나에만 적용된다.
+    # 한쪽만 다르게 풀면 그 달 근무표와 급여 대장의 숫자가 갈라진다.
+    MONTHS = {"2026-10": {"N": 11, "D": 7.5}}
+    m_expect = [
+        ("2026-09", "N", 10),      # 시점 그대로 — 그 달 설정이 없다
+        ("2026-10", "N", 11),      # 그 달만 바뀐다
+        ("2026-10", "D", 7.5),
+        ("2026-11", "N", 10),      # 다음 달은 되돌아온다
+        (None, "N", 9),            # 달을 모르면 쓰지 않는다
+    ]
+    for mth, code, want in m_expect:
+        got = sh.resolve_for_month(mth, None, RULES, MONTHS).get(code)
+        if abs(float(got) - want) > 1e-9:
+            bad.append(f"그 달 설정 {mth!r} {code}: {want} 여야 하는데 {got}")
+
+    t2 = sh.resolve_for_month("2026-09", {"N": 9.5}, RULES, {"2026-09": {"N": 12}})
+    if abs(t2["N"] - 12) > 1e-9:
+        bad.append("그 달 설정이 시점·전체 기간을 이기지 못한다")
+
+    junk2 = sh.resolve_for_month("2026-10", None, None, {"2026-10": {"없는코드": 3, "N": 99}})
+    if abs(junk2["N"] - 9) > 1e-9:
+        bad.append("말이 안 되는 그 달 설정을 무시하지 않는다")
+
     if bad:
         print("❌ 화면과 어긋납니다 — 근무시간 규칙을 한쪽만 고치면 급여 숫자가 갈라집니다.")
         for b in bad:
@@ -118,7 +141,7 @@ def check() -> int:
         print("규칙을 바꿨다면 검증표도 다시 뽑아 양쪽을 맞춰주세요.")
         return 1
 
-    print(f"✅ 화면과 일치 — 입력 {len(fx['cases'])}개 · 휴게 {len(fx['breaks'])}개 · 합계 2건 · 설정 6건 · 시점 12건")
+    print(f"✅ 화면과 일치 — 입력 {len(fx['cases'])}개 · 휴게 {len(fx['breaks'])}개 · 합계 2건 · 설정 6건 · 시점 12건 · 그 달 7건")
     return 0
 
 

@@ -97,7 +97,8 @@ def _actual_schedule_hours(db: Session, year: Optional[int], month: Optional[int
         return {}
     cfg = db.query(WorkScheduleConfig).first()
     code_hours = SH.resolve_for_month(
-        ym, (cfg.code_hours if cfg else None) or {}, (cfg.code_hours_rules if cfg else None) or [])
+        ym, (cfg.code_hours if cfg else None) or {}, (cfg.code_hours_rules if cfg else None) or [],
+        (cfg.code_hours_months if cfg else None) or {})
     days = range(1, calendar.monthrange(year, month)[1] + 1)
     return {sid: SH.month_total(codes, days, code_hours) for sid, codes in (ws.data or {}).items()}
 
