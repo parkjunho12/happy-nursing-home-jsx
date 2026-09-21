@@ -6,10 +6,24 @@ function unwrap<T>(res: any): T {
   throw new Error(res?.data?.message ?? res?.data?.error ?? 'API error')
 }
 
+/** 가져온 케어포 외박 기록. 식이 변경이나 실제 귀원 확정이 아니다. */
+export interface DietAbsence {
+  label: '외박중' | '외박·복귀' | '외박예정'
+  source: string
+  start_date: string
+  start_time?: string | null
+  end_date?: string | null
+  end_time?: string | null
+  conflict: boolean
+  conflict_message?: string | null
+  observed_at?: string | null
+}
+
 /** 한 어르신의 그날 식이 */
 export interface DietRow {
   resident_id: string
   name: string
+  absence?: DietAbsence | null
   floor?: string | null
   room?: string | null
   rice?: string | null          // 일반식 · 당뇨식 · 다진식 · 죽 · 미음

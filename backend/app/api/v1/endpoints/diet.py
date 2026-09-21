@@ -21,6 +21,7 @@ from app.models.resident_diet import DietChange
 from app.models.user import User
 from app.schemas.response import ApiResponse
 from app.services import diet_state as ds
+from app.services import diet_absence as da
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -189,6 +190,41 @@ def _staff_meal(db: Session, on: str, meal: str = "lunch") -> Dict[str, Any]:
             "counted": counted, "skipped": skipped}
 
 
+def _absences(db: Session, residents: List[LtcResident], on: str) -> Dict[str, Any]:
+    """그날 외박 중인 어르신 — 케어포 외박 기록이 근거다.
+
+    식이 현황은 이것 없이도 완전해야 한다. 여기서 무엇이 잘못되어도 식이·
+    식수는 그대로 나가야 하므로, 실패하면 표시만 비우고 기록을 남긴다.
+    """
+    try:
+        from sqlalchemy import or_
+        from app.models.carefor import CareforLeaveRecord
+        from app.models.schedule import ScheduleEvent
+
+        # 달을 가리지 않는다 — 지난달에 나가 아직 안 돌아오신 분이 있다
+        leaves = (db.query(CareforLeaveRecord)
+                  .filter(CareforLeaveRecord.start_date <= on,
+                          or_(CareforLeaveRecord.end_date.is_(None),
+                              CareforLeaveRecord.end_date >= on))
+                  .all())
+        leaves = [l for l in leaves if da.is_overnight(l)]
+        events: List[ScheduleEvent] = []
+        first = da.earliest_start(leaves)
+        if first is not None:
+            # 짝이 되는 외박 일정은 출발 날짜가 같다. UTC 로 저장돼 있어 하루 여유를 둔다.
+            lo = datetime(first.year, first.month, first.day, tzinfo=KST) - timedelta(days=1)
+            y, m, d = int(on[:4]), int(on[5:7]), int(on[8:10])
+            hi = datetime(y, m, d, tzinfo=KST) + timedelta(days=2)
+            events = (db.query(ScheduleEvent)
+                      .filter(ScheduleEvent.category == da.SCHEDULE_CATEGORY,
+                              ScheduleEvent.start_at >= lo, ScheduleEvent.start_at < hi)
+                      .all())
+        return da.build(residents, leaves, events, on, datetime.now(KST))
+    except Exception:
+        logger.warning("diet absence lookup failed for %s", on, exc_info=True)
+        return {}
+
+
 @router.get("")
 def current(date: Optional[str] = Query(None), floor: Optional[str] = Query(None),
             db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -216,10 +252,11 @@ def current(date: Optional[str] = Query(None), floor: Optional[str] = Query(None
               .all())
     away = aw.away_map(events, on)
 
+    in_house = [r for r in db.query(LtcResident).all() if _in_house(r, on)]
+    absences = _absences(db, in_house, on)
+
     people = []
-    for r in db.query(LtcResident).all():
-        if not _in_house(r, on):
-            continue
+    for r in in_house:
         if floor and (r.floor or "") != floor:
             continue
         mine = changes.get(r.id, [])
@@ -237,6 +274,8 @@ def current(date: Optional[str] = Query(None), floor: Optional[str] = Query(None
             "unset": st is None,
             "upcoming": {"date": nxt["effective_date"], "rice": nxt["rice"],
                          "side": nxt["side"], "tube": nxt["tube"]} if nxt else None,
+            # 케어포는 별도 출처로 표시하며 일정/기존 식수 계산을 덮어쓰지 않는다.
+            "absence": absences.get(r.id),
             # 오늘 자리를 비우셨는가 — 일정에 적힌 외박에서 읽은 것
             "away": ({**away[r.name], "label": aw.away_label(away[r.name])}
                      if r.name in away else None),

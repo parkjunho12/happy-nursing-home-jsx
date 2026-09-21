@@ -83,6 +83,8 @@ jobs:
         # 세면 주방이 매 끼니 더 만든다. 직원 점심도 여기서 본다 —
         # 야간조를 두 번 세거나 반일 근무를 빼먹으면 그만큼 덜 짓는다.
         run: python3 backend/tests/test_diet_state.py
+      - name: 케어포 외박 표시와 귀원 기록 대조
+        run: python3 backend/tests/test_diet_absence.py
       - name: 병원동행 톡방 글
         # 이 글이 동행업체로 가는 유일한 근거다. 휠체어 한 줄이 빠지면 업체는
         # 묻지 않고 일반 승용차를 잡고, 그날 병원 앞에서 일이 멈춘다.
