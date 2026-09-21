@@ -313,3 +313,52 @@ export function showValue(row: Record<string, any> | null | undefined, f: Consul
   if (!s) return '—'
   return f.unit ? `${s}${f.unit}` : s
 }
+
+
+/**
+ * 카카오톡으로 보낼 한 줄 요약.
+ *
+ *  ■ 무엇을 담고 무엇을 뺐나
+ *
+ *    담는 것: 성함·성별·연령, 등급·급여·본인부담, 지금 계신 곳, 보행·식사,
+ *    희망 입소일, 진행 상태, 상담자와 날짜. 팀에서 '이런 분 상담 왔다' 를
+ *    듣고 방을 가늠하는 데 필요한 만큼이다.
+ *
+ *    빼는 것: 연락처·주소·진단명·정신행동 양상. 톡방은 시설 밖으로 나가는
+ *    길이고, 한 번 보낸 글은 되돌릴 수 없다. 연락처가 필요한 사람은 관리자
+ *    화면을 열면 된다 — 그래서 마지막 줄에 어디를 보라고 적는다.
+ *
+ *  카카오 텍스트 공유는 200자까지라 짧게 끊는다.
+ */
+export function consultShareText(
+  row: Record<string, any> | null | undefined,
+  /** 부부일 때 짝의 기록. 성함을 아직 안 여쭸어도 '부부' 라는 사실은 알려야 한다 */
+  mate?: { resident_name?: string | null } | null,
+): string {
+  const r = row ?? {}
+  const who = consultTitle(r)
+  const lines: string[] = [`📞 입소 상담 · ${who}`]
+
+  if (mate) lines.push(`부부 · 배우자 ${String(mate.resident_name ?? '').trim() || '성함 미상'}`)
+
+  const money = [r.grade, r.benefit, r.copay].map(v => String(v ?? '').trim()).filter(Boolean)
+  lines.push(money.length ? money.join(' · ') : '등급 미확인')
+
+  const care = [r.living, r.mobility, r.eating].map(v => String(v ?? '').trim()).filter(Boolean)
+  if (care.length) lines.push(care.join(' · '))
+
+  const tail = [
+    r.wish_date ? `희망 입소 ${String(r.wish_date).slice(5).replace('-', '/')}` : '',
+    STATUS_LABEL[String(r.status ?? '')] ?? '',
+  ].filter(Boolean)
+  if (tail.length) lines.push(tail.join(' · '))
+
+  const by = [String(r.counselor ?? '').trim(), String(r.consulted_on ?? '').slice(5).replace('-', '/')]
+    .filter(Boolean).join(' ')
+  if (by) lines.push(`— 상담 ${by}`)
+
+  lines.push('연락처·자세한 내용은 관리자 「입소 상담」에서')
+
+  const text = lines.join('\n')
+  return text.length > 200 ? text.slice(0, 199) + '…' : text
+}

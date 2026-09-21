@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Phone, Plus, Printer, Search, ArrowLeft, Trash2, Loader2, X,
-  AlertCircle, CalendarClock, MessageSquareQuote, Check, Users, Unlink, CornerDownLeft, PenLine,
+  AlertCircle, CalendarClock, MessageSquareQuote, Check, Users, Unlink, CornerDownLeft, PenLine, Share2,
 } from 'lucide-react'
 import { consultAPI, type ConsultRow, type ConsultPatch } from '@/api/consultClient'
+import { isKakaoShareEnabled, shareText } from '@/lib/kakaoShare'
 import { useAuthStore } from '@/store/auth'
 import {
   CONSULT_STATUS, STATUS_LABEL,
-  appendNote, consultMissing, consultTitle, hasChip,
+  appendNote, consultMissing, consultShareText, consultTitle, hasChip,
   isRequiredKey, sectionProgress, showValue, toggleChip, visibleSections,
   type ConsultField,
 } from '@/utils/consultForm'
@@ -236,6 +237,34 @@ export default function ConsultPage() {
   const goSection = (key: string) =>
     document.getElementById(`cs-sec-${key}`)?.scrollIntoView({ block: 'start' })
 
+  /**
+   * 팀에 알리기 — 카카오톡으로.
+   *
+   * 보내는 글에는 연락처·주소·진단명을 넣지 않는다(consultShareText).
+   * 톡방은 시설 밖으로 나가는 길이고 한 번 보낸 글은 되돌릴 수 없다.
+   *
+   * 데스크톱이거나 도메인이 등록되지 않으면 카카오 공유창이 안 뜬다.
+   * 그때는 같은 글을 복사해 준다 — 아무 일도 안 일어나는 것보다 낫다.
+   */
+  const [shareBusy, setShareBusy] = useState(false)
+  const share = async () => {
+    if (!row) return
+    const text = consultShareText(row, mate)
+    setShareBusy(true)
+    try {
+      await flush()
+      await shareText(text)
+    } catch {
+      try {
+        await navigator.clipboard.writeText(text)
+        alert('카카오톡 공유창을 열지 못해 내용을 복사했습니다.\n\n톡방에 붙여넣기(Ctrl+V) 해주세요.')
+      } catch {
+        // 복사까지 막히면 글을 보여준다 — 적어도 옮겨 적을 수는 있다
+        prompt('아래 내용을 복사해 톡방에 붙여넣어 주세요.', text)
+      }
+    } finally { setShareBusy(false) }
+  }
+
   /** 들리는 대로 한 줄 — 특이사항 맨 뒤에 쌓는다 */
   const addQuick = () => {
     const line = quick.trim()
@@ -458,6 +487,20 @@ export default function ConsultPage() {
                   </p>
                 )}
 
+                {isKakaoShareEnabled() && (
+                  <details className="mb-4 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
+                    <summary className="text-[12px] font-bold text-gray-500 cursor-pointer">
+                      카톡으로 보낼 내용 미리 보기
+                    </summary>
+                    <pre className="mt-2 whitespace-pre-wrap text-[12.5px] text-gray-700 leading-relaxed font-sans">
+{consultShareText(row, mate)}
+                    </pre>
+                    <p className="mt-1.5 text-[11.5px] text-gray-400">
+                      연락처·주소·진단명·정신행동 양상은 보내지 않습니다.
+                    </p>
+                  </details>
+                )}
+
                 <p className="text-[12px] font-bold text-gray-500 mb-1.5">이 상담은 어떻게 되었나요?</p>
                 <div className="flex flex-wrap gap-1.5 mb-4">
                   {CONSULT_STATUS.map(s => (
@@ -474,6 +517,13 @@ export default function ConsultPage() {
                     className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gray-800 text-white text-sm font-bold">
                     <Printer size={14} /> 인쇄{mate ? ' 2장' : ''}
                   </button>
+                  {isKakaoShareEnabled() && (
+                    <button onClick={share} disabled={shareBusy}
+                      title="연락처·주소·진단명은 빼고 요약만 보냅니다"
+                      className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#FEE500] text-[#3C1E1E] text-sm font-bold hover:brightness-95 disabled:opacity-50">
+                      {shareBusy ? <Loader2 size={13} className="animate-spin" /> : <Share2 size={14} />} 카톡 공유
+                    </button>
+                  )}
                   {!mate && (
                     <button onClick={addPartner} disabled={busy}
                       className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-pink-200 bg-pink-50 text-pink-700 text-sm font-bold hover:bg-pink-100 disabled:opacity-50">
