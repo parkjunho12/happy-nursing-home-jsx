@@ -188,3 +188,27 @@ test('카카오 글자 수(200자)를 넘지 않는다', () => {
   const long = { ...FULL, resident_name: '가'.repeat(60), living: '나'.repeat(60), mobility: '다'.repeat(60) }
   assert.ok(consultShareText(long, { resident_name: '라'.repeat(40) }).length <= 200)
 })
+
+
+/* 진단명·건강검진 — 통화 중에 누를 수 있어야 하고, 고를 것이 적어야 한다 */
+
+test('진단명은 눌러서 담는다 — 자주 있는 병과 기타', () => {
+  const f = FIELD_BY_KEY.diagnosis
+  assert.equal(f.type, 'chips')
+  for (const d of ['치매', '당뇨', '고혈압', '저혈압', '고관절', '파킨슨', '척추질환', '기타'])
+    assert.ok(f.options!.includes(d), `${d} 가 없다`)
+  assert.equal(f.options![f.options!.length - 1], '기타', '기타는 맨 뒤')
+})
+
+test('진단명은 여러 개를 담을 수 있다', () => {
+  let v = toggleChip('', '치매')
+  v = toggleChip(v, '고혈압')
+  assert.equal(v, '치매 · 고혈압')
+  assert.equal(hasChip(v, '당뇨'), false)
+})
+
+test('건강검진은 세 가지만 고른다 — 검진 메모 칸은 없앴다', () => {
+  const f = FIELD_BY_KEY.checkup
+  assert.deepEqual(f.options, ['안내함', '완료', '해당 없음'])
+  assert.equal(FIELD_BY_KEY.checkup_note, undefined)
+})

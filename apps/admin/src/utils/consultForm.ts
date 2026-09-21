@@ -102,7 +102,11 @@ export const CONSULT_SECTIONS: ConsultSection[] = [
     title: '건강 상태',
     script: '어르신 상태를 알아야 모실 준비를 할 수 있어서 여쭙습니다. 불편하신 것부터 편하게 말씀해 주세요.',
     fields: [
-      { key: 'diagnosis', label: '진단명', type: 'textarea', span: 3, placeholder: '치매 · 파킨슨 · 뇌경색 · 당뇨 · 고혈압 등' },
+      {
+        key: 'diagnosis', label: '진단명', type: 'chips', span: 3,
+        options: ['치매', '당뇨', '고혈압', '저혈압', '고관절', '파킨슨', '척추질환', '기타'],
+        hint: '자주 있는 것은 눌러서 담고, 그 밖의 병명은 아래 칸에 이어 적습니다',
+      },
       {
         key: 'behavior', label: '심리상황 및 정신행동 양상', type: 'chips', span: 3,
         options: ['특이사항 없음', '배회', '공격성·폭언', '반복 질문', '수집·숨김', '망상·환각', '우울', '불안·초조', '거부(목욕·투약)', '야간 섬망', '낙상 위험'],
@@ -164,11 +168,10 @@ export const CONSULT_SECTIONS: ConsultSection[] = [
     script: '입소 전에 건강검진(흉부 X-ray·결핵검사)이 필요합니다. 희망하시는 입소일이 언제쯤이신지요? 필요하신 것 더 있으시면 말씀해 주세요.',
     fields: [
       {
-        key: 'checkup', label: '건강검진 연계', type: 'choice',
-        options: ['안내함', '예약함', '완료', '해당 없음'],
-        hint: '흉부 X-ray·결핵검사는 입소 전에 받아야 한다 — 통화에서 미리 안내하면 입소가 밀리지 않는다',
+        key: 'checkup', label: '건강검진 안내', type: 'choice',
+        options: ['안내함', '완료', '해당 없음'],
+        hint: '입소 전 흉부 X-ray·결핵검사 — 미리 말씀드리면 입소가 밀리지 않습니다',
       },
-      { key: 'checkup_note', label: '검진 메모', type: 'text', span: 2, placeholder: '검진기관 · 예약일' },
       { key: 'wish_date', label: '희망 입소일', type: 'date' },
       { key: 'followup_on', label: '다음 연락 예정일', type: 'date', hint: '먼저 연락드리기로 했으면 적어둔다 — 목록에서 그날이 다가오면 보인다' },
       { key: 'guided', label: '안내한 내용', type: 'textarea', span: 3, placeholder: '월 비용 · 준비물 · 면회 방법 등 통화에서 설명한 것' },
