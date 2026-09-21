@@ -88,12 +88,26 @@ export default function AwayModal({ r, onClose, onDone }: {
     }
   }
 
-  const markReturned = async () => {
+  /**
+   * 귀원 기록.
+   *
+   * 케어포에 이미 복귀로 적혀 있으면 그 시각을 그대로 쓴다 — 지금 시각으로
+   * 적으면 실제와 몇 시간씩 어긋나고, 그 숫자로 식수 정산이 돌아간다.
+   * 무엇을 근거로 눌렀는지도 메모에 한 줄 남긴다. 누가·언제는 남지만
+   * '어떻게 알았는지' 는 남지 않아, 나중에 직접 확인한 건과 구분되지 않는다.
+   */
+  const markReturned = async (fromCarefor = false) => {
     if (!a) return
     setBusy(true); setErr('')
     try {
+      const at = fromCarefor && a.carefor_return_at
+        ? a.carefor_return_at.slice(0, 16)
+        : `${kstToday()}T${kstHM()}`
       await scheduleAPI.markReturned(a.event_id, {
-        returned_at: `${kstToday()}T${kstHM()}`,
+        returned_at: at,
+        memo_append: fromCarefor
+          ? `[귀원] 케어포 복귀 기록(${fmt(a.carefor_return_at)}) 으로 처리`
+          : undefined,
       })
       onDone()
     } catch (e: any) {
@@ -149,11 +163,30 @@ export default function AwayModal({ r, onClose, onDone }: {
                   {a.unknown_return && ' 돌아오시면 아래를 눌러 마무리해 주세요.'}
                 </p>
               </div>
+              {a.carefor_returned && !a.returned && (
+                <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2.5">
+                  <p className="text-[13.5px] font-bold text-emerald-900">
+                    케어포에는 이미 복귀로 적혀 있습니다
+                  </p>
+                  <p className="text-[12.5px] text-emerald-800 mt-0.5">
+                    복귀 {fmt(a.carefor_return_at)} · 우리 쪽 귀원 기록만 비어 있습니다.
+                  </p>
+                  <button onClick={() => markReturned(true)} disabled={busy}
+                    className="mt-2 w-full inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold disabled:opacity-50">
+                    {busy ? <Loader2 size={14} className="animate-spin" /> : <Undo2 size={14} />}
+                    복귀 완료로 처리 ({fmt(a.carefor_return_at)})
+                  </button>
+                  <p className="text-[11px] text-emerald-700/80 mt-1.5">
+                    케어포에 적힌 시각으로 남고, 무엇을 보고 처리했는지 일정 메모에 한 줄 적힙니다.
+                  </p>
+                </div>
+              )}
               <div className="flex gap-2 flex-wrap">
                 {!a.returned && (
-                  <button onClick={markReturned} disabled={busy}
+                  <button onClick={() => markReturned(false)} disabled={busy}
                     className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-green-700 hover:bg-green-800 text-white text-sm font-bold disabled:opacity-50">
-                    {busy ? <Loader2 size={14} className="animate-spin" /> : <Undo2 size={14} />} 지금 귀원하셨습니다
+                    {busy ? <Loader2 size={14} className="animate-spin" /> : <Undo2 size={14} />}
+                    {a.carefor_returned ? '지금 시각으로 처리' : '지금 귀원하셨습니다'}
                   </button>
                 )}
                 <button onClick={cancel} disabled={busy}

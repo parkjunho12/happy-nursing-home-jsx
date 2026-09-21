@@ -84,7 +84,8 @@ export interface EduCalEvent {
 }
 
 export const scheduleAPI = {
-  markReturned: (id: string, b: { returned_at?: string; clear?: boolean } = {}) =>
+  /** 실제 귀원 기록. memo_append 는 '무엇을 근거로 눌렀는지' 를 일정 메모에 한 줄 남긴다. */
+  markReturned: (id: string, b: { returned_at?: string; clear?: boolean; memo_append?: string } = {}) =>
     apiClient.post(`${BASE}/events/${id}/returned`, b).then(unwrap<{ id: string; returned_at: string | null; returned_by: string | null }>),
   events: (params?: { start_date?: string; end_date?: string; category?: string }) =>
     apiClient.get(`${BASE}/events`, { params: params ?? {} }).then(unwrap<ScheduleEvent[]>),

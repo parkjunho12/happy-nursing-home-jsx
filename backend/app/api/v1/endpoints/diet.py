@@ -190,6 +190,25 @@ def _staff_meal(db: Session, on: str, meal: str = "lunch") -> Dict[str, Any]:
             "counted": counted, "skipped": skipped}
 
 
+def _merge_away(a: Dict[str, Any], ab: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """일정 외박 한 줄에 케어포 복귀 사실만 얹는다.
+
+    화면에 뜨는 자리 비움 표시는 하나여야 한다. 일정과 케어포가 각각 줄을
+    만들면 같은 분에게 두 줄이 붙고, 읽는 사람은 어느 쪽을 믿어야 할지 모른다.
+
+    근거는 일정이다 — 주방 숫자와 귀원 처리가 거기에 매여 있다. 케어포는
+    '이미 돌아오신 것으로 적혀 있다' 는 사실만 보태서, 우리 쪽 귀원 기록을
+    누를 수 있게 한다.
+    """
+    out = {**a, "label": aw.away_label(a)}
+    returned = bool(ab) and ab.get("label") == da.LABEL_RETURNED
+    out["carefor_returned"] = returned
+    out["carefor_return_at"] = (
+        f"{ab['end_date']}T{(ab.get('end_time') or '12:00')[:5]}"
+        if returned and ab.get("end_date") else None)
+    return out
+
+
 def _absences(db: Session, residents: List[LtcResident], on: str) -> Dict[str, Any]:
     """그날 외박 중인 어르신 — 케어포 외박 기록이 근거다.
 
@@ -277,9 +296,10 @@ def current(date: Optional[str] = Query(None), floor: Optional[str] = Query(None
             "upcoming": {"date": nxt["effective_date"], "rice": nxt["rice"],
                          "side": nxt["side"], "tube": nxt["tube"]} if nxt else None,
             # 케어포는 별도 출처로 표시하며 일정/기존 식수 계산을 덮어쓰지 않는다.
-            "absence": absences.get(r.id),
-            # 오늘 자리를 비우셨는가 — 일정에 적힌 외박에서 읽은 것
-            "away": ({**away[r.name], "label": aw.away_label(away[r.name])}
+            # 오늘 자리를 비우셨는가 — 일정에 적힌 외박 한 갈래로만 보여준다.
+            # 케어포 기록은 따로 줄을 만들지 않고, '복귀 완료로 적혔는가' 만
+            # 여기에 얹는다. 두 줄이 나란히 뜨면 어느 쪽을 믿어야 할지 모른다.
+            "away": (_merge_away(away[r.name], absences.get(r.id))
                      if r.name in away else None),
         })
 

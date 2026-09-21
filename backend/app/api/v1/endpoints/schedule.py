@@ -327,6 +327,11 @@ def delete_event(eid: str, db: Session = Depends(get_db),
 class ReturnedBody(BaseModel):
     returned_at: Optional[str] = None   # ISO — 없으면 지금
     clear: Optional[bool] = False       # 취소
+    # 왜 이렇게 처리했는지 한 줄 — 메모 끝에 붙는다.
+    # 누가·언제는 returned_by·returned_at 에 남지만, '무엇을 근거로' 는
+    # 남지 않는다. 케어포 복귀 기록을 보고 처리한 건과 직접 확인한 건은
+    # 나중에 구분할 수 있어야 한다.
+    memo_append: Optional[str] = None
 
 
 @router.post("/events/{eid}/returned")
@@ -344,6 +349,9 @@ def mark_returned(eid: str, body: ReturnedBody, db: Session = Depends(get_db),
         e.returned_at = dt or now_kst()
         e.returned_by = getattr(current_user, "name", None)
         e.end_at = e.returned_at        # 예정 귀원(end_at)도 실제 시각으로 통일
+        note = (body.memo_append or "").strip()[:200]
+        if note:
+            e.memo = f"{(e.memo or '').rstrip()}\n{note}".strip()
     _sync_notice(db, e, current_user)   # 공지의 귀원 안내도 함께 갱신
     db.commit(); db.refresh(e)
     return ApiResponse(success=True, data={
