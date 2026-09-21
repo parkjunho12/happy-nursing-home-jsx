@@ -22,6 +22,7 @@ from app.models.user import User
 from app.schemas.response import ApiResponse
 from app.services import diet_state as ds
 from app.services import diet_absence as da
+from app.services import away as aw
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -261,7 +262,6 @@ def current(date: Optional[str] = Query(None), floor: Optional[str] = Query(None
     # 자리 비움은 일정에서 읽는다 — 식이 표에 따로 적지 않는다(services/away.py).
     # 앞뒤로 넉넉히 훑는다: 며칠 전에 떠나 오늘도 안 돌아오신 외박을 잡아야 한다.
     from app.models.schedule import ScheduleEvent
-    from app.services import away as aw
     _d0 = datetime.strptime(on, "%Y-%m-%d")
     events = (db.query(ScheduleEvent)
               .filter(ScheduleEvent.category.in_(list(aw.AWAY_CATEGORIES)),
