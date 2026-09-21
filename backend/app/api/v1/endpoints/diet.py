@@ -202,6 +202,20 @@ def current(date: Optional[str] = Query(None), floor: Optional[str] = Query(None
         raise HTTPException(400, "date 는 YYYY-MM-DD 형식이어야 합니다.")
 
     changes = _by_resident(db)
+
+    # 자리 비움은 일정에서 읽는다 — 식이 표에 따로 적지 않는다(services/away.py).
+    # 앞뒤로 넉넉히 훑는다: 며칠 전에 떠나 오늘도 안 돌아오신 외박을 잡아야 한다.
+    from app.models.schedule import ScheduleEvent
+    from app.services import away as aw
+    _d0 = datetime.strptime(on, "%Y-%m-%d")
+    events = (db.query(ScheduleEvent)
+              .filter(ScheduleEvent.category.in_(list(aw.AWAY_CATEGORIES)),
+                      ScheduleEvent.status != "canceled",
+                      ScheduleEvent.start_at >= (_d0 - timedelta(days=60)).replace(tzinfo=aw.KST),
+                      ScheduleEvent.start_at <= (_d0 + timedelta(days=1)).replace(tzinfo=aw.KST))
+              .all())
+    away = aw.away_map(events, on)
+
     people = []
     for r in db.query(LtcResident).all():
         if not _in_house(r, on):
@@ -223,15 +237,23 @@ def current(date: Optional[str] = Query(None), floor: Optional[str] = Query(None
             "unset": st is None,
             "upcoming": {"date": nxt["effective_date"], "rice": nxt["rice"],
                          "side": nxt["side"], "tube": nxt["tube"]} if nxt else None,
+            # 오늘 자리를 비우셨는가 — 일정에 적힌 외박에서 읽은 것
+            "away": ({**away[r.name], "label": aw.away_label(away[r.name])}
+                     if r.name in away else None),
         })
 
     people.sort(key=lambda p: ((p["floor"] or "9"), (p["room"] or "999"), p["name"] or ""))
-    states = [None if p["unset"] else
+    # 하루를 통째로 비우신 분은 주방 숫자에서 뺀다. 떠나는 날·돌아오는 날은
+    # 그 끼니를 드셔서 빼지 않는다 — 빼면 그 이틀치가 통째로 틀린다.
+    states = [None if (p["unset"] or ((p["away"] or {}).get("full_day"))) else
               {"rice": p["rice"], "side": p["side"], "tube": p["tube"]} for p in people]
     return ApiResponse(success=True, data={
         "date": on,
         "residents": people,
         "counts": ds.counts(states),
+        # 숫자에서 빠진 분 수 — 주방이 '왜 어제보다 적지' 를 묻지 않게
+        "away_count": sum(1 for p in people if (p["away"] or {}).get("full_day")),
+        "away_today": sum(1 for p in people if p["away"]),
         "rice_types": ds.RICE_TYPES,
         "side_types": ds.SIDE_TYPES,
         "can_edit": can_edit_diet(_role(current_user), _pos(current_user)),

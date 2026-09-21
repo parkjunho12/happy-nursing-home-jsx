@@ -23,6 +23,26 @@ export interface DietRow {
   unset: boolean
   /** 앞으로 바뀔 예정 (예: 내일부터 죽) */
   upcoming?: { date: string; rice?: string | null; side?: string | null; tube: boolean } | null
+  /** 오늘 자리를 비우셨는가 — 일정에 적힌 외박에서 읽은 것.
+   *  식이 표에 따로 적지 않는다: 두 곳에 적으면 언젠가 어긋난다. */
+  away?: {
+    event_id: string
+    category: string
+    /** ISO 일시 */
+    start: string
+    /** 귀원(실제 또는 예정). 아직 안 정해졌으면 null */
+    end?: string | null
+    start_day: string
+    end_day?: string | null
+    /** 하루를 통째로 비우셨다 — 주방 숫자에서 빠진다 */
+    full_day: boolean
+    leaving_today: boolean
+    returning_today: boolean
+    /** 실제 귀원이 기록되었는가 */
+    returned: boolean
+    /** 화면·종이에 같은 말이 나가게 서버가 만든 한 줄 */
+    label: string
+  } | null
 }
 
 /** 그날 그 끼니에 계신 직원 — 근무표에서 세어 낸다 */
@@ -48,6 +68,10 @@ export interface DietToday {
   side_types: string[]
   can_edit: boolean
   staff_meal: StaffMeal
+  /** 주방 숫자에서 빠진 분 수 (하루를 통째로 비우신 분) */
+  away_count: number
+  /** 오늘 외박에 걸린 분 수 (떠나는 날·돌아오는 날 포함) */
+  away_today: number
 }
 
 export interface DietChange {

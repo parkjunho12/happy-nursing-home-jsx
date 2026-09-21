@@ -7,6 +7,7 @@ import { Link } from 'react-router-dom'
 import { dietAPI, type DietRow, type DietToday, type DietChange, type ImportResult } from '@/api/dietClient'
 import { RICE_TONE, SIDE_TONE, TUBE_TONE, UNSET_TONE, dietLabel, fmtStamp, stampedOnAnotherDay } from '@/utils/dietTone'
 import DietEditModal from '@/components/diet/DietEditModal'
+import AwayModal from '@/components/diet/AwayModal'
 
 /**
  * 식이 현황 — 어느 어르신이 무엇을 드시는가.
@@ -46,6 +47,8 @@ export default function DietPage() {
   const [edit, setEdit] = useState<DietRow | null>(null)
   const [search, setSearch] = useState('')
   const [impOpen, setImpOpen] = useState(false)
+  // 외박 — 식이가 아니라 일정에 적힌다. 여기서는 열어 주기만 한다.
+  const [away, setAway] = useState<DietRow | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -189,7 +192,8 @@ export default function DietPage() {
                     <div className="flex-1 divide-y divide-gray-50">
                       {list.map(r => (
                         <ResidentLine key={r.resident_id} r={r} canEdit={data.can_edit}
-                          onClick={() => data.can_edit && setEdit(r)} />
+                          onClick={() => data.can_edit && setEdit(r)}
+                          onAway={() => setAway(r)} />
                       ))}
                     </div>
                   </div>
@@ -218,9 +222,14 @@ export default function DietPage() {
           onSaved={() => { setEdit(null); load(); if (tab === 'log') dietAPI.log().then(setLog) }} />
       )}
       {impOpen && <ImportModal onClose={() => setImpOpen(false)} onDone={() => { setImpOpen(false); load() }} />}
+      {away && (
+        <AwayModal r={away} onClose={() => setAway(null)}
+          onDone={() => { setAway(null); load() }} />
+      )}
 
       <p className="text-[11px] text-gray-400 mt-3 print:hidden">
-        💡 입원·외박으로 자리를 비운 끼니는 여기서 세지 않습니다 — 그건 일정에 기록된 대로 「식수 정산」이 계산합니다.
+        💡 외박은 일정에 적힌 것을 그대로 읽어 옵니다 — 일정 캘린더에서 외박으로 등록하셔도 여기에 바로 나타납니다.
+        하루를 통째로 비우신 분만 주방 숫자에서 빠지고, 떠나는 날·돌아오는 날은 한 끼 이상 드셔서 그대로 듭니다.
       </p>
     </div>
   )
@@ -257,6 +266,17 @@ function CountStrip({ data }: { data: DietToday }) {
           {sm?.has_schedule && <b className="text-gray-600"> = {elders + staff}인분</b>}
           <span className="text-gray-300"> · 경관식 {c['경관식'] ?? 0}명은 상을 안 차립니다</span>
         </span>
+        {/* 왜 어제보다 적은지가 숫자 옆에 있어야 한다 — 없으면 주방이 되묻는다 */}
+        {data.away_count > 0 && (
+          <span className="text-[11px] font-bold px-2 py-1 rounded-lg border bg-green-100 text-green-900 border-green-300">
+            외박 {data.away_count}명 뺀 숫자입니다
+          </span>
+        )}
+        {data.away_today > data.away_count && (
+          <span className="text-[11px] font-bold px-2 py-1 rounded-lg border bg-green-50 text-green-800 border-green-200">
+            오늘 출발·귀원 {data.away_today - data.away_count}명은 드십니다
+          </span>
+        )}
       </div>
 
       {/* 밥·반찬·그 외를 갈라 둔다 — 주방은 솥과 찬을 따로 잡는다.
@@ -354,13 +374,24 @@ function CountStrip({ data }: { data: DietToday }) {
 }
 
 /* ══════════ 어르신 한 줄 ══════════ */
-function ResidentLine({ r, canEdit, onClick }: { r: DietRow; canEdit: boolean; onClick: () => void }) {
+function ResidentLine({ r, canEdit, onClick, onAway }: {
+  r: DietRow; canEdit: boolean; onClick: () => void; onAway: () => void
+}) {
   const chip = (t: string, cls: string) =>
     <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded border ${cls}`}>{t}</span>
+  const a = r.away
   return (
+    /* 단추 안에 단추를 넣을 수 없어 줄을 감싸는 상자를 둔다 —
+       왼쪽은 식이를 고치는 자리, 오른쪽은 외박을 여는 자리다. */
+    <div className={`diet-line flex items-stretch ${a?.full_day ? 'bg-green-50/60' : ''}`}>
     <button onClick={onClick} disabled={!canEdit}
-      className={`diet-line w-full text-left px-2.5 py-2 print:py-1 flex items-center gap-1.5 flex-wrap ${canEdit ? 'hover:bg-orange-50/50 cursor-pointer' : 'cursor-default'}`}>
-      <span className="text-[13px] font-bold text-gray-800 w-[3.6rem] shrink-0">{r.name}</span>
+      className={`flex-1 min-w-0 text-left px-2.5 py-2 print:py-1 flex items-center gap-1.5 flex-wrap ${canEdit ? 'hover:bg-orange-50/50 cursor-pointer' : 'cursor-default'}`}>
+      <span className={`text-[13px] font-bold w-[3.6rem] shrink-0 ${a?.full_day ? 'text-green-900' : 'text-gray-800'}`}>{r.name}</span>
+      {a && (
+        <span className="text-[11px] font-bold px-1.5 py-0.5 rounded border bg-green-100 text-green-900 border-green-300">
+          {a.label}
+        </span>
+      )}
       {/* 기록은 있는데 밥·반찬이 비어 있는 경우도 '미정' 이다 —
           경관식을 풀면 그렇게 된다. 빈칸으로 두면 아무도 못 알아챈다. */}
       {r.tube ? chip('경관식', TUBE_TONE.chip)
@@ -379,6 +410,14 @@ function ResidentLine({ r, canEdit, onClick }: { r: DietRow; canEdit: boolean; o
       )}
       {r.note && <span className="w-full text-[10px] text-gray-400 truncate print:hidden">· {r.note}</span>}
     </button>
+    {canEdit && (
+      <button onClick={onAway} title={a ? '외박 · 귀원 기록' : '외박으로 등록'}
+        className={`shrink-0 px-2 print:hidden border-l border-gray-100 text-[10.5px] font-bold transition-colors ${
+          a ? 'text-green-700 hover:bg-green-100' : 'text-gray-300 hover:text-green-700 hover:bg-green-50'}`}>
+        외박
+      </button>
+    )}
+    </div>
   )
 }
 
