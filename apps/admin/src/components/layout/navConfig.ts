@@ -1,5 +1,5 @@
 import {
-  LayoutDashboard, UserCog, MessageSquare, FileText,
+  Calculator, LayoutDashboard, UserCog, MessageSquare, FileText,
   Star, Settings, ClipboardList, ClipboardCheck, CalendarDays,
   UserRound, ShieldCheck, Sparkles, FileSearch,
   Image as ImageIcon, Users, Activity, Phone, BookOpen, PenLine, Megaphone, Bell, CalendarClock, CalendarCheck, HeartHandshake, Briefcase, Soup, Receipt, GraduationCap,
@@ -248,6 +248,7 @@ export function getNavConfig(
         {
           label: '회계',
           items: [
+            { to: '/fee-calculator', icon: Calculator, label: '수가 · 가산 계산' },
             { to: '/expense', icon: Receipt, label: '지출결의' },
             { to: '/operations', icon: Landmark, label: '운영 · 계약' },
           ],

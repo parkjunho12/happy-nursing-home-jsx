@@ -130,3 +130,6 @@ from app.models.meeting import MeetingPrep  # noqa: F401
 
 # 입소 상담 — 전화를 받으면서 채우는 한 장
 from app.models.consult import Consult  # noqa: F401,E402
+
+# 수가(급여) 계산기 — 비공개 원본 스냅샷 + 월별 시나리오 (ADMIN 전용)
+from app.models.fee_calculator import FeeCalculatorSource, FeeCalculatorScenario  # noqa: F401,E402

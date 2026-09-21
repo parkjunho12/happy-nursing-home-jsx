@@ -36,6 +36,7 @@ const EvalCalendarPage = lazy(() => import('./pages/eval/EvalCalendarPage'))
 const EvalResidentsPage = lazy(() => import('./pages/eval/EvalResidentsPage'))
 const TherapyGroupPage = lazy(() => import('./pages/eval/TherapyGroupPage'))
 const EvalStaffPage = lazy(() => import('./pages/eval/EvalStaffPage'))
+const FeeCalculatorPage = lazy(() => import('./pages/admin/FeeCalculatorPage'))
 const StaffingSimulatorPage = lazy(() => import('./pages/admin/StaffingSimulatorPage'))
 const WorkSchedulePage = lazy(() => import('./pages/eval/WorkSchedulePage'))
 const MySchedulePage = lazy(() => import('./pages/MySchedulePage'))
@@ -418,7 +419,8 @@ function App() {
             <Route path="monthly-routines"         element={<AdminRoutinePage />} />
             <Route path="broadcast"                element={<BroadcastRoute><BroadcastPage /></BroadcastRoute>} />
             <Route path="staff-hr"                 element={<StaffAdminRoute><StaffHrPage /></StaffAdminRoute>} />
-            <Route path="staffing"                 element={<ManagerRoute><StaffingSimulatorPage /></ManagerRoute>} />
+            <Route path="fee-calculator" element={<AdminRoute><FeeCalculatorPage /></AdminRoute>} />
+              <Route path="staffing"                 element={<ManagerRoute><StaffingSimulatorPage /></ManagerRoute>} />
             <Route path="work-schedule"           element={<ManagerRoute><WorkSchedulePage /></ManagerRoute>} />
             <Route path="work-schedule-view"      element={<ScheduleViewRoute><WorkScheduleViewPage /></ScheduleViewRoute>} />
             {/* 직원 평가(인사고과) — ADMIN 만. 서버에서도 다시 막는다(staff_eval.py):

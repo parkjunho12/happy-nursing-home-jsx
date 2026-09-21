@@ -53,6 +53,7 @@ from app.api.v1.endpoints.handover import router as handover_router
 from app.api.v1.endpoints.meeting_prep import router as meeting_prep_router
 from app.api.v1.endpoints.resident_docs import router as resident_docs_router
 from app.api.v1.endpoints.staff_education import router as staff_education_router
+from app.api.v1.endpoints.fee_calculator import router as fee_calculator_router
 api_router = APIRouter()
 
 # Public endpoints (인증 불필요)
@@ -191,6 +192,9 @@ api_router.include_router(handover_router, prefix="/admin/handover", tags=["admi
 api_router.include_router(meeting_prep_router, prefix="/admin/meeting-prep", tags=["admin-meeting-prep"])
 api_router.include_router(resident_docs_router, prefix="/admin/resident-docs", tags=["admin-resident-docs"])
 api_router.include_router(staff_education_router, prefix="/admin/educations", tags=["admin-educations"])
+
+# 수가(급여) 계산기 — 비공개 원본 스냅샷 + 월별 시나리오. ADMIN 전용(get_current_admin_user).
+api_router.include_router(fee_calculator_router, prefix="/admin/fee-calculator", tags=["admin-fee-calculator"])
 
 # AI 페이지 편집기 — 관리자 화면과 편집 에이전트
 api_router.include_router(ai_editor.router,       prefix="/admin/ai-editor", tags=["ai-editor"])
