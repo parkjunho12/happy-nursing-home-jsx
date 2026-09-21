@@ -236,6 +236,7 @@ export function getNavConfig(
             { to: '/eval/workload', icon: ClipboardCheck, label: '담당자별 현황' },
             { to: '/eval/record-audit', icon: FileSearch, label: '제공기록지 검수' },
             { to: '/eval/record-guide', icon: BookOpen, label: '검수 기준' },
+            { to: '/eval/weekly-audit', icon: ClipboardCheck, label: '주간 기록지 점검' },
             { to: '/eval/ai-review', icon: Sparkles, label: 'AI 체크리스트 검토' },
             // 인사고과 — 이 블록(ADMIN)에만 둔다. 시설장 메뉴에는 넣지 않는다.
             { to: '/eval/staff-eval', icon: UserCheck, label: '직원 평가' },
@@ -344,6 +345,7 @@ export function getNavConfig(
             { to: '/eval/workload', icon: ClipboardCheck, label: '담당자별 현황' },
             { to: '/eval/record-audit', icon: FileSearch, label: '제공기록지 검수' },
             { to: '/eval/record-guide', icon: BookOpen, label: '검수 기준' },
+            { to: '/eval/weekly-audit', icon: ClipboardCheck, label: '주간 기록지 점검' },
             { to: '/eval/ai-review', icon: Sparkles, label: 'AI 체크리스트 검토' },
           ],
         },
@@ -462,6 +464,7 @@ export function getNavConfig(
     { to: '/education', icon: GraduationCap, label: '직원 교육' },
     { to: '/eval/record-audit', icon: FileSearch, label: '제공기록지 검수' },
     { to: '/eval/record-guide', icon: BookOpen, label: '검수 기준' },
+    { to: '/eval/weekly-audit', icon: ClipboardCheck, label: '주간 기록지 점검' },
   ]
 
   const marketingItems: NavItem[] = []

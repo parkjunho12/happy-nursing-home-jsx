@@ -20,6 +20,7 @@ import { useLtcStore } from '@/store/ltc'
 import { useAuthStore } from '@/store/auth'
 import NoticeBoard from '@/components/dashboard/NoticeBoard'
 import HandoverTodayCard from '@/components/dashboard/HandoverTodayCard'
+import WeeklyAuditCard from '@/components/dashboard/WeeklyAuditCard'
 import UpcomingDocs from '@/components/dashboard/UpcomingDocs'
 import UpcomingSchedule from '@/components/dashboard/UpcomingSchedule'
 import ResidentTrendChart from '@/components/dashboard/ResidentTrendChart'
@@ -963,6 +964,8 @@ export default function DashboardPage() {
   const secChart = canResidents ? <ResidentTrendChart residents={residents} months={isMobile ? 6 : 12} /> : null
   // 오늘자 인수인계 업로드가 있을 때만 렌더(권한 없으면 자동 숨김)
   const secHandover = <HandoverTodayCard />
+  // 최신 주간 기록지 점검 결과가 있을 때만 렌더(권한 없으면 자동 숨김)
+  const secWeeklyAudit = <WeeklyAuditCard />
 
   /* ══════════════════ 모바일 레이아웃 (< md) ══════════════════
      인사말 → 현황 → 다가오는 일정(4건) → 진행 중 → 처리 대기 → 내부 공지 → 어르신 서류
@@ -974,6 +977,7 @@ export default function DashboardPage() {
         {secMyDay}
         {secBadges}
         {secHandover}
+        {secWeeklyAudit}
         {secSchedule}
         {secRunning}
         {secPending}
@@ -998,6 +1002,7 @@ export default function DashboardPage() {
       {secMyDay}
       {secBadges}
       {secHandover}
+      {secWeeklyAudit}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <div className="lg:col-span-2">{secSchedule}</div>

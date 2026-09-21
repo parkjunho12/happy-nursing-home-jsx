@@ -85,6 +85,8 @@ jobs:
         run: python3 backend/tests/test_diet_state.py
       - name: 케어포 외박 표시와 귀원 기록 대조
         run: python3 backend/tests/test_diet_absence.py
+      - name: 주간 기록지 점검 결과 집계
+        run: python3 backend/tests/test_care_log_audit.py
       - name: 병원동행 톡방 글
         # 이 글이 동행업체로 가는 유일한 근거다. 휠체어 한 줄이 빠지면 업체는
         # 묻지 않고 일반 승용차를 잡고, 그날 병원 앞에서 일이 멈춘다.

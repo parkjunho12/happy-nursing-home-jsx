@@ -47,6 +47,7 @@ const EvalRecordAuditPage = lazy(() => import('./pages/eval/EvalRecordAuditPage'
 const EvalRecordAuditDetailPage = lazy(() => import('./pages/eval/EvalRecordAuditDetailPage'))
 const EvalAlbumPage = lazy(() => import('./pages/eval/EvalAlbumPage'))
 const EvalRecordGuidePage = lazy(() => import('./pages/eval/EvalRecordGuidePage'))
+const EvalWeeklyAuditPage = lazy(() => import('./pages/eval/EvalWeeklyAuditPage'))
 const BlogAiWriterPage = lazy(() => import('./pages/eval/BlogAiWriterPage'))
 const EvalUsersPage = lazy(() => import('./pages/eval/EvalUsersPage'))
 const StaffWorkloadPage = lazy(() => import('./pages/eval/StaffWorkloadPage'))
@@ -463,6 +464,7 @@ function App() {
             {/* 모든 STAFF 접근 가능 — 제공기록지 검수 */}
             <Route path="eval/record-audit" element={<EvalRecordAuditPage />} />
             <Route path="eval/record-guide" element={<EvalRecordGuidePage />} />
+            <Route path="eval/weekly-audit" element={<EvalWeeklyAuditPage />} />
             <Route path="eval/record-audit/:auditId/resident/:residentName" element={<EvalRecordAuditDetailPage />} />
 
             {/* 사회복지사 + ADMIN — 수급자/직원 관리 */}
