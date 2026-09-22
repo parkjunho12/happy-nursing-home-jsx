@@ -7,12 +7,12 @@ import { useAuthStore } from '@/store/auth'
 
 /**
  * 최신 주간 기록지 점검 결과 위젯.
- * - ADMIN 계정에만 보인다(직원 개인별 오류 집계). 그 외에는 요청도 보내지 않는다.
+ * - 관리자급(ADMIN 또는 시설장)에만 보인다(직원 개인별 오류 집계). 그 외에는 요청도 보내지 않는다.
  * - 점검 결과가 없거나 403 이면 아무것도 렌더하지 않는다(위젯 자체가 숨김).
  */
 export default function WeeklyAuditCard() {
   const navigate = useNavigate()
-  const isAdmin = useAuthStore(s => s.user?.role === 'ADMIN')
+  const isAdmin = useAuthStore(s => s.user?.role === 'ADMIN' || s.user?.position === '시설장')
   const [data, setData] = useState<WeeklyAuditLatest | null>(null)
 
   useEffect(() => {

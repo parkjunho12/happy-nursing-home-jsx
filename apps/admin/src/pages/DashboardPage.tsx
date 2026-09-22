@@ -977,13 +977,13 @@ export default function DashboardPage() {
         {secMyDay}
         {secBadges}
         {secHandover}
-        {secWeeklyAudit}
         {secSchedule}
         {secRunning}
         {secPending}
         {secNotices}
         {secDocs}
         {secOutDocs}
+        {secWeeklyAudit}
         {secAdmission}
           {secHire}
         {secStaffing}
@@ -1002,7 +1002,6 @@ export default function DashboardPage() {
       {secMyDay}
       {secBadges}
       {secHandover}
-      {secWeeklyAudit}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <div className="lg:col-span-2">{secSchedule}</div>
@@ -1021,6 +1020,9 @@ export default function DashboardPage() {
       )}
 
       {secDocs}
+
+      {/* 주간 기록지 점검 — 주 1회 갱신되는 결과라 매일 보는 항목들보다 아래에 둔다 */}
+      {secWeeklyAudit}
 
       <div className="grid lg:grid-cols-5 gap-4">
         <div className="lg:col-span-3 space-y-4">
