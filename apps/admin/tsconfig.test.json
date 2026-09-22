@@ -39,6 +39,7 @@
     "src/utils/vitalSheet.ts",
     "src/utils/residentSort.ts",
     "src/utils/consultForm.ts",
+    "src/utils/favOrder.ts",
     "src/utils/weeklyAudit.ts",
     "tests/**/*.ts"
   ]
