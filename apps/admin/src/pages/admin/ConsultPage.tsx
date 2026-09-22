@@ -682,13 +682,7 @@ export default function ConsultPage() {
                 </h1>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 17, fontWeight: 900, color: '#111827', lineHeight: 1.1 }}>
-                  {String(sheet.resident_name ?? '').trim() || '성함 미상'}
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', marginLeft: 5 }}>
-                    {[sheet.gender, sheet.age ? `${sheet.age}세` : ''].filter(Boolean).join(' · ')}
-                  </span>
-                </div>
-                <div style={{ fontSize: 9.5, color: '#6b7280', marginTop: 1 }}>
+                <div style={{ fontSize: 9.5, color: '#6b7280' }}>
                   {sheet.consulted_on}{sheet.consulted_at ? ` ${sheet.consulted_at}` : ''} · 상담 {sheet.counselor || '—'}
                   {' · '}<b style={{ color: '#3730a3' }}>{STATUS_LABEL[sheet.status] ?? sheet.status}</b>
                 </div>
@@ -700,7 +694,43 @@ export default function ConsultPage() {
               </div>
             </div>
 
-            {/* ── 한눈에 ── 모실 수 있나 · 얼마인가 · 언제 오시나 · 누구에게 전화하나 */}
+            {/* ── 누구 기록지인가 ── 어르신 · 보호자 · 전화번호를 가장 크게.
+                기록지가 여러 장 쌓이면 이 세 칸만 보고 집어 든다. 전화번호는
+                숫자 사이를 조금 띄워 한 자리씩 읽히게 한다. */}
+            {(() => {
+              const name = String(sheet.resident_name ?? '').trim() || '성함 미상'
+              const meta = [sheet.gender, sheet.age ? `${sheet.age}세` : ''].filter(Boolean).join(' · ')
+              const gName = String(sheet.guardian_name ?? '').trim()
+              const gRel = String(sheet.guardian_relation ?? '').trim()
+              const gPhone = String(sheet.guardian_phone ?? '').trim()
+              const cell = (label: string, value: string, opts: { empty: boolean; size: number; sub?: string; mono?: boolean }) => (
+                <td style={{ border: '2px solid #312e81', padding: '4px 9px 5px', verticalAlign: 'top', width: '33.33%' }}>
+                  <div style={{ fontSize: 8.5, fontWeight: 800, color: '#4338ca', letterSpacing: '0.08em' }}>{label}</div>
+                  <div style={{
+                    fontSize: opts.size, fontWeight: 900, lineHeight: 1.12, marginTop: 2,
+                    color: opts.empty ? '#c7d2fe' : '#111827',
+                    letterSpacing: opts.mono ? '0.06em' : '0.01em',
+                    fontVariantNumeric: 'tabular-nums', wordBreak: 'keep-all',
+                  }}>
+                    {value}
+                    {opts.sub && <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', marginLeft: 6, letterSpacing: 0 }}>{opts.sub}</span>}
+                  </div>
+                </td>
+              )
+              return (
+                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', marginBottom: 5 }}>
+                  <tbody>
+                    <tr>
+                      {cell('어르신 성함', name, { empty: !sheet.resident_name, size: 28, sub: meta || undefined })}
+                      {cell('보호자 성함', gName || '—', { empty: !gName, size: 24, sub: gRel || undefined })}
+                      {cell('보호자 연락처', gPhone || '—', { empty: !gPhone, size: 24, mono: true })}
+                    </tr>
+                  </tbody>
+                </table>
+              )
+            })()}
+
+            {/* ── 한눈에 ── 모실 수 있나 · 얼마인가 · 언제 오시나 */}
             <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', marginBottom: 7 }}>
               <tbody>
                 <tr>
@@ -717,7 +747,7 @@ export default function ConsultPage() {
                           {f.label}
                         </div>
                         <div style={{
-                          fontSize: k === 'guardian_phone' ? 12.5 : 13.5, fontWeight: 900,
+                          fontSize: 13.5, fontWeight: 900,
                           color: empty ? '#c7d2fe' : '#1e1b4b', marginTop: 1, lineHeight: 1.15,
                           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                         }}>{v}</div>
@@ -864,6 +894,8 @@ function PrintCell({ f, row, span }: { f: ConsultField; row: ConsultRow; span: n
   const tall = f.type === 'textarea' || f.type === 'chips'
   const v = showValue(row, f)
   const empty = v === '—'
+  // 성함·전화번호는 표 안에서도 한 단계 크게 — 위 띠를 보지 않고 대목을 훑는 사람도 바로 찾게
+  const idCell = f.key === 'resident_name' || f.key === 'guardian_name' || f.key === 'guardian_phone'
   return (
     <td colSpan={span} style={{
       border: '1px solid #cbd5e1', padding: '2.5px 6px', verticalAlign: 'top',
@@ -872,7 +904,8 @@ function PrintCell({ f, row, span }: { f: ConsultField; row: ConsultRow; span: n
       <div style={{ fontSize: 7.8, fontWeight: 700, color: '#64748b', letterSpacing: '0.02em',
         lineHeight: 1.2, wordBreak: 'keep-all' }}>{f.label}</div>
       <div style={{
-        fontSize: 11.5, fontWeight: 600, color: empty ? '#cbd5e1' : '#111827',
+        fontSize: idCell ? 15 : 11.5, fontWeight: idCell ? 900 : 600, color: empty ? '#cbd5e1' : '#111827',
+        letterSpacing: f.key === 'guardian_phone' ? '0.05em' : undefined,
         marginTop: 1.5, lineHeight: 1.3, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
       }}>{v}</div>
     </td>

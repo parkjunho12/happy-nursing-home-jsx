@@ -327,10 +327,11 @@ export function consultTitle(row: Record<string, any> | null | undefined): strin
  * 종이 맨 위에 크게 낼 것.
  *
  * 인쇄물을 집어 든 사람이 3초 안에 알아야 하는 것은 '모실 수 있나, 얼마인가,
- * 언제 오시나, 누구에게 전화하나' 이다. 나머지 마흔 칸과 같은 크기로 두면
- * 그 넷을 찾으려고 표를 훑어야 한다.
+ * 언제 오시나' 이다. 나머지 마흔 칸과 같은 크기로 두면 그 셋을 찾으려고 표를
+ * 훑어야 한다. '누구 기록지인가, 누구에게 전화하나'(어르신·보호자 성함·연락처)는
+ * 이 띠보다 위에 더 크게 따로 찍는다 — ConsultPage 인쇄부 참고.
  */
-export const PRINT_KEY_FIELDS = ['grade', 'benefit', 'copay', 'visit_date', 'guardian_phone'] as const
+export const PRINT_KEY_FIELDS = ['grade', 'benefit', 'copay', 'visit_date'] as const
 
 /** 비어 있는 칸은 종이에 '—' 로 — 안 여쭌 것인지 없는 것인지는 통화한 사람만 안다 */
 export function showValue(row: Record<string, any> | null | undefined, f: ConsultField): string {

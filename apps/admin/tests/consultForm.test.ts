@@ -241,7 +241,10 @@ test('방문 날짜가 잡히면 공유 글에도 적힌다', () => {
 
 test('맨 위 띠에 낼 칸은 모두 실재하고, 결정에 필요한 것들이다', () => {
   for (const k of PRINT_KEY_FIELDS) assert.ok(FIELD_BY_KEY[k], `${k} 가 표에 없다`)
-  for (const k of ['grade', 'benefit', 'copay', 'guardian_phone'])
+  for (const k of ['grade', 'benefit', 'copay', 'visit_date'])
     assert.ok((PRINT_KEY_FIELDS as readonly string[]).includes(k), `${k} 가 띠에 없다`)
-  assert.equal(PRINT_KEY_FIELDS.length, 5, '띠가 길어지면 한 칸씩 좁아져 커 보이지 않는다')
+  // 어르신·보호자 성함과 연락처는 이 띠보다 위의 식별 띠에 더 크게 따로 찍는다 — 여기 두면 두 번 찍힌다
+  for (const k of ['resident_name', 'guardian_name', 'guardian_phone'])
+    assert.ok(!(PRINT_KEY_FIELDS as readonly string[]).includes(k), `${k} 는 식별 띠에만 있어야 한다`)
+  assert.equal(PRINT_KEY_FIELDS.length, 4, '띠가 길어지면 한 칸씩 좁아져 커 보이지 않는다')
 })
