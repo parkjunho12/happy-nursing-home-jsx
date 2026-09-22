@@ -181,6 +181,8 @@ export default function EvalWeeklyAuditPage() {
               <th className="text-right font-semibold px-4 py-2">공동</th>
               <th className="text-right font-semibold px-4 py-2">확인</th>
               <th className="text-right font-semibold px-4 py-2">합계</th>
+              <th className="text-right font-semibold px-4 py-2" title="그 주 기록에 이름이 들어간 횟수 — 신체·인지·식사 작성자, 기저귀·집중배설 행 담당자, 체위변경 제공자">작성 횟수</th>
+              <th className="text-right font-semibold px-4 py-2" title="오류 ÷ 작성 횟수">오류율</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
@@ -196,10 +198,12 @@ export default function EvalWeeklyAuditPage() {
                 <td className="px-4 py-2 text-right text-violet-600 font-semibold">{r.shared ?? 0}</td>
                 <td className="px-4 py-2 text-right text-gray-500">{r.check}</td>
                 <td className="px-4 py-2 text-right font-bold text-gray-900">{r.total}</td>
+                <td className="px-4 py-2 text-right text-gray-700 tabular-nums" title={mentionsTitle(r.mentions_by_area)}>{r.mentions ?? 0}</td>
+                <td className="px-4 py-2 text-right text-gray-500 tabular-nums">{r.error_rate != null ? `${r.error_rate}%` : '-'}</td>
               </tr>
             ))}
             {staffRows.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-400 text-xs">집계된 선생님이 없습니다.</td></tr>
+              <tr><td colSpan={8} className="px-4 py-6 text-center text-gray-400 text-xs">집계된 선생님이 없습니다.</td></tr>
             )}
           </tbody>
         </table>
@@ -294,6 +298,12 @@ export default function EvalWeeklyAuditPage() {
       </p>
     </div>
   )
+}
+
+/** 작성 횟수 칸에 마우스를 올리면 분야별 내역 */
+function mentionsTitle(byArea?: Record<string, number>): string {
+  if (!byArea) return ''
+  return Object.entries(byArea).map(([k, v]) => `${k} ${v}`).join(' · ')
 }
 
 function Header() {

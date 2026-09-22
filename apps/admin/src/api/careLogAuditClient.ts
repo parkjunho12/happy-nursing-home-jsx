@@ -37,6 +37,12 @@ export interface WeeklyAuditStaffRow {
   shared?: number
   check: number
   total: number
+  /** 그 주 기록에 이름이 들어간 횟수(신체·인지·식사 작성자, 기저귀·집중배설 행 담당자, 체위변경 제공자) */
+  mentions?: number
+  mentions_by_area?: Record<string, number>
+  /** 오류 ÷ 작성 횟수 (%) */
+  error_rate?: number | null
+  days_scheduled?: number | null
   signed_resident_days?: number
 }
 
