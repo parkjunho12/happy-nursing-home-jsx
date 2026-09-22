@@ -341,6 +341,26 @@ export function showValue(row: Record<string, any> | null | undefined, f: Consul
   return f.unit ? `${s}${f.unit}` : s
 }
 
+/**
+ * 종이에 낼 칸 — 값이 있는 칸만.
+ *
+ *  마흔 칸을 다 찍으면 두 장이 되고, 두 장짜리는 뒷장을 잃는다. 안 여쭌 칸은
+ *  종이에서 빼서 한 장에 들어가게 한다. 어떤 칸이 비었는지는 화면에서 본다.
+ *
+ *  단, 아무것도 안 적힌 기록지(빈 서식을 뽑아 손으로 적는 경우)는 전부 찍는다 —
+ *  그때는 빈칸이 목적이다. isBlankSheet 로 가른다.
+ */
+export function filledFields(row: Record<string, any> | null | undefined, fields: ConsultField[]): ConsultField[] {
+  return fields.filter(f => showValue(row, f) !== '—')
+}
+
+/** 상담 개요(날짜·상담자)만 있고 어르신·보호자 내용이 하나도 없으면 빈 서식으로 본다 */
+export function isBlankSheet(row: Record<string, any> | null | undefined, sections: ConsultSection[]): boolean {
+  return sections
+    .filter(s => s.key !== 'head')
+    .every(s => filledFields(row, s.fields).length === 0)
+}
+
 
 /**
  * 카카오톡으로 보낼 한 줄 요약.

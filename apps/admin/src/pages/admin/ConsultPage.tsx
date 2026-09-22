@@ -11,6 +11,7 @@ import {
   FIELD_BY_KEY, PRINT_KEY_FIELDS,
   appendNote, consultMissing, consultShareText, consultTitle, hasChip,
   isRequiredKey, sectionProgress, showValue, toggleChip, visibleSections,
+  filledFields, isBlankSheet,
   type ConsultField,
 } from '@/utils/consultForm'
 
@@ -758,36 +759,45 @@ export default function ConsultPage() {
               </tbody>
             </table>
 
-            {/* ── 대목별 ── */}
-            {visibleSections(!!sheet.partner_id).map(sec => (
-              <div key={sec.key} style={{ marginBottom: 5, breakInside: 'avoid' }}>
-                <div style={{
-                  borderLeft: `3px solid ${sec.coupleOnly ? '#db2777' : sec.key_point ? '#4f46e5' : '#94a3b8'}`,
-                  paddingLeft: 5, marginBottom: 2.5,
-                  fontSize: 11, fontWeight: 900,
-                  color: sec.coupleOnly ? '#9d174d' : sec.key_point ? '#3730a3' : '#334155',
-                }}>{sec.title}</div>
-                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-                  <colgroup>
-                    {[0, 1, 2].map(i => <col key={i} style={{ width: '33.33%' }} />)}
-                  </colgroup>
-                  <tbody>
-                    {rowsOf(sec.fields).map((line, li) => {
-                      const used = line.reduce((n, f) => n + (f.span ?? 1), 0)
-                      return (
-                        <tr key={li}>
-                          {line.map((f, fi) => (
-                            <PrintCell key={f.key} f={f} row={sheet}
-                              // 마지막 칸이 남은 자리를 메운다 — 줄이 짧게 끝나면 표가 어긋난다
-                              span={(f.span ?? 1) + (fi === line.length - 1 ? 3 - used : 0)} />
-                          ))}
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            ))}
+            {/* ── 대목별 ── 값이 있는 칸만 찍어 한 장에 넣는다.
+                아무것도 안 적힌 빈 서식은 손으로 적는 용도라 전부(칸 높이까지) 찍는다. */}
+            {(() => {
+              const secs = visibleSections(!!sheet.partner_id)
+              const blank = isBlankSheet(sheet, secs)
+              return secs.map(sec => {
+                const fields = blank ? sec.fields : filledFields(sheet, sec.fields)
+                if (fields.length === 0) return null
+                return (
+                  <div key={sec.key} style={{ marginBottom: blank ? 5 : 3.5, breakInside: 'avoid' }}>
+                    <div style={{
+                      borderLeft: `3px solid ${sec.coupleOnly ? '#db2777' : sec.key_point ? '#4f46e5' : '#94a3b8'}`,
+                      paddingLeft: 5, marginBottom: 2,
+                      fontSize: 10.5, fontWeight: 900,
+                      color: sec.coupleOnly ? '#9d174d' : sec.key_point ? '#3730a3' : '#334155',
+                    }}>{sec.title}</div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                      <colgroup>
+                        {[0, 1, 2].map(i => <col key={i} style={{ width: '33.33%' }} />)}
+                      </colgroup>
+                      <tbody>
+                        {rowsOf(fields).map((line, li) => {
+                          const used = line.reduce((n, f) => n + (f.span ?? 1), 0)
+                          return (
+                            <tr key={li}>
+                              {line.map((f, fi) => (
+                                <PrintCell key={f.key} f={f} row={sheet} blank={blank}
+                                  // 마지막 칸이 남은 자리를 메운다 — 줄이 짧게 끝나면 표가 어긋난다
+                                  span={(f.span ?? 1) + (fi === line.length - 1 ? 3 - used : 0)} />
+                              ))}
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )
+              })
+            })()}
 
             <p style={{ fontSize: 8, color: '#9ca3af', textAlign: 'right', margin: '5px 2px 0' }}>
               출력 {new Date().toLocaleDateString('ko-KR')} · 어르신 건강 상태와 보호자 연락처가 적힌 문서입니다 — 보관·폐기에 주의해 주세요.
@@ -890,7 +900,7 @@ function rowsOf(fields: ConsultField[]): ConsultField[][] {
  *
  *  값칸에 높이를 주어 빈 기록지를 뽑아 손으로 적을 수도 있게 한다.
  */
-function PrintCell({ f, row, span }: { f: ConsultField; row: ConsultRow; span: number }) {
+function PrintCell({ f, row, span, blank }: { f: ConsultField; row: ConsultRow; span: number; blank: boolean }) {
   const tall = f.type === 'textarea' || f.type === 'chips'
   const v = showValue(row, f)
   const empty = v === '—'
@@ -898,8 +908,9 @@ function PrintCell({ f, row, span }: { f: ConsultField; row: ConsultRow; span: n
   const idCell = f.key === 'resident_name' || f.key === 'guardian_name' || f.key === 'guardian_phone'
   return (
     <td colSpan={span} style={{
-      border: '1px solid #cbd5e1', padding: '2.5px 6px', verticalAlign: 'top',
-      height: tall ? '13mm' : '9mm',
+      border: '1px solid #cbd5e1', padding: blank ? '2.5px 6px' : '2px 6px', verticalAlign: 'top',
+      // 빈 서식만 손으로 적을 높이를 준다. 값이 있으면 글 높이만큼만 — 한 장에 들어가야 한다
+      height: blank ? (tall ? '13mm' : '9mm') : undefined,
     }}>
       <div style={{ fontSize: 7.8, fontWeight: 700, color: '#64748b', letterSpacing: '0.02em',
         lineHeight: 1.2, wordBreak: 'keep-all' }}>{f.label}</div>

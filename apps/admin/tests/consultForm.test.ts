@@ -5,6 +5,7 @@ import {
   appendNote, consultMissing, consultTitle, filled, firstMissingKey, hasChip,
   isRequiredKey, sectionProgress, showValue, toggleChip, visibleSections, consultShareText,
   PRINT_KEY_FIELDS,
+  filledFields, isBlankSheet,
 } from '../src/utils/consultForm'
 
 /* 상담 기록지는 통화하면서 채우는 표다. 화면과 종이가 같은 목록을 읽어야
@@ -247,4 +248,20 @@ test('맨 위 띠에 낼 칸은 모두 실재하고, 결정에 필요한 것들�
   for (const k of ['resident_name', 'guardian_name', 'guardian_phone'])
     assert.ok(!(PRINT_KEY_FIELDS as readonly string[]).includes(k), `${k} 는 식별 띠에만 있어야 한다`)
   assert.equal(PRINT_KEY_FIELDS.length, 4, '띠가 길어지면 한 칸씩 좁아져 커 보이지 않는다')
+})
+
+/* 종이 — 안 여쭌 칸은 빼서 한 장에 넣는다. 빈 서식은 전부 찍는다 */
+
+test('값이 있는 칸만 종이에 낸다 — 단위가 붙는 칸도 값 유무로 판단', () => {
+  const elder = CONSULT_SECTIONS.find(s => s.key === 'elder')!
+  const row = { resident_name: '김영희', age: 84, height_cm: ' ', gender: '' }
+  const keys = filledFields(row, elder.fields).map(f => f.key)
+  assert.deepEqual(keys, ['resident_name', 'age'])
+})
+
+test('빈 서식 판정 — 개요(날짜·상담자)만 있어도 빈 서식, 어르신 한 칸이라도 있으면 아니다', () => {
+  assert.equal(isBlankSheet({}, CONSULT_SECTIONS), true)
+  assert.equal(isBlankSheet({ consulted_on: '2026-09-22', counselor: '박' }, CONSULT_SECTIONS), true)
+  assert.equal(isBlankSheet({ consulted_on: '2026-09-22', resident_name: '김영희' }, CONSULT_SECTIONS), false)
+  assert.equal(isBlankSheet({ guardian_phone: '010-1234-5678' }, CONSULT_SECTIONS), false)
 })
