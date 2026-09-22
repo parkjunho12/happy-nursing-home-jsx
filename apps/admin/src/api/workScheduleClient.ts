@@ -128,6 +128,20 @@ export const workScheduleAPI = {
     code_hours_rules?: { from: string; hours: Record<string, number> }[]
     code_hours_months?: Record<string, Record<string, number>>
   }>),
+  /**
+   * 조 편성(직종·조·층)을 다른 달에 그대로 적는다.
+   *
+   * 저장할 때의 자동 이월은 '이 달을 그대로 따라오던 달' 만 건드린다. 뒤 달을
+   * 한 번이라도 다르게 저장했으면 비켜 가므로, 사람이 시켜서 밀어 넣는 길이다.
+   */
+  copyRows: (source: string, targets: string[]) =>
+    apiClient.post(`${BASE}/rows/copy`, { source, targets }).then(unwrap<{
+      source: string
+      applied: string[]
+      created: string[]
+      locked: string[]
+      people: number
+    }>),
   /** 그 달 선생님별 메모 — 근무표를 고칠 수 있는 사람만 본다 */
   memos: (month: string) =>
     apiClient.get(`${BASE}/memos`, { params: { month } }).then(unwrap<StaffMemo[]>),

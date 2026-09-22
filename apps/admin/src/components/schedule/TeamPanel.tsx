@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Loader2, CalendarArrowDown } from 'lucide-react'
 import { workScheduleAPI } from '@/api/workScheduleClient'
 import { TEAMS, DAY_TEAM, ROTATION, rotationPreview, meta, SHIFT_CODES, type CodeHourRule } from '@/utils/shiftCodes'
 import { TEAM_BAND, canJoinTeam, type StaffRow } from './shared'
@@ -9,7 +10,18 @@ import { useShiftConfig } from '@/store/shiftConfig'
  * 조 편성 패널 — 요양보호사에게 조를 지정하고, 조별 시작 패턴과
  * 정산 설정(회전 기준일·정산 시작월)을 조정한다.
  */
-export default function TeamPanel({ staff, patchRow, offsets, setOffsets, setDirty, anchor, setAnchor, settleStart, setSettleStart, floors }: {
+/** 'YYYY-MM' 에 n 달 더하기 — 글자만 가지고 센다 */
+function addMonths(ym: string, n: number): string {
+  const y = Number(ym.slice(0, 4)), m = Number(ym.slice(5, 7))
+  const t = new Date(Date.UTC(y, m - 1 + n, 1))
+  return t.toISOString().slice(0, 7)
+}
+const monthLabel = (ym: string, base: string) =>
+  ym.slice(0, 4) === base.slice(0, 4)
+    ? `${Number(ym.slice(5, 7))}월`
+    : `${ym.slice(0, 4)}년 ${Number(ym.slice(5, 7))}월`
+
+export default function TeamPanel({ staff, patchRow, offsets, setOffsets, setDirty, anchor, setAnchor, settleStart, setSettleStart, floors, ym, dirty, onCopied }: {
   staff: StaffRow[]
   patchRow: (sid: string, p: Partial<ScheduleRow>) => void
   offsets: Record<string, number>
@@ -21,6 +33,12 @@ export default function TeamPanel({ staff, patchRow, offsets, setOffsets, setDir
   setSettleStart: (v: string) => void
   /** 어르신이 실제로 계신 층 — 없는 층을 고르게 두지 않는다 */
   floors: string[]
+  /** 지금 보고 있는 달 'YYYY-MM' */
+  ym: string
+  /** 아직 저장 안 한 것이 있는가 — 있으면 먼저 저장하시라고 말한다 */
+  dirty: boolean
+  /** 다음 달에 적고 난 뒤 — 화면을 다시 읽게 한다 */
+  onCopied?: () => void
 }) {
   return (
           <div className="mb-3 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-3">
@@ -109,8 +127,77 @@ export default function TeamPanel({ staff, patchRow, offsets, setOffsets, setDir
               </div>
 
               <CodeHoursPanel />
+              <CopyRowsPanel ym={ym} dirty={dirty} onCopied={onCopied} />
             </div>
           </div>
+  )
+}
+
+/**
+ * 이 편성을 다음 달에도.
+ *
+ *  저장할 때의 자동 이월은 '이 달을 그대로 따라오던 달' 만 건드린다. 뒤 달을
+ *  한 번이라도 다르게 저장했으면 '따로 손본 달' 로 보고 비켜 간다 — 그 달
+ *  나름의 이유가 있다고 보기 때문이다.
+ *
+ *  그런데 실제로는 '그때 잠깐 다르게 짰을 뿐, 이제 이 달 편성대로 돌려놔라'
+ *  인 경우가 있다. 자동 규칙을 느슨하게 하면 진짜로 따로 짠 달까지 덮으므로,
+ *  규칙은 그대로 두고 사람이 시키는 길을 연다.
+ */
+function CopyRowsPanel({ ym, dirty, onCopied }: {
+  ym: string; dirty: boolean; onCopied?: () => void
+}) {
+  const [months, setMonths] = useState(1)
+  const [busy, setBusy] = useState(false)
+  const targets = Array.from({ length: months }, (_, i) => addMonths(ym, i + 1))
+  const label = targets.map(t => monthLabel(t, ym)).join(' · ')
+  const here = monthLabel(ym, ym)
+
+  const run = async () => {
+    if (dirty && !confirm(
+      '아직 저장하지 않은 것이 있습니다.\n\n지금 적용하면 저장된 편성이 넘어갑니다 — ' +
+      '방금 고친 것은 빠집니다.\n먼저 저장하시겠어요? (취소 = 그대로 진행)')) return
+    if (!confirm(
+      `${here} 조·층 편성을 ${label} 근무표에도 그대로 적습니다.\n\n` +
+      '· 직종·조·층만 덮습니다 — 그 달 근무 칸·총시간·비고는 그대로입니다.\n' +
+      '· 확정 잠금된 달은 건드리지 않습니다.\n' +
+      '· 되돌리려면 그 달의 「저장 이력」에서 되돌리세요.\n\n계속할까요?')) return
+    setBusy(true)
+    try {
+      const r = await workScheduleAPI.copyRows(ym, targets)
+      const fm = (l: string[]) => l.map(x => monthLabel(x, ym)).join('·')
+      alert(
+        (r.applied.length ? `${fm(r.applied)} 근무표에 ${here} 편성을 적었습니다 (${r.people}명).` : '적용된 달이 없습니다.') +
+        (r.created.length ? `\n${fm(r.created)}은 표가 없어 편성만 담아 새로 만들었습니다.` : '') +
+        (r.locked.length ? `\n${fm(r.locked)}은 확정 잠금이라 건드리지 못했습니다 — 잠금을 풀고 다시 하세요.` : ''))
+      onCopied?.()
+    } catch (e: any) {
+      alert(e?.response?.data?.detail ?? e?.message ?? '적용하지 못했습니다.')
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="mt-3 pt-3 border-t border-gray-100">
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <p className="text-[11px] font-bold text-gray-500">이 편성을 다음 달에도</p>
+        <span className="text-[10px] text-gray-400">조·층만 옮깁니다 — 근무 칸은 그대로</span>
+      </div>
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <select value={months} onChange={e => setMonths(Number(e.target.value))}
+          className="px-2 py-1.5 text-[11px] border border-gray-200 rounded-lg bg-white">
+          {[1, 2, 3].map(n => <option key={n} value={n}>다음 {n}개월</option>)}
+        </select>
+        <button type="button" onClick={run} disabled={busy}
+          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold disabled:opacity-40">
+          {busy ? <Loader2 size={11} className="animate-spin" /> : <CalendarArrowDown size={12} />}
+          {label}에 적용
+        </button>
+      </div>
+      <p className="text-[10.5px] text-gray-500 mt-1.5">
+        저장할 때도 자동으로 따라갑니다. 다만 그 달을 한 번이라도 다르게 저장했으면
+        자동으로는 건드리지 않으니, 그때 이 단추로 맞추세요.
+      </p>
+    </div>
   )
 }
 

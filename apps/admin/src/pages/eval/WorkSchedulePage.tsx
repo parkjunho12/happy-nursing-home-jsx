@@ -1084,6 +1084,7 @@ export default function WorkSchedulePage() {
             staff={staff} patchRow={patchRow} offsets={offsets} setOffsets={setOffsets} setDirty={setDirty}
             floors={floors}
             anchor={anchor} setAnchor={setAnchor} settleStart={settleStart} setSettleStart={setSettleStart}
+            ym={ym} dirty={dirty}
           />
         )}
 

@@ -915,6 +915,95 @@ def _follow_rows(db: Session, ym: str, old_rows, new_rows, by: Optional[str]) ->
     return todo, locked
 
 
+class CopyRowsBody(BaseModel):
+    """어느 달의 조 편성을 어느 달(들)에 그대로 적을지."""
+    source: str                      # 'YYYY-MM' — 가져올 달
+    targets: List[str]               # 적을 달들
+
+
+@router.post("/rows/copy")
+def copy_rows(body: CopyRowsBody, db: Session = Depends(get_db),
+              current_user: User = Depends(_manager)):
+    """조 편성(직종·조·층)을 다른 달에 그대로 적는다 — 사람이 시켜서.
+
+    ■ 왜 자동 이월만으로는 모자란가
+
+      저장할 때의 자동 이월(_follow_rows)은 '이 달을 그대로 따라오던 달' 만
+      건드린다. 뒤 달을 한 번이라도 다르게 저장한 적이 있으면 그 달은 '따로
+      손본 달' 로 보고 비켜 간다 — 그 달 나름의 이유가 있다고 보기 때문이다.
+
+      그런데 실제로는 '그때 잠깐 다르게 짰을 뿐, 이제 10월 편성대로 돌려놔라'
+      인 경우가 있다. 자동 규칙을 느슨하게 하면 진짜로 따로 짠 달까지 덮게
+      되므로, 규칙은 그대로 두고 사람이 시킬 길을 따로 연다.
+
+    ■ 무엇을 적고 무엇을 두는가
+
+      직종·조·층만 덮는다(ASSIGN_KEYS). 그 달의 근무 칸·총시간·비고·줄 순서는
+      그대로 둔다 — 편성을 맞추자고 그 달 기록을 건드릴 이유가 없다.
+      대상 달에 아직 표가 없으면 편성만 담은 표를 새로 만든다. 그래야 다른
+      화면이 그 달을 읽을 때도 조·층이 보인다.
+
+    ■ 되돌릴 수 있게
+
+      적기 전에 그 달의 스냅샷을 남긴다. 남이 밀어 넣은 달에 이력이 없으면
+      되돌릴 길이 없다. 확정 잠금이 걸린 달은 건드리지 않고 알린다.
+    """
+    if not _YM.match(body.source or ""):
+        raise HTTPException(400, "source 형식은 YYYY-MM 이어야 합니다.")
+    targets = [t for t in dict.fromkeys(body.targets or []) if _YM.match(t or "")]
+    if not targets:
+        raise HTTPException(400, "적용할 달을 골라주세요. (YYYY-MM)")
+    if body.source in targets:
+        raise HTTPException(400, "가져온 달과 적용할 달이 같습니다.")
+
+    src = db.query(WorkSchedule).filter(WorkSchedule.year_month == body.source).first()
+    src_rows = (src.rows if src else None) or []
+    if not src_rows:
+        # 그 달 자기 편성이 없으면 이어받은 것을 쓴다 — 화면이 보여주는 것과 같게
+        src_rows, _ = _inherit_rows(db, body.source)
+    if not src_rows:
+        raise HTTPException(400, f"{body.source} 에 조 편성이 없습니다.")
+
+    who = getattr(current_user, "name", None)
+    applied, locked, created = [], [], []
+    for t in targets:
+        x = db.query(WorkSchedule).filter(WorkSchedule.year_month == t).first()
+        if x and x.locked_at:
+            locked.append(t)
+            continue
+        if not x:
+            x = WorkSchedule(year_month=t, data={}, rows=[])
+            db.add(x); db.flush()
+            created.append(t)
+        else:
+            db.add(WorkScheduleVersion(
+                year_month=t, data=x.data, rows=x.rows,
+                base_hours=x.base_hours, base_days=x.base_days,
+                as_of=x.as_of, team_offsets=x.team_offsets,
+                cells=_count_cells(x.data or {}), changed=0,
+                saved_by=f"{who or ''} · {int(body.source[5:7])}월 조 편성 적용 전".strip(" ·"),
+            ))
+        x.rows = _rows_mod.apply_assignment(x.rows, src_rows)
+        applied.append(t)
+
+    if applied:
+        db.flush()
+        for t in applied:
+            olds = (db.query(WorkScheduleVersion)
+                    .filter(WorkScheduleVersion.year_month == t)
+                    .order_by(WorkScheduleVersion.saved_at.desc())
+                    .offset(KEEP_VERSIONS).all())
+            for o in olds:
+                db.delete(o)
+    db.commit()
+    logger.info("조 편성 적용: %s → %s", body.source, ", ".join(applied) or "(없음)")
+    return ApiResponse(success=True, data={
+        "source": body.source, "applied": applied,
+        "created": created, "locked": locked,
+        "people": len(src_rows),
+    })
+
+
 # ── 확정 잠금 ──────────────────────────────────────────────────────────────
 # 근무표는 붙여 놓고 여러 사람이 보는 문서다. 확정한 뒤 조용히 바뀌면
 # 사람마다 다른 표를 보게 되고, 그날 누가 나오는지가 어긋난다.
