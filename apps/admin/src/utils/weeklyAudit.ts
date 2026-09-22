@@ -103,3 +103,26 @@ export function rankStaff<T extends WeeklyAuditStaffRowLike>(rows: T[]): T[] {
     return a.staff.localeCompare(b.staff, 'ko')
   })
 }
+
+export type StaffSortKey = 'default' | 'error' | 'blank_owner' | 'shared' | 'check' | 'total' | 'mentions' | 'error_rate'
+
+/**
+ * 선생님별 표 정렬. 'default' 는 rankStaff 순서(오류+공란+공동). 그 외 열은 숫자 내림/오름차순.
+ * 오류율이 없는 분(작성 0회, null)은 어느 방향이든 맨 아래로 보낸다 — 0% 와 '없음' 은 다르다.
+ */
+export function sortStaffRows<T extends WeeklyAuditStaffRowLike>(rows: T[], key: StaffSortKey, dir: 'asc' | 'desc' = 'desc'): T[] {
+  if (key === 'default') return rankStaff(rows)
+  const val = (r: T): number | null => {
+    const v = (r as Record<string, unknown>)[key]
+    return typeof v === 'number' && Number.isFinite(v) ? v : null
+  }
+  return [...rows].sort((a, b) => {
+    const va = val(a), vb = val(b)
+    if (va === null && vb === null) return a.staff.localeCompare(b.staff, 'ko')
+    if (va === null) return 1
+    if (vb === null) return -1
+    const diff = dir === 'desc' ? vb - va : va - vb
+    if (diff !== 0) return diff
+    return a.staff.localeCompare(b.staff, 'ko')
+  })
+}

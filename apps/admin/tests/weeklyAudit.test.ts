@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  formatRange, filterFindings, groupByDate, rankStaff, KIND_LABEL,
+  formatRange, filterFindings, groupByDate, rankStaff, sortStaffRows, KIND_LABEL,
   type WeeklyAuditFindingLike,
 } from '../src/utils/weeklyAudit'
 
@@ -89,4 +89,25 @@ test('rankStaff — 원본을 건드리지 않는다(복사본 정렬)', () => {
   const before = JSON.parse(JSON.stringify(rows))
   rankStaff(rows)
   assert.deepEqual(rows, before)
+})
+
+test('sortStaffRows — 오류율 내림차순, 작성 0회(null)는 맨 아래', () => {
+  const rows = [
+    { staff: '가', error: 1, blank_owner: 0, mentions: 100, error_rate: 1 },
+    { staff: '나', error: 5, blank_owner: 0, mentions: 10, error_rate: 50 },
+    { staff: '다', error: 0, blank_owner: 2, mentions: 0, error_rate: null },
+    { staff: '라', error: 2, blank_owner: 0, mentions: 20, error_rate: 10 },
+  ]
+  assert.deepEqual(sortStaffRows(rows, 'error_rate', 'desc').map(r => r.staff), ['나', '라', '가', '다'])
+  assert.deepEqual(sortStaffRows(rows, 'error_rate', 'asc').map(r => r.staff), ['가', '라', '나', '다'])
+})
+
+test('sortStaffRows — default 는 rankStaff 순서, 같은 값이면 이름순', () => {
+  const rows = [
+    { staff: '나', error: 1, blank_owner: 0, mentions: 5 },
+    { staff: '가', error: 1, blank_owner: 0, mentions: 5 },
+    { staff: '다', error: 3, blank_owner: 0, mentions: 5 },
+  ]
+  assert.deepEqual(sortStaffRows(rows, 'default').map(r => r.staff), ['다', '가', '나'])
+  assert.deepEqual(sortStaffRows(rows, 'mentions', 'desc').map(r => r.staff), ['가', '나', '다'])
 })

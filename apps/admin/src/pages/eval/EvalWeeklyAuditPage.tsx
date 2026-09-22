@@ -6,7 +6,7 @@ import {
   type WeeklyAuditFinding,
   type WeeklyAuditWeek,
 } from '@/api/careLogAuditClient'
-import { KIND_LABEL, filterFindings, formatRange, groupByDate, rankStaff } from '@/utils/weeklyAudit'
+import { KIND_LABEL, filterFindings, formatRange, groupByDate, sortStaffRows, type StaffSortKey } from '@/utils/weeklyAudit'
 
 const KIND_BADGE: Record<WeeklyAuditFinding['kind'], string> = {
   error: 'bg-red-100 text-red-700',
@@ -34,6 +34,8 @@ export default function EvalWeeklyAuditPage() {
   const [areaFilter, setAreaFilter] = useState('')
   const [kindFilter, setKindFilter] = useState('')
   const [q, setQ] = useState('')
+  const [sortKey, setSortKey] = useState<StaffSortKey>('default')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
   useEffect(() => {
     let alive = true
@@ -58,7 +60,14 @@ export default function EvalWeeklyAuditPage() {
     return () => { alive = false }
   }, [weekStart])
 
-  const staffRows = useMemo(() => rankStaff(detail?.summary?.by_staff ?? []), [detail])
+  const staffRows = useMemo(() => sortStaffRows(detail?.summary?.by_staff ?? [], sortKey, sortDir), [detail, sortKey, sortDir])
+  // 같은 열을 다시 누르면 방향 반전, 세 번째는 기본 순서로
+  const toggleSort = (key: StaffSortKey) => {
+    if (sortKey !== key) { setSortKey(key); setSortDir('desc'); return }
+    if (sortDir === 'desc') { setSortDir('asc'); return }
+    setSortKey('default'); setSortDir('desc')
+  }
+  const sortMark = (key: StaffSortKey) => sortKey === key ? (sortDir === 'desc' ? ' ▼' : ' ▲') : ''
 
   const filtered = useMemo(() => {
     if (!detail) return []
@@ -175,14 +184,22 @@ export default function EvalWeeklyAuditPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 text-gray-500 text-xs">
-              <th className="text-left font-semibold px-4 py-2">선생님</th>
-              <th className="text-right font-semibold px-4 py-2">오류</th>
-              <th className="text-right font-semibold px-4 py-2">공란(책임후보)</th>
-              <th className="text-right font-semibold px-4 py-2">공동</th>
-              <th className="text-right font-semibold px-4 py-2">확인</th>
-              <th className="text-right font-semibold px-4 py-2">합계</th>
-              <th className="text-right font-semibold px-4 py-2" title="그 주 기록에 이름이 들어간 횟수 — 신체·인지·식사 작성자, 기저귀·집중배설 행 담당자, 체위변경 제공자">작성 횟수</th>
-              <th className="text-right font-semibold px-4 py-2" title="오류 ÷ 작성 횟수">오류율</th>
+              <th className="text-left font-semibold px-4 py-2">
+                <button type="button" onClick={() => toggleSort('default')} className="hover:text-gray-800" title="기본 순서(오류+공란+공동)">선생님{sortKey === 'default' ? ' ▼' : ''}</button>
+              </th>
+              {([
+                ['error', '오류', undefined],
+                ['blank_owner', '공란(책임후보)', undefined],
+                ['shared', '공동', undefined],
+                ['check', '확인', undefined],
+                ['total', '합계', undefined],
+                ['mentions', '작성 횟수', '그 주 기록에 이름이 들어간 횟수 — 신체·인지·식사 작성자, 기저귀·집중배설 행 담당자, 체위변경 제공자'],
+                ['error_rate', '오류율', '오류 ÷ 작성 횟수 · 누르면 정렬'],
+              ] as [StaffSortKey, string, string | undefined][]).map(([key, label, title]) => (
+                <th key={key} className="text-right font-semibold px-4 py-2" title={title}>
+                  <button type="button" onClick={() => toggleSort(key)} className={`hover:text-gray-800 ${sortKey === key ? 'text-gray-900' : ''}`}>{label}{sortMark(key)}</button>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
