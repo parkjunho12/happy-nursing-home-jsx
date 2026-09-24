@@ -85,6 +85,10 @@ jobs:
         run: python3 backend/tests/test_diet_state.py
       - name: 케어포 외박 표시와 귀원 기록 대조
         run: python3 backend/tests/test_diet_absence.py
+      - name: 퇴소 시각 기준 식이 명단 제외
+        # 퇴소 처리한 분이 식이 현황에 남으면 주방이 그 분 상까지 차린다.
+        # 반대로 퇴소일 아침을 드실 분을 미리 빼면 한 끼가 빈다.
+        run: python3 backend/tests/test_diet_discharge.py
       - name: 주간 기록지 점검 결과 집계
         run: python3 backend/tests/test_care_log_audit.py
       - name: 병원동행 톡방 글

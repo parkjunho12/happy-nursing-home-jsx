@@ -23,6 +23,9 @@ export interface DietRow {
   unset: boolean
   /** 앞으로 바뀔 예정 (예: 내일부터 죽) */
   upcoming?: { date: string; rice?: string | null; side?: string | null; tube: boolean } | null
+  /** 퇴소 당일에만 온다 — 시각이 지나면 명단에서 아예 빠지므로 여기 오는 건
+   *  '아직 계시지만 오늘 나가신다' 는 분이다. 시각을 안 적은 퇴소는 time 이 null. */
+  discharge?: { label: string | null; time: string | null } | null
   /** 오늘 자리를 비우셨는가 — 일정에 적힌 외박에서 읽은 것.
    *  식이 표에 따로 적지 않는다: 두 곳에 적으면 언젠가 어긋난다. */
   away?: {

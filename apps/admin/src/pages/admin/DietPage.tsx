@@ -412,6 +412,13 @@ function ResidentLine({ r, canEdit, onClick, onAway }: {
           {a.label}
         </span>
       )}
+      {/* 퇴소 당일 — 시각이 지나면 이 줄 자체가 사라진다. 남아 있는 동안은
+          '오늘 나가신다' 를 보여 주방이 저녁까지 차리지 않게 한다. */}
+      {r.discharge?.label && (
+        <span className="text-[11px] font-bold px-1.5 py-0.5 rounded border bg-rose-100 text-rose-900 border-rose-300">
+          {r.discharge.label}
+        </span>
+      )}
       {/* 기록은 있는데 밥·반찬이 비어 있는 경우도 '미정' 이다 —
           경관식을 풀면 그렇게 된다. 빈칸으로 두면 아무도 못 알아챈다. */}
       {r.tube ? chip('경관식', TUBE_TONE.chip)

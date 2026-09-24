@@ -22,6 +22,7 @@ from app.models.user import User
 from app.schemas.response import ApiResponse
 from app.services import diet_state as ds
 from app.services import diet_absence as da
+from app.services import diet_discharge as dd
 from app.services import away as aw
 
 logger = logging.getLogger(__name__)
@@ -67,15 +68,18 @@ def _importer(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
-def _in_house(r: LtcResident, on: str) -> bool:
-    """그날 재원 중인 어르신인가 — 식수 정산과 같은 기준."""
+def _in_house(r: LtcResident, on: str, now: Optional[datetime] = None) -> bool:
+    """그날 재원 중인 어르신인가 — 식수 정산과 같은 기준.
+
+    퇴소일 당일은 퇴소 시각까지 본다(services/diet_discharge.py). 시각이 지난
+    분은 명단과 주방 숫자에서 함께 빠진다 — 퇴소한 분의 상을 차리면 안 된다.
+    """
     if (r.status or "") == "pending":
         return False
     adm = (r.admission_date or "")[:10]
     if not adm or adm > on:
         return False
-    dis = (r.discharge_date or "")[:10]
-    return not (dis and dis < on)
+    return dd.discharge_state(r, on, now)["show"]
 
 
 def _rows(c: DietChange) -> Dict[str, Any]:
@@ -273,7 +277,8 @@ def current(date: Optional[str] = Query(None), floor: Optional[str] = Query(None
               .all())
     away = aw.away_map(events, on)
 
-    in_house = [r for r in db.query(LtcResident).all() if _in_house(r, on)]
+    now = datetime.now(KST)
+    in_house = [r for r in db.query(LtcResident).all() if _in_house(r, on, now)]
     absences = _absences(db, in_house, on)
 
     people = []
@@ -283,9 +288,14 @@ def current(date: Optional[str] = Query(None), floor: Optional[str] = Query(None
         mine = changes.get(r.id, [])
         st = ds.state_at(mine, on)
         nxt = ds.next_change(mine, on)
+        dsc = dd.discharge_state(r, on, now)
         people.append({
             "resident_id": r.id, "name": r.name,
             "floor": r.floor, "room": r.room,
+            # 퇴소 당일, 아직 시각이 안 지난 분 — '오늘 HH:MM 퇴소' 로 알린다.
+            # 시각을 안 적은 퇴소는 하루가 끝날 때까지 남는다.
+            "discharge": ({"label": dsc["label"], "time": dsc["time"]}
+                          if dsc["today"] else None),
             "rice": (st or {}).get("rice"), "side": (st or {}).get("side"),
             # 경관식은 어르신 기록(tube_feeding)이 먼저다 — 경관식 재고·반출이 그 값을 쓴다
             "tube": bool(r.tube_feeding) or bool((st or {}).get("tube")),
