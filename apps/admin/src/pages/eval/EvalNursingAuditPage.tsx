@@ -138,14 +138,15 @@ export default function EvalNursingAuditPage() {
           </p>
 
           {/* 항목별 합계 + 어디서 고치는지 */}
-          <table className="w-full text-[10px] border-collapse mb-3">
+          <table className="w-full text-[10px] border-collapse mb-3 table-fixed">
+            <colgroup><col style={{ width: '30%' }} /><col style={{ width: '5%' }} /><col style={{ width: '5%' }} /><col style={{ width: '5%' }} /><col style={{ width: '55%' }} /></colgroup>
             <thead><tr className="border-b border-gray-400 text-left">
               <th className="py-0.5 pr-2">항목</th><th className="py-0.5 pr-2 text-right">오류</th><th className="py-0.5 pr-2 text-right">확인</th><th className="py-0.5 pr-2 text-right">참고</th><th className="py-0.5">어디서 보나 (케어포)</th>
             </tr></thead>
             <tbody>
               {matrix.map(r => (
                 <tr key={`${r.area}|${r.item}`} className="border-b border-gray-200 align-top">
-                  <td className="py-0.5 pr-2 whitespace-nowrap font-semibold">{r.area} · {r.item}</td>
+                  <td className="py-0.5 pr-2 font-semibold">{r.area} · {r.item}</td>
                   <td className="py-0.5 pr-2 text-right">{r.error || ''}</td>
                   <td className="py-0.5 pr-2 text-right">{r.check || ''}</td>
                   <td className="py-0.5 pr-2 text-right text-gray-400">{r.info || ''}</td>
@@ -157,9 +158,10 @@ export default function EvalNursingAuditPage() {
 
           {/* 날짜별 한 줄 요약 */}
           <h2 className="text-xs font-bold mt-2 mb-1">날짜별 확인 목록 <span className="font-normal text-gray-500">(참고 항목은 건수만, 같은 어르신·시각은 한 번만)</span></h2>
-          <table className="w-full text-[10px] border-collapse">
+          <table className="w-full text-[10px] border-collapse table-fixed">
+            <colgroup><col style={{ width: '11%' }} /><col style={{ width: '24%' }} /><col style={{ width: '21%' }} /><col style={{ width: '44%' }} /></colgroup>
             <thead><tr className="border-b border-gray-400 text-left">
-              <th className="py-0.5 pr-2 w-16">날짜</th><th className="py-0.5 pr-2 w-40">어디서</th><th className="py-0.5 pr-2 w-28">항목</th><th className="py-0.5">누구 (호실) · 시각</th>
+              <th className="py-0.5 pr-2">날짜</th><th className="py-0.5 pr-2">어디서</th><th className="py-0.5 pr-2">항목</th><th className="py-0.5">누구 (호실) · 시각</th>
             </tr></thead>
             <tbody>
               {printDays.map(d => (
@@ -168,8 +170,8 @@ export default function EvalNursingAuditPage() {
                   : d.lines.map((l, i) => (
                     <tr key={`${d.date}|${i}`} className={`align-top ${i === d.lines.length - 1 ? 'border-b border-gray-300' : ''}`}>
                       <td className="py-0.5 pr-2 font-semibold whitespace-nowrap">{i === 0 ? <>{d.date.slice(5).replace('-', '/')}({d.weekday})<div className="font-normal text-gray-500">오류 {d.error} · 확인 {d.check}{d.info ? ` · 참고 ${d.info}` : ''}</div></> : ''}</td>
-                      <td className="py-0.5 pr-2 text-gray-600">{l.where.split(' › ').slice(0, 2).join(' › ')}</td>
-                      <td className="py-0.5 pr-2 whitespace-nowrap"><span className={l.kind === 'error' ? 'font-bold' : ''}>{l.kind === 'error' ? '오류' : '확인'}</span> {l.item} <span className="text-gray-500">{l.count}</span></td>
+                      <td className="py-0.5 pr-2 text-gray-600">{l.whereShort}</td>
+                      <td className="py-0.5 pr-2"><span className={l.kind === 'error' ? 'font-bold' : ''}>{l.kind === 'error' ? '오류' : '확인'}</span> {l.item} <span className="text-gray-500">{l.count}</span></td>
                       <td className="py-0.5">{l.text}</td>
                     </tr>
                   ))

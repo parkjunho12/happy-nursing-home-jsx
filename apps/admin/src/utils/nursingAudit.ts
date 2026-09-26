@@ -128,6 +128,23 @@ export const WHERE_BY_ITEM: Record<string, string> = {
   '관리기록 없음': '3-1 › 어르신 클릭 › 5.도뇨관관리 탭 › 그날 관리기록 (도뇨관 뺐으면 3-5 리포트 대상자 정리)',
 }
 
+/** 날짜별 표에 쓰는 짧은 위치(메뉴 › 탭). 자세한 칸 안내는 WHERE_BY_ITEM */
+export const WHERE_SHORT: Record<string, string> = {
+  '투약 미기록(●)': '3-1 목록 투약 ● › 2.투약관리',
+  '미작성': '3-1 › 2.투약관리 (미작성 칸)',
+  '외출·외박 중 투약기록': '3-1 › 2.투약관리 + 1-5 외출',
+  '동일 제공자 동일 시각 다른 생활실': '3-1 › 2.투약관리 (3-9 리포트)',
+  '동일 시각 다른 생활실': '3-9 투약제공 리포트',
+  '외출기록 없음': '1-5 외출,외박 관리',
+  '외출 목적 불일치': '1-5 외출,외박 관리',
+  '병원 외출인데 진료기록 없음': '3-1 › 7.진료기록',
+  '바이탈 미기록': '3-1-1 통합 간호관리',
+  '건강관리 미체크': '3-1-1 통합 간호관리 (건강관리 칸)',
+  '간호관리 미체크': '3-1-1 통합 간호관리 (간호관리 칸)',
+  '주 1회 미제공': '3-1 › 3.욕창간호',
+  '관리기록 없음': '3-1 › 5.도뇨관관리',
+}
+
 /** 분야 기본 위치 */
 export const WHERE_TO_LOOK: Record<string, string> = {
   '투약': '3-1 › 2.투약관리 탭',
@@ -138,7 +155,7 @@ export const WHERE_TO_LOOK: Record<string, string> = {
   '비위관': '3-1 › 4.비위관관리 탭',
 }
 
-export interface PrintLine { area: string; where: string; item: string; kind: NursingKind; count: number; text: string }
+export interface PrintLine { area: string; where: string; whereShort: string; item: string; kind: NursingKind; count: number; text: string }
 export interface PrintDay { date: string; weekday: string; error: number; check: number; info: number; lines: PrintLine[] }
 
 const shortRoom = (room?: string | null) => (room || '').replace('호', '')
@@ -172,7 +189,7 @@ export function printDigest<T extends NursingFindingLike>(rows: T[], maxTokens =
     const key = `${f.date}|${where}|${f.item}|${f.kind}`
     let cur = lineMap.get(key)
     if (!cur) {
-      cur = { line: { area: f.area, where, item: f.item, kind: f.kind, count: 0, text: '' }, tokens: [] }
+      cur = { line: { area: f.area, where, whereShort: (WHERE_SHORT[f.item] || WHERE_TO_LOOK[f.area] || f.area) + (f.item === '미작성' && /외출|외박/.test(f.exception || '') ? ' + 1-5 외출' : ''), item: f.item, kind: f.kind, count: 0, text: '' }, tokens: [] }
       lineMap.set(key, cur)
       day.lines.push(cur.line)
     }
@@ -181,7 +198,7 @@ export function printDigest<T extends NursingFindingLike>(rows: T[], maxTokens =
     if (tok && !cur.tokens.includes(tok)) cur.tokens.push(tok)
   }
   for (const { line, tokens } of lineMap.values()) {
-    const shown = tokens.slice(0, maxTokens)
+    const shown = tokens.slice(0, line.item === '동일 시각 다른 생활실' ? 8 : maxTokens)
     const more = tokens.length - shown.length
     line.text = shown.join(', ') + (more > 0 ? ` 외 ${more}` : '')
     if (line.item === '동일 시각 다른 생활실') line.text = `${line.count}건 (${shown.join('·')}${more > 0 ? ' …' : ''}) — 2·3층이 같은 분에 찍힘, 일괄처리로 시간 복사했는지`
