@@ -93,6 +93,58 @@ class WorkScheduleMemo(Base):
     updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)
 
 
+class WorkScheduleHighlight(Base):
+    """근무표 형광펜 — 그 달 그 칸(또는 그 날 전체)에 '여기 봐라' 표시.
+
+    ■ 무엇에 쓰는가
+
+      근무표는 한 달에 한 번 붙이고 끝나는 종이가 아니다. 붙인 뒤에 2일
+      근무가 바뀌고, 누가 대휴를 당겼고, 이 주만 층을 바꿨다 — 이런 것이
+      생긴다. 표를 다시 붙여도 사람들은 지난달과 똑같이 생긴 표에서 어디가
+      달라졌는지 못 찾는다. 종이라면 형광펜으로 긋는다. 그것을 그대로 옮긴다.
+
+    ■ 왜 근무 코드에 섞지 않는가
+
+      data[staff][day] 는 근무 코드('D','N','休'…)이고 시간 계산·자동 편성·
+      되돌리기가 전부 이 값을 읽는다. 여기에 '강조됨' 을 끼워 넣으면 그 모든
+      곳이 형광펜을 근무로 오해할 길이 생긴다. 표시는 표시대로 둔다.
+
+    ■ 왜 잠금과 무관한가 (메모와 같은 이유)
+
+      형광펜은 확정된 뒤에 긋는 것이다. "확정본에서 2일이 바뀌었다" 를
+      알리려고 확정 잠금을 풀 수는 없다. 그래서 메모처럼 따로 두고 근무표의
+      잠금·버전·수정시각을 건드리지 않는다.
+
+    ■ 메모와 다른 점 — 벽보에 나간다
+
+      메모는 사람에 대한 기록이라 화면에서만 본다. 형광펜은 반대다. 남들이
+      알라고 긋는 것이므로 열람 화면·인쇄·엑셀에 모두 나간다. 여기 적는
+      '이유' 도 그 자리에서 함께 보인다 — 사람 이야기는 메모에 적어야 한다.
+
+    ■ 칸 하나 vs 날 전체
+
+      staff_id 가 비어 있으면 그 날 전체(열)를 그은 것이다. "2일에 뭔가
+      바뀌었다" 는 사람을 고르지 않고 날짜만 긋고 싶은 경우가 더 많다.
+      같은 날에 열 표시와 칸 표시가 둘 다 있으면 칸 쪽이 위에 보인다.
+    """
+
+    __tablename__ = "work_schedule_highlights"
+    __table_args__ = (
+        # 한 달, 한 칸에 하나 — 둘이면 어느 색이 그 칸 색인지 알 수 없다
+        UniqueConstraint("year_month", "staff_id", "day", name="uq_ws_hl_month_staff_day"),
+        Index("ix_ws_hl_month", "year_month"),
+    )
+
+    id         = Column(String, primary_key=True, default=_uuid)
+    year_month = Column(String(7), nullable=False)
+    staff_id   = Column(String, nullable=False, default="")   # '' = 그 날 전체
+    day        = Column(Integer, nullable=False)                # 1~31
+    color      = Column(String(16), nullable=False, default="yellow")  # yellow·pink·green
+    note       = Column(String(200), nullable=False, default="")     # 짧은 이유 — 표에 함께 나간다
+    updated_by = Column(String(100), nullable=True)
+    updated_at = Column(DateTime(timezone=True), default=now_kst, onupdate=now_kst)
+
+
 class WorkScheduleConfig(Base):
     """근무표 전역 설정 — 한 행만 쓴다.
 

@@ -1,4 +1,5 @@
 import { apiClient } from './client'
+import type { Highlight, HlItem } from '@/utils/scheduleHighlight'
 
 const BASE = '/api/v1/admin/work-schedule'
 function unwrap<T>(res: any): T {
@@ -134,6 +135,15 @@ export const workScheduleAPI = {
    *  근무표가 확정 잠금이어도 저장된다(메모는 근무표가 아니다). */
   saveMemo: (b: { year_month: string; staff_id: string; memo: string }) =>
     apiClient.put(`${BASE}/memos`, b).then(unwrap<StaffMemo>),
+
+  /** 그 달 형광펜 전부 — 남들이 알라고 긋는 것이라 근무표를 볼 수 있으면 누구나 본다 */
+  highlights: (month: string) =>
+    apiClient.get(`${BASE}/highlights`, { params: { month } }).then(unwrap<Highlight[]>),
+  /** 여러 칸을 한 번에 — 끌면서 그으면 한 번에 여러 칸이 찍힌다. color '' 는 지우기.
+   *  근무표가 확정 잠금이어도 저장된다(형광펜은 확정된 뒤에 긋는 것이다).
+   *  응답은 그 달 전체 목록 — 화면 상태를 서버 것으로 맞춘다. */
+  saveHighlights: (year_month: string, items: HlItem[]) =>
+    apiClient.put(`${BASE}/highlights`, { year_month, items }).then(unwrap<Highlight[]>),
 
   versions: (month: string) =>
     apiClient.get(`${BASE}/versions`, { params: { month } }).then(unwrap<ScheduleVersion[]>),

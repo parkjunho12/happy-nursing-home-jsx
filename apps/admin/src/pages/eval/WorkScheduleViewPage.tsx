@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { CalendarRange, Loader2, Maximize2, Minus, Plus, ZoomIn } from 'lucide-react'
 import { workScheduleAPI, type WorkScheduleDoc, type HolidayInfo } from '@/api/workScheduleClient'
+import { HL_STYLE, hlOf, hlOwn, hlLegend, toHlMap, type HlMap } from '@/utils/scheduleHighlight'
 import { sortScheduleStaff, canJoinTeam } from '@/components/schedule/shared'
 import { countAsOf } from '@/utils/shiftCodes'
 import { withFloorSubtotals } from '@/utils/floorSubtotals'
@@ -52,6 +53,8 @@ export default function WorkScheduleViewPage() {
   useEffect(() => { useHoursFor(ym) }, [ym, useHoursFor])
   const [doc, setDoc] = useState<WorkScheduleDoc | null>(null)
   const [hols, setHols] = useState<Record<string, HolidayInfo>>({})
+  // 형광펜 — 관리자가 '여기 봐라' 하고 그은 것. 남들이 보라고 긋는 것이라 여기서도 보인다.
+  const [hls, setHls] = useState<HlMap>({})
   const [loading, setLoading] = useState(true)
   const [zoom, setZoom] = useState(1)
   // 층으로 걸러 보기 — ''이면 전체. 이 브라우저에 기억한다(편성 화면과 같은 열쇠는 쓰지 않는다,
@@ -141,7 +144,8 @@ export default function WorkScheduleViewPage() {
     Promise.all([
       workScheduleAPI.get(ym).catch(() => null),
       workScheduleAPI.holidays(ym).catch(() => ({} as Record<string, HolidayInfo>)),
-    ]).then(([d, h]) => { setDoc(d); setHols(h) }).finally(() => setLoading(false))
+      workScheduleAPI.highlights(ym).catch(() => []),
+    ]).then(([d, h, hl]) => { setDoc(d); setHols(h); setHls(toHlMap(hl)) }).finally(() => setLoading(false))
   }, [ym])
 
   /**
@@ -342,9 +346,12 @@ export default function WorkScheduleViewPage() {
                       const iso = `${ym}-${String(d).padStart(2, '0')}`
                       return (
                         <th key={d} data-today={iso === todayIso ? '1' : undefined}
-                          className={`border-b border-gray-200 ${vLine(d)} px-0.5 py-1 text-center min-w-[30px] ${iso === todayIso ? 'bg-amber-100' : dayColor(d, false)}`}>
+                          data-hl={hlOwn(hls, '', d)?.color}
+                          title={hlOwn(hls, '', d)?.note ? `형광펜: ${hlOwn(hls, '', d)!.note}` : undefined}
+                          className={`relative border-b border-gray-200 ${vLine(d)} px-0.5 py-1 text-center min-w-[30px] ${iso === todayIso ? 'bg-amber-100' : dayColor(d, false)}`}>
                           <p className={`text-[11px] font-extrabold leading-none ${dayColor(d)}`}>{d}</p>
                           <p className={`text-[8.5px] leading-tight ${dayColor(d)}`}>{DOW[new Date(y, m - 1, d).getDay()]}</p>
+                          {(() => { const h = hlOwn(hls, '', d); return h ? <span className="ws-hl" style={{ background: HL_STYLE[h.color].tint }} /> : null })()}
                         </th>
                       )
                     })}
@@ -413,8 +420,11 @@ export default function WorkScheduleViewPage() {
                         {days.map(d => {
                           const iso = `${ym}-${String(d).padStart(2, '0')}`
                           const c = p.codes[String(d)] ?? ''
+                          const hl = hlOf(hls, p.id, d)
                           return (
-                            <td key={d} className={`border-b border-gray-50 ${vLine(d)} p-0.5 text-center ${iso === todayIso ? 'bg-amber-50' : dayColor(d, false)}`}>
+                            <td key={d} data-hl={hl?.color} title={hl?.note ? `형광펜: ${hl.note}` : undefined}
+                              className={`relative border-b border-gray-50 ${vLine(d)} p-0.5 text-center ${iso === todayIso ? 'bg-amber-50' : dayColor(d, false)}`}>
+                              {hl && <span className="ws-hl" style={{ background: HL_STYLE[hl.color].tint }} />}
                               {c && (
                                 <span className={`inline-block min-w-[24px] px-0.5 py-0.5 rounded text-[10px] font-bold leading-none ${codeCls(c)}`}>
                                   {splitTime(c)
@@ -433,6 +443,22 @@ export default function WorkScheduleViewPage() {
               </table>
             </div>
           </div>
+          {/* 형광펜 범례 — 이유를 적은 것만. 색만 그은 것은 표에서 이미 보인다. */}
+          {(() => {
+            const lines = hlLegend(hls, Object.fromEntries(staffList.map(x => [x.id, x.name])))
+            if (!lines.length) return null
+            return (
+              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-700">
+                <span className="font-bold text-gray-500">형광펜</span>
+                {lines.map(l => (
+                  <span key={l.key} className="inline-flex items-center gap-1">
+                    <span className="inline-block w-3 h-3 rounded-sm border border-gray-300" style={{ background: HL_STYLE[l.color].tint }} />
+                    <b>{l.day}일</b> · {l.who} · {l.note}
+                  </span>
+                ))}
+              </div>
+            )
+          })()}
           <p ref={legendRef} className="mt-2 text-[11px] text-gray-400 leading-relaxed">
             D 주간 08:50~18:00 · M 06:50~16:00 · N 야간 18:00~익일 09:00 · <span className="text-rose-500 font-bold">休</span> 연차 ·
             숫자 코드는 시간대 근무 — 손가락 두 개로 확대·축소, 「한눈에」로 전체 보기 · 수정은 PC 「근무표」에서

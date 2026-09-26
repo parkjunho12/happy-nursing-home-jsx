@@ -41,6 +41,7 @@
     "src/utils/consultForm.ts",
     "src/utils/favOrder.ts",
     "src/utils/weeklyAudit.ts",
+    "src/utils/scheduleHighlight.ts",
     "tests/**/*.ts"
   ]
 }

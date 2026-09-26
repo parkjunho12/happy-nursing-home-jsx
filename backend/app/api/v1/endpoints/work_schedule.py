@@ -15,7 +15,8 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
 from app.models.work_schedule import (WorkSchedule, WorkScheduleMemo, WorkScheduleVersion,
-                                      WorkScheduleConfig, now_kst)
+                                      WorkScheduleConfig, WorkScheduleHighlight, now_kst)
+from app.services import work_schedule_highlight as _hl
 from app.models.eval import LtcStaffMember
 from app.services.staff_notify import notify_all_staff
 from app.models.staffing import HolidayCalendar
@@ -418,6 +419,27 @@ def export_schedule(month: str = Query(...), db: Session = Depends(get_db), _: U
     # 화면과 엑셀의 숫자가 갈라진다. 그러면 어느 쪽이 맞는지 아무도 모른다.
     NAME_C, TOTAL_C, DAY0 = 3, 4, 5
 
+    # 형광펜 — 화면에서 그은 것을 종이에도 그대로. 진한 테두리를 같이 두는 것은
+    # 흑백 복사에서 옅은 색이 사라져도 표시가 살아남게 하려는 것이다.
+    hl_rows = db.query(WorkScheduleHighlight).filter(WorkScheduleHighlight.year_month == month).all()
+    hl_items = [{"staff_id": r.staff_id or "", "day": int(r.day), "color": r.color, "note": r.note or ""} for r in hl_rows]
+    hl_cell = {((r.staff_id or "").strip(), int(r.day)): r for r in hl_rows}
+    HL_FILL = {k: PatternFill("solid", fgColor=v) for k, v in _hl.XLSX_FILL.items()}
+    HL_EDGE = Side(style="medium", color="8D6E00")
+    HL_BORDER = Border(left=HL_EDGE, right=HL_EDGE, top=HL_EDGE, bottom=HL_EDGE)
+
+    def hl_of(sid, day):
+        """그 칸에 보일 형광펜 — 칸 표시가 있으면 그것, 없으면 그 날 열 표시."""
+        return hl_cell.get(((sid or "").strip(), int(day))) or hl_cell.get(("", int(day)))
+
+    def paint_hl(c, r, keep_fill=False):
+        if not keep_fill:
+            c.fill = HL_FILL.get(r.color or "yellow", HL_FILL["yellow"])
+        c.border = HL_BORDER
+        if r.note:
+            from openpyxl.comments import Comment
+            c.comment = Comment(r.note, r.updated_by or "")
+
     def day_style(c, day, base_fill=None):
         dow = _date(y, m, day).weekday()
         red = dow == 6 or day in holidays
@@ -467,6 +489,11 @@ def export_schedule(month: str = Query(...), db: Session = Depends(get_db), _: U
             c.border = border
             red, sat = day_style(c, day)
             c.font = F(color=RED) if red else F(color=BLUE) if sat else F()
+        # 그 날 전체를 그은 것은 날짜 머리에도 — 열을 따라 내려가기 전에 위에서 보여야 한다
+        col_hl = hl_cell.get(("", day))
+        if col_hl:
+            for c in (c1, c2):
+                paint_hl(c, col_hl)
     ws.row_dimensions[4].height = 30
 
     # ── 본문 — 저장된 rows 순서(화면 정렬 그대로) ──
@@ -544,6 +571,10 @@ def export_schedule(month: str = Query(...), db: Session = Depends(get_db), _: U
             else:
                 red, sat = day_style(c, day)
                 c.font = F(color=RED) if (red and not code) else F()
+            hr = hl_of(sid, day)
+            if hr:
+                # 休·대휴는 색 자체가 뜻이라 덮지 않고 테두리만 긋는다
+                paint_hl(c, hr, keep_fill=code in ("休", "대휴", "초과휴"))
         ws.row_dimensions[r_i].height = 34
         r_i += 1
 
@@ -595,6 +626,16 @@ def export_schedule(month: str = Query(...), db: Session = Depends(get_db), _: U
         for cix in range(DAY0 + 1, DAY0 + 6):
             ws.cell(row=r_i, column=cix).border = border
         r_i += 1
+
+    # ── 형광펜 범례 — 이유를 적은 것만. 색만 그은 것은 표에서 이미 보인다 ──
+    for line in _hl.legend_lines(hl_items, names):
+        r_i += 1
+        cv = ws.cell(row=r_i, column=DAY0, value="★")
+        cv.font = F(); cv.alignment = center; cv.border = HL_BORDER; cv.fill = HL_FILL["yellow"]
+        ws.merge_cells(start_row=r_i, start_column=DAY0 + 1, end_row=r_i, end_column=DAY0 + 12)
+        dv = ws.cell(row=r_i, column=DAY0 + 1, value=line)
+        dv.font = Font(name="Arial", size=11)
+        dv.alignment = Alignment(horizontal="left", vertical="center")
 
     # ── 폭·틀 고정 ──
     ws.column_dimensions["A"].width = 5.5
@@ -986,6 +1027,96 @@ def save_memo(body: MemoBody, db: Session = Depends(get_db),
         "updated_by": row.updated_by,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
     })
+
+
+# ── 형광펜 ──
+# 왜 따로 두는지는 모델(WorkScheduleHighlight) 설명에 있다.
+
+def _hl_view(r: WorkScheduleHighlight) -> dict:
+    return {
+        "staff_id": r.staff_id or "", "day": int(r.day),
+        "color": r.color or _hl.DEFAULT_COLOR, "note": r.note or "",
+        "updated_by": r.updated_by,
+        "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+    }
+
+
+class HighlightItem(BaseModel):
+    staff_id: str = ""      # '' = 그 날 전체
+    day: int
+    color: str = "yellow"   # '' = 지우기
+    note: str = ""
+
+
+class HighlightBody(BaseModel):
+    year_month: str
+    items: List[HighlightItem]
+
+
+@router.get("/highlights")
+def list_highlights(month: str = Query(...), db: Session = Depends(get_db),
+                    _: User = Depends(_viewer)):
+    """그 달 형광펜 전부 — 남들이 알라고 긋는 것이라 근무표를 볼 수 있으면 누구나 본다."""
+    if not _YM.match(month or ""):
+        raise HTTPException(400, "month 형식은 YYYY-MM 이어야 합니다.")
+    rows = (db.query(WorkScheduleHighlight)
+            .filter(WorkScheduleHighlight.year_month == month)
+            .order_by(WorkScheduleHighlight.day, WorkScheduleHighlight.staff_id).all())
+    return ApiResponse(success=True, data=[_hl_view(r) for r in rows])
+
+
+@router.put("/highlights")
+def save_highlights(body: HighlightBody, db: Session = Depends(get_db),
+                    current_user: User = Depends(_manager)):
+    """여러 칸을 한 번에 저장한다.
+
+    화면에서 마우스로 끌면서 그으면 한 번에 여러 칸이 찍힌다. 칸마다 요청을
+    보내면 순서가 엉키고, 하나 실패하면 어느 칸이 안 되었는지 모른다. 그래서
+    끌기가 끝날 때 모아 보낸다. color 가 빈 문자열이면 그 칸을 지운다.
+
+    근무표가 확정 잠금이어도 저장한다. 형광펜은 확정된 뒤에 긋는 것이다.
+    응답은 그 달 전체 목록 — 화면이 넣은 것과 서버가 가진 것이 같은지 바로 맞춘다.
+    """
+    if not _YM.match(body.year_month or ""):
+        raise HTTPException(400, "year_month 형식은 YYYY-MM 이어야 합니다.")
+    if len(body.items) > 2000:
+        raise HTTPException(400, "한 번에 너무 많이 보냈습니다.")
+    by = getattr(current_user, "name", None)
+
+    # 같은 칸이 두 번 오면 뒤에 온 것이 이긴다 — 마지막에 긋은 것이 그 사람 뜻이다
+    wanted: Dict[tuple, HighlightItem] = {}
+    for it in body.items:
+        d = _hl.norm_day(it.day)
+        if d is None:
+            raise HTTPException(400, f"날짜가 이상합니다: {it.day}")
+        wanted[((it.staff_id or "").strip(), d)] = it
+
+    if wanted:
+        existing = {
+            ((r.staff_id or "").strip(), int(r.day)): r
+            for r in db.query(WorkScheduleHighlight)
+                       .filter(WorkScheduleHighlight.year_month == body.year_month,
+                               WorkScheduleHighlight.day.in_({d for _, d in wanted})).all()
+        }
+        for (sid, d), it in wanted.items():
+            color = _hl.norm_color(it.color)
+            row = existing.get((sid, d))
+            if color == "":
+                if row:
+                    db.delete(row)
+                continue
+            if not row:
+                row = WorkScheduleHighlight(year_month=body.year_month, staff_id=sid, day=d)
+                db.add(row)
+            row.color = color
+            row.note = _hl.norm_note(it.note)
+            row.updated_by = by
+        db.commit()
+
+    rows = (db.query(WorkScheduleHighlight)
+            .filter(WorkScheduleHighlight.year_month == body.year_month)
+            .order_by(WorkScheduleHighlight.day, WorkScheduleHighlight.staff_id).all())
+    return ApiResponse(success=True, data=[_hl_view(r) for r in rows])
 
 
 @router.get("/versions")

@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, Printer, Save, Eraser, Loader2, CalendarDays, Wand2, Users, History, Sparkles, Inbox, Trash2, FileSpreadsheet, X, Lock, Unlock, StickyNote } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Printer, Save, Eraser, Loader2, CalendarDays, Wand2, Users, History, Sparkles, Inbox, Trash2, FileSpreadsheet, X, Lock, Unlock, StickyNote, Highlighter } from 'lucide-react'
 import { useLtcStore } from '@/store/ltc'
 import { useAuthStore } from '@/store/auth'
 import { apiClient } from '@/api/client'
@@ -7,6 +7,7 @@ import { workScheduleAPI, type ScheduleData, type ScheduleRow, type HolidayInfo,
 import { calcBase, DAILY_HOURS } from '@/utils/baseHours'
 import ScheduleHistoryModal from '@/components/schedule/ScheduleHistoryModal'
 import StaffMemoPanel from '@/components/schedule/StaffMemoPanel'
+import { HL_COLORS, HL_STYLE, hlOf, hlOwn, paintHl, noteHl, hlLegend, hlCount, toHlMap, hlKey, type HlMap, type HlColor, type HlItem } from '@/utils/scheduleHighlight'
 import TeamPanel from '@/components/schedule/TeamPanel'
 import SettlementPanel from '@/components/schedule/SettlementPanel'
 import AuditPanel from '@/components/schedule/AuditPanel'
@@ -64,6 +65,48 @@ export default function WorkSchedulePage() {
       .then(list => setMemos(Object.fromEntries(list.map(x => [x.staff_id, x]))))
       .catch(() => setMemos({}))
   }, [ym])
+  // 형광펜 — 근무표 문서와 따로 저장한다(메모와 같은 이유: 확정 잠금 뒤에 긋는 것이다).
+  // hlBrush 가 켜져 있으면 칸을 눌러도 근무가 아니라 형광펜이 찍힌다.
+  const [hls, setHls] = useState<HlMap>({})
+  const [hlBrush, setHlBrush] = useState<HlColor | 'erase' | null>(null)
+  // 끌면서 그으면 칸이 여럿 찍힌다 — 손을 뗄 때 한 번에 보낸다
+  const hlPending = useRef<Map<string, HlItem>>(new Map())
+  useEffect(() => {
+    setHls({}); hlPending.current.clear()
+    workScheduleAPI.highlights(ym).then(list => setHls(toHlMap(list))).catch(() => setHls({}))
+  }, [ym])
+  const flushHl = useCallback(() => {
+    const items = [...hlPending.current.values()]
+    if (!items.length) return
+    hlPending.current.clear()
+    workScheduleAPI.saveHighlights(ym, items)
+      .then(list => setHls(toHlMap(list)))
+      .catch(e => alert(`형광펜을 저장하지 못했습니다: ${e?.message ?? e}`))
+  }, [ym])
+  /** 한 칸(staffId '' 이면 그 날 전체)에 지금 든 형광펜을 긋는다 */
+  const applyHl = (staffId: string, day: number, dragging = false) => {
+    if (!hlBrush) return
+    // 끌면서 지나가는 칸은 토글하지 않는다 — 이미 그 색이면 그대로 둔다.
+    // 안 그러면 한 번 그은 칸 위로 다시 지나갈 때 지워진다.
+    const cur = hlOwn(hls, staffId, day)
+    if (dragging && hlBrush !== 'erase' && cur?.color === hlBrush) return
+    if (dragging && hlBrush === 'erase' && !cur) return
+    const r = paintHl(hls, staffId, day, hlBrush === 'erase' ? null : hlBrush)
+    setHls(r.map)
+    hlPending.current.set(hlKey(staffId, day), r.item)
+  }
+  /** 이유 적기 — 표시 없던 칸이면 노랑으로 긋고 적는다 */
+  const askHlNote = (staffId: string, day: number, who: string) => {
+    const cur = hlOwn(hls, staffId, day)
+    const t = prompt(`${who} · ${Number(ym.slice(5, 7))}월 ${day}일 형광펜 이유 (예: 근무 변경, 대휴 당김)\n비우면 이유만 지워집니다.`, cur?.note ?? '')
+    if (t === null) return
+    const r = noteHl(hls, staffId, day, t)
+    setHls(r.map)
+    hlPending.current.set(hlKey(staffId, day), r.item)
+    flushHl()
+  }
+  /** 근무 붓을 고르면 형광펜은 내려놓는다 — 둘을 같이 들 수는 없다 */
+  const pickBrush = (code: string) => { setBrush(code); setHlBrush(null) }
   const onMemoChange = (m: StaffMemo) => setMemos(s2 => {
     const n = { ...s2 }
     if ((m.memo ?? '').trim()) n[m.staff_id] = m
@@ -287,10 +330,10 @@ export default function WorkSchedulePage() {
   }
 
   useEffect(() => {
-    const up = () => { painting.current = false }
+    const up = () => { if (painting.current) flushHl(); painting.current = false }
     window.addEventListener('mouseup', up)
     return () => window.removeEventListener('mouseup', up)
-  }, [])
+  }, [flushHl])
 
   const [y, m] = ym.split('-').map(Number)
   const days = useMemo(() => {
@@ -977,8 +1020,8 @@ export default function WorkSchedulePage() {
         <div className="flex items-center gap-1 mb-2 flex-wrap">
           <span className="text-[11px] font-semibold text-gray-400 mr-1">칠할 근무</span>
           {SHIFT_CODES.map(c => (
-            <button key={c.code} onClick={() => setBrush(c.code)} title={`${c.label}${c.time ? ` · ${c.time}` : ''}${c.hours ? ` · ${c.hours}시간` : ''}`}
-              className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition-all ${brush === c.code ? c.cls + ' ring-2 ring-offset-1 ring-gray-300' : 'bg-white border-gray-200 text-gray-500'}`}>
+            <button key={c.code} onClick={() => pickBrush(c.code)} title={`${c.label}${c.time ? ` · ${c.time}` : ''}${c.hours ? ` · ${c.hours}시간` : ''}`}
+              className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition-all ${brush === c.code && !hlBrush ? c.cls + ' ring-2 ring-offset-1 ring-gray-300' : 'bg-white border-gray-200 text-gray-500'}`}>
               {c.code}
             </button>
           ))}
@@ -986,19 +1029,41 @@ export default function WorkSchedulePage() {
           <span className="text-[11px] font-semibold text-gray-400">시간 직접</span>
           {/* 단축·추가근무를 손으로 넣을 때 — 자주 쓰는 시간대는 칠하기만 하면 된다 */}
           {['0850~1400', '0850~1600', '0850~1700'].map(t => (
-            <button key={t} onClick={() => setBrush(t)} title={`${extraHoursOf(t)}시간 근무 — D 자리에 칠하면 단축(갚음), 쉬는 날에 칠하면 추가근무`}
-              className={`px-2 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${brush === t ? 'bg-violet-100 text-violet-800 border-violet-300 ring-2 ring-offset-1 ring-violet-200' : 'bg-white border-gray-200 text-gray-500'}`}>
+            <button key={t} onClick={() => pickBrush(t)} title={`${extraHoursOf(t)}시간 근무 — D 자리에 칠하면 단축(갚음), 쉬는 날에 칠하면 추가근무`}
+              className={`px-2 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${brush === t && !hlBrush ? 'bg-violet-100 text-violet-800 border-violet-300 ring-2 ring-offset-1 ring-violet-200' : 'bg-white border-gray-200 text-gray-500'}`}>
               {t.replace('~', '–')}<span className="font-normal text-gray-400"> {extraHoursOf(t)}h</span>
             </button>
           ))}
           <button onClick={() => {
             const t = prompt('근무 시간대 입력 (예: 0850~1500)', '0850~')
-            if (t && extraHoursOf(t) > 0) setBrush(t.trim())
+            if (t && extraHoursOf(t) > 0) pickBrush(t.trim())
             else if (t) alert('형식을 읽지 못했습니다. 0850~1500 처럼 입력해주세요.')
           }} className={`px-2 py-1.5 rounded-lg text-[10px] font-bold border ${brush.includes('~') && !['0850~1400','0850~1600','0850~1700'].includes(brush) ? 'bg-violet-100 text-violet-800 border-violet-300 ring-2 ring-offset-1 ring-violet-200' : 'bg-white border-gray-200 text-gray-500'}`}>
             기타 시간…
           </button>
-          <button onClick={() => setBrush('')} className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-bold border ${brush === '' ? 'bg-gray-200 text-gray-700 ring-2 ring-offset-1 ring-gray-300' : 'bg-white border-gray-200 text-gray-400'}`}>
+          <span className="text-gray-200 mx-0.5">|</span>
+          {/* 형광펜 — 근무가 아니라 '여기 봐라' 표시. 끌어서 긋고, 날짜 머리를 누르면 그 날 전체.
+              같은 색을 다시 그으면 지워진다. 확정 잠금과 무관하게 바로 저장된다. */}
+          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-400" title="근무는 그대로 두고 눈에 띄게 긋는 표시 — 벽보·엑셀에도 그대로 나갑니다">
+            <Highlighter className="w-3.5 h-3.5" /> 형광펜
+          </span>
+          {HL_COLORS.map(c => (
+            <button key={c} onClick={() => setHlBrush(hlBrush === c ? null : c)}
+              title={`${HL_STYLE[c].label} 형광펜 — 칸을 끌어서 긋기 · 날짜를 누르면 그 날 전체 · 두 번 누르면 이유 적기`}
+              className={`w-7 h-7 rounded-lg border transition-all ${HL_STYLE[c].swatch} ${hlBrush === c ? 'ring-2 ring-offset-1 ring-gray-700 border-gray-700' : 'border-gray-200 opacity-70 hover:opacity-100'}`} />
+          ))}
+          <button onClick={() => setHlBrush(hlBrush === 'erase' ? null : 'erase')} title="형광펜 지우개 — 근무는 안 지워집니다"
+            className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-bold border ${hlBrush === 'erase' ? 'bg-gray-200 text-gray-700 ring-2 ring-offset-1 ring-gray-300' : 'bg-white border-gray-200 text-gray-400'}`}>
+            <Eraser className="w-3 h-3" /> 형광펜 지우기
+          </button>
+          {hlCount(hls) > 0 && (
+            <span className="text-[11px] font-bold text-amber-700 bg-amber-100 rounded-full px-1.5" title="이 달 형광펜 수">{hlCount(hls)}</span>
+          )}
+          {hlBrush && (
+            <span className="text-[10px] text-gray-500">칸을 끌어 긋기 · 날짜를 누르면 하루 전체 · 두 번 누르면 이유 적기 · 바로 저장</span>
+          )}
+          <span className="text-gray-200 mx-0.5">|</span>
+          <button onClick={() => pickBrush('')} className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-bold border ${brush === '' && !hlBrush ? 'bg-gray-200 text-gray-700 ring-2 ring-offset-1 ring-gray-300' : 'bg-white border-gray-200 text-gray-400'}`}>
             <Eraser className="w-3 h-3" /> 지우기
           </button>
           <button onClick={() => {
@@ -1160,9 +1225,15 @@ export default function WorkSchedulePage() {
                 {days.map(({ day, dow }) => {
                   const t = dayTone(day, dow)
                   return (
-                    <th key={day} style={{ minWidth: 30 }} title={holidays[iso(day)]?.name ?? ''}
-                      className={`${th} ${day === todayCol ? 'bg-indigo-100 text-indigo-800' : t === 'red' ? 'bg-red-50 text-red-600' : t === 'blue' ? 'bg-blue-50 text-blue-600' : ''}`}>
+                    <th key={day} style={{ minWidth: 30 }}
+                      title={(() => { const h = hlOwn(hls, '', day); const hn = holidays[iso(day)]?.name ?? ''
+                        return h ? `형광펜: ${day}일 전체${h.note ? ` — ${h.note}` : ''}${hn ? `\n${hn}` : ''}` : hlBrush ? `${day}일 전체에 긋기` : hn })()}
+                      data-hl={hlOwn(hls, '', day)?.color}
+                      onMouseDown={hlBrush ? (e => { e.preventDefault(); applyHl('', day); flushHl() }) : undefined}
+                      onDoubleClick={hlBrush ? (() => askHlNote('', day, '전체')) : undefined}
+                      className={`${th} relative ${hlBrush ? 'cursor-pointer' : ''} ${day === todayCol ? 'bg-indigo-100 text-indigo-800' : t === 'red' ? 'bg-red-50 text-red-600' : t === 'blue' ? 'bg-blue-50 text-blue-600' : ''}`}>
                       {day}
+                      {(() => { const h = hlOwn(hls, '', day); return h ? <span className="ws-hl" style={{ background: HL_STYLE[h.color].tint }} /> : null })()}
                     </th>
                   )
                 })}
@@ -1299,17 +1370,21 @@ export default function WorkSchedulePage() {
                       const shortened = isShift && customH > 0 && customH < DAILY_HOURS
                         && rotationFor(s.team, day, offsets, ym, anchor) === 'D'
                       const req = leaveAt.get(`${s.id}:${day}`)?.[0]
+                      const hl = hlOf(hls, s.id, day)
+                      const cellTitle = shortened
+                        ? `단축 근무 — 초과근무 ${Math.round((DAILY_HOURS - customH) * 10) / 10}시간 갚는 날 (${customH}시간 근무)`
+                        : mt ? `${mt.label}${mt.time ? ` ${mt.time}` : ''}` : v
                       return (
                         <td key={day}
-                          onMouseDown={() => { painting.current = true; setSel({ si, di }); setCell(s.id, day, brush) }}
-                          onMouseEnter={() => { if (painting.current) setCell(s.id, day, brush) }}
+                          onMouseDown={() => { painting.current = true; setSel({ si, di }); if (hlBrush) applyHl(s.id, day); else setCell(s.id, day, brush) }}
+                          onMouseEnter={() => { if (painting.current) { if (hlBrush) applyHl(s.id, day, true); else setCell(s.id, day, brush) } }}
                           onDoubleClick={() => {
+                            if (hlBrush) { askHlNote(s.id, day, s.name); return }
                             const t = prompt(`${s.name} · ${m}월 ${day}일 근무 (예: D, N, 대휴, 0850 1600)`, v)
                             if (t !== null) setCell(s.id, day, t.trim())
                           }}
-                          title={shortened
-                            ? `단축 근무 — 초과근무 ${Math.round((DAILY_HOURS - customH) * 10) / 10}시간 갚는 날 (${customH}시간 근무)`
-                            : mt ? `${mt.label}${mt.time ? ` ${mt.time}` : ''}` : v}
+                          data-hl={hl?.color}
+                          title={hl?.note ? `형광펜: ${hl.note}\n${cellTitle}` : cellTitle}
                           data-code={v}
                           data-shorten={shortened ? '1' : undefined}
                           // 시간을 직접 적은 칸(추가근무). 인쇄에서 진하게 칠하려고 표식을 둔다.
@@ -1323,6 +1398,7 @@ export default function WorkSchedulePage() {
                             if (tr) return <span className="ws-time">{tr[0]}<br />{tr[1]}</span>
                             return <span className="ws-code">{shortOf(v)}</span>
                           })()}
+                          {hl && <span className="ws-hl" style={{ background: HL_STYLE[hl.color].tint }} />}
                           {req && (
                             // 신청 표식 — 눌러서 그 자리에서 승인·반려한다.
                             // 칠하기(mousedown)와 겹치지 않게 이벤트를 여기서 끊는다.
@@ -1426,6 +1502,23 @@ export default function WorkSchedulePage() {
               ))}
             </tbody>
           </table>
+          {/* 형광펜 범례 — 이유를 적은 것만. 색만 그은 것은 표에서 이미 보인다. 인쇄에도 같이 나간다. */}
+          {(() => {
+            const names = Object.fromEntries(staffList.map(x => [x.id, x.name]))
+            const lines = hlLegend(hls, names)
+            if (!lines.length) return null
+            return (
+              <div className="ws-hl-legend flex flex-wrap gap-x-4 gap-y-1 px-3 py-2 border-t border-gray-100 bg-white text-[11px] text-gray-700">
+                <span className="inline-flex items-center gap-1 font-bold text-gray-500"><Highlighter className="w-3.5 h-3.5 print:hidden" />형광펜</span>
+                {lines.map(l => (
+                  <span key={l.key} className="inline-flex items-center gap-1.5">
+                    <span className="inline-block w-3 h-3 rounded-sm border border-gray-300" style={{ background: HL_STYLE[l.color].tint }} />
+                    <b>{l.day}일</b> · {l.who} · {l.note}
+                  </span>
+                ))}
+              </div>
+            )
+          })()}
         </div>
       )}
 
@@ -1520,6 +1613,7 @@ export default function WorkSchedulePage() {
            칸 오른쪽 위 모서리를 접은 것처럼 보이는 작은 삼각형.
            칸 글자를 가리지 않으면서 '여기 신청이 있다'를 알린다.
            대기는 주황(처리해야 할 일), 승인은 파랑(이미 정해진 일). */
+        /* .ws-hl (형광펜 덧칠) 은 index.css — 열람 화면과 같이 쓴다 */
         .ws-req { width: 0; height: 0; border-style: solid; border-width: 0 7px 7px 0; cursor: pointer; }
         .ws-req-wait { border-color: transparent #f59e0b transparent transparent; }
         .ws-req-ok   { border-color: transparent #0ea5e9 transparent transparent; }
@@ -1593,6 +1687,11 @@ export default function WorkSchedulePage() {
              그대로 인쇄되면 근무를 잘못 적은 것처럼 보인다.
              (Tailwind 의 ring 은 box-shadow 로 그려진다) */
           .ws-table th, .ws-table td { box-shadow: none !important; outline: none !important; }
+          /* 형광펜은 인쇄에 나가야 한다 — 그러라고 긋는 것이다. 흑백 복사에서 옅은 색이
+             날아가도 살아남게 테두리를 진하게 같이 긋는다. */
+          .ws-table td[data-hl], .ws-table th[data-hl] { border: 0.6mm solid #8d6e00 !important; }
+          .ws-hl { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .ws-hl-legend { display: flex !important; font-size: 8pt !important; padding: 1mm 0 0 !important; border: 0 !important; }
           .ws-table td[data-code="대휴"] { background: #fcd34d !important; }
           .ws-table td[data-code="초과휴"] { background: #c4b5fd !important; }
           .ws-table td[data-code="休"], .ws-table td[data-code="반"] { background: #a7f3d0 !important; }

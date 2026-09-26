@@ -114,3 +114,8 @@
   .diet-print .diet-line { break-inside: avoid; }
   @page { size: A4 portrait; margin: 10mm; }
 }
+
+/* 근무표 형광펜 — 반투명 덧칠. 근무 색(D·N·休…) 위에 그어도 근무 색이 비쳐 보인다.
+   편집(WorkSchedulePage)·열람(WorkScheduleViewPage) 두 화면이 같이 쓴다.
+   pointer-events 를 끊어야 그 위를 눌러도 칸이 눌린다. */
+.ws-hl { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: multiply; }
