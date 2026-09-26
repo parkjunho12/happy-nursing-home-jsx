@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { UtensilsCrossed, ChevronRight, Check, Loader2, X } from 'lucide-react'
-import { dietFollowupAPI, type DietFollowUp } from '@/api/dietFollowupClient'
+import { dietFollowupAPI, type DietFollowUp, type DietFollowUpTask } from '@/api/dietFollowupClient'
 
 /**
- * 식이가 바뀐 뒤 해야 할 것 — 욕구사정·급여제공계획서.
+ * 식이가 바뀐 뒤 해야 할 것 — 욕구사정 · 급여제공계획서 · 서류현황 기록.
  *
  *  ■ 왜 대시보드에 띄우는가
  *
@@ -12,7 +12,9 @@ import { dietFollowupAPI, type DietFollowUp } from '@/api/dietFollowupClient'
  *    다르다. 말로 전하면 잊히고, 몇 달 뒤 지도점검에서야 '언제 바뀐 건데
  *    계획서는 그대로냐' 가 나온다.
  *
- *    그래서 바꾸는 순간 할 일이 한 줄 생기고, 둘 다 끝날 때까지 여기 남는다.
+ *    그래서 바꾸는 순간 할 일이 한 줄 생기고, 셋 다 끝날 때까지 여기 남는다.
+ *    계획서를 고쳐 놓고 「어르신 서류현황」에 작성 일시를 안 적는 일이 잦아,
+ *    그 기록까지 따로 항목으로 둔다 — 점검에서 보는 것은 그 일시다.
  *    끝나면 저절로 사라진다 — '완료' 를 한 번 더 누르게 하면 그 한 번을
  *    안 눌러서 목록에 계속 쌓인다.
  *
@@ -46,11 +48,11 @@ export default function DietFollowUpCard() {
   }, [])
   useEffect(() => { load() }, [load])
 
-  const toggle = async (f: DietFollowUp, task: 'assess' | 'plan', done: boolean) => {
+  const toggle = async (f: DietFollowUp, task: DietFollowUpTask, done: boolean) => {
     setBusy(`${f.id}-${task}`)
     try {
       const saved = await dietFollowupAPI.setTask(f.id, task, done)
-      // 둘 다 끝나면 목록에서 내려간다
+      // 셋 다 끝나면 목록에서 내려간다
       setItems(list => (list ?? [])
         .map(x => (x.id === saved.id ? saved : x))
         .filter(x => !x.done_at))
@@ -61,7 +63,7 @@ export default function DietFollowUpCard() {
 
   const skip = async (f: DietFollowUp) => {
     const reason = prompt(
-      `${f.resident_name} 어르신 — 욕구사정·계획서를 하지 않는 까닭을 적어 주세요.\n` +
+      `${f.resident_name} 어르신 — 욕구사정·계획서를 하지 않아도 되는 까닭을 적어 주세요.\n` +
       '(나중에 "왜 안 했지" 를 따질 수 있어야 해서 까닭 없이는 접히지 않습니다)')
     if (reason === null) return
     if (reason.trim().length < 2) { alert('까닭을 적어 주세요.'); return }
@@ -95,8 +97,8 @@ export default function DietFollowUpCard() {
       </div>
 
       <p className="px-4 pt-2.5 text-[11.5px] text-gray-500 leading-relaxed">
-        식사 형태가 바뀌면 <b>욕구사정</b>을 다시 하고 <b>급여제공계획서</b>에 반영해야 합니다.
-        둘 다 체크하면 이 목록에서 내려갑니다.
+        식사 형태가 바뀌면 <b>욕구사정</b>을 다시 하고, <b>급여제공계획서</b>에 반영한 뒤,
+        <b>서류현황</b>에 작성 일시까지 적어야 합니다. 셋 다 체크하면 이 목록에서 내려갑니다.
       </p>
 
       <ul className="px-3 py-2.5 space-y-2">
@@ -142,8 +144,9 @@ export default function DietFollowUpCard() {
                   )
                 })}
                 <button onClick={() => navigate('/resident-docs')}
-                  className="text-[11px] font-semibold text-gray-400 hover:text-indigo-600 px-1">
-                  서류현황 ▸
+                  title="어르신 서류현황으로 — 급여제공계획서 일시를 여기에 적습니다"
+                  className="text-[11px] font-semibold text-indigo-500 hover:text-indigo-700 hover:underline px-1">
+                  서류현황 열기 ▸
                 </button>
                 <button onClick={() => skip(f)} disabled={busy === `${f.id}-skip`}
                   title="해당 없음으로 접기 — 까닭을 적습니다"

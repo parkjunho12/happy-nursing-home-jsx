@@ -4,8 +4,12 @@
 바뀐 날' 과 '계획서에 반영된 날' 이 맞물리는가다.
 
 주방에 알리려고 식이를 바꾸는 사람과 서류를 쓰는 사람이 달라서, 말로 전하면
-잊힌다. 그래서 식이를 바꾸는 순간 할 일이 한 줄 생기고(services/diet_followup
-의 open_for_change), 끝날 때까지 대시보드에 뜬다.
+잊힌다. 그래서 식이를 바꾸는 순간 할 일이 한 줄 생기고(endpoints/diet 의
+_open_followup, 판단은 services/diet_followup), 끝날 때까지 대시보드에 뜬다.
+
+할 일은 셋이다 — 욕구사정을 하고, 계획서에 반영하고, 「어르신 서류현황」에
+작성 일시를 적는다. 점검에서 보는 것은 그 일시라, 문서만 고치고 일시를 안
+적으면 안 한 것과 같다.
 
 권한: 식이를 바꿀 수 있는 자리와 같다 — 간호팀·복지팀·영양사·시설장·관리자.
       서류를 쓰는 사람들이고, 이 목록에 어르신 성함과 식사 형태가 적힌다.
@@ -86,7 +90,7 @@ def list_followups(scope: str = Query("open", description="open | done | all"),
 
 
 class TaskBody(BaseModel):
-    task: str                      # assess | plan
+    task: str                      # assess | plan | docs
     done: bool = True
 
 
@@ -95,7 +99,7 @@ def set_task(fid: str, body: TaskBody, db: Session = Depends(get_db),
              u: User = Depends(_editor)):
     """할 일 하나를 했다/안 했다로 바꾼다.
 
-    둘 다 끝나면 이 건은 저절로 닫힌다 — 따로 '완료' 를 한 번 더 누르게 하면
+    다 끝나면 이 건은 저절로 닫힌다 — 따로 '완료' 를 한 번 더 누르게 하면
     그 한 번을 안 눌러서 목록에 계속 남는다.
     """
     if body.task not in TASKS:

@@ -37,11 +37,18 @@ def now_kst() -> datetime:
     return datetime.now(KST)
 
 
-# 할 일 두 가지. 순서대로 한다 — 욕구사정이 먼저고, 그 결과가 계획서에 들어간다.
-TASKS = ("assess", "plan")
+# 할 일 세 가지. 순서대로 한다 — 욕구사정을 하고, 그 결과를 계획서에 넣고,
+# 마지막에 「어르신 서류현황」에 작성 일시를 적는다.
+#
+# 서류현황 기록을 따로 둔 이유: 계획서를 고쳐 놓고 일시를 안 적는 일이 잦다.
+# 지도점검에서 보는 것은 그 '일시' 라, 문서만 고치고 끝내면 안 한 것과 같다.
+# 화면이 대신 적어 줄 수도 있지만, 문서를 쓰기 전에 눌러 두면 허위 기록이
+# 남는다. 사람이 적고, 적었다고 체크하게 한다.
+TASKS = ("assess", "plan", "docs")
 TASK_LABEL = {
     "assess": "욕구사정 생성",
     "plan": "급여제공계획서 반영",
+    "docs": "서류현황에 일시 기록",
 }
 
 
@@ -74,8 +81,11 @@ class DietFollowUp(Base):
     assess_by = Column(String(100), nullable=True)
     plan_at = Column(DateTime(timezone=True), nullable=True)
     plan_by = Column(String(100), nullable=True)
+    # 「어르신 서류현황」의 급여제공계획서 일시에 적었는가
+    docs_at = Column(DateTime(timezone=True), nullable=True)
+    docs_by = Column(String(100), nullable=True)
 
-    # 둘 다 끝났거나 '해당 없음' 으로 접은 시각. 이 값이 있으면 대시보드에서 내려간다.
+    # 다 끝났거나 '해당 없음' 으로 접은 시각. 이 값이 있으면 대시보드에서 내려간다.
     done_at = Column(DateTime(timezone=True), nullable=True, index=True)
     done_by = Column(String(100), nullable=True)
     # 왜 접었는지 — '해당 없음' 으로 접은 건은 까닭이 남아야 나중에 따질 수 있다

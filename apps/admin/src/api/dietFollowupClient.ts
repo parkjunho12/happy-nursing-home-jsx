@@ -7,6 +7,9 @@ function unwrap<T>(res: any): T {
   throw new Error(res?.data?.message ?? res?.data?.error ?? 'API error')
 }
 
+/** 할 일 — 욕구사정 → 계획서 반영 → 서류현황에 일시 기록 */
+export type DietFollowUpTask = 'assess' | 'plan' | 'docs'
+
 /** 식이가 바뀌면 따라오는 일 한 건 */
 export interface DietFollowUp {
   id: string
@@ -20,7 +23,7 @@ export interface DietFollowUp {
   after_label?: string | null
   /** 식이를 바꾼 사유 */
   note?: string | null
-  tasks: { key: 'assess' | 'plan'; label: string; done_at?: string | null; done_by?: string | null }[]
+  tasks: { key: DietFollowUpTask; label: string; done_at?: string | null; done_by?: string | null }[]
   done_at?: string | null
   done_by?: string | null
   /** '해당 없음' 으로 접은 까닭 */
@@ -33,7 +36,7 @@ export const dietFollowupAPI = {
   list: (scope: 'open' | 'done' | 'all' = 'open', limit = 100) =>
     apiClient.get(BASE, { params: { scope, limit } })
       .then(unwrap<{ items: DietFollowUp[]; open_count: number }>),
-  setTask: (id: string, task: 'assess' | 'plan', done: boolean) =>
+  setTask: (id: string, task: DietFollowUpTask, done: boolean) =>
     apiClient.post(`${BASE}/${id}/task`, { task, done }).then(unwrap<DietFollowUp>),
   /** 해당 없음으로 접기 — 까닭을 적어야 접힌다 */
   skip: (id: string, reason: string) =>
