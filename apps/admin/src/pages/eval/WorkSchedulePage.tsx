@@ -1229,7 +1229,8 @@ export default function WorkSchedulePage() {
                       title={(() => { const h = hlOwn(hls, '', day); const hn = holidays[iso(day)]?.name ?? ''
                         return h ? `형광펜: ${day}일 전체${h.note ? ` — ${h.note}` : ''}${hn ? `\n${hn}` : ''}` : hlBrush ? `${day}일 전체에 긋기` : hn })()}
                       data-hl={hlOwn(hls, '', day)?.color}
-                      onMouseDown={hlBrush ? (e => { e.preventDefault(); applyHl('', day); flushHl() }) : undefined}
+                      // e.detail 이 2면 두 번 누르기의 둘째 눌림 — 그으면 첫 눌림을 도로 지우게 된다. 이유 적기(dblclick)에 맡긴다.
+                      onMouseDown={hlBrush ? (e => { e.preventDefault(); if (e.detail > 1) return; applyHl('', day); flushHl() }) : undefined}
                       onDoubleClick={hlBrush ? (() => askHlNote('', day, '전체')) : undefined}
                       className={`${th} relative ${hlBrush ? 'cursor-pointer' : ''} ${day === todayCol ? 'bg-indigo-100 text-indigo-800' : t === 'red' ? 'bg-red-50 text-red-600' : t === 'blue' ? 'bg-blue-50 text-blue-600' : ''}`}>
                       {day}
@@ -1376,7 +1377,7 @@ export default function WorkSchedulePage() {
                         : mt ? `${mt.label}${mt.time ? ` ${mt.time}` : ''}` : v
                       return (
                         <td key={day}
-                          onMouseDown={() => { painting.current = true; setSel({ si, di }); if (hlBrush) applyHl(s.id, day); else setCell(s.id, day, brush) }}
+                          onMouseDown={e => { if (hlBrush && e.detail > 1) return; painting.current = true; setSel({ si, di }); if (hlBrush) applyHl(s.id, day); else setCell(s.id, day, brush) }}
                           onMouseEnter={() => { if (painting.current) { if (hlBrush) applyHl(s.id, day, true); else setCell(s.id, day, brush) } }}
                           onDoubleClick={() => {
                             if (hlBrush) { askHlNote(s.id, day, s.name); return }
