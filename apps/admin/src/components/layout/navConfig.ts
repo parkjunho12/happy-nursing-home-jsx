@@ -238,7 +238,7 @@ export function getNavConfig(
             { to: '/eval/record-audit', icon: FileSearch, label: '제공기록지 검수' },
             { to: '/eval/record-guide', icon: BookOpen, label: '검수 기준' },
             { to: '/eval/weekly-audit', icon: ClipboardCheck, label: '주간 기록지 점검' },
-            // 간호기록 점검 — ADMIN 블록에만 둔다(시설장·직원 메뉴에는 넣지 않는다)
+            // 간호기록 점검 — ADMIN·시설장 블록에만 둔다(일반 직원 메뉴에는 넣지 않는다)
             { to: '/eval/nursing-audit', icon: Stethoscope, label: '간호기록 점검' },
             { to: '/eval/ai-review', icon: Sparkles, label: 'AI 체크리스트 검토' },
             // 인사고과 — 이 블록(ADMIN)에만 둔다. 시설장 메뉴에는 넣지 않는다.
@@ -349,6 +349,7 @@ export function getNavConfig(
             { to: '/eval/record-audit', icon: FileSearch, label: '제공기록지 검수' },
             { to: '/eval/record-guide', icon: BookOpen, label: '검수 기준' },
             { to: '/eval/weekly-audit', icon: ClipboardCheck, label: '주간 기록지 점검' },
+            { to: '/eval/nursing-audit', icon: Stethoscope, label: '간호기록 점검' },
             { to: '/eval/ai-review', icon: Sparkles, label: 'AI 체크리스트 검토' },
           ],
         },

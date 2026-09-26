@@ -466,8 +466,8 @@ function App() {
             <Route path="eval/record-audit" element={<EvalRecordAuditPage />} />
             <Route path="eval/record-guide" element={<EvalRecordGuidePage />} />
             <Route path="eval/weekly-audit" element={<ManagerRoute><EvalWeeklyAuditPage /></ManagerRoute>} />
-            {/* 간호기록 점검 — ADMIN 전용(사용자 지시 2026-09-26). 시설장 포함 여부는 사용자 확인 후 넓힌다 */}
-            <Route path="eval/nursing-audit" element={<AdminRoute><EvalNursingAuditPage /></AdminRoute>} />
+            {/* 간호기록 점검 — 관리자·시설장(사용자 지시 2026-09-26 "시설장도 볼 수 있게"). 백엔드 _manager 와 같은 기준 */}
+            <Route path="eval/nursing-audit" element={<ManagerRoute><EvalNursingAuditPage /></ManagerRoute>} />
             <Route path="eval/record-audit/:auditId/resident/:residentName" element={<EvalRecordAuditDetailPage />} />
 
             {/* 사회복지사 + ADMIN — 수급자/직원 관리 */}

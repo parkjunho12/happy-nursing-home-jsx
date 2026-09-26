@@ -4,7 +4,8 @@
 월 단위로 올리면 admin 은 저장·조회·표시만 한다 — 판정 로직은 여기 없다.
 같은 month 로 다시 올리면 덮어쓴다(upsert). 주별 조회는 월 스냅샷을 날짜로 잘라 요약을 다시 계산한다.
 
-권한: 조회·업로드·삭제 모두 role ADMIN 만 (사용자 지시 2026-09-26 "Admin만").
+권한: 조회·업로드·삭제 모두 관리자급(role ADMIN 또는 position 시설장). 사용자 지시 2026-09-26 "시설장도 볼 수 있게".
+App.tsx 의 ManagerRoute 와 같은 기준이어야 한다.
 """
 from __future__ import annotations
 import re
@@ -16,13 +17,22 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_admin_user
+from app.core.security import get_current_user
 from app.models.user import User
 from app.models.nursing_audit import NursingAudit, now_kst
 from app.schemas.response import ApiResponse
 from app.services.nursing_audit import build_summary, slice_by_date, validate_findings
 
 router = APIRouter()
+
+
+def _manager(current_user: User = Depends(get_current_user)) -> User:
+    """관리자급 — ADMIN 또는 시설장(직원 계정이어도). 조회·업로드·삭제가 같은 문을 쓴다."""
+    role = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    pos = getattr(current_user, "position", None) or ""
+    if role != "ADMIN" and pos != "시설장":
+        raise HTTPException(403, "간호기록 점검은 관리자·시설장만 볼 수 있습니다.")
+    return current_user
 
 MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -58,14 +68,14 @@ def _detail(a: NursingAudit) -> dict[str, Any]:
 
 
 @router.get("/months")
-def list_months(db: Session = Depends(get_db), _: User = Depends(get_current_admin_user)):
+def list_months(db: Session = Depends(get_db), _: User = Depends(_manager)):
     """점검 월 목록 — 최신 우선."""
     rows = db.query(NursingAudit).order_by(NursingAudit.month.desc()).all()
     return ApiResponse(success=True, data=[_month_view(r) for r in rows])
 
 
 @router.get("/latest")
-def latest(db: Session = Depends(get_db), _: User = Depends(get_current_admin_user)):
+def latest(db: Session = Depends(get_db), _: User = Depends(_manager)):
     row = db.query(NursingAudit).order_by(NursingAudit.month.desc()).first()
     if not row:
         return ApiResponse(success=True, data=None)
@@ -74,7 +84,7 @@ def latest(db: Session = Depends(get_db), _: User = Depends(get_current_admin_us
 
 @router.get("/range")
 def get_range(start: str = Query(...), end: str = Query(...),
-              db: Session = Depends(get_db), _: User = Depends(get_current_admin_user)):
+              db: Session = Depends(get_db), _: User = Depends(_manager)):
     """날짜 구간(주별 화면용) — 겹치는 월 스냅샷의 findings 를 잘라 붙이고 요약을 다시 만든다."""
     if not DATE_RE.match(start) or not DATE_RE.match(end) or start > end:
         raise HTTPException(400, "start/end 는 YYYY-MM-DD 이고 start ≤ end 여야 합니다.")
@@ -121,7 +131,7 @@ def _count_days(a: str, b: str) -> int:
 
 
 @router.get("/months/{month}")
-def get_month(month: str, db: Session = Depends(get_db), _: User = Depends(get_current_admin_user)):
+def get_month(month: str, db: Session = Depends(get_db), _: User = Depends(_manager)):
     row = db.query(NursingAudit).filter(NursingAudit.month == month).first()
     if not row:
         raise HTTPException(404, "그 달 점검 결과가 없습니다.")
@@ -130,7 +140,7 @@ def get_month(month: str, db: Session = Depends(get_db), _: User = Depends(get_c
 
 @router.put("/months/{month}")
 def upsert_month(month: str, body: NursingAuditBody, db: Session = Depends(get_db),
-                 current_user: User = Depends(get_current_admin_user)):
+                 current_user: User = Depends(_manager)):
     if not MONTH_RE.match(month):
         raise HTTPException(400, "month 는 YYYY-MM 형식이어야 합니다.")
     for k in ("window_start", "window_end"):
@@ -169,7 +179,7 @@ def upsert_month(month: str, body: NursingAuditBody, db: Session = Depends(get_d
 
 
 @router.delete("/months/{month}")
-def delete_month(month: str, db: Session = Depends(get_db), _: User = Depends(get_current_admin_user)):
+def delete_month(month: str, db: Session = Depends(get_db), _: User = Depends(_manager)):
     row = db.query(NursingAudit).filter(NursingAudit.month == month).first()
     if not row:
         raise HTTPException(404, "그 달 점검 결과가 없습니다.")

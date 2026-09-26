@@ -412,7 +412,7 @@ function Header() {
         <Stethoscope size={20} className="text-primary-orange" />
         간호기록 점검
       </h1>
-      <p className="text-sm text-gray-500 mt-0.5">케어포 3-1 간호급여 제공기록(투약·진료·간호일지·욕창·도뇨관) 월별·주별 점검 — 관리자 전용</p>
+      <p className="text-sm text-gray-500 mt-0.5">케어포 3-1 간호급여 제공기록(투약·진료·간호일지·욕창·도뇨관) 월별·주별 점검 — 관리자·시설장</p>
     </div>
   )
 }
