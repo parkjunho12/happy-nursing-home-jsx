@@ -7,7 +7,7 @@ import {
   type NursingAuditMonth,
 } from '@/api/nursingAuditClient'
 import {
-  KIND_LABEL, filterFindings, formatMonth, formatRange, groupByDate, itemMatrix, weeksOfMonth, mondayOf, addDays,
+  KIND_LABEL, filterFindings, formatMonth, formatRange, groupByDate, itemMatrix, weeksOfMonth, mondayOf, addDays, printDigest, homeDigest, WHERE_BY_ITEM,
 } from '@/utils/nursingAudit'
 
 const KIND_BADGE: Record<NursingAuditFinding['kind'], string> = {
@@ -98,6 +98,9 @@ export default function EvalNursingAuditPage() {
   const residents = useMemo(() => (detail?.summary?.by_resident ?? []).map(r => r.resident), [detail])
   const staffs = useMemo(() => (detail?.summary?.by_staff ?? []).map(r => r.staff), [detail])
   const homeRows = useMemo(() => (detail?.home_nursing ?? []).filter(h => h.home_nursing), [detail])
+  // 인쇄본: 필터가 걸려 있으면 필터 결과만, 아니면 전체를 날짜별로 압축
+  const printDays = useMemo(() => printDigest(filtered), [filtered])
+  const printHome = useMemo(() => homeDigest(detail?.home_nursing ?? []), [detail])
   const hasFilter = !!(residentFilter || areaFilter || itemFilter || kindFilter || staffFilter || q)
   const clearFilters = () => { setResidentFilter(''); setAreaFilter(''); setItemFilter(''); setKindFilter(''); setStaffFilter(''); setQ('') }
 
@@ -125,15 +128,77 @@ export default function EvalNursingAuditPage() {
     <div className="space-y-4 nursing-audit-print">
       <div className="print:hidden"><Header /></div>
 
-      {/* 인쇄용 머리글 */}
-      <div className="hidden print:block">
-        <h1 className="text-lg font-bold">행복한요양원 간호기록 점검 — {periodTitle}</h1>
-        <p className="text-[11px] text-gray-500">케어포 3-1 간호급여 제공기록 · 투약 / 진료 / 간호일지 / 욕창 / 도뇨관 · 출력 {hhmm(new Date().toISOString())}</p>
-      </div>
+      {/* 인쇄본 — 화면 상세 대신 "며칠 · 어디서 · 누구" 한 줄 요약만 찍는다 */}
+      {detail && !loading && (
+        <div className="hidden print:block nursing-print">
+          <h1 className="text-base font-bold">행복한요양원 간호기록 점검 — {periodTitle}</h1>
+          <p className="text-[10px] text-gray-500 mb-2">
+            총 {summary?.total ?? 0}건 (오류 {summary?.by_kind?.error ?? 0} · 확인 {summary?.by_kind?.check ?? 0} · 참고 {summary?.by_kind?.info ?? 0}) · 대상 {detail.coverage?.residents ?? '-'}명 · 점검 {hhmm(detail.generated_at)} · 출력 {hhmm(new Date().toISOString())}
+            {hasFilter && <> · 필터: {[residentFilter, areaFilter, itemFilter, kindFilter && KIND_LABEL[kindFilter as NursingAuditFinding['kind']], staffFilter, q].filter(Boolean).join(' · ')}</>}
+          </p>
+
+          {/* 항목별 합계 + 어디서 고치는지 */}
+          <table className="w-full text-[10px] border-collapse mb-3">
+            <thead><tr className="border-b border-gray-400 text-left">
+              <th className="py-0.5 pr-2">항목</th><th className="py-0.5 pr-2 text-right">오류</th><th className="py-0.5 pr-2 text-right">확인</th><th className="py-0.5 pr-2 text-right">참고</th><th className="py-0.5">어디서 보나 (케어포)</th>
+            </tr></thead>
+            <tbody>
+              {matrix.map(r => (
+                <tr key={`${r.area}|${r.item}`} className="border-b border-gray-200 align-top">
+                  <td className="py-0.5 pr-2 whitespace-nowrap font-semibold">{r.area} · {r.item}</td>
+                  <td className="py-0.5 pr-2 text-right">{r.error || ''}</td>
+                  <td className="py-0.5 pr-2 text-right">{r.check || ''}</td>
+                  <td className="py-0.5 pr-2 text-right text-gray-400">{r.info || ''}</td>
+                  <td className="py-0.5 text-gray-600">{WHERE_BY_ITEM[r.item] || ''}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* 날짜별 한 줄 요약 */}
+          <h2 className="text-xs font-bold mt-2 mb-1">날짜별 확인 목록 <span className="font-normal text-gray-500">(참고 항목은 건수만, 같은 어르신·시각은 한 번만)</span></h2>
+          <table className="w-full text-[10px] border-collapse">
+            <thead><tr className="border-b border-gray-400 text-left">
+              <th className="py-0.5 pr-2 w-16">날짜</th><th className="py-0.5 pr-2 w-40">어디서</th><th className="py-0.5 pr-2 w-28">항목</th><th className="py-0.5">누구 (호실) · 시각</th>
+            </tr></thead>
+            <tbody>
+              {printDays.map(d => (
+                d.lines.length === 0
+                  ? <tr key={d.date} className="border-b border-gray-200"><td className="py-0.5 pr-2 font-semibold whitespace-nowrap">{d.date.slice(5).replace('-', '/')}({d.weekday})</td><td colSpan={3} className="py-0.5 text-gray-400">오류·확인 없음{d.info ? ` (참고 ${d.info})` : ''}</td></tr>
+                  : d.lines.map((l, i) => (
+                    <tr key={`${d.date}|${i}`} className={`align-top ${i === d.lines.length - 1 ? 'border-b border-gray-300' : ''}`}>
+                      <td className="py-0.5 pr-2 font-semibold whitespace-nowrap">{i === 0 ? <>{d.date.slice(5).replace('-', '/')}({d.weekday})<div className="font-normal text-gray-500">오류 {d.error} · 확인 {d.check}{d.info ? ` · 참고 ${d.info}` : ''}</div></> : ''}</td>
+                      <td className="py-0.5 pr-2 text-gray-600">{l.where.split(' › ').slice(0, 2).join(' › ')}</td>
+                      <td className="py-0.5 pr-2 whitespace-nowrap"><span className={l.kind === 'error' ? 'font-bold' : ''}>{l.kind === 'error' ? '오류' : '확인'}</span> {l.item} <span className="text-gray-500">{l.count}</span></td>
+                      <td className="py-0.5">{l.text}</td>
+                    </tr>
+                  ))
+              ))}
+            </tbody>
+          </table>
+
+          {/* 가정간호 */}
+          <h2 className="text-xs font-bold mt-3 mb-1">가정간호 처치 기록 <span className="font-normal text-gray-500">— 청구서와 날짜 대조 (☐ 일치 ☐ 불일치)</span></h2>
+          {printHome.length === 0 ? <p className="text-[10px] text-gray-400">이 기간에 '가정간호'가 적힌 욕창·비위관·도뇨관 기록 없음</p> : (
+            <table className="w-full text-[10px] border-collapse">
+              <tbody>
+                {printHome.map(h => (
+                  <tr key={`${h.resident}|${h.room}`} className="border-b border-gray-200 align-top">
+                    <td className="py-0.5 pr-2 font-semibold whitespace-nowrap">{h.resident}({h.room})</td>
+                    <td className="py-0.5">{h.types.map(t => <span key={t.type} className="mr-3"><b>{t.type}</b> {t.dates.join(', ')} <span className="text-gray-500">({t.dates.length}회)</span></span>)}</td>
+                    <td className="py-0.5 whitespace-nowrap text-gray-400">☐ 일치 ☐ 불일치</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <p className="text-[9px] text-gray-500 mt-2">오류=기록 기준상 고칠 것 · 확인=외출·입소·퇴소 등 상황 확인 뒤 판단 · 참고=정상일 가능성 높음(전일 외박 등). 제공자는 기록에 적힌 이름 기준. 자세한 내용은 admin › 평가 › 간호기록 점검 화면.</p>
+        </div>
+      )}
 
       {/* 기간 선택 */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 space-y-3">
-        <div className="flex flex-wrap items-center gap-2 print:hidden">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 space-y-3 print:hidden">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden text-xs font-bold">
             {(['month', 'week'] as Mode[]).map(m => (
               <button key={m} type="button" onClick={() => setMode(m)}
@@ -185,10 +250,10 @@ export default function EvalNursingAuditPage() {
       </div>
 
       {detail && !loading && (
-        <>
+        <div className="space-y-4 print:hidden">
           {/* 항목별 요약 */}
-          <div className="grid gap-4 lg:grid-cols-3 print:block print:space-y-3">
-            <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden print:break-inside-avoid">
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                 <h3 className="text-sm font-bold text-gray-900">항목별</h3>
                 {itemFilter && (
@@ -227,7 +292,7 @@ export default function EvalNursingAuditPage() {
             </div>
 
             {/* 어르신별 · 제공자별 */}
-            <div className="space-y-4 print:space-y-3">
+            <div className="space-y-4">
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                   <h3 className="text-sm font-bold text-gray-900">어르신별 <span className="text-gray-400 font-normal text-xs">(오류 많은 순)</span></h3>
@@ -237,7 +302,7 @@ export default function EvalNursingAuditPage() {
                     </button>
                   )}
                 </div>
-                <div className="max-h-72 overflow-auto print:max-h-none print:overflow-visible">
+                <div className="max-h-72 overflow-auto">
                   <table className="w-full text-sm">
                     <thead className="sticky top-0"><tr className="bg-gray-50 text-gray-500 text-xs">
                       <th className="text-left font-semibold px-4 py-2">어르신</th>
@@ -304,7 +369,7 @@ export default function EvalNursingAuditPage() {
                   <th className="text-left font-semibold px-4 py-2">구분</th>
                   <th className="text-left font-semibold px-4 py-2">기록 내용</th>
                   <th className="text-left font-semibold px-4 py-2">작성자</th>
-                  <th className="text-left font-semibold px-4 py-2 print:table-cell">청구 대조</th>
+                  <th className="text-left font-semibold px-4 py-2">청구 대조</th>
                 </tr></thead>
                 <tbody className="divide-y divide-gray-50">
                   {homeRows.map((h, i) => (
@@ -344,11 +409,6 @@ export default function EvalNursingAuditPage() {
 
           {/* 날짜별 상세 */}
           <div className="space-y-3">
-            {hasFilter && (
-              <div className="hidden print:block text-[11px] text-gray-500">
-                필터: {[residentFilter, areaFilter, itemFilter, kindFilter && KIND_LABEL[kindFilter as NursingAuditFinding['kind']], staffFilter, q].filter(Boolean).join(' · ')} — {filtered.length}건
-              </div>
-            )}
             {dateGroups.map(g => (
               <div key={g.date} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="px-4 py-2.5 border-b border-gray-100 bg-gray-50">
@@ -399,7 +459,7 @@ export default function EvalNursingAuditPage() {
             오류 = 기록 기준상 고쳐야 할 것, 확인 = 외출·입소·퇴소 등 상황 확인 뒤 판단, 참고 = 정상일 가능성이 높은 것(전일 외박 등).
             제공자는 기록에 적힌 이름 기준이며 실제 입력자를 뜻하지 않습니다. 가정간호 청구서는 케어포에 없으므로 위 표와 수기로 대조합니다.
           </p>
-        </>
+        </div>
       )}
     </div>
   )
