@@ -424,6 +424,55 @@ class ChangeBody(BaseModel):
     note: Optional[str] = None
 
 
+def _open_followup(db: Session, r: LtcResident, c: DietChange,
+                   after: Dict[str, Any], who: Optional[str]) -> None:
+    """식이가 바뀌면 할 일을 한 줄 연다 — 욕구사정·급여제공계획서.
+
+    ■ 이미 안 끝난 것이 있으면 더 만들지 않고 그 줄을 최신 값으로 민다
+
+      죽 → 미음 → 다진식으로 사흘 연달아 바뀌어도 욕구사정도 계획서도 한 번만
+      쓰면 된다. 다만 '무엇에서' 는 처음 값을 지켜야 무슨 일이었는지 읽힌다.
+
+    ■ 직전 값은 이번 줄을 빼고 센다
+
+      방금 넣은 줄까지 넣고 계산하면 '일반식 → 일반식' 이 되어 아무것도 안 만든다.
+
+    판단 규칙은 services/diet_followup 에 있다(설치 없이 검사할 수 있게 순수 함수).
+    """
+    from app.models.diet_followup import DietFollowUp
+    from app.services import diet_followup as dfu
+
+    rows = [{"effective_date": x.effective_date, "rice": x.rice, "side": x.side,
+             "tube": bool(x.tube),
+             "created_at": x.created_at.isoformat() if x.created_at else ""}
+            for x in db.query(DietChange).filter(DietChange.resident_id == r.id).all()
+            if x.id != c.id]
+    before = ds.state_at(rows, c.effective_date)
+    if not dfu.changed(before, after):
+        return
+
+    cur = (db.query(DietFollowUp)
+           .filter(DietFollowUp.resident_id == r.id, DietFollowUp.done_at.is_(None))
+           .order_by(DietFollowUp.created_at.asc())
+           .first())
+    if cur:
+        cur.after_label = dfu.label_of(after)
+        cur.effective_date = c.effective_date
+        cur.change_id = c.id
+        cur.note = c.note or None
+        cur.floor, cur.room = r.floor, r.room
+        cur.resident_name = r.name
+        return
+
+    db.add(DietFollowUp(
+        change_id=c.id, resident_id=r.id, resident_name=r.name,
+        floor=r.floor, room=r.room,
+        effective_date=c.effective_date,
+        before_label=dfu.label_of(before), after_label=dfu.label_of(after),
+        note=c.note or None, created_by=who,
+    ))
+
+
 @router.post("/{resident_id}")
 def set_diet(resident_id: str, body: ChangeBody, db: Session = Depends(get_db),
              current_user: User = Depends(_editor)):
@@ -461,11 +510,8 @@ def set_diet(resident_id: str, body: ChangeBody, db: Session = Depends(get_db),
     # 여기서 무엇이 잘못되어도 식이 변경 자체는 살아야 한다. 주방은 오늘
     # 점심을 차려야 하고, 후속조치는 나중에 손으로도 챙길 수 있다.
     try:
-        from app.services import diet_followup as dfu
-        before = dfu.state_before(db, r.id, on, exclude_id=c.id)
-        dfu.open_for_change(db, resident=r, change=c, before=before,
-                            after={"rice": rice, "side": side, "tube": bool(body.tube)},
-                            who=getattr(current_user, "name", None))
+        _open_followup(db, r, c, {"rice": rice, "side": side, "tube": bool(body.tube)},
+                       getattr(current_user, "name", None))
     except Exception:
         logger.warning("식이 후속조치 생성 실패 (식이 변경은 그대로 저장): %s", r.id, exc_info=True)
 
