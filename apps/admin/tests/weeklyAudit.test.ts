@@ -111,3 +111,50 @@ test('sortStaffRows — default 는 rankStaff 순서, 같은 값이면 이름순
   assert.deepEqual(sortStaffRows(rows, 'default').map(r => r.staff), ['다', '가', '나'])
   assert.deepEqual(sortStaffRows(rows, 'mentions', 'desc').map(r => r.staff), ['가', '나', '다'])
 })
+
+import { shortIssue, staffBreakdown, weeklyPrintDigest, weeklyPrintToken } from '../src/utils/weeklyAudit'
+
+test('shortIssue — 문제 문구를 한 토막으로', () => {
+  assert.equal(shortIssue('1회 / 기준 3회'), '1/3회')
+  assert.equal(shortIssue('미체크 (기준 1회)'), '미체크')
+  assert.equal(shortIssue('미체크: 신체기능훈련, 기본동작훈련, 일상생활동작훈련 (신체·기본·일상 모두)'), '미체크 신체기능·기본동작·일상생활동작')
+  assert.equal(shortIssue('확인(C) 기록 0회 (기준 1회 이상)'), '확인0회')
+  assert.equal(shortIssue('교체(R) 5회 (기준 6회 이상)'), '교체5회')
+  assert.equal(shortIssue('체위변경 8회 (기준 12회 · 2시간마다)'), '8회')
+  assert.equal(shortIssue('체위변경 간격 12시간 (07:00→19:00) — 2시간 초과'), '간격12h 07:00→19:00')
+  assert.equal(shortIssue('저녁 미체크(사유·조치사항 없음)'), '저녁 미체크')
+  assert.equal(shortIssue('저녁(16:30) 외출·외박 중 미식사인데 조치사항 없음'), '저녁 외출중 미식사·조치없음')
+})
+
+test('weeklyPrintToken / weeklyPrintDigest — 날짜별 위치·항목 줄, 공란은 후보 표시', () => {
+  const rows = [
+    F({ id: '1', item: '이동도움', issue: '1회 / 기준 3회', room: '303호', resident: '이경애', staff: '강풀잎' } as any),
+    F({ id: '2', item: '이동도움', issue: '1회 / 기준 3회', room: '303호', resident: '이경애', staff: '강풀잎' } as any),
+    F({ id: '3', area: '화장실이용', item: '기저귀 교체', issue: '확인(C) 기록 0회 (기준 1회 이상)', kind: 'blank', staff: null, owner_candidates: ['김만자', '박영선'], resident: '오경애', room: '307호' } as any),
+    F({ id: '4', area: '식사', item: '저녁식사', issue: '저녁 미체크(사유·조치사항 없음)', staff: '최진흥', resident: '박청', room: '304호' } as any),
+  ]
+  assert.equal(weeklyPrintToken(rows[0] as any), '이경애(303) 1/3회 강풀잎')
+  const d = weeklyPrintDigest(rows as any)
+  assert.equal(d.length, 1)
+  assert.equal(d[0].error, 3); assert.equal(d[0].blank, 1)
+  assert.deepEqual(d[0].lines.map(l => l.item), ['이동도움', '저녁식사', '기저귀 교체'])   // 신체활동 → 식사 → 화장실이용
+  assert.equal(d[0].lines[0].count, 2)
+  assert.equal(d[0].lines[0].text, '이경애(303) 1/3회 강풀잎')
+  assert.equal(d[0].lines[0].where, '2-1 신체활동지원 칸')
+  assert.equal(d[0].lines[2].text, '오경애(307) 확인0회 후보 김만자·박영선')
+})
+
+test('staffBreakdown — 선생님별 항목 건수, 공란은 후보 전원에게', () => {
+  const rows = [
+    F({ id: '1', item: '이동도움', staff: '강풀잎' } as any),
+    F({ id: '2', item: '옷갈아입히기', staff: '강풀잎' } as any),
+    F({ id: '3', item: '이동도움', staff: '강풀잎' } as any),
+    F({ id: '4', item: '체위변경', area: '체위변경', kind: 'check', staff: '강풀잎' } as any),
+    F({ id: '5', item: '기저귀 교체', area: '화장실이용', kind: 'blank', staff: null, owner_candidates: ['김만자', '강풀잎'] } as any),
+  ]
+  const b = staffBreakdown(rows as any)
+  assert.equal(b[0].staff, '강풀잎')
+  assert.equal(b[0].error, 3); assert.equal(b[0].blank_owner, 1); assert.equal(b[0].check, 1)
+  assert.deepEqual(b[0].items[0], { label: '신체활동 · 이동도움', count: 2 })
+  assert.equal(b[1].staff, '김만자'); assert.equal(b[1].blank_owner, 1)
+})

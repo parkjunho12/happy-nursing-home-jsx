@@ -6,7 +6,7 @@ import {
   type WeeklyAuditFinding,
   type WeeklyAuditWeek,
 } from '@/api/careLogAuditClient'
-import { KIND_LABEL, filterFindings, formatRange, groupByDate, sortStaffRows, type StaffSortKey } from '@/utils/weeklyAudit'
+import { KIND_LABEL, WEEKLY_WHERE, filterFindings, formatRange, groupByDate, sortStaffRows, staffBreakdown, weeklyPrintDigest, type StaffSortKey } from '@/utils/weeklyAudit'
 
 const KIND_BADGE: Record<WeeklyAuditFinding['kind'], string> = {
   error: 'bg-red-100 text-red-700',
@@ -36,6 +36,8 @@ export default function EvalWeeklyAuditPage() {
   const [q, setQ] = useState('')
   const [sortKey, setSortKey] = useState<StaffSortKey>('default')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  // 인쇄 판: 선생님별(표+선생님마다 무엇을 틀렸는지) / 날짜별 확인 목록(며칠·어디서·누구)
+  const [printMode, setPrintMode] = useState<'staff' | 'dates'>('dates')
 
   useEffect(() => {
     let alive = true
@@ -77,6 +79,10 @@ export default function EvalWeeklyAuditPage() {
   }, [detail, staffFilter, residentFilter, areaFilter, kindFilter, q])
 
   const dateGroups = useMemo(() => groupByDate(filtered), [filtered])
+  const printDays = useMemo(() => weeklyPrintDigest(filtered), [filtered])
+  const printStaff = useMemo(() => staffBreakdown(detail?.findings ?? []), [detail])
+  const printAreas = useMemo(() => Object.keys(detail?.summary?.by_area ?? {}), [detail])
+  const hasFilter = !!(staffFilter || residentFilter || areaFilter || kindFilter || q)
 
   const areas = useMemo(
     () => Object.keys(detail?.summary?.by_area ?? {}),
@@ -114,13 +120,92 @@ export default function EvalWeeklyAuditPage() {
         <Header />
       </div>
 
+      {/* 인쇄본 — 화면 대신 압축 표만 찍는다 (간호기록 점검과 같은 방식) */}
+      {detail && (
+        <div className="hidden print:block nursing-print">
+          <h1 className="text-base font-bold">행복한요양원 주간 기록지 점검 — {formatRange(detail.week_start, detail.week_end)} · {printMode === 'staff' ? '선생님별' : '날짜별 확인 목록'}</h1>
+          <p className="text-[10px] text-gray-500 mb-2">
+            총 {summary?.total ?? 0}건 (오류 {summary?.by_kind?.error ?? 0} · 공란 {summary?.by_kind?.blank ?? 0} · 확인 {summary?.by_kind?.check ?? 0}) · 대상 {detail.coverage?.residents ?? '-'}명 · 점검 {hhmm(detail.generated_at)} · 출력 {hhmm(new Date().toISOString())}
+            {printMode === 'dates' && hasFilter && <> · 필터: {[staffFilter, residentFilter, areaFilter, kindFilter && KIND_LABEL[kindFilter as WeeklyAuditFinding['kind']], q].filter(Boolean).join(' · ')} — {filtered.length}건</>}
+          </p>
+
+          {printMode === 'staff' ? (
+            <>
+              <table className="w-full text-[10px] border-collapse table-fixed mb-3">
+                <colgroup><col style={{ width: '12%' }} /><col style={{ width: '7%' }} /><col style={{ width: '9%' }} /><col style={{ width: '7%' }} /><col style={{ width: '7%' }} /><col style={{ width: '9%' }} /><col style={{ width: '8%' }} /><col style={{ width: '41%' }} /></colgroup>
+                <thead><tr className="border-b border-gray-400 text-left">
+                  <th className="py-0.5 pr-2">선생님</th><th className="py-0.5 pr-2 text-right">오류</th><th className="py-0.5 pr-2 text-right">공란후보</th><th className="py-0.5 pr-2 text-right">공동</th><th className="py-0.5 pr-2 text-right">확인</th><th className="py-0.5 pr-2 text-right">작성횟수</th><th className="py-0.5 pr-2 text-right">오류율</th><th className="py-0.5">무엇을 틀렸나 (오류 건수 · 공란 후보)</th>
+                </tr></thead>
+                <tbody>
+                  {staffRows.map(r => {
+                    const bd = printStaff.find(x => x.staff === r.staff)
+                    return (
+                      <tr key={r.staff} className="border-b border-gray-200 align-top">
+                        <td className="py-0.5 pr-2 font-semibold">{r.staff}</td>
+                        <td className="py-0.5 pr-2 text-right font-bold">{r.error || ''}</td>
+                        <td className="py-0.5 pr-2 text-right">{r.blank_owner || ''}</td>
+                        <td className="py-0.5 pr-2 text-right">{r.shared || ''}</td>
+                        <td className="py-0.5 pr-2 text-right text-gray-500">{r.check || ''}</td>
+                        <td className="py-0.5 pr-2 text-right">{r.mentions ?? ''}</td>
+                        <td className="py-0.5 pr-2 text-right">{r.error_rate != null ? `${r.error_rate}%` : '-'}</td>
+                        <td className="py-0.5 text-gray-700">{(bd?.items ?? []).slice(0, 8).map(i => `${i.label} ${i.count}`).join(', ')}{(bd?.items ?? []).length > 8 ? ` 외 ${(bd?.items ?? []).length - 8}` : ''}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+              <h2 className="text-xs font-bold mt-2 mb-1">어디서 고치나 (케어포)</h2>
+              <table className="w-full text-[10px] border-collapse table-fixed">
+                <colgroup><col style={{ width: '18%' }} /><col style={{ width: '82%' }} /></colgroup>
+                <tbody>
+                  {printAreas.map(a => (
+                    <tr key={a} className="border-b border-gray-200 align-top"><td className="py-0.5 pr-2 font-semibold">{a}</td><td className="py-0.5 text-gray-600">{WEEKLY_WHERE[a] || ''}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="text-[9px] text-gray-500 mt-2">공동 = 하루 합계 기준(기저귀 6회·체위변경 12회 등) 미달을 당일 담당자 모두에게 붙인 것. 작성 횟수 = 그 주 기록에 이름이 들어간 횟수, 오류율 = 오류 ÷ 작성 횟수. 작성자는 기록에 지정된 이름 기준.</p>
+            </>
+          ) : (
+            <>
+              <table className="w-full text-[10px] border-collapse table-fixed mb-3">
+                <colgroup><col style={{ width: '14%' }} /><col style={{ width: '6%' }} /><col style={{ width: '80%' }} /></colgroup>
+                <thead><tr className="border-b border-gray-400 text-left"><th className="py-0.5 pr-2">분야</th><th className="py-0.5 pr-2 text-right">건수</th><th className="py-0.5">어디서 고치나 (케어포)</th></tr></thead>
+                <tbody>
+                  {printAreas.map(a => (
+                    <tr key={a} className="border-b border-gray-200 align-top"><td className="py-0.5 pr-2 font-semibold">{a}</td><td className="py-0.5 pr-2 text-right">{summary?.by_area?.[a] ?? ''}</td><td className="py-0.5 text-gray-600">{WEEKLY_WHERE[a] || ''}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+              <h2 className="text-xs font-bold mt-2 mb-1">날짜별 확인 목록 <span className="font-normal text-gray-500">(어르신(호실) 문제 작성자 — 같은 어르신·문제는 한 번만)</span></h2>
+              <table className="w-full text-[10px] border-collapse table-fixed">
+                <colgroup><col style={{ width: '11%' }} /><col style={{ width: '20%' }} /><col style={{ width: '19%' }} /><col style={{ width: '50%' }} /></colgroup>
+                <thead><tr className="border-b border-gray-400 text-left">
+                  <th className="py-0.5 pr-2">날짜</th><th className="py-0.5 pr-2">어디서</th><th className="py-0.5 pr-2">항목</th><th className="py-0.5">누구 (호실) · 문제 · 작성자</th>
+                </tr></thead>
+                <tbody>
+                  {printDays.map(d => d.lines.map((l, i) => (
+                    <tr key={`${d.date}|${i}`} className={`align-top ${i === d.lines.length - 1 ? 'border-b border-gray-300' : ''}`}>
+                      <td className="py-0.5 pr-2 font-semibold whitespace-nowrap">{i === 0 ? <>{d.date.slice(5).replace('-', '/')}({d.weekday})<div className="font-normal text-gray-500">오류 {d.error} · 공란 {d.blank} · 확인 {d.check}</div></> : ''}</td>
+                      <td className="py-0.5 pr-2 text-gray-600">{l.where}</td>
+                      <td className="py-0.5 pr-2"><span className={l.kind === 'error' ? 'font-bold' : ''}>{KIND_LABEL[l.kind]}</span> {l.item} <span className="text-gray-500">{l.count}</span></td>
+                      <td className="py-0.5">{l.text}</td>
+                    </tr>
+                  )))}
+                </tbody>
+              </table>
+              <p className="text-[9px] text-gray-500 mt-2">오류 = 작성자에게 귀속되는 기록 오류 · 공란 = 작성자 없음(책임 후보 표시) · 확인 = 외출·근무표 등 상황 확인 뒤 판단. 작성자는 기록에 지정된 이름 기준.</p>
+            </>
+          )}
+        </div>
+      )}
+
       {error && (
         <div className="bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl px-4 py-3 print:hidden">{error}</div>
       )}
 
       {/* 주 선택 · 기간 · 요약 칩 */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 space-y-3">
-        <div className="flex flex-wrap items-center gap-3 print:hidden">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 space-y-3 print:hidden">
+        <div className="flex flex-wrap items-center gap-3">
           <select
             value={weekStart}
             onChange={e => setWeekStart(e.target.value)}
@@ -132,12 +217,23 @@ export default function EvalWeeklyAuditPage() {
               </option>
             ))}
           </select>
-          <button
-            onClick={() => window.print()}
-            className="ml-auto inline-flex items-center gap-1.5 text-xs font-bold text-gray-600 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50"
-          >
-            <Printer size={13} /> 인쇄
-          </button>
+          <div className="ml-auto flex items-center gap-1.5">
+            <select
+              value={printMode}
+              onChange={e => setPrintMode(e.target.value as 'staff' | 'dates')}
+              className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-600"
+              title="인쇄 판 선택"
+            >
+              <option value="dates">인쇄: 날짜별 확인 목록</option>
+              <option value="staff">인쇄: 선생님별</option>
+            </select>
+            <button
+              onClick={() => window.print()}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-600 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50"
+            >
+              <Printer size={13} /> 인쇄
+            </button>
+          </div>
         </div>
 
         {detail && (
@@ -172,7 +268,7 @@ export default function EvalWeeklyAuditPage() {
       </div>
 
       {/* 선생님별 표 */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden print:hidden">
         <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
           <h3 className="text-sm font-bold text-gray-900">선생님별</h3>
           {staffFilter && (
@@ -253,7 +349,7 @@ export default function EvalWeeklyAuditPage() {
       </div>
 
       {/* 날짜별 상세 */}
-      <div className="space-y-3">
+      <div className="space-y-3 print:hidden">
         {dateGroups.map(g => (
           <div key={g.date} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="px-4 py-2.5 border-b border-gray-100 bg-gray-50">

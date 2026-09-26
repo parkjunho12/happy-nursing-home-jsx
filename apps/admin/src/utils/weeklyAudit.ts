@@ -126,3 +126,119 @@ export function sortStaffRows<T extends WeeklyAuditStaffRowLike>(rows: T[], key:
     return a.staff.localeCompare(b.staff, 'ko')
   })
 }
+
+// ── 인쇄본 (간호기록 점검과 같은 방식) ──────────────────────────────
+// 인쇄는 두 판이다: ① 선생님별(표 + 선생님마다 무엇을 몇 건 틀렸는지) ② 날짜별 확인 목록(며칠·어디서·누구).
+
+/** 분야 → 케어포에서 열어볼 위치(메뉴 › 화면 › 칸) */
+export const WEEKLY_WHERE: Record<string, string> = {
+  '신체활동': '2-1 요양급여 제공기록 › 어르신 › 그 날짜 열 › 신체활동지원 칸(체크·횟수)',
+  '인지관리': '2-1 요양급여 제공기록 › 그 날짜 열 › 인지관리지원·의사소통도움 칸',
+  '기능회복훈련': '2-1 요양급여 제공기록 › 그 날짜 열 › 기능회복훈련 신체·기본·일상 세 칸 체크',
+  '목욕': '2-1 요양급여 제공기록 › 목욕도움·머리감기 칸 (2-3 목욕관리)',
+  '식사': '2-1-1 통합식사도움기록 › 날짜를 그날로 › 어르신 행 끼니 체크·시간·식사량·조치사항',
+  '화장실이용': '2-1 › 그 날짜 화장실이용하기 칸 클릭 › 기저귀 모달(시각·대소변·교체C/확인R·소변량·담당자)',
+  '집중배설관찰': '2-2 집중배설관찰 › 어르신 › 시간별 행(소변·대변·기저귀 교환·작성자)',
+  '체위변경': '2-1 › 그 날짜 체위변경 칸 클릭(와상) › 2시간 간격 12회·제공자 (2-7 체위변경 리포트로 한눈에)',
+  '작성자': '2-1 요양급여 제공기록 › 그 날짜 열 › 작성자(신체·인지) 지정 후 저장',
+}
+
+/** 날짜별 표용 짧은 위치 */
+export const WEEKLY_WHERE_SHORT: Record<string, string> = {
+  '신체활동': '2-1 신체활동지원 칸',
+  '인지관리': '2-1 인지관리·의사소통 칸',
+  '기능회복훈련': '2-1 기능회복훈련 칸',
+  '목욕': '2-1 목욕·머리감기 칸',
+  '식사': '2-1-1 통합식사도움기록',
+  '화장실이용': '2-1 화장실이용 모달',
+  '집중배설관찰': '2-2 집중배설관찰',
+  '체위변경': '2-1 체위변경 모달 (2-7)',
+  '작성자': '2-1 작성자 칸',
+}
+
+/** "1회 / 기준 3회" → "1/3회" 처럼 문제를 한 토막으로 */
+export function shortIssue(issue?: string | null): string {
+  const s = (issue || '').trim()
+  let m: RegExpMatchArray | null
+  if ((m = s.match(/^(\d+)회 \/ 기준 (\d+)회/))) return `${m[1]}/${m[2]}회`
+  if (/^미체크/.test(s)) { const mm = s.match(/^미체크:\s*([^(]+)/); return mm ? '미체크 ' + mm[1].trim().replace(/훈련/g, '').replace(/\s*,\s*/g, '·') : '미체크' }
+  if (/^확인\(C\) 기록 0회/.test(s)) return '확인0회'
+  if ((m = s.match(/^교체\(R\) (\d+)회/))) return `교체${m[1]}회`
+  if ((m = s.match(/^소변 체크된 교체 (\d+)회/))) return `소변교체${m[1]}회`
+  if ((m = s.match(/^체위변경 (\d+)회/))) return `${m[1]}회`
+  if ((m = s.match(/간격 (\d+)시간 \(([^)]+)\)/))) return `간격${m[1]}h ${m[2]}`
+  if ((m = s.match(/^(아침|점심|저녁|간식)[^ ]* 미체크/))) return `${m[1]} 미체크`
+  if ((m = s.match(/^(아침|점심|저녁)\([\d:]+\) 외출·외박 중 미식사/))) return `${m[1]} 외출중 미식사·조치없음`
+  if ((m = s.match(/^소변량 합계 ([\d,]+mL)/))) return `소변량 ${m[1]}`
+  if (/^소변량 기록 없음/.test(s)) return '소변량 없음'
+  if (/시각 기록 0건/.test(s)) return '시각 0건'
+  return s.length > 18 ? s.slice(0, 18) + '…' : s
+}
+
+export interface WeeklyPrintLine { area: string; where: string; item: string; kind: 'error' | 'blank' | 'check'; count: number; text: string }
+export interface WeeklyPrintDay { date: string; weekday: string; error: number; blank: number; check: number; lines: WeeklyPrintLine[] }
+
+const AREA_RANK = ['신체활동', '인지관리', '기능회복훈련', '목욕', '식사', '화장실이용', '집중배설관찰', '체위변경', '작성자']
+
+/** 한 건 → "어르신(호실) 문제·작성자" 토막. 공란은 후보를 붙인다 */
+export function weeklyPrintToken(f: WeeklyAuditFindingLike): string {
+  const who = `${f.resident}${f.room ? `(${String(f.room).replace('호', '')})` : ''}`
+  const issue = shortIssue((f as any).issue)
+  const staff = f.kind === 'blank'
+    ? ((f.owner_candidates ?? []).length ? `후보 ${(f.owner_candidates ?? []).join('·')}` : '작성자 없음')
+    : (f.staff || '')
+  const time = (f as any).time ? ` ${(f as any).time}` : ''
+  return [who + time, issue, staff].filter(Boolean).join(' ')
+}
+
+/** 날짜 → (위치·항목·종류) 줄. 같은 토막은 한 번만 */
+export function weeklyPrintDigest<T extends WeeklyAuditFindingLike>(rows: T[], maxTokens = 16): WeeklyPrintDay[] {
+  const days = new Map<string, WeeklyPrintDay>()
+  const lines = new Map<string, { line: WeeklyPrintLine; tokens: string[] }>()
+  for (const f of rows) {
+    const day = days.get(f.date) ?? { date: f.date, weekday: f.weekday || '', error: 0, blank: 0, check: 0, lines: [] }
+    day[f.kind] += 1
+    days.set(f.date, day)
+    const item = String((f as any).item || '')
+    const key = `${f.date}|${f.area}|${item}|${f.kind}`
+    let cur = lines.get(key)
+    if (!cur) {
+      cur = { line: { area: f.area, where: WEEKLY_WHERE_SHORT[f.area] || f.area, item, kind: f.kind, count: 0, text: '' }, tokens: [] }
+      lines.set(key, cur); day.lines.push(cur.line)
+    }
+    cur.line.count += 1
+    const tok = weeklyPrintToken(f)
+    if (tok && !cur.tokens.includes(tok)) cur.tokens.push(tok)
+  }
+  for (const { line, tokens } of lines.values()) {
+    const shown = tokens.slice(0, maxTokens)
+    line.text = shown.join(', ') + (tokens.length > shown.length ? ` 외 ${tokens.length - shown.length}` : '')
+  }
+  const rank = (a: string) => { const i = AREA_RANK.indexOf(a); return i < 0 ? 99 : i }
+  const kindRank = { error: 0, blank: 1, check: 2 }
+  for (const d of days.values()) d.lines.sort((a, b) => rank(a.area) - rank(b.area) || kindRank[a.kind] - kindRank[b.kind] || b.count - a.count)
+  return [...days.values()].sort((a, b) => a.date.localeCompare(b.date))
+}
+
+export interface StaffBreakdownRow { staff: string; error: number; blank_owner: number; check: number; items: { label: string; count: number }[] }
+
+/** 선생님별 인쇄용: 선생님마다 무엇(분야·항목)을 몇 건 틀렸는지. 공란은 후보 전원에게 붙는다 */
+export function staffBreakdown<T extends WeeklyAuditFindingLike>(rows: T[]): StaffBreakdownRow[] {
+  const map = new Map<string, StaffBreakdownRow & { _items: Map<string, number> }>()
+  const get = (name: string) => { let r = map.get(name); if (!r) { r = { staff: name, error: 0, blank_owner: 0, check: 0, items: [], _items: new Map() }; map.set(name, r) } return r }
+  for (const f of rows) {
+    const label = `${f.area} · ${(f as any).item || ''}`
+    if (f.kind === 'blank') {
+      for (const n of f.owner_candidates ?? []) { const r = get(n); r.blank_owner += 1; r._items.set(label + '(공란)', (r._items.get(label + '(공란)') || 0) + 1) }
+      continue
+    }
+    if (!f.staff) continue
+    const r = get(f.staff)
+    if (f.kind === 'error') r.error += 1; else r.check += 1
+    if (f.kind === 'error') r._items.set(label, (r._items.get(label) || 0) + 1)
+  }
+  return [...map.values()].map(r => ({
+    staff: r.staff, error: r.error, blank_owner: r.blank_owner, check: r.check,
+    items: [...r._items.entries()].sort((a, b) => b[1] - a[1]).map(([label, count]) => ({ label, count })),
+  })).sort((a, b) => (b.error + b.blank_owner) - (a.error + a.blank_owner) || a.staff.localeCompare(b.staff, 'ko'))
+}
