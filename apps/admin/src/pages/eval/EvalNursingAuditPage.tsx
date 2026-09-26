@@ -187,8 +187,8 @@ export default function EvalNursingAuditPage() {
       {detail && !loading && (
         <>
           {/* 항목별 요약 */}
-          <div className="grid gap-4 lg:grid-cols-3 print:grid-cols-3 print:break-inside-avoid">
-            <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="grid gap-4 lg:grid-cols-3 print:block print:space-y-3">
+            <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden print:break-inside-avoid">
               <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                 <h3 className="text-sm font-bold text-gray-900">항목별</h3>
                 {itemFilter && (
@@ -227,7 +227,7 @@ export default function EvalNursingAuditPage() {
             </div>
 
             {/* 어르신별 · 제공자별 */}
-            <div className="space-y-4">
+            <div className="space-y-4 print:space-y-3">
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                   <h3 className="text-sm font-bold text-gray-900">어르신별 <span className="text-gray-400 font-normal text-xs">(오류 많은 순)</span></h3>
@@ -290,7 +290,7 @@ export default function EvalNursingAuditPage() {
           </div>
 
           {/* 가정간호 처치 기록 (청구 대조용) */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden print:break-inside-avoid">
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100">
               <h3 className="text-sm font-bold text-gray-900">가정간호 처치 기록 <span className="text-gray-400 font-normal text-xs">— 욕창간호 {summary?.home_nursing?.['욕창간호'] ?? 0} · 비위관 {summary?.home_nursing?.['비위관'] ?? 0} · 도뇨관 {summary?.home_nursing?.['도뇨관'] ?? 0} (가정간호 청구서와 날짜·처치를 대조하세요)</span></h3>
             </div>
@@ -350,7 +350,7 @@ export default function EvalNursingAuditPage() {
               </div>
             )}
             {dateGroups.map(g => (
-              <div key={g.date} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden print:break-inside-avoid">
+              <div key={g.date} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="px-4 py-2.5 border-b border-gray-100 bg-gray-50">
                   <h4 className="text-sm font-bold text-gray-800">
                     {g.date}({g.weekday}) <span className="text-gray-400 font-normal">· {g.items.length}건</span>
