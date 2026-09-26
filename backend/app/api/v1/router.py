@@ -29,6 +29,7 @@ from app.api.v1.endpoints.monthly_report import router as monthly_report_router
 from app.api.v1.endpoints.payslips import router as payslips_router
 from app.api.v1.endpoints.assignments import router as assignments_router
 from app.api.v1.endpoints.care_log_audit import router as care_log_audit_router
+from app.api.v1.endpoints.nursing_audit import router as nursing_audit_router
 from app.api.v1.endpoints.caregiver_day import router as caregiver_day_router
 from app.api.v1.endpoints.outgoing_docs import router as outgoing_docs_router
 from app.api.v1.endpoints.blog_drafts import router as blog_drafts_router
@@ -168,6 +169,7 @@ api_router.include_router(monthly_report_router, prefix="/admin/reports", tags=[
 api_router.include_router(payslips_router, prefix="/admin/payslips", tags=["admin-payslips"])
 api_router.include_router(assignments_router, prefix="/admin/assignments", tags=["admin-assignments"])
 api_router.include_router(care_log_audit_router, prefix="/admin/care-log-audit", tags=["care-log-audit"])
+api_router.include_router(nursing_audit_router, prefix="/admin/nursing-audit", tags=["nursing-audit"])
 api_router.include_router(caregiver_day_router, prefix="/admin/caregiver-day", tags=["caregiver-day"])
 api_router.include_router(outgoing_docs_router, prefix="/admin/outgoing-docs", tags=["outgoing-docs"])
 api_router.include_router(blog_drafts_router, prefix="/admin/blog-drafts", tags=["blog-drafts"])

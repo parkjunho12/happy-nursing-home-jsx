@@ -97,6 +97,7 @@ from app.models.staff_education import StaffEducation
 from app.models.enteral import EnteralProduct, EnteralTransaction
 from app.models.record_audit import RecordAudit  # noqa: F401
 from app.models.care_log_audit import CareLogAudit  # noqa: F401
+from app.models.nursing_audit import NursingAudit  # noqa: F401
 from app.models.work_schedule import WorkSchedule, WorkScheduleVersion, WorkScheduleConfig, WorkScheduleMemo, WorkScheduleHighlight  # noqa: F401
 from app.models.handover import HandoverReport  # noqa: F401
 from app.models.leave import LeaveRequest, SwapRequest  # noqa: F401
