@@ -21,6 +21,7 @@ import { useAuthStore } from '@/store/auth'
 import NoticeBoard from '@/components/dashboard/NoticeBoard'
 import HandoverTodayCard from '@/components/dashboard/HandoverTodayCard'
 import WeeklyAuditCard from '@/components/dashboard/WeeklyAuditCard'
+import DietFollowUpCard from '@/components/dashboard/DietFollowUpCard'
 import UpcomingDocs from '@/components/dashboard/UpcomingDocs'
 import UpcomingSchedule from '@/components/dashboard/UpcomingSchedule'
 import ResidentTrendChart from '@/components/dashboard/ResidentTrendChart'
@@ -966,6 +967,8 @@ export default function DashboardPage() {
   const secHandover = <HandoverTodayCard />
   // 최신 주간 기록지 점검 결과가 있을 때만 렌더(권한 없으면 자동 숨김)
   const secWeeklyAudit = <WeeklyAuditCard />
+  // 식이가 바뀌면 서류도 따라가야 한다 — 남은 것이 없으면 카드 자체가 안 그려진다
+  const secDietFollowUp = <DietFollowUpCard />
 
   /* ══════════════════ 모바일 레이아웃 (< md) ══════════════════
      인사말 → 현황 → 다가오는 일정(4건) → 진행 중 → 처리 대기 → 내부 공지 → 어르신 서류
@@ -977,6 +980,7 @@ export default function DashboardPage() {
         {secMyDay}
         {secBadges}
         {secHandover}
+        {secDietFollowUp}
         {secSchedule}
         {secRunning}
         {secPending}
@@ -1002,6 +1006,7 @@ export default function DashboardPage() {
       {secMyDay}
       {secBadges}
       {secHandover}
+      {secDietFollowUp}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <div className="lg:col-span-2">{secSchedule}</div>

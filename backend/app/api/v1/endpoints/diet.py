@@ -452,6 +452,23 @@ def set_diet(resident_id: str, body: ChangeBody, db: Session = Depends(get_db),
     # 경관식 여부는 어르신 기록에도 반영한다 — 경관식 재고·반출이 그 값을 본다
     if bool(r.tube_feeding) != bool(body.tube):
         r.tube_feeding = bool(body.tube)
+    db.flush()
+
+    # 식이가 바뀌면 서류도 따라가야 한다 — 욕구사정·급여제공계획서.
+    # 주방에 알리려고 바꾸는 사람과 서류를 쓰는 사람이 달라서, 말로 전하면
+    # 잊힌다. 여기서 할 일을 한 줄 만들어 대시보드에 띄운다.
+    #
+    # 여기서 무엇이 잘못되어도 식이 변경 자체는 살아야 한다. 주방은 오늘
+    # 점심을 차려야 하고, 후속조치는 나중에 손으로도 챙길 수 있다.
+    try:
+        from app.services import diet_followup as dfu
+        before = dfu.state_before(db, r.id, on, exclude_id=c.id)
+        dfu.open_for_change(db, resident=r, change=c, before=before,
+                            after={"rice": rice, "side": side, "tube": bool(body.tube)},
+                            who=getattr(current_user, "name", None))
+    except Exception:
+        logger.warning("식이 후속조치 생성 실패 (식이 변경은 그대로 저장): %s", r.id, exc_info=True)
+
     db.commit()
     db.refresh(c)
     return ApiResponse(success=True, data=_rows(c))
